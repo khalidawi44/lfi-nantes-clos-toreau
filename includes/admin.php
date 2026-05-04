@@ -12,6 +12,22 @@ function lfi_nct_admin_menu() {
         'dashicons-clipboard',
         25
     );
+    add_submenu_page(
+        'lfi-nct-responses',
+        'LFI Clos Toreau — Réponses',
+        'Réponses',
+        'manage_options',
+        'lfi-nct-responses',
+        'lfi_nct_admin_page'
+    );
+    add_submenu_page(
+        'lfi-nct-responses',
+        'LFI Clos Toreau — Statistiques',
+        '📊 Statistiques',
+        'manage_options',
+        'lfi-nct-stats',
+        'lfi_nct_stats_page'
+    );
 }
 
 function lfi_nct_admin_page() {

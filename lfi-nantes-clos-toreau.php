@@ -18,6 +18,7 @@ require_once LFI_NCT_PATH . 'includes/db.php';
 require_once LFI_NCT_PATH . 'includes/form-render.php';
 require_once LFI_NCT_PATH . 'includes/form-handler.php';
 require_once LFI_NCT_PATH . 'includes/admin.php';
+require_once LFI_NCT_PATH . 'includes/stats.php';
 
 register_activation_hook(__FILE__, 'lfi_nct_activate');
 function lfi_nct_activate() {
