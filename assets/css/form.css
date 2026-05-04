@@ -48,6 +48,12 @@
 }
 .lfi-radio:hover, .lfi-check:hover { background: #f0f0f0; border-color: #c8102e; }
 .lfi-radio input, .lfi-check input { margin-right: 8px; }
+.lfi-radio:has(input:checked), .lfi-check:has(input:checked) {
+    background: #c8102e;
+    color: white;
+    border-color: #c8102e;
+    font-weight: 600;
+}
 
 /* Échelle 1-5 horizontale */
 .lfi-scale { display: flex; gap: 6px; margin-top: 0.5em; }
@@ -63,7 +69,11 @@
 }
 .lfi-radio-btn:hover { background: #f0f0f0; border-color: #c8102e; }
 .lfi-radio-btn input { display: none; }
-.lfi-radio-btn input:checked + * { color: #c8102e; }
+.lfi-radio-btn:has(input:checked) {
+    background: #c8102e;
+    color: white;
+    border-color: #c8102e;
+}
 
 .lfi-info-box { background: #f5f5f5; border-left: 3px solid #c8102e; padding: 12px; margin: 1em 0; font-size: 0.95em; }
 .lfi-step { display: none; }
