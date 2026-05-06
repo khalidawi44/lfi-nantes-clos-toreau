@@ -34,6 +34,37 @@ function lfi_nct_enqueue_assets() {
     }
 }
 
+/**
+ * Privacy : noindex sur les pages contenant le shortcode du formulaire.
+ * La page reste publique pour que les militants Souscripteurs y accèdent,
+ * mais Google ne l'indexe pas et le shortcode bloque les non-connectés.
+ */
+add_action('wp_head', 'lfi_nct_noindex_survey_page', 1);
+function lfi_nct_noindex_survey_page() {
+    global $post;
+    if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'lfi_nct_survey')) {
+        echo '<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">' . "\n";
+    }
+}
+
+/**
+ * Cache la page formulaire des menus pour les utilisateurs non connectés.
+ * Filtre wp_get_nav_menu_items pour retirer les pages avec le shortcode si visiteur anonyme.
+ */
+add_filter('wp_get_nav_menu_items', 'lfi_nct_hide_survey_from_menu_for_guests', 10, 3);
+function lfi_nct_hide_survey_from_menu_for_guests($items, $menu, $args) {
+    if (is_user_logged_in() || empty($items)) return $items;
+    foreach ($items as $key => $item) {
+        if (!empty($item->object_id) && $item->object === 'page') {
+            $page = get_post($item->object_id);
+            if ($page && has_shortcode($page->post_content, 'lfi_nct_survey')) {
+                unset($items[$key]);
+            }
+        }
+    }
+    return array_values($items);
+}
+
 add_shortcode('lfi_nct_survey', 'lfi_nct_survey_shortcode');
 function lfi_nct_survey_shortcode() {
     if (!is_user_logged_in()) {
