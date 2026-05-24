@@ -130,6 +130,29 @@ function lfi_nct_menu_extra_added($set = false) {
 }
 
 /**
+ * URL de « Trouver mon groupe » : la page interne « Trouver mon groupe local LFI »
+ * si elle existe (résolue par slug puis par titre), sinon Action Populaire.
+ */
+function lfi_nct_trouver_groupe_url() {
+    static $url = null;
+    if ($url !== null) return $url;
+
+    $page = get_page_by_path('trouver-mon-groupe-local-lfi');
+    if (!$page) {
+        $hits = get_posts([
+            'post_type'   => 'page',
+            'post_status' => 'publish',
+            's'           => 'Trouver mon groupe',
+            'numberposts' => 1,
+        ]);
+        if ($hits) $page = $hits[0];
+    }
+
+    $url = $page ? get_permalink($page) : LFI_NCT_AP_CARTE_URL;
+    return $url;
+}
+
+/**
  * Construit les entrées de menu : « Prendre rendez-vous » (à plat) + un menu
  * déroulant « Rejoindre » (déconnecté) / « Espace adhérent » (connecté).
  * $style : 'classic' (wp_nav_menu) ou 'block' (navigation FSE, version à plat).
@@ -151,7 +174,7 @@ function lfi_nct_menu_extra_items($style = 'classic') {
         $parent_url   = esc_url(home_url('/adherer/'));
         $subs = [
             ['Rejoindre le groupe', esc_url(LFI_NCT_ACTION_POPULAIRE_URL), true],
-            ['Trouver mon groupe près de chez moi', esc_url(LFI_NCT_AP_CARTE_URL), true],
+            ['Trouver mon groupe près de chez moi', esc_url(lfi_nct_trouver_groupe_url()), false],
             ["Connexion / S'inscrire", $compte_url, false],
         ];
     }
