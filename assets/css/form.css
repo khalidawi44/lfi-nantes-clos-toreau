@@ -116,6 +116,9 @@
 .lfi-btn:hover { background: #a50d26; color: #fff; }
 .lfi-btn-ap { background: #571845; }
 .lfi-btn-ap:hover { background: #3f1132; }
+.lfi-btn-tg { background: #229ed9; }
+.lfi-btn-tg:hover { background: #1b87bb; }
+.lfi-tg-rdv { max-width: 640px; }
 .lfi-inscription {
     margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #ddd;
 }
