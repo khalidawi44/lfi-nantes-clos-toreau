@@ -1,13 +1,13 @@
 <?php
 /**
- * Espace adhérent : connexion en façade (sans wp-login.php) + menu dynamique.
+ * Espace adhérent : connexion en façade (sans wp-login.php) + entrées de menu.
  *
  * - Shortcode [lfi_nct_compte] pour la page /mon-compte : formulaire de
  *   connexion quand on est déconnecté (+ lien d'inscription Action Populaire),
  *   tableau de bord + déconnexion quand on est connecté.
- * - Élément de menu dynamique : un item portant la classe CSS
- *   "lfi-espace-adherent" devient « M'inscrire / Me connecter » (déconnecté)
- *   ou « Espace adhérent » (connecté).
+ * - Entrées de menu ajoutées automatiquement au menu principal (sans wp-admin) :
+ *   « 📅 Prendre rendez-vous » et « Espace adhérent » / « M'inscrire / Me connecter ».
+ * - « Rejoindre LFI » est masqué quand l'utilisateur est connecté.
  */
 if (!defined('ABSPATH')) exit;
 
@@ -102,26 +102,47 @@ function lfi_nct_compte_shortcode() {
 }
 
 /**
- * Menu selon le statut de connexion :
- * - « lfi-espace-adherent » : libellé dynamique (connecté / déconnecté) ;
- * - « lfi-hide-when-logged-in » : élément masqué quand l'utilisateur est connecté
- *   (ex : « Rejoindre LFI »).
+ * Vrai si l'on est en train de rendre le menu principal du thème
+ * (emplacement « primary », ou à défaut le premier emplacement enregistré).
  */
-add_filter('wp_nav_menu_objects', 'lfi_nct_dynamic_account_menu', 10, 2);
-function lfi_nct_dynamic_account_menu($items, $args) {
-    $logged_in = is_user_logged_in();
+function lfi_nct_is_primary_menu($args) {
+    $loc = (is_object($args) && !empty($args->theme_location)) ? $args->theme_location : '';
+    if ($loc === '') return false;
+    $registered = (array) get_registered_nav_menus();
+    if (isset($registered['primary'])) return $loc === 'primary';
+    $keys = array_keys($registered);
+    return !empty($keys) && $loc === $keys[0];
+}
+
+/**
+ * Ajoute « Prendre rendez-vous » et « Espace adhérent » au menu principal.
+ */
+add_filter('wp_nav_menu_items', 'lfi_nct_append_menu_items', 10, 2);
+function lfi_nct_append_menu_items($items_html, $args) {
+    if (!lfi_nct_is_primary_menu($args)) return $items_html;
+
+    $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . esc_url(home_url('/rendez-vous/')) . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
+
+    $label = is_user_logged_in() ? 'Espace adhérent' : "M'inscrire / Me connecter";
+    $compte = '<li class="menu-item lfi-menu-compte"><a href="' . esc_url(home_url('/mon-compte/')) . '">' . esc_html($label) . '</a></li>';
+
+    return $items_html . $rdv . $compte;
+}
+
+/**
+ * Masque « Rejoindre LFI » (par titre ou via la classe « lfi-hide-when-logged-in »)
+ * quand l'utilisateur est connecté.
+ */
+add_filter('wp_nav_menu_objects', 'lfi_nct_hide_join_when_logged_in', 10, 2);
+function lfi_nct_hide_join_when_logged_in($items, $args) {
+    if (!is_user_logged_in()) return $items;
     $kept = [];
     foreach ($items as $item) {
         $classes = (array) $item->classes;
-
-        if ($logged_in && in_array('lfi-hide-when-logged-in', $classes, true)) {
+        $title = strtolower(wp_strip_all_tags($item->title));
+        if (in_array('lfi-hide-when-logged-in', $classes, true) || strpos($title, 'rejoindre') !== false) {
             continue;
         }
-
-        if (in_array('lfi-espace-adherent', $classes, true)) {
-            $item->title = $logged_in ? 'Espace adhérent' : "M'inscrire / Me connecter";
-        }
-
         $kept[] = $item;
     }
     return $kept;
