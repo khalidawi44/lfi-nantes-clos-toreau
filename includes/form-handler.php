@@ -5,11 +5,10 @@ function lfi_nct_handle_submission() {
     if (!isset($_POST['lfi_nct_nonce']) || !wp_verify_nonce($_POST['lfi_nct_nonce'], 'lfi_nct_submit_nonce')) {
         return 'Erreur de sécurité : nonce invalide. Recharge la page.';
     }
-    if (!is_user_logged_in()) {
-        return 'Vous devez être connecté.';
-    }
 
     $user = wp_get_current_user();
+    $militant_user_id = $user->ID;
+    $militant_login = $user->ID ? $user->user_login : 'anonyme';
 
     $adresse = sanitize_text_field($_POST['adresse'] ?? '');
     $etage = sanitize_text_field($_POST['etage'] ?? '');
@@ -44,8 +43,8 @@ function lfi_nct_handle_submission() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
     $insert = $wpdb->insert($table, [
-        'militant_user_id' => $user->ID,
-        'militant_login' => $user->user_login,
+        'militant_user_id' => $militant_user_id,
+        'militant_login' => $militant_login,
         'adresse' => $adresse,
         'etage' => $etage,
         'annee_arrivee' => $annee_arrivee,
