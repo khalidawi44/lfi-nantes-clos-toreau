@@ -146,19 +146,16 @@ function lfi_nct_menu_extra_items($style = 'classic') {
 }
 
 /**
- * Cas thème classique : ajoute au premier menu rendu qui n'est pas un menu
- * pied-de-page / réseaux sociaux, peu importe comment le thème le nomme.
+ * Cas thème classique : ajoute à tous les menus rendus qui ne sont pas des
+ * menus pied-de-page / réseaux sociaux (pour atteindre l'en-tête à coup sûr,
+ * même si le thème rend plusieurs menus, ex. desktop + mobile).
  */
 add_filter('wp_nav_menu_items', 'lfi_nct_append_menu_items', 10, 2);
 function lfi_nct_append_menu_items($items_html, $args) {
-    if (lfi_nct_menu_extra_added()) return $items_html;
-
     $loc = (is_object($args) && !empty($args->theme_location)) ? strtolower($args->theme_location) : '';
     if ($loc !== '' && preg_match('/(footer|social|bottom|pied|legal|mentions)/', $loc)) {
         return $items_html;
     }
-
-    lfi_nct_menu_extra_added(true);
     return $items_html . lfi_nct_menu_extra_items('classic');
 }
 
