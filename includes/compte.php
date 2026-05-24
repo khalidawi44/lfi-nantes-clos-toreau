@@ -21,14 +21,6 @@ if (!defined('LFI_NCT_AP_CARTE_URL')) {
     define('LFI_NCT_AP_CARTE_URL', 'https://actionpopulaire.fr/groupes/');
 }
 
-// Telegram : lien d'invitation au groupe + lien du fil « rendez-vous » (membres).
-if (!defined('LFI_NCT_TELEGRAM_INVITE')) {
-    define('LFI_NCT_TELEGRAM_INVITE', 'https://t.me/+bt8Wm58ejXxlYWRk');
-}
-if (!defined('LFI_NCT_TELEGRAM_RDV')) {
-    define('LFI_NCT_TELEGRAM_RDV', 'https://t.me/c/3045636337/37');
-}
-
 /**
  * Traite la connexion en façade avant tout affichage (pour pouvoir rediriger).
  * Passe par wp_signon() : la connexion ne dépend pas de wp-login.php et reste
@@ -74,32 +66,6 @@ function lfi_nct_inject_compte_form($content) {
     if (!$post || $post->post_name !== 'mon-compte') return $content;
     if (has_shortcode($post->post_content, 'lfi_nct_compte')) return $content;
     return $content . do_shortcode('[lfi_nct_compte]');
-}
-
-/**
- * Encart « Prendre rendez-vous sur Telegram » injecté en haut de la page
- * /rendez-vous. Le contenu existant (dont Cal.com) est conservé en dessous.
- */
-add_filter('the_content', 'lfi_nct_inject_telegram_rdv', 15);
-function lfi_nct_inject_telegram_rdv($content) {
-    if (is_admin() || !in_the_loop() || !is_main_query() || !is_page()) return $content;
-    $post = get_post();
-    if (!$post || $post->post_name !== 'rendez-vous') return $content;
-    return lfi_nct_telegram_rdv_box() . $content;
-}
-
-function lfi_nct_telegram_rdv_box() {
-    $invite = esc_url(LFI_NCT_TELEGRAM_INVITE);
-    $rdv    = esc_url(LFI_NCT_TELEGRAM_RDV);
-    ob_start(); ?>
-    <div class="lfi-compte lfi-tg-rdv">
-        <h2>📅 Prendre rendez-vous sur Telegram</h2>
-        <p>Les rendez-vous se prennent dans notre groupe Telegram. Rejoignez le groupe, puis allez dans le fil « Rendez-vous » pour réserver un créneau avec un·e bénévole.</p>
-        <p><a class="lfi-btn lfi-btn-tg lfi-popup" href="<?php echo $invite; ?>" target="_blank" rel="noopener">Rejoindre le groupe Telegram</a></p>
-        <p class="lfi-help">Déjà membre du groupe ? <a class="lfi-popup" href="<?php echo $rdv; ?>" target="_blank" rel="noopener">Accéder au fil rendez-vous</a>.</p>
-    </div>
-    <?php
-    return ob_get_clean();
 }
 
 add_shortcode('lfi_nct_compte', 'lfi_nct_compte_shortcode');
