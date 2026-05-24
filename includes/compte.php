@@ -116,28 +116,68 @@ function lfi_nct_compte_shortcode() {
 }
 
 /**
- * Ajoute « Prendre rendez-vous » et « Espace adhérent » au menu principal.
- * Robuste : on ajoute au premier menu rendu qui n'est pas un menu
+ * Garde-fou pour n'ajouter les entrées qu'une seule fois par page,
+ * que le menu soit classique (wp_nav_menu) ou en blocs (FSE).
+ */
+function lfi_nct_menu_extra_added($set = false) {
+    static $done = false;
+    if ($set) $done = true;
+    return $done;
+}
+
+/**
+ * Construit les entrées « Prendre rendez-vous » + « Espace adhérent ».
+ * $style : 'classic' (menus wp_nav_menu) ou 'block' (bloc de navigation FSE).
+ */
+function lfi_nct_menu_extra_items($style = 'classic') {
+    $rdv_url    = esc_url(home_url('/rendez-vous/'));
+    $compte_url = esc_url(home_url('/mon-compte/'));
+    $rdv_label  = esc_html('📅 Prendre rendez-vous');
+    $compte_label = esc_html(is_user_logged_in() ? 'Espace adhérent' : "M'inscrire / Me connecter");
+
+    if ($style === 'block') {
+        $tpl = '<li class="wp-block-navigation-item wp-block-navigation-link %3$s"><a class="wp-block-navigation-item__content" href="%1$s"><span class="wp-block-navigation-item__label">%2$s</span></a></li>';
+    } else {
+        $tpl = '<li class="menu-item %3$s"><a href="%1$s">%2$s</a></li>';
+    }
+
+    return sprintf($tpl, $rdv_url, $rdv_label, 'lfi-menu-rdv')
+         . sprintf($tpl, $compte_url, $compte_label, 'lfi-menu-compte');
+}
+
+/**
+ * Cas thème classique : ajoute au premier menu rendu qui n'est pas un menu
  * pied-de-page / réseaux sociaux, peu importe comment le thème le nomme.
  */
 add_filter('wp_nav_menu_items', 'lfi_nct_append_menu_items', 10, 2);
 function lfi_nct_append_menu_items($items_html, $args) {
-    static $added = false;
-    if ($added) return $items_html;
+    if (lfi_nct_menu_extra_added()) return $items_html;
 
     $loc = (is_object($args) && !empty($args->theme_location)) ? strtolower($args->theme_location) : '';
     if ($loc !== '' && preg_match('/(footer|social|bottom|pied|legal|mentions)/', $loc)) {
         return $items_html;
     }
 
-    $added = true;
+    lfi_nct_menu_extra_added(true);
+    return $items_html . lfi_nct_menu_extra_items('classic');
+}
 
-    $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . esc_url(home_url('/rendez-vous/')) . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
+/**
+ * Cas thème en blocs (FSE) : injecte les entrées dans le bloc de navigation.
+ */
+add_filter('render_block', 'lfi_nct_inject_nav_block', 10, 2);
+function lfi_nct_inject_nav_block($block_content, $block) {
+    if (empty($block['blockName']) || $block['blockName'] !== 'core/navigation') return $block_content;
+    if (lfi_nct_menu_extra_added()) return $block_content;
 
-    $label = is_user_logged_in() ? 'Espace adhérent' : "M'inscrire / Me connecter";
-    $compte = '<li class="menu-item lfi-menu-compte"><a href="' . esc_url(home_url('/mon-compte/')) . '">' . esc_html($label) . '</a></li>';
+    lfi_nct_menu_extra_added(true);
+    $items = lfi_nct_menu_extra_items('block');
 
-    return $items_html . $rdv . $compte;
+    $pos = strripos($block_content, '</ul>');
+    if ($pos !== false) {
+        return substr($block_content, 0, $pos) . $items . substr($block_content, $pos);
+    }
+    return $block_content . $items;
 }
 
 /**
