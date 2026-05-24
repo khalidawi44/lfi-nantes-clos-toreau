@@ -116,24 +116,21 @@ function lfi_nct_compte_shortcode() {
 }
 
 /**
- * Vrai si l'on est en train de rendre le menu principal du thème
- * (emplacement « primary », ou à défaut le premier emplacement enregistré).
- */
-function lfi_nct_is_primary_menu($args) {
-    $loc = (is_object($args) && !empty($args->theme_location)) ? $args->theme_location : '';
-    if ($loc === '') return false;
-    $registered = (array) get_registered_nav_menus();
-    if (isset($registered['primary'])) return $loc === 'primary';
-    $keys = array_keys($registered);
-    return !empty($keys) && $loc === $keys[0];
-}
-
-/**
  * Ajoute « Prendre rendez-vous » et « Espace adhérent » au menu principal.
+ * Robuste : on ajoute au premier menu rendu qui n'est pas un menu
+ * pied-de-page / réseaux sociaux, peu importe comment le thème le nomme.
  */
 add_filter('wp_nav_menu_items', 'lfi_nct_append_menu_items', 10, 2);
 function lfi_nct_append_menu_items($items_html, $args) {
-    if (!lfi_nct_is_primary_menu($args)) return $items_html;
+    static $added = false;
+    if ($added) return $items_html;
+
+    $loc = (is_object($args) && !empty($args->theme_location)) ? strtolower($args->theme_location) : '';
+    if ($loc !== '' && preg_match('/(footer|social|bottom|pied|legal|mentions)/', $loc)) {
+        return $items_html;
+    }
+
+    $added = true;
 
     $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . esc_url(home_url('/rendez-vous/')) . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
 
