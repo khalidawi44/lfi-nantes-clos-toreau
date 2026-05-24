@@ -42,8 +42,8 @@ function lfi_nct_enqueue_assets() {
 
 /**
  * Privacy : noindex sur les pages contenant le shortcode du formulaire.
- * La page reste publique pour que les militants Souscripteurs y accèdent,
- * mais Google ne l'indexe pas et le shortcode bloque les non-connectés.
+ * Le formulaire est public (accessible sans connexion) mais non indexé
+ * par les moteurs de recherche.
  */
 add_action('wp_head', 'lfi_nct_noindex_survey_page', 1);
 function lfi_nct_noindex_survey_page() {
@@ -54,29 +54,22 @@ function lfi_nct_noindex_survey_page() {
 }
 
 /**
- * Cache la page formulaire des menus pour les utilisateurs non connectés.
- * Filtre wp_get_nav_menu_items pour retirer les pages avec le shortcode si visiteur anonyme.
+ * Empêche la mise en cache de la page du formulaire.
+ * Le formulaire étant public, sans ça le jeton de sécurité (nonce) serait
+ * mis en cache et les envois finiraient par échouer (« nonce invalide »).
  */
-add_filter('wp_get_nav_menu_items', 'lfi_nct_hide_survey_from_menu_for_guests', 10, 3);
-function lfi_nct_hide_survey_from_menu_for_guests($items, $menu, $args) {
-    if (is_user_logged_in() || empty($items)) return $items;
-    foreach ($items as $key => $item) {
-        if (!empty($item->object_id) && $item->object === 'page') {
-            $page = get_post($item->object_id);
-            if ($page && has_shortcode($page->post_content, 'lfi_nct_survey')) {
-                unset($items[$key]);
-            }
-        }
+add_action('wp', 'lfi_nct_no_cache_survey_page');
+function lfi_nct_no_cache_survey_page() {
+    if (!is_singular()) return;
+    $post = get_post();
+    if ($post && has_shortcode($post->post_content, 'lfi_nct_survey')) {
+        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+        do_action('litespeed_control_set_nocache', 'LFI : formulaire public avec nonce dynamique');
     }
-    return array_values($items);
 }
 
 add_shortcode('lfi_nct_survey', 'lfi_nct_survey_shortcode');
 function lfi_nct_survey_shortcode() {
-    if (!is_user_logged_in()) {
-        return '<div class="lfi-warn"><p>Vous devez être connecté en tant que militant LFI Clos Toreau pour accéder à ce formulaire.</p><p><a href="' . esc_url(wp_login_url(get_permalink())) . '">Se connecter</a></p></div>';
-    }
-
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_nct_submit'])) {
         $result = lfi_nct_handle_submission();
         if ($result === true) {
