@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.2.0
+ * Version: 0.3.0
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.2.0');
+define('LFI_NCT_VERSION', '0.3.0');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -19,52 +19,61 @@ require_once LFI_NCT_PATH . 'includes/form-render.php';
 require_once LFI_NCT_PATH . 'includes/form-handler.php';
 require_once LFI_NCT_PATH . 'includes/admin.php';
 require_once LFI_NCT_PATH . 'includes/stats.php';
-require_once LFI_NCT_PATH . 'includes/sync.php';
+require_once LFI_NCT_PATH . 'includes/compte.php';
 
 register_activation_hook(__FILE__, 'lfi_nct_activate');
 function lfi_nct_activate() {
     lfi_nct_create_table();
 }
 
-register_deactivation_hook(__FILE__, 'lfi_nct_deactivate');
-function lfi_nct_deactivate() {
-    lfi_nct_sync_unschedule_event();
-}
-
 add_action('wp_enqueue_scripts', 'lfi_nct_enqueue_assets');
 function lfi_nct_enqueue_assets() {
     global $post;
-    if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'lfi_nct_survey')) {
+    if (!is_a($post, 'WP_Post')) return;
+    $has_survey = has_shortcode($post->post_content, 'lfi_nct_survey');
+    $has_compte = has_shortcode($post->post_content, 'lfi_nct_compte');
+    if ($has_survey || $has_compte) {
         wp_enqueue_style('lfi-nct-css', LFI_NCT_URL . 'assets/css/form.css', [], LFI_NCT_VERSION);
+    }
+    if ($has_survey) {
         wp_enqueue_script('lfi-nct-js', LFI_NCT_URL . 'assets/js/form.js', [], LFI_NCT_VERSION, true);
     }
 }
 
 /**
- * Privacy : noindex sur les pages contenant le shortcode du formulaire.
- * Le formulaire est public (accessible sans connexion) mais non indexé
- * par les moteurs de recherche.
+ * Vrai si la page contient le formulaire d'enquête ou l'espace adhérent
+ * (pages privées : non indexées et non mises en cache).
+ */
+function lfi_nct_is_private_page($post) {
+    return is_a($post, 'WP_Post') && (
+        has_shortcode($post->post_content, 'lfi_nct_survey') ||
+        has_shortcode($post->post_content, 'lfi_nct_compte')
+    );
+}
+
+/**
+ * Privacy : noindex sur le formulaire d'enquête et l'espace adhérent.
+ * Pages publiques/privées mais non indexées par les moteurs de recherche.
  */
 add_action('wp_head', 'lfi_nct_noindex_survey_page', 1);
 function lfi_nct_noindex_survey_page() {
     global $post;
-    if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'lfi_nct_survey')) {
+    if (lfi_nct_is_private_page($post)) {
         echo '<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">' . "\n";
     }
 }
 
 /**
- * Empêche la mise en cache de la page du formulaire.
- * Le formulaire étant public, sans ça le jeton de sécurité (nonce) serait
- * mis en cache et les envois finiraient par échouer (« nonce invalide »).
+ * Empêche la mise en cache de ces pages.
+ * Sans ça, le jeton de sécurité (nonce) du formulaire ou de la connexion
+ * serait mis en cache et les envois/connexions échoueraient (« nonce invalide »).
  */
 add_action('wp', 'lfi_nct_no_cache_survey_page');
 function lfi_nct_no_cache_survey_page() {
     if (!is_singular()) return;
-    $post = get_post();
-    if ($post && has_shortcode($post->post_content, 'lfi_nct_survey')) {
+    if (lfi_nct_is_private_page(get_post())) {
         if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
-        do_action('litespeed_control_set_nocache', 'LFI : formulaire public avec nonce dynamique');
+        do_action('litespeed_control_set_nocache', 'LFI : page avec nonce dynamique');
     }
 }
 
