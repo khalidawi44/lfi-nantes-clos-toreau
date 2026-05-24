@@ -118,7 +118,18 @@
 .lfi-btn-ap:hover { background: #3f1132; }
 .lfi-btn-tg { background: #229ed9; }
 .lfi-btn-tg:hover { background: #1b87bb; }
-.lfi-tg-rdv { max-width: 640px; }
+.lfi-btn-tel { background: #1a7f37; }
+.lfi-btn-tel:hover { background: #15672d; }
+.lfi-tg-rdv, .lfi-rdv-form { max-width: 640px; }
+.lfi-rdv-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.lfi-rdv-form select,
+.lfi-rdv-form input[type="date"],
+.lfi-rdv-form input[type="tel"],
+.lfi-rdv-form input[type="email"],
+.lfi-rdv-form input[type="text"],
+.lfi-rdv-form textarea {
+    padding: 0.6em; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; width: 100%;
+}
 .lfi-inscription {
     margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #ddd;
 }

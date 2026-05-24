@@ -10,6 +10,10 @@
         var link = e.target.closest('a.lfi-popup');
         if (!link) return;
 
+        // Sur mobile / petit écran : ne pas ouvrir de fenêtre, laisser le lien
+        // s'ouvrir nativement (ouvre l'appli Telegram si elle est installée).
+        if (window.innerWidth < 900) return;
+
         var w = 480, h = 720;
         var baseLeft = window.screenLeft !== undefined ? window.screenLeft : (screen.left || 0);
         var baseTop = window.screenTop !== undefined ? window.screenTop : (screen.top || 0);
