@@ -12,9 +12,9 @@
 if (!defined('ABSPATH')) exit;
 
 // URL du groupe sur Action Populaire (pour le bouton « M'inscrire »).
-// À renseigner — laisser vide masque le bouton.
+// Laisser vide masque le bouton.
 if (!defined('LFI_NCT_ACTION_POPULAIRE_URL')) {
-    define('LFI_NCT_ACTION_POPULAIRE_URL', '');
+    define('LFI_NCT_ACTION_POPULAIRE_URL', 'https://actionpopulaire.fr/groupes/3f07362c-8238-4a63-9b0c-4128e9ec6ede/');
 }
 
 /**
