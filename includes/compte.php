@@ -11,10 +11,14 @@
  */
 if (!defined('ABSPATH')) exit;
 
-// URL du groupe sur Action Populaire (pour le bouton « M'inscrire »).
-// Laisser vide masque le bouton.
+// URL du groupe sur Action Populaire (pour « Rejoindre le groupe »).
 if (!defined('LFI_NCT_ACTION_POPULAIRE_URL')) {
     define('LFI_NCT_ACTION_POPULAIRE_URL', 'https://actionpopulaire.fr/groupes/3f07362c-8238-4a63-9b0c-4128e9ec6ede/');
+}
+
+// URL « Trouver un groupe près de chez moi » sur Action Populaire.
+if (!defined('LFI_NCT_AP_CARTE_URL')) {
+    define('LFI_NCT_AP_CARTE_URL', 'https://actionpopulaire.fr/groupes/');
 }
 
 /**
@@ -126,23 +130,51 @@ function lfi_nct_menu_extra_added($set = false) {
 }
 
 /**
- * Construit les entrées « Prendre rendez-vous » + « Espace adhérent ».
- * $style : 'classic' (menus wp_nav_menu) ou 'block' (bloc de navigation FSE).
+ * Construit les entrées de menu : « Prendre rendez-vous » (à plat) + un menu
+ * déroulant « Rejoindre » (déconnecté) / « Espace adhérent » (connecté).
+ * $style : 'classic' (wp_nav_menu) ou 'block' (navigation FSE, version à plat).
  */
 function lfi_nct_menu_extra_items($style = 'classic') {
-    $rdv_url    = esc_url(home_url('/rendez-vous/'));
     $compte_url = esc_url(home_url('/mon-compte/'));
-    $rdv_label  = esc_html('📅 Prendre rendez-vous');
-    $compte_label = esc_html(is_user_logged_in() ? 'Espace adhérent' : "M'inscrire / Me connecter");
+    $rdv_url    = esc_url(home_url('/rendez-vous/'));
+    $logged_in  = is_user_logged_in();
 
-    if ($style === 'block') {
-        $tpl = '<li class="wp-block-navigation-item wp-block-navigation-link %3$s"><a class="wp-block-navigation-item__content" href="%1$s"><span class="wp-block-navigation-item__label">%2$s</span></a></li>';
+    if ($logged_in) {
+        $parent_label = 'Espace adhérent';
+        $parent_url   = $compte_url;
+        $subs = [
+            ['Mon compte', $compte_url, false],
+            ['Se déconnecter', esc_url(wp_logout_url(home_url('/'))), false],
+        ];
     } else {
-        $tpl = '<li class="menu-item %3$s"><a href="%1$s">%2$s</a></li>';
+        $parent_label = 'Rejoindre';
+        $parent_url   = esc_url(home_url('/adherer/'));
+        $subs = [
+            ['Rejoindre le groupe', esc_url(LFI_NCT_ACTION_POPULAIRE_URL), true],
+            ['Trouver mon groupe près de chez moi', esc_url(LFI_NCT_AP_CARTE_URL), true],
+            ["Connexion / S'inscrire", $compte_url, false],
+        ];
     }
 
-    return sprintf($tpl, $rdv_url, $rdv_label, 'lfi-menu-rdv')
-         . sprintf($tpl, $compte_url, $compte_label, 'lfi-menu-compte');
+    if ($style === 'block') {
+        // Thème en blocs (fallback) : entrées à plat.
+        $rdv = '<li class="wp-block-navigation-item wp-block-navigation-link lfi-menu-rdv"><a class="wp-block-navigation-item__content" href="' . $rdv_url . '"><span class="wp-block-navigation-item__label">' . esc_html('📅 Prendre rendez-vous') . '</span></a></li>';
+        $par = '<li class="wp-block-navigation-item wp-block-navigation-link"><a class="wp-block-navigation-item__content" href="' . $parent_url . '"><span class="wp-block-navigation-item__label">' . esc_html($parent_label) . '</span></a></li>';
+        return $rdv . $par;
+    }
+
+    $sub_html = '';
+    foreach ($subs as $s) {
+        $ext = $s[2] ? ' target="_blank" rel="noopener"' : '';
+        $sub_html .= '<li class="menu-item"><a href="' . $s[1] . '"' . $ext . '>' . esc_html($s[0]) . '</a></li>';
+    }
+
+    $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . $rdv_url . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
+    $dropdown = '<li class="menu-item menu-item-has-children lfi-menu-dropdown">'
+        . '<a href="' . $parent_url . '">' . esc_html($parent_label) . ' ▾</a>'
+        . '<ul class="sub-menu">' . $sub_html . '</ul></li>';
+
+    return $rdv . $dropdown;
 }
 
 /**
@@ -178,20 +210,40 @@ function lfi_nct_inject_nav_block($block_content, $block) {
 }
 
 /**
- * Masque « Rejoindre LFI » (par titre ou via la classe « lfi-hide-when-logged-in »)
- * quand l'utilisateur est connecté.
+ * Supprime les entrées « Rejoindre LFI » / « Rejoindre le groupe » d'origine
+ * (le doublon) : elles sont remplacées par le menu déroulant « Rejoindre ».
+ * Respecte aussi la classe « lfi-hide-when-logged-in ».
  */
-add_filter('wp_nav_menu_objects', 'lfi_nct_hide_join_when_logged_in', 10, 2);
-function lfi_nct_hide_join_when_logged_in($items, $args) {
-    if (!is_user_logged_in()) return $items;
+add_filter('wp_nav_menu_objects', 'lfi_nct_hide_redundant_join', 10, 2);
+function lfi_nct_hide_redundant_join($items, $args) {
+    $logged_in = is_user_logged_in();
     $kept = [];
     foreach ($items as $item) {
         $classes = (array) $item->classes;
         $title = strtolower(wp_strip_all_tags($item->title));
-        if (in_array('lfi-hide-when-logged-in', $classes, true) || strpos($title, 'rejoindre') !== false) {
+        if (strpos($title, 'rejoindre') !== false) {
+            continue;
+        }
+        if ($logged_in && in_array('lfi-hide-when-logged-in', $classes, true)) {
             continue;
         }
         $kept[] = $item;
     }
     return $kept;
+}
+
+/**
+ * Styles du menu déroulant (chargés sur tout le site, car le menu est partout).
+ * Le sous-menu s'ouvre au survol, indépendamment du thème.
+ */
+add_action('wp_head', 'lfi_nct_menu_dropdown_css', 20);
+function lfi_nct_menu_dropdown_css() {
+    echo '<style id="lfi-nct-menu-css">'
+        . '.lfi-menu-dropdown{position:relative}'
+        . '.lfi-menu-dropdown>.sub-menu{display:none;position:absolute;top:100%;left:0;z-index:99999;min-width:250px;margin:0;padding:.4em 0;list-style:none;background:#2d0a2e;box-shadow:0 8px 24px rgba(0,0,0,.3);border-radius:0 0 6px 6px}'
+        . '.lfi-menu-dropdown:hover>.sub-menu,.lfi-menu-dropdown:focus-within>.sub-menu{display:block}'
+        . '.lfi-menu-dropdown>.sub-menu>li{display:block;margin:0;float:none}'
+        . '.lfi-menu-dropdown>.sub-menu>li>a{display:block;padding:.55em 1.3em;color:#fff;white-space:nowrap;text-decoration:none;font-size:.95em}'
+        . '.lfi-menu-dropdown>.sub-menu>li>a:hover{background:rgba(255,255,255,.14)}'
+        . '</style>' . "\n";
 }
