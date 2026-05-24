@@ -123,14 +123,15 @@ function lfi_nct_rdv_contact_box() {
     $tel_href = esc_url(lfi_nct_tel_href());
     $tel_disp = esc_html(lfi_nct_tel_display());
     ob_start(); ?>
-    <div class="lfi-compte lfi-tg-rdv">
-        <h2>📅 Prendre rendez-vous</h2>
-        <p>Réservez un créneau avec un·e bénévole, par Telegram, par téléphone, ou via le formulaire ci-dessous.</p>
-        <p class="lfi-rdv-actions">
+    <div class="lfi-rdv-card">
+        <h2 class="lfi-rdv-title">📅 Prendre rendez-vous</h2>
+        <p class="lfi-rdv-why">Un souci de logement, une démarche administrative ou juridique qui coince, ou simplement besoin d'un coup de main&nbsp;? Nos bénévoles vous reçoivent <strong>gratuitement et en toute confidentialité</strong> pour vous écouter et vous accompagner.</p>
+        <p class="lfi-rdv-sub">Choisissez ce qui vous arrange :</p>
+        <div class="lfi-rdv-actions">
             <a class="lfi-btn lfi-btn-tg lfi-popup" href="<?php echo $invite; ?>" target="_blank" rel="noopener">Rejoindre le groupe Telegram</a>
             <a class="lfi-btn lfi-btn-tel" href="<?php echo $tel_href; ?>">📞 Appeler (<?php echo $tel_disp; ?>)</a>
-        </p>
-        <p class="lfi-help">Déjà membre du groupe ? <a class="lfi-popup" href="<?php echo $fil; ?>" target="_blank" rel="noopener">Accéder au fil rendez-vous</a>.</p>
+        </div>
+        <p class="lfi-help">Déjà membre du groupe&nbsp;? <a class="lfi-popup" href="<?php echo $fil; ?>" target="_blank" rel="noopener">Accéder au fil rendez-vous</a>.</p>
     </div>
     <?php
     return ob_get_clean();
@@ -139,49 +140,56 @@ function lfi_nct_rdv_contact_box() {
 function lfi_nct_rdv_form() {
     $msg = $GLOBALS['lfi_nct_rdv_msg'] ?? null;
     ob_start(); ?>
-    <div class="lfi-compte lfi-rdv-form">
-        <h2>Demander un rendez-vous</h2>
+    <div class="lfi-rdv-card">
+        <h2 class="lfi-rdv-title">Demander un rendez-vous en ligne</h2>
+        <p class="lfi-rdv-sub">Laissez vos coordonnées : un·e bénévole vous recontacte pour fixer le créneau.</p>
         <?php if ($msg): ?>
             <div class="lfi-<?php echo $msg[0] === 'success' ? 'success' : 'error'; ?>"><?php echo esc_html($msg[1]); ?></div>
         <?php endif; ?>
         <?php if (!$msg || $msg[0] !== 'success'): ?>
-        <form method="post" class="lfi-login-form">
+        <form method="post" class="lfi-rdv-fields">
             <?php wp_nonce_field('lfi_nct_rdv', 'lfi_nct_rdv_nonce'); ?>
-            <label class="lfi-field">
-                <span class="lfi-label">Date souhaitée</span>
-                <input type="date" name="rdv_date" min="<?php echo esc_attr(current_time('Y-m-d')); ?>">
-            </label>
-            <label class="lfi-field">
-                <span class="lfi-label">Créneau</span>
-                <select name="rdv_creneau">
-                    <option value="">— indifférent —</option>
-                    <option>Matin</option>
-                    <option>Après-midi</option>
-                    <option>Soir</option>
-                </select>
-            </label>
-            <label class="lfi-field">
-                <span class="lfi-label">Prénom</span>
-                <input type="text" name="rdv_prenom">
-            </label>
-            <label class="lfi-field">
-                <span class="lfi-label">Nom</span>
-                <input type="text" name="rdv_nom">
-            </label>
-            <label class="lfi-field">
-                <span class="lfi-label">Téléphone</span>
-                <input type="tel" name="rdv_tel" placeholder="06 12 34 56 78">
-            </label>
-            <label class="lfi-field">
-                <span class="lfi-label">Email</span>
-                <input type="email" name="rdv_email" placeholder="vous@email.fr">
-            </label>
+            <div class="lfi-rdv-row">
+                <label class="lfi-field">
+                    <span class="lfi-label">Date souhaitée</span>
+                    <input type="date" name="rdv_date" min="<?php echo esc_attr(current_time('Y-m-d')); ?>">
+                </label>
+                <label class="lfi-field">
+                    <span class="lfi-label">Créneau</span>
+                    <select name="rdv_creneau">
+                        <option value="">— indifférent —</option>
+                        <option>Matin</option>
+                        <option>Après-midi</option>
+                        <option>Soir</option>
+                    </select>
+                </label>
+            </div>
+            <div class="lfi-rdv-row">
+                <label class="lfi-field">
+                    <span class="lfi-label">Prénom</span>
+                    <input type="text" name="rdv_prenom">
+                </label>
+                <label class="lfi-field">
+                    <span class="lfi-label">Nom</span>
+                    <input type="text" name="rdv_nom">
+                </label>
+            </div>
+            <div class="lfi-rdv-row">
+                <label class="lfi-field">
+                    <span class="lfi-label">Téléphone</span>
+                    <input type="tel" name="rdv_tel" placeholder="06 12 34 56 78">
+                </label>
+                <label class="lfi-field">
+                    <span class="lfi-label">Email</span>
+                    <input type="email" name="rdv_email" placeholder="vous@email.fr">
+                </label>
+            </div>
             <p class="lfi-help">Indiquez au moins un téléphone <strong>ou</strong> un email.</p>
             <label class="lfi-field">
                 <span class="lfi-label">Motif (optionnel)</span>
-                <textarea name="rdv_motif" rows="3"></textarea>
+                <textarea name="rdv_motif" rows="3" placeholder="Ex : problème d'humidité, aide pour un courrier à NMH…"></textarea>
             </label>
-            <button type="submit" class="lfi-btn">Envoyer la demande</button>
+            <button type="submit" class="lfi-btn lfi-btn-lg">Envoyer la demande</button>
         </form>
         <?php endif; ?>
     </div>

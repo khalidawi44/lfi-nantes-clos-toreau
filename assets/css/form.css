@@ -120,16 +120,47 @@
 .lfi-btn-tg:hover { background: #1b87bb; }
 .lfi-btn-tel { background: #1a7f37; }
 .lfi-btn-tel:hover { background: #15672d; }
-.lfi-tg-rdv, .lfi-rdv-form { max-width: 640px; }
-.lfi-rdv-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.lfi-rdv-form select,
-.lfi-rdv-form input[type="date"],
-.lfi-rdv-form input[type="tel"],
-.lfi-rdv-form input[type="email"],
-.lfi-rdv-form input[type="text"],
-.lfi-rdv-form textarea {
-    padding: 0.6em; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; width: 100%;
+
+/* Rendez-vous : cartes */
+.lfi-rdv-card {
+    max-width: 680px;
+    margin: 1.5em auto;
+    padding: 1.8em 2em;
+    background: #fff;
+    border: 1px solid #ececec;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #222;
+    font-size: 16px;
 }
+.lfi-rdv-title { color: #c8102e; margin: 0 0 0.6em; font-size: 1.4em; }
+.lfi-rdv-why {
+    background: #fdf0f2;
+    border-left: 4px solid #c8102e;
+    border-radius: 0 6px 6px 0;
+    padding: 0.9em 1.1em;
+    margin: 0 0 1em;
+    line-height: 1.55;
+}
+.lfi-rdv-sub { color: #555; margin: 0 0 1em; }
+.lfi-rdv-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 0.8em; }
+.lfi-rdv-actions .lfi-btn { flex: 1 1 auto; }
+.lfi-rdv-fields { display: flex; flex-direction: column; gap: 1.1em; }
+.lfi-rdv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+.lfi-rdv-card .lfi-field { display: flex; flex-direction: column; margin: 0; }
+.lfi-rdv-card .lfi-label { font-weight: 600; margin-bottom: 0.35em; }
+.lfi-rdv-card input,
+.lfi-rdv-card select,
+.lfi-rdv-card textarea {
+    padding: 0.65em; font-size: 1em; border: 1px solid #ccc; border-radius: 6px;
+    width: 100%; box-sizing: border-box; font-family: inherit;
+}
+.lfi-rdv-card input:focus,
+.lfi-rdv-card select:focus,
+.lfi-rdv-card textarea:focus { border-color: #c8102e; outline: none; }
+.lfi-btn-lg { padding: 0.9em 1.6em; font-size: 1.05em; font-weight: 600; align-self: flex-start; }
+
 .lfi-inscription {
     margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #ddd;
 }
@@ -141,4 +172,8 @@
     .lfi-scale { flex-wrap: wrap; }
     .lfi-radio-btn { min-width: 18%; }
     .lfi-compte { margin: 0; padding: 1em; }
+    .lfi-rdv-card { padding: 1.2em; margin: 1em 0; }
+    .lfi-rdv-row { grid-template-columns: 1fr; gap: 1.1em; }
+    .lfi-rdv-actions .lfi-btn { flex-basis: 100%; }
+    .lfi-btn-lg { align-self: stretch; }
 }
