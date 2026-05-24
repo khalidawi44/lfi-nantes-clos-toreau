@@ -91,7 +91,7 @@ function lfi_nct_compte_shortcode() {
             <h3>Pas encore adhérent ?</h3>
             <p>L'inscription se fait sur Action Populaire, dans notre groupe.</p>
             <?php if ($ap_url !== ''): ?>
-                <a class="lfi-btn lfi-btn-ap" href="<?php echo esc_url($ap_url); ?>" target="_blank" rel="noopener">M'inscrire sur Action Populaire</a>
+                <a class="lfi-btn lfi-btn-ap lfi-popup" href="<?php echo esc_url($ap_url); ?>" target="_blank" rel="noopener">M'inscrire sur Action Populaire</a>
             <?php else: ?>
                 <p class="lfi-help">(Lien Action Populaire à configurer.)</p>
             <?php endif; ?>
@@ -102,14 +102,27 @@ function lfi_nct_compte_shortcode() {
 }
 
 /**
- * Libellé dynamique d'un élément de menu portant la classe « lfi-espace-adherent ».
+ * Menu selon le statut de connexion :
+ * - « lfi-espace-adherent » : libellé dynamique (connecté / déconnecté) ;
+ * - « lfi-hide-when-logged-in » : élément masqué quand l'utilisateur est connecté
+ *   (ex : « Rejoindre LFI »).
  */
 add_filter('wp_nav_menu_objects', 'lfi_nct_dynamic_account_menu', 10, 2);
 function lfi_nct_dynamic_account_menu($items, $args) {
+    $logged_in = is_user_logged_in();
+    $kept = [];
     foreach ($items as $item) {
-        if (in_array('lfi-espace-adherent', (array) $item->classes, true)) {
-            $item->title = is_user_logged_in() ? 'Espace adhérent' : "M'inscrire / Me connecter";
+        $classes = (array) $item->classes;
+
+        if ($logged_in && in_array('lfi-hide-when-logged-in', $classes, true)) {
+            continue;
         }
+
+        if (in_array('lfi-espace-adherent', $classes, true)) {
+            $item->title = $logged_in ? 'Espace adhérent' : "M'inscrire / Me connecter";
+        }
+
+        $kept[] = $item;
     }
-    return $items;
+    return $kept;
 }
