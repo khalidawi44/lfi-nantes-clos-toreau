@@ -50,6 +50,20 @@ function lfi_nct_handle_login() {
     exit;
 }
 
+/**
+ * Affiche le formulaire / tableau de bord à la suite du contenu de la page
+ * « mon-compte », sans avoir à insérer le shortcode à la main.
+ * Le contenu existant de la page est conservé.
+ */
+add_filter('the_content', 'lfi_nct_inject_compte_form', 20);
+function lfi_nct_inject_compte_form($content) {
+    if (is_admin() || !in_the_loop() || !is_main_query() || !is_page()) return $content;
+    $post = get_post();
+    if (!$post || $post->post_name !== 'mon-compte') return $content;
+    if (has_shortcode($post->post_content, 'lfi_nct_compte')) return $content;
+    return $content . do_shortcode('[lfi_nct_compte]');
+}
+
 add_shortcode('lfi_nct_compte', 'lfi_nct_compte_shortcode');
 function lfi_nct_compte_shortcode() {
     if (is_user_logged_in()) {
