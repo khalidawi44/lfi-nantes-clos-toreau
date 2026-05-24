@@ -165,8 +165,9 @@ function lfi_nct_menu_extra_items($style = 'classic') {
 
     $sub_html = '';
     foreach ($subs as $s) {
-        $ext = $s[2] ? ' target="_blank" rel="noopener"' : '';
-        $sub_html .= '<li class="menu-item"><a href="' . $s[1] . '"' . $ext . '>' . esc_html($s[0]) . '</a></li>';
+        // Liens externes : petite fenêtre (classe lfi-popup) sans quitter le site.
+        $attr = $s[2] ? ' class="lfi-popup" target="_blank" rel="noopener"' : '';
+        $sub_html .= '<li class="menu-item"><a href="' . $s[1] . '"' . $attr . '>' . esc_html($s[0]) . '</a></li>';
     }
 
     $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . $rdv_url . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
