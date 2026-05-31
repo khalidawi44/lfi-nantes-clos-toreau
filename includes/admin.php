@@ -46,13 +46,14 @@ function lfi_nct_admin_page() {
 
         <table class="wp-list-table widefat fixed striped">
             <thead>
-                <tr><th>ID</th><th>Date</th><th>Militant</th><th>Adresse</th><th>Étage</th><th>Année</th><th>Recontact ?</th></tr>
+                <tr><th>ID</th><th>Date</th><th>Gravité</th><th>Militant</th><th>Adresse</th><th>Étage</th><th>Année</th><th>Recontact ?</th></tr>
             </thead>
             <tbody>
                 <?php foreach ($responses as $r): ?>
                 <tr>
                     <td><?php echo $r->id; ?></td>
                     <td><?php echo esc_html($r->submitted_at); ?></td>
+                    <td><?php echo lfi_nct_gravity_badge_html($r); ?></td>
                     <td><?php echo esc_html($r->militant_login); ?></td>
                     <td><?php echo esc_html($r->adresse); ?></td>
                     <td><?php echo esc_html($r->etage); ?></td>
