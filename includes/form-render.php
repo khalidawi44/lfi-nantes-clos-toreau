@@ -415,3 +415,62 @@ function lfi_nct_section_8_contact() {
     </div>
     <?php
 }
+
+/**
+ * Rend un résumé imprimable de la réponse qui vient d'être envoyée.
+ * Affiché après soumission pour que la personne (et le ou la militant·e)
+ * puisse imprimer/photocopier la fiche pour garder une copie papier.
+ */
+function lfi_nct_render_submission_summary($id) {
+    global $wpdb;
+    $id = (int) $id;
+    if ($id <= 0) return '';
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $id));
+    if (!$row) return '';
+    $data = $row->data ? json_decode($row->data, true) : [];
+    if (!is_array($data)) $data = [];
+
+    $fresh_url = esc_url(remove_query_arg(['_wp_http_referer']));
+
+    ob_start(); ?>
+    <div class="lfi-survey lfi-submission">
+        <div class="lfi-print-bar">
+            <button type="button" class="lfi-btn-print" onclick="window.print()">🖨️ Imprimer ma réponse</button>
+            <a href="<?php echo $fresh_url; ?>" class="lfi-btn-print" style="margin-left:.5em;text-decoration:none">📝 Saisir une nouvelle enquête</a>
+        </div>
+
+        <h2>Votre réponse — enquête n°<?php echo (int) $row->id; ?></h2>
+        <p class="lfi-help">Enregistrée le <?php echo esc_html($row->submitted_at); ?>.</p>
+
+        <h3>Logement</h3>
+        <ul class="lfi-summary-list">
+            <li><strong>Adresse :</strong> <?php echo esc_html($row->adresse); ?></li>
+            <li><strong>Étage :</strong> <?php echo esc_html($row->etage); ?></li>
+            <li><strong>Année d'arrivée :</strong> <?php echo esc_html($row->annee_arrivee); ?></li>
+        </ul>
+
+        <?php if (!empty($data)): ?>
+        <h3>Réponses détaillées</h3>
+        <ul class="lfi-summary-list">
+            <?php foreach ($data as $k => $v):
+                $label = ucfirst(str_replace('_', ' ', (string) $k));
+                $value = is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v;
+                if ($value === '') continue; ?>
+                <li><strong><?php echo esc_html($label); ?> :</strong> <?php echo esc_html($value); ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+
+        <h3>Contact</h3>
+        <ul class="lfi-summary-list">
+            <li><strong>Souhaite être recontacté·e :</strong> <?php echo $row->contact_recontact ? 'Oui' : 'Non'; ?></li>
+            <?php if ($row->contact_prenom): ?><li><strong>Prénom :</strong> <?php echo esc_html($row->contact_prenom); ?></li><?php endif; ?>
+            <?php if ($row->contact_nom): ?><li><strong>Nom :</strong> <?php echo esc_html($row->contact_nom); ?></li><?php endif; ?>
+            <?php if ($row->contact_tel): ?><li><strong>Téléphone :</strong> <?php echo esc_html($row->contact_tel); ?></li><?php endif; ?>
+            <?php if ($row->contact_email): ?><li><strong>Email :</strong> <?php echo esc_html($row->contact_email); ?></li><?php endif; ?>
+        </ul>
+    </div>
+    <?php
+    return ob_get_clean();
+}

@@ -40,7 +40,7 @@ function lfi_nct_admin_page() {
     $responses = lfi_nct_get_responses(50);
     ?>
     <div class="wrap">
-        <h1>LFI Clos Toreau — Réponses Enquête Logement</h1>
+        <h1>LFI Clos Toreau — Réponses Enquête Logement <?php echo lfi_nct_print_button('Imprimer toutes les réponses'); ?></h1>
         <p><strong><?php echo $count; ?></strong> réponse(s) enregistrée(s).</p>
         <p><a href="?page=lfi-nct-responses&export=csv" class="button button-primary">📥 Exporter en CSV</a></p>
 
@@ -83,4 +83,33 @@ function lfi_nct_export_csv() {
         ], ';');
     }
     fclose($out);
+}
+
+/**
+ * Petit bouton « Imprimer » à inclure en haut des pages d'admin LFI.
+ */
+function lfi_nct_print_button($label = 'Imprimer cette page') {
+    return '<button type="button" class="button lfi-print-hide" onclick="window.print()" style="margin-left:.5em;vertical-align:middle">🖨️ ' . esc_html($label) . '</button>';
+}
+
+/**
+ * Feuille de style impression : masque tout le chrome de wp-admin pour
+ * n'imprimer que le contenu de la page (.wrap), sur les pages LFI.
+ */
+add_action('admin_head', 'lfi_nct_admin_print_css');
+function lfi_nct_admin_print_css() {
+    $page = isset($_GET['page']) ? (string) $_GET['page'] : '';
+    if (!preg_match('/^lfi-nct-(responses|stats|rdv)$/', $page)) return;
+    echo '<style id="lfi-nct-print-css">
+    @media print {
+        body * { visibility: hidden; }
+        .wrap, .wrap * { visibility: visible; }
+        .wrap { position: absolute; left: 0; top: 0; width: 100%; padding: 0 1em; }
+        .button, .lfi-print-hide, #screen-meta, #screen-meta-links,
+        .notice, .update-nag, .page-title-action { display: none !important; }
+        a { color: #000; text-decoration: none; }
+        .wp-list-table { font-size: 11px; }
+        .wp-list-table th, .wp-list-table td { padding: 4px 6px !important; }
+    }
+    </style>';
 }

@@ -219,7 +219,7 @@ function lfi_nct_rdv_admin_page() {
     $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}lfi_nct_rdv ORDER BY created_at DESC LIMIT 300");
     ?>
     <div class="wrap">
-        <h1>Demandes de rendez-vous</h1>
+        <h1>Demandes de rendez-vous <?php echo lfi_nct_print_button('Imprimer la liste'); ?></h1>
         <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr><th>Reçu le</th><th>Date souhaitée</th><th>Créneau</th><th>Prénom Nom</th><th>Téléphone</th><th>Email</th><th>Motif</th></tr>
