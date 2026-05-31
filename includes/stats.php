@@ -128,6 +128,7 @@ function lfi_nct_compute_stats() {
         'thermique_type' => [], 'thermique_adequation' => [], 'thermique_appoint' => [],
         'demarches_signale' => [], 'demarches_collectif' => [],
         'top_immeubles' => [],
+        'gravity' => ['leger' => 0, 'preoccupant' => 0, 'grave' => 0, 'critique' => 0],
     ];
 
     if ($total === 0) return $stats;
@@ -136,6 +137,10 @@ function lfi_nct_compute_stats() {
     foreach ($responses as $r) {
         $data = json_decode($r->data, true);
         if (!is_array($data)) continue;
+
+        // Gravité automatique
+        list($glvl) = lfi_nct_gravity_level(lfi_nct_gravity_score($data));
+        if (isset($stats['gravity'][$glvl])) $stats['gravity'][$glvl]++;
 
         $ins = $data['insectes_presence'] ?? '';
         if ($ins === 'oui') { $stats['insectes_oui']++; $stats['insectes_repartition']['oui']++; }
@@ -213,6 +218,15 @@ function lfi_nct_get_filtered_responses($filter) {
             case 'interet_collectif':
                 $match = in_array($data['demarches_collectif'] ?? '', ['oui', 'a_voir'], true);
                 break;
+            case 'gravite_preoccupant':
+                $match = lfi_nct_gravity_at_least($data, 'preoccupant');
+                break;
+            case 'gravite_grave':
+                $match = lfi_nct_gravity_at_least($data, 'grave');
+                break;
+            case 'gravite_critique':
+                $match = lfi_nct_gravity_at_least($data, 'critique');
+                break;
         }
         if ($match) $filtered[] = $r;
     }
@@ -228,6 +242,9 @@ function lfi_nct_filter_label($filter) {
         'signale_nmh' => 'Ont signalé à NMH',
         'interet_collectif' => 'Intéressés par dossier collectif',
         'recontact' => 'Souhaitent être recontactés',
+        'gravite_preoccupant' => 'Cas au moins préoccupants',
+        'gravite_grave' => 'Cas graves ou critiques',
+        'gravite_critique' => 'Cas critiques',
     ][$filter] ?? $filter;
 }
 
@@ -285,6 +302,32 @@ function lfi_nct_render_stats_overview() {
 
         <p style="font-size:1.1em;margin-bottom:1.5em;">Basé sur <strong><?php echo $total; ?></strong> réponse<?php echo $total > 1 ? 's' : ''; ?>. <em>Cliquez sur une card pour voir le détail.</em></p>
 
+        <h2 style="margin-top:0">Gravité automatique</h2>
+        <p class="description" style="margin-top:-.5em;margin-bottom:1em">Score calculé à partir des indicateurs : insectes, humidité, chauffage NMH, appoint perso, infiltrations.</p>
+        <div class="lfi-stats-cards">
+            <a class="lfi-stats-card" style="background:#1a7f37;color:#fff" href="<?php echo esc_url($url('gravite_preoccupant')); ?>" title="Niveau léger (score 0-2)">
+                <div class="nb"><?php echo $stats['gravity']['leger']; ?></div>
+                <div class="label">🟢 Léger</div>
+                <div class="abs"><?php echo $pct($stats['gravity']['leger'], $total); ?>%</div>
+            </a>
+            <a class="lfi-stats-card" style="background:#bd8600;color:#fff" href="<?php echo esc_url($url('gravite_preoccupant')); ?>">
+                <div class="nb"><?php echo $stats['gravity']['preoccupant']; ?></div>
+                <div class="label">🟡 Préoccupant</div>
+                <div class="abs"><?php echo $pct($stats['gravity']['preoccupant'], $total); ?>%</div>
+            </a>
+            <a class="lfi-stats-card" style="background:#c8102e;color:#fff" href="<?php echo esc_url($url('gravite_grave')); ?>">
+                <div class="nb"><?php echo $stats['gravity']['grave']; ?></div>
+                <div class="label">🔴 Grave</div>
+                <div class="abs"><?php echo $pct($stats['gravity']['grave'], $total); ?>%</div>
+            </a>
+            <a class="lfi-stats-card" style="background:#7a0000;color:#fff" href="<?php echo esc_url($url('gravite_critique')); ?>">
+                <div class="nb"><?php echo $stats['gravity']['critique']; ?></div>
+                <div class="label">🚨 Critique</div>
+                <div class="abs"><?php echo $pct($stats['gravity']['critique'], $total); ?>%</div>
+            </a>
+        </div>
+
+        <h2 style="margin-top:2em">Indicateurs détaillés</h2>
         <div class="lfi-stats-cards">
             <div class="lfi-stats-card lfi-card-static">
                 <div class="nb"><?php echo $total; ?></div>
