@@ -277,7 +277,7 @@ function lfi_nct_render_stats_overview() {
     $chart_collectif = lfi_nct_chart_data($stats['demarches_collectif'], lfi_nct_value_labels()['demarches_collectif']);
     ?>
     <div class="wrap lfi-stats">
-        <h1>📊 LFI Clos Toreau — Statistiques de l'enquête</h1>
+        <h1>📊 LFI Clos Toreau — Statistiques de l'enquête <?php echo lfi_nct_print_button('Imprimer les statistiques'); ?></h1>
 
         <?php if ($total === 0): ?>
             <div class="notice notice-info"><p>Aucune réponse enregistrée pour l'instant.</p></div>
@@ -410,7 +410,7 @@ function lfi_nct_render_filtered_view($filter) {
     ?>
     <div class="wrap lfi-stats">
         <p><a href="<?php echo esc_url($back); ?>" class="button">← Retour aux statistiques</a></p>
-        <h1>🔍 Filtre : <?php echo esc_html($label); ?></h1>
+        <h1>🔍 Filtre : <?php echo esc_html($label); ?> <?php echo lfi_nct_print_button('Imprimer cette sélection'); ?></h1>
         <p><strong><?php echo count($responses); ?></strong> réponse<?php echo count($responses) > 1 ? 's' : ''; ?> correspondante<?php echo count($responses) > 1 ? 's' : ''; ?>.</p>
 
         <?php if (empty($responses)): ?>
@@ -489,7 +489,7 @@ function lfi_nct_render_response_detail($id) {
     ?>
     <div class="wrap lfi-stats">
         <p><a href="<?php echo esc_url($back_url); ?>" class="button">← Retour</a></p>
-        <h1>📄 Réponse #<?php echo $r->id; ?> — détail complet</h1>
+        <h1>📄 Réponse #<?php echo $r->id; ?> — détail complet <?php echo lfi_nct_print_button('Imprimer ce formulaire rempli'); ?></h1>
         <p><strong>Soumise le :</strong> <?php echo esc_html($r->submitted_at); ?> par <strong><?php echo esc_html($r->militant_login); ?></strong></p>
 
         <div class="lfi-detail-section">

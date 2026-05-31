@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.9.4
+ * Version: 0.9.5
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.9.4');
+define('LFI_NCT_VERSION', '0.9.5');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -98,7 +98,9 @@ function lfi_nct_survey_shortcode() {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_nct_submit'])) {
         $result = lfi_nct_handle_submission();
         if ($result === true) {
-            return '<div class="lfi-success"><h2>Merci !</h2><p>L\'enquête a été enregistrée. Tu peux en saisir une nouvelle ci-dessous.</p></div>' . lfi_nct_render_form();
+            $id = $GLOBALS['lfi_nct_last_submission_id'] ?? 0;
+            $summary = $id > 0 ? lfi_nct_render_submission_summary($id) : lfi_nct_render_form();
+            return '<div class="lfi-success"><h2>Merci !</h2><p>L\'enquête a été enregistrée. Vous pouvez l\'imprimer ci-dessous pour garder une copie papier.</p></div>' . $summary;
         } else {
             return '<div class="lfi-error"><strong>Erreur :</strong> ' . esc_html($result) . '</div>' . lfi_nct_render_form();
         }

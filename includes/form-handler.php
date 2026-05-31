@@ -59,5 +59,6 @@ function lfi_nct_handle_submission() {
     if ($insert === false) {
         return 'Erreur DB : ' . esc_html($wpdb->last_error);
     }
+    $GLOBALS['lfi_nct_last_submission_id'] = (int) $wpdb->insert_id;
     return true;
 }
