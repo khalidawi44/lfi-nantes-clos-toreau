@@ -7,6 +7,10 @@ function lfi_nct_render_form() {
     <form method="POST" id="lfi-nct-form" class="lfi-survey">
         <?php wp_nonce_field('lfi_nct_submit_nonce', 'lfi_nct_nonce'); ?>
 
+        <div class="lfi-print-bar">
+            <button type="button" class="lfi-btn-print" onclick="window.print()">🖨️ Imprimer / Photocopier (version papier)</button>
+        </div>
+
         <div class="lfi-progress"><div class="lfi-progress-bar" style="width:14%"></div></div>
 
         <div class="lfi-step active" data-step="1"><?php lfi_nct_section_1_logement(); ?></div>
