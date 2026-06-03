@@ -184,6 +184,28 @@
 .lfi-rdv-card textarea:focus { border-color: #c8102e; outline: none; }
 .lfi-btn-lg { padding: 0.9em 1.6em; font-size: 1.05em; font-weight: 600; align-self: flex-start; }
 
+/* Courrier CRA (Arpège) — style « lettre administrative » */
+.lfi-arpege-letter {
+    max-width: 720px;
+    margin: 2em auto;
+    padding: 2.5em 3em;
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #000;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    line-height: 1.6;
+}
+.lfi-arpege-letter p { margin: 0 0 1em; }
+.lfi-arpege-letter ol { margin: 0 0 1em 1.6em; }
+.lfi-letter-meta { text-align: right; margin-bottom: 2em !important; }
+
+/* Impression du courrier CRA seul (sans la carte verte ni les boutons) */
+@media print {
+    .lfi-arpege-card { display: none !important; }
+    .lfi-arpege-letter { border: none; padding: 0; max-width: 100%; margin: 0; }
+}
+
 .lfi-inscription {
     margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #ddd;
 }
