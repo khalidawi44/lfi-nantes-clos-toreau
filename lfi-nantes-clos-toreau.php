@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.10.0
+ * Version: 0.11.0
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.10.0');
+define('LFI_NCT_VERSION', '0.11.0');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -22,6 +22,7 @@ require_once LFI_NCT_PATH . 'includes/admin.php';
 require_once LFI_NCT_PATH . 'includes/stats.php';
 require_once LFI_NCT_PATH . 'includes/compte.php';
 require_once LFI_NCT_PATH . 'includes/rdv.php';
+require_once LFI_NCT_PATH . 'includes/arpege.php';
 
 register_activation_hook(__FILE__, 'lfi_nct_activate');
 function lfi_nct_activate() {
@@ -39,7 +40,9 @@ function lfi_nct_enqueue_assets() {
     $has_survey = has_shortcode($post->post_content, 'lfi_nct_survey');
     $has_compte = lfi_nct_is_compte_page($post);
     $is_rdv     = ($post->post_name === 'rendez-vous');
-    if ($has_survey || $has_compte || $is_rdv) {
+    $is_arpege  = ($post->post_name === LFI_NCT_ARPEGE_SLUG)
+                  || has_shortcode($post->post_content, 'lfi_nct_arpege');
+    if ($has_survey || $has_compte || $is_rdv || $is_arpege) {
         wp_enqueue_style('lfi-nct-css', LFI_NCT_URL . 'assets/css/form.css', [], LFI_NCT_VERSION);
     }
     if ($has_survey) {
@@ -87,8 +90,9 @@ add_action('wp', 'lfi_nct_no_cache_survey_page');
 function lfi_nct_no_cache_survey_page() {
     if (!is_singular()) return;
     $post = get_post();
-    $is_rdv = is_a($post, 'WP_Post') && $post->post_name === 'rendez-vous';
-    if (lfi_nct_is_private_page($post) || $is_rdv) {
+    $is_rdv    = is_a($post, 'WP_Post') && $post->post_name === 'rendez-vous';
+    $is_arpege = is_a($post, 'WP_Post') && $post->post_name === LFI_NCT_ARPEGE_SLUG;
+    if (lfi_nct_is_private_page($post) || $is_rdv || $is_arpege) {
         if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
         do_action('litespeed_control_set_nocache', 'LFI : page avec nonce dynamique');
     }
