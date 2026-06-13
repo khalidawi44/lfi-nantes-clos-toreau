@@ -158,9 +158,11 @@ function lfi_nct_trouver_groupe_url() {
  * $style : 'classic' (wp_nav_menu) ou 'block' (navigation FSE, version à plat).
  */
 function lfi_nct_menu_extra_items($style = 'classic') {
-    $compte_url = esc_url(home_url('/mon-compte/'));
-    $rdv_url    = esc_url(home_url('/rendez-vous/'));
-    $logged_in  = is_user_logged_in();
+    $compte_url  = esc_url(home_url('/mon-compte/'));
+    $rdv_url     = esc_url(home_url('/rendez-vous/'));
+    $survey_url  = esc_url(home_url('/enquete-logement-clos-toreau/'));
+    $survey_label = '📋 Enquête logement';
+    $logged_in   = is_user_logged_in();
 
     if ($logged_in) {
         $parent_label = 'Espace adhérent';
@@ -182,8 +184,9 @@ function lfi_nct_menu_extra_items($style = 'classic') {
     if ($style === 'block') {
         // Thème en blocs (fallback) : entrées à plat.
         $rdv = '<li class="wp-block-navigation-item wp-block-navigation-link lfi-menu-rdv"><a class="wp-block-navigation-item__content" href="' . $rdv_url . '"><span class="wp-block-navigation-item__label">' . esc_html('📅 Prendre rendez-vous') . '</span></a></li>';
+        $survey = '<li class="wp-block-navigation-item wp-block-navigation-link lfi-menu-survey"><a class="wp-block-navigation-item__content" href="' . $survey_url . '"><span class="wp-block-navigation-item__label">' . esc_html($survey_label) . '</span></a></li>';
         $par = '<li class="wp-block-navigation-item wp-block-navigation-link"><a class="wp-block-navigation-item__content" href="' . $parent_url . '"><span class="wp-block-navigation-item__label">' . esc_html($parent_label) . '</span></a></li>';
-        return $rdv . $par;
+        return $rdv . $survey . $par;
     }
 
     $sub_html = '';
@@ -194,11 +197,12 @@ function lfi_nct_menu_extra_items($style = 'classic') {
     }
 
     $rdv = '<li class="menu-item lfi-menu-rdv"><a href="' . $rdv_url . '">' . esc_html('📅 Prendre rendez-vous') . '</a></li>';
+    $survey = '<li class="menu-item lfi-menu-survey"><a href="' . $survey_url . '">' . esc_html($survey_label) . '</a></li>';
     $dropdown = '<li class="menu-item menu-item-has-children lfi-menu-dropdown">'
         . '<a href="' . $parent_url . '">' . esc_html($parent_label) . ' ▾</a>'
         . '<ul class="sub-menu">' . $sub_html . '</ul></li>';
 
-    return $rdv . $dropdown;
+    return $rdv . $survey . $dropdown;
 }
 
 /**
