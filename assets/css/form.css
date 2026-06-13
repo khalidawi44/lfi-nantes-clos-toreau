@@ -98,9 +98,19 @@
 
 /* Rendu papier : toutes les sections visibles, navigation cachée */
 @media print {
+    /* Cache explicitement le chrome du thème pour qu'il ne s'imprime pas
+       (logo, en-tête, pied, navigation, sidebar, etc.) */
+    header, footer, nav, aside,
+    .site-header, .site-footer, .site-navigation, .sidebar, .menu, .header, .footer,
+    #masthead, #colophon, #wpadminbar, #wp-toolbar,
+    .wp-block-template-part, .wp-block-navigation, .nav-menu, .menu-toggle,
+    .ag-header, .ag-footer, .ag-nav,
+    [class*="site-header"], [class*="site-footer"] { display: none !important; }
+
+    /* Puis : tout cacher visuellement et n'afficher que le formulaire */
     body * { visibility: hidden; }
     .lfi-survey, .lfi-survey * { visibility: visible; }
-    .lfi-survey { position: absolute; left: 0; top: 0; max-width: none; padding: 0; margin: 0; color: #000; }
+    .lfi-survey { position: static !important; max-width: none !important; padding: 0 !important; margin: 0 !important; color: #000 !important; }
     .lfi-step { display: block !important; page-break-inside: avoid; margin-bottom: 1em; }
     .lfi-nav, .lfi-print-bar, .lfi-progress, .lfi-info-box { display: none !important; }
     .lfi-radio, .lfi-check { background: #fff !important; color: #000 !important; border: 1px solid #999 !important; padding: 4px 8px; }
@@ -108,6 +118,8 @@
     .lfi-radio-btn { background: #fff !important; color: #000 !important; border: 1px solid #999 !important; }
     .lfi-survey h2 { border-bottom: 1px solid #000; color: #000; page-break-after: avoid; }
     input, textarea, select { border: 1px solid #999 !important; background: #fff !important; }
+    /* Annule le marquage HTML5 « invalide » sur les champs vides à l'impression */
+    input:invalid, select:invalid, textarea:invalid { box-shadow: none !important; outline: none !important; }
     a[href]:after { content: ""; } /* pas d'URL collée après les liens */
 }
 
@@ -202,8 +214,18 @@
 
 /* Impression du courrier CRA seul (sans la carte verte ni les boutons) */
 @media print {
+    /* Cache le thème (logo, en-tête, etc.) pour avoir une lettre propre */
+    header, footer, nav, aside,
+    .site-header, .site-footer, .site-navigation, .sidebar, .menu, .header, .footer,
+    #masthead, #colophon, #wpadminbar, #wp-toolbar,
+    .wp-block-template-part, .wp-block-navigation, .nav-menu, .menu-toggle,
+    .ag-header, .ag-footer, .ag-nav,
+    [class*="site-header"], [class*="site-footer"] { display: none !important; }
+
+    body * { visibility: hidden; }
+    .lfi-arpege-letter, .lfi-arpege-letter * { visibility: visible; }
     .lfi-arpege-card { display: none !important; }
-    .lfi-arpege-letter { border: none; padding: 0; max-width: 100%; margin: 0; }
+    .lfi-arpege-letter { position: static !important; border: none !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
 }
 
 .lfi-inscription {
