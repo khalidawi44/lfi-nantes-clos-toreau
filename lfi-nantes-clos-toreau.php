@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.11.1
+ * Version: 0.11.2
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.11.1');
+define('LFI_NCT_VERSION', '0.11.2');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -27,6 +27,29 @@ require_once LFI_NCT_PATH . 'includes/arpege.php';
 register_activation_hook(__FILE__, 'lfi_nct_activate');
 function lfi_nct_activate() {
     lfi_nct_create_table();
+}
+
+/**
+ * Purge automatiquement les caches dès que la version du plugin change
+ * (= dès qu'Hostinger Git Tool a tiré un nouveau commit). Sur la première
+ * requête après le déploiement, on détecte la nouvelle version et on vide
+ * LiteSpeed Cache (et d'autres caches connus s'ils sont présents).
+ */
+add_action('init', 'lfi_nct_purge_cache_on_upgrade', 5);
+function lfi_nct_purge_cache_on_upgrade() {
+    $installed = (string) get_option('lfi_nct_installed_version', '');
+    if ($installed === LFI_NCT_VERSION) return;
+
+    // On note la nouvelle version AVANT de purger pour ne jamais boucler.
+    update_option('lfi_nct_installed_version', LFI_NCT_VERSION, false);
+
+    // LiteSpeed Cache (le cache utilisé sur le site)
+    do_action('litespeed_purge_all');
+    // Filets de sécurité si d'autres caches sont actifs
+    if (function_exists('wp_cache_clear_cache')) wp_cache_clear_cache(); // WP Super Cache
+    if (function_exists('w3tc_flush_all'))       w3tc_flush_all();       // W3 Total Cache
+    if (function_exists('rocket_clean_domain'))  rocket_clean_domain();  // WP Rocket
+    if (function_exists('wp_cache_flush'))       wp_cache_flush();       // Cache objet
 }
 
 add_action('wp_enqueue_scripts', 'lfi_nct_enqueue_assets');
