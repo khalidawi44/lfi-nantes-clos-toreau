@@ -116,19 +116,27 @@ function lfi_nct_label($field, $value) {
 function lfi_nct_compute_stats() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
-
     $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
 
     $stats = [
         'total' => $total,
-        'insectes_oui' => 0, 'humidite_oui' => 0, 'thermique_insuffisant' => 0,
-        'appoint_utilise' => 0, 'signale_nmh' => 0, 'interet_collectif' => 0, 'recontact' => 0,
-        'insectes_repartition' => ['oui' => 0, 'non' => 0],
-        'humidite_repartition' => ['oui_visible' => 0, 'oui_ressentie' => 0, 'oui_suspicion' => 0, 'non' => 0],
-        'thermique_type' => [], 'thermique_adequation' => [], 'thermique_appoint' => [],
-        'demarches_signale' => [], 'demarches_collectif' => [],
+        'problemes_oui' => 0,
+        'recontact'     => 0,
+        'gravite_sum'   => 0,
+        'gravite_count' => 0,
+        'gravite_moyenne' => 0,
+        'types_repartition' => [
+            'degats_eaux' => 0, 'humidite' => 0, 'insectes' => 0, 'chauffage' => 0,
+            'electricite' => 0, 'ascenseur' => 0, 'parties_communes' => 0,
+            'bruit' => 0, 'securite' => 0, 'autre' => 0,
+        ],
+        'duree_repartition' => [
+            'moins_1_mois' => 0, '1_6_mois' => 0, '6_12_mois' => 0,
+            '1_5_ans' => 0, 'plus_5_ans' => 0,
+        ],
+        'recurrent_repartition' => ['permanent' => 0, 'parfois' => 0, 'ponctuel' => 0],
+        'gravity'      => ['leger' => 0, 'preoccupant' => 0, 'grave' => 0, 'critique' => 0],
         'top_immeubles' => [],
-        'gravity' => ['leger' => 0, 'preoccupant' => 0, 'grave' => 0, 'critique' => 0],
     ];
 
     if ($total === 0) return $stats;
@@ -138,38 +146,37 @@ function lfi_nct_compute_stats() {
         $data = json_decode($r->data, true);
         if (!is_array($data)) continue;
 
-        // Gravité automatique
+        // Gravité (niveau qualitatif via gravity.php)
         list($glvl) = lfi_nct_gravity_level(lfi_nct_gravity_score($data));
         if (isset($stats['gravity'][$glvl])) $stats['gravity'][$glvl]++;
 
-        $ins = $data['insectes_presence'] ?? '';
-        if ($ins === 'oui') { $stats['insectes_oui']++; $stats['insectes_repartition']['oui']++; }
-        elseif ($ins === 'non') { $stats['insectes_repartition']['non']++; }
+        // Logements avec problèmes
+        if (($data['problemes_presence'] ?? '') === 'oui') {
+            $stats['problemes_oui']++;
+        }
 
-        $hum = $data['humidite_presence'] ?? '';
-        if (isset($stats['humidite_repartition'][$hum])) $stats['humidite_repartition'][$hum]++;
-        if (in_array($hum, ['oui_visible', 'oui_ressentie', 'oui_suspicion'], true)) $stats['humidite_oui']++;
+        // Types de problèmes (multi-cases)
+        foreach ((array) ($data['problemes_types'] ?? []) as $t) {
+            if (isset($stats['types_repartition'][$t])) $stats['types_repartition'][$t]++;
+        }
 
-        $type = $data['thermique_type'] ?? '';
-        if ($type) $stats['thermique_type'][$type] = ($stats['thermique_type'][$type] ?? 0) + 1;
+        // Durée
+        $duree = $data['problemes_duree'] ?? '';
+        if (isset($stats['duree_repartition'][$duree])) $stats['duree_repartition'][$duree]++;
 
-        $adeq = $data['thermique_adequation'] ?? '';
-        if ($adeq) $stats['thermique_adequation'][$adeq] = ($stats['thermique_adequation'][$adeq] ?? 0) + 1;
-        if (in_array($adeq, ['partiel', 'non_18', 'non_16', 'non_panne'], true)) $stats['thermique_insuffisant']++;
+        // Récurrence
+        $rec = $data['problemes_recurrent'] ?? '';
+        if (isset($stats['recurrent_repartition'][$rec])) $stats['recurrent_repartition'][$rec]++;
 
-        $appoint = $data['thermique_appoint'] ?? '';
-        if ($appoint) $stats['thermique_appoint'][$appoint] = ($stats['thermique_appoint'][$appoint] ?? 0) + 1;
-        if (in_array($appoint, ['oui_permanent', 'oui_quotidien', 'oui_ponctuel', 'oui_passe'], true)) $stats['appoint_utilise']++;
-
-        $signale = $data['demarches_signale'] ?? '';
-        if ($signale) $stats['demarches_signale'][$signale] = ($stats['demarches_signale'][$signale] ?? 0) + 1;
-        if (in_array($signale, ['oui', 'partiel'], true)) $stats['signale_nmh']++;
-
-        $collectif = $data['demarches_collectif'] ?? '';
-        if ($collectif) $stats['demarches_collectif'][$collectif] = ($stats['demarches_collectif'][$collectif] ?? 0) + 1;
-        if (in_array($collectif, ['oui', 'a_voir'], true)) $stats['interet_collectif']++;
+        // Gravité moyenne (sur l'échelle 1-10)
+        $g = (int) ($data['problemes_gravite'] ?? 0);
+        if ($g > 0) { $stats['gravite_sum'] += $g; $stats['gravite_count']++; }
 
         if ((int) $r->contact_recontact === 1) $stats['recontact']++;
+    }
+
+    if ($stats['gravite_count'] > 0) {
+        $stats['gravite_moyenne'] = round($stats['gravite_sum'] / $stats['gravite_count'], 1);
     }
 
     $top = $wpdb->get_results("SELECT adresse, COUNT(*) as nb FROM $table GROUP BY adresse ORDER BY nb DESC LIMIT 10");
@@ -200,23 +207,21 @@ function lfi_nct_get_filtered_responses($filter) {
 
         $match = false;
         switch ($filter) {
-            case 'humidite_oui':
-                $match = in_array($data['humidite_presence'] ?? '', ['oui_visible', 'oui_ressentie', 'oui_suspicion'], true);
+            case 'problemes_oui':
+                $match = ($data['problemes_presence'] ?? '') === 'oui';
                 break;
-            case 'insectes_oui':
-                $match = ($data['insectes_presence'] ?? '') === 'oui';
-                break;
-            case 'thermique_insuffisant':
-                $match = in_array($data['thermique_adequation'] ?? '', ['partiel', 'non_18', 'non_16', 'non_panne'], true);
-                break;
-            case 'appoint_utilise':
-                $match = in_array($data['thermique_appoint'] ?? '', ['oui_permanent', 'oui_quotidien', 'oui_ponctuel', 'oui_passe'], true);
-                break;
-            case 'signale_nmh':
-                $match = in_array($data['demarches_signale'] ?? '', ['oui', 'partiel'], true);
-                break;
-            case 'interet_collectif':
-                $match = in_array($data['demarches_collectif'] ?? '', ['oui', 'a_voir'], true);
+            case 'type_degats_eaux':
+            case 'type_humidite':
+            case 'type_insectes':
+            case 'type_chauffage':
+            case 'type_electricite':
+            case 'type_ascenseur':
+            case 'type_parties_communes':
+            case 'type_bruit':
+            case 'type_securite':
+            case 'type_autre':
+                $needle = substr($filter, 5);
+                $match  = in_array($needle, (array) ($data['problemes_types'] ?? []), true);
                 break;
             case 'gravite_preoccupant':
                 $match = lfi_nct_gravity_at_least($data, 'preoccupant');
@@ -235,16 +240,21 @@ function lfi_nct_get_filtered_responses($filter) {
 
 function lfi_nct_filter_label($filter) {
     return [
-        'humidite_oui' => 'Humidité présente',
-        'insectes_oui' => 'Insectes / nuisibles présents',
-        'thermique_insuffisant' => 'Chauffage NMH insuffisant',
-        'appoint_utilise' => 'Utilisent un appoint personnel',
-        'signale_nmh' => 'Ont signalé à NMH',
-        'interet_collectif' => 'Intéressés par dossier collectif',
-        'recontact' => 'Souhaitent être recontactés',
+        'problemes_oui'      => 'Logements avec problèmes',
+        'recontact'          => 'Souhaitent être recontactés',
+        'type_degats_eaux'   => 'Dégâts des eaux / infiltrations',
+        'type_humidite'      => 'Humidité / moisissures',
+        'type_insectes'      => 'Insectes / nuisibles',
+        'type_chauffage'     => 'Chauffage insuffisant',
+        'type_electricite'   => 'Problèmes électriques',
+        'type_ascenseur'     => 'Ascenseur défaillant',
+        'type_parties_communes' => 'Parties communes dégradées',
+        'type_bruit'         => 'Nuisances sonores',
+        'type_securite'      => 'Insécurité',
+        'type_autre'         => 'Autres problèmes',
         'gravite_preoccupant' => 'Cas au moins préoccupants',
-        'gravite_grave' => 'Cas graves ou critiques',
-        'gravite_critique' => 'Cas critiques',
+        'gravite_grave'      => 'Cas graves ou critiques',
+        'gravite_critique'   => 'Cas critiques',
     ][$filter] ?? $filter;
 }
 
@@ -285,13 +295,23 @@ function lfi_nct_render_stats_overview() {
     $pct = function($n, $tot) { return $tot > 0 ? round($n / $tot * 100, 1) : 0; };
     $url = function($filter) { return admin_url('admin.php?page=lfi-nct-stats&filter=' . urlencode($filter)); };
 
-    $chart_insectes = lfi_nct_chart_data($stats['insectes_repartition'], ['oui' => 'Présence', 'non' => 'Aucun']);
-    $chart_humidite = lfi_nct_chart_data($stats['humidite_repartition'], lfi_nct_value_labels()['humidite_presence']);
-    $chart_thermique_type = lfi_nct_chart_data($stats['thermique_type'], lfi_nct_value_labels()['thermique_type']);
-    $chart_thermique_adeq = lfi_nct_chart_data($stats['thermique_adequation'], lfi_nct_value_labels()['thermique_adequation']);
-    $chart_appoint = lfi_nct_chart_data($stats['thermique_appoint'], lfi_nct_value_labels()['thermique_appoint']);
-    $chart_signale = lfi_nct_chart_data($stats['demarches_signale'], lfi_nct_value_labels()['demarches_signale']);
-    $chart_collectif = lfi_nct_chart_data($stats['demarches_collectif'], lfi_nct_value_labels()['demarches_collectif']);
+    $chart_types = lfi_nct_chart_data($stats['types_repartition'], [
+        'degats_eaux' => 'Dégâts des eaux', 'humidite' => 'Humidité', 'insectes' => 'Nuisibles',
+        'chauffage' => 'Chauffage', 'electricite' => 'Électricité', 'ascenseur' => 'Ascenseur',
+        'parties_communes' => 'Parties communes', 'bruit' => 'Bruit', 'securite' => 'Insécurité',
+        'autre' => 'Autre',
+    ]);
+    $chart_duree = lfi_nct_chart_data($stats['duree_repartition'], [
+        'moins_1_mois' => "<1 mois", '1_6_mois' => '1-6 mois', '6_12_mois' => '6-12 mois',
+        '1_5_ans' => '>1 an', 'plus_5_ans' => '>5 ans',
+    ]);
+    $chart_recurrent = lfi_nct_chart_data($stats['recurrent_repartition'], [
+        'permanent' => 'Permanent', 'parfois' => 'Régulier', 'ponctuel' => 'Ponctuel',
+    ]);
+    $chart_gravity = lfi_nct_chart_data($stats['gravity'], [
+        'leger' => '🟢 Sans souci', 'preoccupant' => '🟡 Préoccupant',
+        'grave' => '🔴 Grave', 'critique' => '🚨 Critique',
+    ]);
     ?>
     <div class="wrap lfi-stats">
         <h1>📊 LFI Clos Toreau — Statistiques de l'enquête <?php echo lfi_nct_print_button('Imprimer les statistiques'); ?></h1>
@@ -302,12 +322,12 @@ function lfi_nct_render_stats_overview() {
 
         <p style="font-size:1.1em;margin-bottom:1.5em;">Basé sur <strong><?php echo $total; ?></strong> réponse<?php echo $total > 1 ? 's' : ''; ?>. <em>Cliquez sur une card pour voir le détail.</em></p>
 
-        <h2 style="margin-top:0">Gravité automatique</h2>
-        <p class="description" style="margin-top:-.5em;margin-bottom:1em">Score calculé à partir des indicateurs : insectes, humidité, chauffage NMH, appoint perso, infiltrations.</p>
+        <h2 style="margin-top:0">Gravité ressentie</h2>
+        <p class="description" style="margin-top:-.5em;margin-bottom:1em">Niveau déclaré par les habitant·es sur l'échelle 1-10 (moyenne : <strong><?php echo $stats['gravite_moyenne']; ?> / 10</strong>).</p>
         <div class="lfi-stats-cards">
-            <a class="lfi-stats-card" style="background:#1a7f37;color:#fff" href="<?php echo esc_url($url('gravite_preoccupant')); ?>" title="Niveau léger (score 0-2)">
+            <a class="lfi-stats-card" style="background:#1a7f37;color:#fff" href="<?php echo esc_url($url('gravite_preoccupant')); ?>" title="Sans souci (pas de problème ou score 0)">
                 <div class="nb"><?php echo $stats['gravity']['leger']; ?></div>
-                <div class="label">🟢 Léger</div>
+                <div class="label">🟢 Sans souci</div>
                 <div class="abs"><?php echo $pct($stats['gravity']['leger'], $total); ?>%</div>
             </a>
             <a class="lfi-stats-card" style="background:#bd8600;color:#fff" href="<?php echo esc_url($url('gravite_preoccupant')); ?>">
@@ -327,57 +347,60 @@ function lfi_nct_render_stats_overview() {
             </a>
         </div>
 
-        <h2 style="margin-top:2em">Indicateurs détaillés</h2>
+        <h2 style="margin-top:2em">Vue d'ensemble</h2>
         <div class="lfi-stats-cards">
             <div class="lfi-stats-card lfi-card-static">
                 <div class="nb"><?php echo $total; ?></div>
                 <div class="label">Réponses totales</div>
             </div>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('humidite_oui')); ?>">
-                <div class="nb"><?php echo $pct($stats['humidite_oui'], $total); ?>%</div>
-                <div class="label">Logements avec humidité</div>
-                <div class="abs"><?php echo $stats['humidite_oui']; ?> / <?php echo $total; ?></div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('insectes_oui')); ?>">
-                <div class="nb"><?php echo $pct($stats['insectes_oui'], $total); ?>%</div>
-                <div class="label">Logements avec nuisibles</div>
-                <div class="abs"><?php echo $stats['insectes_oui']; ?> / <?php echo $total; ?></div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('thermique_insuffisant')); ?>">
-                <div class="nb"><?php echo $pct($stats['thermique_insuffisant'], $total); ?>%</div>
-                <div class="label">Chauffage NMH insuffisant</div>
-                <div class="abs"><?php echo $stats['thermique_insuffisant']; ?> / <?php echo $total; ?></div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('appoint_utilise')); ?>">
-                <div class="nb"><?php echo $pct($stats['appoint_utilise'], $total); ?>%</div>
-                <div class="label">Utilisent un appoint perso</div>
-                <div class="abs"><?php echo $stats['appoint_utilise']; ?> / <?php echo $total; ?></div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('signale_nmh')); ?>">
-                <div class="nb"><?php echo $pct($stats['signale_nmh'], $total); ?>%</div>
-                <div class="label">Ont signalé à NMH</div>
-                <div class="abs"><?php echo $stats['signale_nmh']; ?> / <?php echo $total; ?></div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('interet_collectif')); ?>">
-                <div class="nb"><?php echo $pct($stats['interet_collectif'], $total); ?>%</div>
-                <div class="label">Intéressés par dossier collectif</div>
-                <div class="abs"><?php echo $stats['interet_collectif']; ?> / <?php echo $total; ?></div>
+            <a class="lfi-stats-card" href="<?php echo esc_url($url('problemes_oui')); ?>">
+                <div class="nb"><?php echo $pct($stats['problemes_oui'], $total); ?>%</div>
+                <div class="label">Logements avec problèmes</div>
+                <div class="abs"><?php echo $stats['problemes_oui']; ?> / <?php echo $total; ?></div>
             </a>
             <a class="lfi-stats-card" href="<?php echo esc_url($url('recontact')); ?>">
                 <div class="nb"><?php echo $pct($stats['recontact'], $total); ?>%</div>
-                <div class="label">Souhaitent être recontactés</div>
+                <div class="label">Souhaitent un RDV</div>
                 <div class="abs"><?php echo $stats['recontact']; ?> / <?php echo $total; ?></div>
             </a>
+            <div class="lfi-stats-card lfi-card-static">
+                <div class="nb"><?php echo $stats['gravite_moyenne']; ?> /10</div>
+                <div class="label">Gravité moyenne ressentie</div>
+            </div>
+        </div>
+
+        <h2 style="margin-top:2em">Types de problèmes (multi-cases)</h2>
+        <div class="lfi-stats-cards">
+            <?php
+            $type_meta = [
+                'degats_eaux' => ['💧 Dégâts des eaux', 'type_degats_eaux'],
+                'humidite'    => ['🌫️ Humidité', 'type_humidite'],
+                'insectes'    => ['🐜 Insectes / nuisibles', 'type_insectes'],
+                'chauffage'   => ['🥶 Chauffage', 'type_chauffage'],
+                'electricite' => ['⚡ Électricité', 'type_electricite'],
+                'ascenseur'   => ['🛗 Ascenseur', 'type_ascenseur'],
+                'parties_communes' => ['🚪 Parties communes', 'type_parties_communes'],
+                'bruit'       => ['🔊 Bruit', 'type_bruit'],
+                'securite'    => ['🚨 Insécurité', 'type_securite'],
+                'autre'       => ['Autre', 'type_autre'],
+            ];
+            foreach ($type_meta as $k => $meta):
+                $cnt = $stats['types_repartition'][$k] ?? 0;
+                if ($cnt === 0) continue;
+            ?>
+                <a class="lfi-stats-card" href="<?php echo esc_url($url($meta[1])); ?>">
+                    <div class="nb"><?php echo $pct($cnt, $total); ?>%</div>
+                    <div class="label"><?php echo esc_html($meta[0]); ?></div>
+                    <div class="abs"><?php echo $cnt; ?> / <?php echo $total; ?></div>
+                </a>
+            <?php endforeach; ?>
         </div>
 
         <div class="lfi-stats-charts">
-            <div class="lfi-chart-box"><h3>Présence d'humidité</h3><canvas id="chart-humidite"></canvas></div>
-            <div class="lfi-chart-box"><h3>Présence d'insectes</h3><canvas id="chart-insectes"></canvas></div>
-            <div class="lfi-chart-box"><h3>Adéquation chauffage NMH</h3><canvas id="chart-thermique-adeq"></canvas></div>
-            <div class="lfi-chart-box"><h3>Utilisation appoint perso</h3><canvas id="chart-appoint"></canvas></div>
-            <div class="lfi-chart-box"><h3>Type de chauffage</h3><canvas id="chart-thermique-type"></canvas></div>
-            <div class="lfi-chart-box"><h3>Signalement à NMH</h3><canvas id="chart-signale"></canvas></div>
-            <div class="lfi-chart-box"><h3>Intérêt dossier collectif</h3><canvas id="chart-collectif"></canvas></div>
+            <div class="lfi-chart-box"><h3>Répartition des types de problèmes</h3><canvas id="chart-types"></canvas></div>
+            <div class="lfi-chart-box"><h3>Depuis combien de temps</h3><canvas id="chart-duree"></canvas></div>
+            <div class="lfi-chart-box"><h3>Récurrence</h3><canvas id="chart-recurrent"></canvas></div>
+            <div class="lfi-chart-box"><h3>Niveau de gravité</h3><canvas id="chart-gravity"></canvas></div>
         </div>
 
         <div class="lfi-stats-section">
@@ -429,13 +452,10 @@ function lfi_nct_render_stats_overview() {
                 options: opts
             });
         }
-        makePie('chart-humidite', <?php echo wp_json_encode($chart_humidite['labels']); ?>, <?php echo wp_json_encode($chart_humidite['data']); ?>);
-        makePie('chart-insectes', <?php echo wp_json_encode($chart_insectes['labels']); ?>, <?php echo wp_json_encode($chart_insectes['data']); ?>);
-        makePie('chart-thermique-adeq', <?php echo wp_json_encode($chart_thermique_adeq['labels']); ?>, <?php echo wp_json_encode($chart_thermique_adeq['data']); ?>);
-        makePie('chart-appoint', <?php echo wp_json_encode($chart_appoint['labels']); ?>, <?php echo wp_json_encode($chart_appoint['data']); ?>);
-        makePie('chart-thermique-type', <?php echo wp_json_encode($chart_thermique_type['labels']); ?>, <?php echo wp_json_encode($chart_thermique_type['data']); ?>);
-        makePie('chart-signale', <?php echo wp_json_encode($chart_signale['labels']); ?>, <?php echo wp_json_encode($chart_signale['data']); ?>);
-        makePie('chart-collectif', <?php echo wp_json_encode($chart_collectif['labels']); ?>, <?php echo wp_json_encode($chart_collectif['data']); ?>);
+        makePie('chart-types', <?php echo wp_json_encode($chart_types['labels']); ?>, <?php echo wp_json_encode($chart_types['data']); ?>);
+        makePie('chart-duree', <?php echo wp_json_encode($chart_duree['labels']); ?>, <?php echo wp_json_encode($chart_duree['data']); ?>);
+        makePie('chart-recurrent', <?php echo wp_json_encode($chart_recurrent['labels']); ?>, <?php echo wp_json_encode($chart_recurrent['data']); ?>);
+        makePie('chart-gravity', <?php echo wp_json_encode($chart_gravity['labels']); ?>, <?php echo wp_json_encode($chart_gravity['data']); ?>);
     });
     </script>
     <?php endif; ?>

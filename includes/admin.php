@@ -46,19 +46,40 @@ function lfi_nct_admin_page() {
 
         <table class="wp-list-table widefat fixed striped">
             <thead>
-                <tr><th>ID</th><th>Date</th><th>Gravité</th><th>Militant</th><th>Adresse</th><th>Étage</th><th>Année</th><th>Recontact ?</th></tr>
+                <tr>
+                    <th>ID</th><th>Reçu le</th><th>Gravité</th>
+                    <th>Adresse</th><th>Étage</th><th>Appt</th>
+                    <th>Problèmes</th><th>Récurrence</th><th>Souhaite RDV</th>
+                </tr>
             </thead>
             <tbody>
-                <?php foreach ($responses as $r): ?>
+                <?php
+                $type_labels = [
+                    'degats_eaux' => 'eaux', 'humidite' => 'humidité', 'insectes' => 'nuisibles',
+                    'chauffage' => 'chauffage', 'electricite' => 'électr.', 'ascenseur' => 'ascenseur',
+                    'parties_communes' => 'parties communes', 'bruit' => 'bruit', 'securite' => 'sécurité',
+                    'autre' => 'autre',
+                ];
+                $rec_labels = ['permanent' => 'permanent', 'parfois' => 'régulier', 'ponctuel' => 'ponctuel'];
+                foreach ($responses as $r):
+                    $data = $r->data ? json_decode($r->data, true) : [];
+                    if (!is_array($data)) $data = [];
+                    $appt = $data['appartement'] ?? '';
+                    $types = array_map(function($t) use ($type_labels) { return $type_labels[$t] ?? $t; }, (array)($data['problemes_types'] ?? []));
+                    $rec = $rec_labels[$data['problemes_recurrent'] ?? ''] ?? '—';
+                    $presence = $data['problemes_presence'] ?? '';
+                    $types_str = $presence === 'non' ? '—' : ($types ? implode(', ', $types) : '—');
+                ?>
                 <tr>
-                    <td><?php echo $r->id; ?></td>
+                    <td><?php echo (int) $r->id; ?></td>
                     <td><?php echo esc_html($r->submitted_at); ?></td>
                     <td><?php echo lfi_nct_gravity_badge_html($r); ?></td>
-                    <td><?php echo esc_html($r->militant_login); ?></td>
                     <td><?php echo esc_html($r->adresse); ?></td>
                     <td><?php echo esc_html($r->etage); ?></td>
-                    <td><?php echo esc_html($r->annee_arrivee); ?></td>
-                    <td><?php echo $r->contact_recontact ? '✅ ' . esc_html($r->contact_prenom) : '—'; ?></td>
+                    <td><?php echo esc_html($appt); ?></td>
+                    <td><?php echo esc_html($types_str); ?></td>
+                    <td><?php echo esc_html($rec); ?></td>
+                    <td><?php echo $r->contact_recontact ? '✅ ' . esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom)) : '—'; ?></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -73,14 +94,26 @@ function lfi_nct_export_csv() {
     header('Content-Disposition: attachment; filename=lfi-clos-toreau-export-' . date('Y-m-d') . '.csv');
     $out = fopen('php://output', 'w');
     fputs($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['ID', 'Date', 'Militant', 'Adresse', 'Étage', 'Année', 'Recontact', 'Prénom', 'Nom', 'Tél', 'Email', 'Données complètes (JSON)'], ';');
+    fputcsv($out, [
+        'ID', 'Reçu le', 'Adresse', 'Étage', 'Appartement',
+        'Problèmes ?', 'Types', 'Autre type', 'Durée', 'Récurrence', 'Gravité (1-10)',
+        'Souhaite RDV', 'Prénom', 'Nom', 'Tél', 'Email',
+        'Données complètes (JSON)'
+    ], ';');
     foreach ($responses as $r) {
+        $data = $r->data ? json_decode($r->data, true) : [];
+        if (!is_array($data)) $data = [];
         fputcsv($out, [
-            $r->id, $r->submitted_at, $r->militant_login,
-            $r->adresse, $r->etage, $r->annee_arrivee,
+            $r->id, $r->submitted_at, $r->adresse, $r->etage, $data['appartement'] ?? '',
+            $data['problemes_presence'] ?? '',
+            implode(', ', (array)($data['problemes_types'] ?? [])),
+            $data['problemes_types_autre'] ?? '',
+            $data['problemes_duree'] ?? '',
+            $data['problemes_recurrent'] ?? '',
+            $data['problemes_gravite'] ?? '',
             $r->contact_recontact ? 'Oui' : 'Non',
             $r->contact_prenom, $r->contact_nom, $r->contact_tel, $r->contact_email,
-            $r->data
+            $r->data,
         ], ';');
     }
     fclose($out);
