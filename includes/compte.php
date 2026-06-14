@@ -275,3 +275,19 @@ function lfi_nct_menu_dropdown_css() {
         . '.lfi-menu-dropdown>.sub-menu>li>a:hover{background:rgba(255,255,255,.14)}'
         . '</style>' . "\n";
 }
+
+/**
+ * Masque les éléments promotionnels « Alliance Groupe » du thème
+ * (popup, ruban latéral « TEMPLATE GRATUIT • ALLIANCE GROUPE », credit, etc.).
+ */
+add_action('wp_head', 'lfi_nct_hide_alliance_groupe_promo', 99);
+function lfi_nct_hide_alliance_groupe_promo() {
+    echo '<style id="lfi-nct-hide-ag-promo">'
+        . '[class*="alliance"], [id*="alliance"],'
+        . '.ag-popup, .ag-modal, .ag-promo, .ag-credit, .ag-template-credit,'
+        . '.template-credit, .theme-credit, .ag-side-ribbon, .ag-side, .ag-banner,'
+        . '.ag-template-ribbon, .ag-watermark,'
+        . '[data-ag-credit], [data-alliance], [data-ag-promo]'
+        . '{ display: none !important; visibility: hidden !important; }'
+        . '</style>' . "\n";
+}
