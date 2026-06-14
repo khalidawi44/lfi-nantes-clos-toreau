@@ -1,425 +1,131 @@
 <?php
+/**
+ * Formulaire d'enquête porte-à-porte (version courte).
+ * 8 questions max, conditionnel : si pas de problème, on saute aux coordonnées.
+ */
 if (!defined('ABSPATH')) exit;
 
 function lfi_nct_render_form() {
-    ob_start();
-    ?>
-    <form method="POST" id="lfi-nct-form" class="lfi-survey">
+    ob_start(); ?>
+    <form method="POST" id="lfi-nct-form" class="lfi-survey lfi-survey-simple">
         <?php wp_nonce_field('lfi_nct_submit_nonce', 'lfi_nct_nonce'); ?>
 
         <div class="lfi-print-bar">
             <button type="button" class="lfi-btn-print" onclick="window.print()">🖨️ Imprimer / Photocopier (version papier)</button>
         </div>
 
-        <div class="lfi-progress"><div class="lfi-progress-bar" style="width:14%"></div></div>
+        <h2>Enquête porte-à-porte — logement</h2>
+        <p class="lfi-section-desc">Quelques questions rapides pour identifier les problèmes et organiser une suite si besoin.</p>
 
-        <div class="lfi-step active" data-step="1"><?php lfi_nct_section_1_logement(); ?></div>
-        <div class="lfi-step" data-step="2"><?php lfi_nct_section_2_insectes(); ?></div>
-        <div class="lfi-step" data-step="3"><?php lfi_nct_section_3_humidite(); ?></div>
-        <div class="lfi-step" data-step="4"><?php lfi_nct_section_4_thermique(); ?></div>
-        <div class="lfi-step" data-step="5"><?php lfi_nct_section_6_demarches(); ?></div>
-        <div class="lfi-step" data-step="6"><?php lfi_nct_section_7_demande(); ?></div>
-        <div class="lfi-step" data-step="7"><?php lfi_nct_section_8_contact(); ?></div>
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">📍 Logement visité</legend>
+            <label class="lfi-field">
+                <span class="lfi-label">Immeuble / adresse <span class="req">*</span></span>
+                <input type="text" name="adresse" required placeholder="Ex : 12 rue de Biarritz">
+            </label>
+            <label class="lfi-field">
+                <span class="lfi-label">Étage <span class="req">*</span></span>
+                <input type="text" name="etage" required placeholder="Ex : 3">
+            </label>
+            <label class="lfi-field">
+                <span class="lfi-label">Numéro d'appartement</span>
+                <input type="text" name="appartement" placeholder="Ex : 32">
+            </label>
+        </fieldset>
 
-        <div class="lfi-nav">
-            <button type="button" class="lfi-prev" disabled>← Précédent</button>
-            <button type="button" class="lfi-next">Suivant →</button>
-            <button type="submit" name="lfi_nct_submit" value="1" class="lfi-submit" style="display:none;">Envoyer l'enquête</button>
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">Y a-t-il des problèmes dans ce logement ? <span class="req">*</span></legend>
+            <label class="lfi-radio"><input type="radio" name="problemes_presence" value="oui" required> Oui</label>
+            <label class="lfi-radio"><input type="radio" name="problemes_presence" value="non"> Non</label>
+        </fieldset>
+
+        <div id="lfi-bloc-problemes" hidden>
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Lesquels ? (cochez tout ce qui s'applique)</legend>
+                <?php
+                $types = [
+                    'degats_eaux'      => '💧 Dégâts des eaux / fuites / infiltrations',
+                    'humidite'         => '🌫️ Humidité / moisissures',
+                    'insectes'         => '🐜 Insectes / nuisibles (cafards, punaises, rats…)',
+                    'chauffage'        => '🥶 Chauffage insuffisant / panne',
+                    'electricite'      => '⚡ Problèmes électriques',
+                    'ascenseur'        => '🛗 Ascenseur en panne / défaillant',
+                    'parties_communes' => '🚪 Parties communes dégradées',
+                    'bruit'            => '🔊 Nuisances sonores / voisinage',
+                    'securite'         => '🚨 Insécurité (entrées, parties communes…)',
+                ];
+                foreach ($types as $k => $label): ?>
+                    <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
+                <?php endforeach; ?>
+                <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="autre"> Autre :</label>
+                <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="précisez">
+            </fieldset>
+
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Depuis combien de temps ?</legend>
+                <?php
+                $durees = [
+                    'moins_1_mois' => "Moins d'un mois",
+                    '1_6_mois'     => '1 à 6 mois',
+                    '6_12_mois'    => '6 à 12 mois',
+                    '1_5_ans'      => "Plus d'un an",
+                    'plus_5_ans'   => 'Plus de 5 ans',
+                ];
+                foreach ($durees as $k => $label): ?>
+                    <label class="lfi-radio"><input type="radio" name="problemes_duree" value="<?php echo esc_attr($k); ?>"> <?php echo esc_html($label); ?></label>
+                <?php endforeach; ?>
+            </fieldset>
+
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Est-ce récurrent ?</legend>
+                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="permanent"> Oui, en permanence</label>
+                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="parfois"> Oui, ça revient régulièrement</label>
+                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="ponctuel"> Non, c'est ponctuel</label>
+            </fieldset>
+
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Gravité ressentie <span class="req">*</span></legend>
+                <p class="lfi-help">1 = mineur · 10 = insupportable / critique</p>
+                <div class="lfi-scale">
+                    <?php for ($i = 1; $i <= 10; $i++): ?>
+                        <label class="lfi-radio-btn"><input type="radio" name="problemes_gravite" value="<?php echo $i; ?>"> <?php echo $i; ?></label>
+                    <?php endfor; ?>
+                </div>
+            </fieldset>
         </div>
+
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">Accepteriez-vous qu'on revienne ?</legend>
+            <p class="lfi-help">On peut revenir constater sur place, vous accompagner pour faire pression sur Nantes Habitat, et vous aider juridiquement pour que le problème soit réglé.</p>
+            <label class="lfi-radio"><input type="radio" name="revenir_ok" value="oui"> Oui, je suis intéressé·e</label>
+            <label class="lfi-radio"><input type="radio" name="revenir_ok" value="non"> Non, merci</label>
+        </fieldset>
+
+        <div id="lfi-bloc-contact" hidden>
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Vos coordonnées pour qu'on prenne RDV</legend>
+                <label class="lfi-field"><span class="lfi-label">Prénom</span><input type="text" name="contact_prenom"></label>
+                <label class="lfi-field"><span class="lfi-label">Nom</span><input type="text" name="contact_nom"></label>
+                <label class="lfi-field"><span class="lfi-label">Téléphone</span><input type="tel" name="contact_tel" placeholder="06 12 34 56 78"></label>
+                <label class="lfi-field"><span class="lfi-label">Email</span><input type="email" name="contact_email" placeholder="vous@email.fr"></label>
+                <p class="lfi-help">Téléphone <strong>ou</strong> email — au moins l'un des deux pour qu'on puisse vous recontacter.</p>
+            </fieldset>
+        </div>
+
+        <div class="lfi-info-box">
+            🔒 <strong>RGPD</strong> : ces infos sont strictement internes au Groupe d'Action LFI Nantes Sud Clos Toreau, jamais transmises à un tiers. Vous pouvez demander leur suppression à tout moment.
+        </div>
+
+        <p>
+            <button type="submit" name="lfi_nct_submit" class="lfi-btn lfi-btn-lg lfi-submit">✓ Enregistrer l'enquête</button>
+        </p>
     </form>
     <?php
     return ob_get_clean();
 }
 
-function lfi_nct_section_1_logement() {
-    ?>
-    <h2>Section 1 — Le logement</h2>
-    <p class="lfi-section-desc">Quelques infos générales sur le logement enquêté.</p>
-
-    <label class="lfi-field">
-        <span class="lfi-label">Adresse de l'immeuble <span class="req">*</span></span>
-        <span class="lfi-help">Indiquez la rue et le numéro (sans étage ni numéro d'appartement).</span>
-        <input type="text" name="adresse" required placeholder="Ex : 12 rue Saint-Aignan">
-    </label>
-
-    <div class="lfi-info-box"><strong>Bailleur :</strong> Nantes Métropole Habitat (NMH)</div>
-
-    <label class="lfi-field">
-        <span class="lfi-label">Étage <span class="req">*</span></span>
-        <span class="lfi-help">Indiquez « RDC » pour rez-de-chaussée.</span>
-        <input type="text" name="etage" required placeholder="Ex : 3, RDC, sous-sol">
-    </label>
-
-    <label class="lfi-field">
-        <span class="lfi-label">Année d'arrivée dans le logement <span class="req">*</span></span>
-        <input type="number" name="annee_arrivee" required min="1950" max="2030" placeholder="Ex : 2018">
-    </label>
-    <?php
-}
-
-function lfi_nct_section_2_insectes() {
-    ?>
-    <h2>Section 2 — Insectes et nuisibles</h2>
-    <p class="lfi-section-desc">Présence d'insectes ou de nuisibles dans le logement.</p>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Présence d'insectes ou de nuisibles <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="insectes_presence" value="oui" required> Oui</label>
-        <label class="lfi-radio"><input type="radio" name="insectes_presence" value="non" required> Non</label>
-    </fieldset>
-
-    <div data-show-if="insectes_presence:oui">
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Si oui, lesquels ? (cocher tout ce qui s'applique)</legend>
-            <label class="lfi-check"><input type="checkbox" name="insectes_types[]" value="cafards"> Cafards</label>
-            <label class="lfi-check"><input type="checkbox" name="insectes_types[]" value="punaises_lit"> Punaises de lit</label>
-            <label class="lfi-check"><input type="checkbox" name="insectes_types[]" value="rongeurs"> Rongeurs (souris, rats)</label>
-            <label class="lfi-check"><input type="checkbox" name="insectes_types[]" value="fourmis"> Fourmis</label>
-            <label class="lfi-check"><input type="checkbox" name="insectes_types[]" value="autres"> Autres</label>
-            <input type="text" name="insectes_types_autres" placeholder="Si autres, préciser" class="lfi-other-input">
-        </fieldset>
-
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Depuis quand ?</legend>
-            <label class="lfi-radio"><input type="radio" name="insectes_depuis" value="moins_6mois"> Moins de 6 mois</label>
-            <label class="lfi-radio"><input type="radio" name="insectes_depuis" value="6_12mois"> 6 à 12 mois</label>
-            <label class="lfi-radio"><input type="radio" name="insectes_depuis" value="plus_1an"> Plus d'un an</label>
-        </fieldset>
-
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Gravité ressentie</legend>
-            <span class="lfi-help">1 = supportable, 5 = invivable</span>
-            <div class="lfi-scale">
-                <label class="lfi-radio-btn"><input type="radio" name="insectes_gravite" value="1"> 1</label>
-                <label class="lfi-radio-btn"><input type="radio" name="insectes_gravite" value="2"> 2</label>
-                <label class="lfi-radio-btn"><input type="radio" name="insectes_gravite" value="3"> 3</label>
-                <label class="lfi-radio-btn"><input type="radio" name="insectes_gravite" value="4"> 4</label>
-                <label class="lfi-radio-btn"><input type="radio" name="insectes_gravite" value="5"> 5</label>
-            </div>
-        </fieldset>
-    </div>
-    <?php
-}
-
-function lfi_nct_section_3_humidite() {
-    ?>
-    <h2>Section 3 — Humidité</h2>
-    <p class="lfi-section-desc">L'humidité est un critère majeur de logement indécent (décret du 30 janvier 2002). Toute trace, tache, odeur ou condensation persistante compte.</p>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Présence d'humidité visible ou ressentie <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="humidite_presence" value="oui_visible" required> Oui, traces ou taches visibles</label>
-        <label class="lfi-radio"><input type="radio" name="humidite_presence" value="oui_ressentie" required> Oui, ressentie sans traces (mur froid, condensation, odeur)</label>
-        <label class="lfi-radio"><input type="radio" name="humidite_presence" value="oui_suspicion" required> Oui, suspicion mais pas certain·e</label>
-        <label class="lfi-radio"><input type="radio" name="humidite_presence" value="non" required> Non, aucun signe</label>
-    </fieldset>
-
-    <div data-show-if="humidite_presence:oui_visible|oui_ressentie|oui_suspicion">
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Où voyez-vous précisément l'humidité ?</legend>
-            <span class="lfi-help">La localisation permet d'identifier l'origine (remontée capillaire, ventilation, fuite, condensation, infiltration).</span>
-            <?php
-            $loc_humidite = [
-                'salon_mur_ext_bas' => 'Salon — mur extérieur en bas (suspicion remontée capillaire)',
-                'salon_mur_ext_haut' => 'Salon — mur extérieur en haut (suspicion défaut ventilation)',
-                'salon_plafond' => 'Salon — plafond (suspicion fuite logement au-dessus ou toiture)',
-                'salon_fenetres' => 'Salon — autour des fenêtres (suspicion menuiserie défectueuse)',
-                'salon_derriere_meubles' => 'Salon — derrière meubles contre mur extérieur',
-                'chambre_mur_ext_bas' => 'Chambre — mur extérieur en bas',
-                'chambre_mur_ext_haut' => 'Chambre — mur extérieur en haut',
-                'chambre_plafond' => 'Chambre — plafond',
-                'chambre_fenetres' => 'Chambre — autour des fenêtres',
-                'chambre_derriere_meubles' => 'Chambre — derrière tête de lit ou meubles',
-                'cuisine_sous_evier' => 'Cuisine — sous l\'évier ou autour des canalisations',
-                'cuisine_vmc' => 'Cuisine — autour de la VMC ou hotte',
-                'cuisine_plafond' => 'Cuisine — plafond',
-                'cuisine_derriere_meubles' => 'Cuisine — derrière meubles ou électroménagers',
-                'sdb_joints' => 'Salle de bain — joints du carrelage (douche, baignoire)',
-                'sdb_plafond' => 'Salle de bain — plafond (suspicion VMC HS)',
-                'sdb_baignoire' => 'Salle de bain — autour baignoire ou receveur',
-                'sdb_lavabo' => 'Salle de bain — derrière lavabo ou WC',
-                'wc_separe' => 'WC séparés — mur ou sol',
-                'couloir_plafond' => 'Couloir / entrée — plafond',
-                'couloir_porte' => 'Couloir / entrée — mur près de la porte palière',
-                'cave' => 'Cave, cellier ou box',
-                'combles' => 'Combles ou grenier',
-                'garage' => 'Garage attenant',
-            ];
-            foreach ($loc_humidite as $val => $label) {
-                echo '<label class="lfi-check"><input type="checkbox" name="humidite_loc[]" value="' . esc_attr($val) . '"> ' . esc_html($label) . '</label>';
-            }
-            ?>
-            <label class="lfi-check"><input type="checkbox" name="humidite_loc[]" value="autres"> Autres</label>
-            <input type="text" name="humidite_loc_autres" placeholder="Si autres, préciser" class="lfi-other-input">
-        </fieldset>
-
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Gravité de l'humidité observée</legend>
-            <label class="lfi-radio"><input type="radio" name="humidite_gravite" value="1"> 1 — À peine visible : taches discrètes, pas de gêne</label>
-            <label class="lfi-radio"><input type="radio" name="humidite_gravite" value="2"> 2 — Visible mais limité : zone < 0,5 m², stable</label>
-            <label class="lfi-radio"><input type="radio" name="humidite_gravite" value="3"> 3 — Modérée : zone 0,5-2 m², extension lente, gêne occasionnelle</label>
-            <label class="lfi-radio"><input type="radio" name="humidite_gravite" value="4"> 4 — Sévère : zone > 2 m², moisissures abondantes, gêne quotidienne</label>
-            <label class="lfi-radio"><input type="radio" name="humidite_gravite" value="5"> 5 — Insalubre : impact santé, plusieurs pièces, dégradations majeures</label>
-        </fieldset>
-
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Conséquences observées chez vous</legend>
-            <span class="lfi-help">Les effets sur la santé sont juridiquement très importants pour caractériser un logement indécent.</span>
-            <?php
-            $cons_humidite = [
-                'moisissures_noires' => 'Moisissures noires visibles',
-                'moisissures_vertes' => 'Moisissures vertes ou blanches',
-                'salpetre' => 'Salpêtre (dépôt blanchâtre poudreux)',
-                'peinture_cloque' => 'Peinture qui cloque ou s\'écaille',
-                'papier_peint_decolle' => 'Papier peint qui se décolle',
-                'platre_effrite' => 'Plâtre qui s\'effrite ou se détache',
-                'carrelage_descelle' => 'Carrelage descellé',
-                'parquet_gondole' => 'Parquet gondolé ou cassé',
-                'bois_pourri' => 'Bois pourri (encadrements, plinthes, portes)',
-                'odeur_renferme' => 'Odeur de renfermé permanente',
-                'condensation_vitres' => 'Condensation matinale persistante sur les vitres',
-                'mur_froid' => 'Mur froid au toucher en permanence',
-                'linge_humide' => 'Linge qui sèche mal ou prend une odeur',
-                'sante_respi' => 'Asthme, allergies ou toux chroniques apparus ou aggravés',
-                'sante_tete' => 'Maux de tête fréquents',
-                'degradation_biens' => 'Dégradation de meubles ou affaires',
-                'surconso_chauffage' => 'Surconsommation de chauffage pour compenser le froid humide',
-            ];
-            foreach ($cons_humidite as $val => $label) {
-                echo '<label class="lfi-check"><input type="checkbox" name="humidite_consequences[]" value="' . esc_attr($val) . '"> ' . esc_html($label) . '</label>';
-            }
-            ?>
-            <label class="lfi-check"><input type="checkbox" name="humidite_consequences[]" value="autres"> Autres</label>
-            <input type="text" name="humidite_consequences_autres" placeholder="Si autres, préciser" class="lfi-other-input">
-        </fieldset>
-    </div>
-    <?php
-}
-
-function lfi_nct_section_4_thermique() {
-    ?>
-    <h2>Section 4 — Thermique : chauffage, chaleur, froid, isolation</h2>
-    <p class="lfi-section-desc">À Clos Toreau, le chauffage au sol collectif est géré par NMH. Beaucoup de locataires utilisent un appoint personnel pour compenser — c'est un préjudice financier directement imputable à NMH.</p>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Type de chauffage du logement <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="thermique_type" value="sol_collectif_nmh" required> Sol chauffant collectif géré par NMH (la norme à Clos Toreau)</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_type" value="sol_avec_appoint" required> Sol chauffant collectif + chauffage d'appoint personnel</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_type" value="individuel_gaz" required> Chauffage individuel gaz</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_type" value="individuel_elec" required> Chauffage individuel électrique</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_type" value="aucun" required> Pas de chauffage fonctionnel</label>
-    </fieldset>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Le chauffage NMH permet-il d'atteindre 19°C en hiver, sans appoint ? <span class="req">*</span></legend>
-        <span class="lfi-help">19°C en pièce de vie = seuil légal de logement décent.</span>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="oui_toujours" required> Oui, toujours</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="oui_limite" required> Oui mais limite (jamais plus que 19°C)</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="partiel" required> Partiellement (certaines pièces seulement)</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="non_18" required> Non, jamais plus de 17-18°C sans appoint</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="non_16" required> Non, souvent en dessous de 16°C sans appoint</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_adequation" value="non_panne" required> Non, le chauffage NMH ne fonctionne pas du tout</label>
-    </fieldset>
-
-    <label class="lfi-field">
-        <span class="lfi-label">Température moyenne mesurée chez vous en hiver, sans appoint (en °C)</span>
-        <span class="lfi-help">Si possible, mesure en pièce de vie en milieu de journée par temps froid. Sinon estimation. Vide si impossible.</span>
-        <input type="number" name="thermique_temperature" min="0" max="30" placeholder="Ex : 17">
-    </label>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Utilisez-vous un chauffage d'appoint personnel ? <span class="req">*</span></legend>
-        <span class="lfi-help">⭐ Stratégique : preuve directe que NMH ne tient pas son obligation.</span>
-        <label class="lfi-radio"><input type="radio" name="thermique_appoint" value="oui_permanent" required> Oui, en permanence pendant la saison froide</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_appoint" value="oui_quotidien" required> Oui, plusieurs heures/jour pendant la saison froide</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_appoint" value="oui_ponctuel" required> Oui, ponctuellement (vagues de froid, pannes)</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_appoint" value="oui_passe" required> J'en ai eu un mais je ne l'utilise plus</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_appoint" value="non" required> Non, jamais eu besoin</label>
-    </fieldset>
-
-    <div data-show-if="thermique_appoint:oui_permanent|oui_quotidien|oui_ponctuel|oui_passe">
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Quel(s) type(s) d'appoint utilisez-vous ?</legend>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="radiateur_convecteur"> Radiateur électrique convecteur</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="radiateur_inertie"> Radiateur à inertie ou bain d'huile</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="soufflant"> Radiateur soufflant</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="gaz_portatif"> Chauffage à gaz portatif (bouteille)</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="petrole"> Chauffage à pétrole</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="clim_reversible"> Climatisation réversible</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="couvertures_chauffantes"> Couvertures ou coussins chauffants</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="bouillottes"> Bouillottes</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_appoint_types[]" value="autres"> Autres</label>
-            <input type="text" name="thermique_appoint_types_autres" placeholder="Si autres, préciser" class="lfi-other-input">
-        </fieldset>
-    </div>
-
-    <div data-show-if="thermique_appoint:oui_permanent|oui_quotidien|oui_ponctuel">
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">Surcoût mensuel de l'appoint en hiver</legend>
-            <span class="lfi-help">Préjudice financier imputable à NMH.</span>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="moins_20"> Moins de 20 € / mois</label>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="20_50"> 20 à 50 € / mois</label>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="50_100"> 50 à 100 € / mois</label>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="100_150"> 100 à 150 € / mois</label>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="plus_150"> Plus de 150 € / mois</label>
-            <label class="lfi-radio"><input type="radio" name="thermique_appoint_cout" value="nsp"> Je ne sais pas</label>
-        </fieldset>
-    </div>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Confort en été <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="ete_confort" value="confortable" required> Confortable</label>
-        <label class="lfi-radio"><input type="radio" name="ete_confort" value="trop_chaud_canicule" required> Trop chaud par moments (canicule), supportable</label>
-        <label class="lfi-radio"><input type="radio" name="ete_confort" value="trop_chaud_souvent" required> Trop chaud souvent en été, gêne quotidienne</label>
-        <label class="lfi-radio"><input type="radio" name="ete_confort" value="insupportable" required> Insupportable (intérieur > 30°C, troubles du sommeil)</label>
-    </fieldset>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Sentez-vous des infiltrations d'air (froid en hiver, chaud en été) ? <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="thermique_infiltration" value="oui_importantes" required> Oui, importantes</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_infiltration" value="oui_moderees" required> Oui, modérées</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_infiltration" value="non" required> Non</label>
-    </fieldset>
-
-    <div data-show-if="thermique_infiltration:oui_importantes|oui_moderees">
-        <fieldset class="lfi-field">
-            <legend class="lfi-label">D'où viennent ces infiltrations ?</legend>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="fenetres"> Fenêtres</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="porte_entree"> Porte d'entrée</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="vmc"> Bouches de VMC</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="prises"> Prises électriques / interrupteurs</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="coffrets_volets"> Coffrets de volets roulants</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="plinthes"> Plinthes / jonction sol-mur</label>
-            <label class="lfi-check"><input type="checkbox" name="thermique_infiltration_origine[]" value="fissures"> Trous ou fissures dans les murs</label>
-        </fieldset>
-    </div>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Qualité ressentie de l'isolation thermique <span class="req">*</span></legend>
-        <span class="lfi-help">1 = nulle (mur froid, courants d'air), 5 = bonne</span>
-        <div class="lfi-scale">
-            <label class="lfi-radio-btn"><input type="radio" name="thermique_isolation" value="1" required> 1</label>
-            <label class="lfi-radio-btn"><input type="radio" name="thermique_isolation" value="2" required> 2</label>
-            <label class="lfi-radio-btn"><input type="radio" name="thermique_isolation" value="3" required> 3</label>
-            <label class="lfi-radio-btn"><input type="radio" name="thermique_isolation" value="4" required> 4</label>
-            <label class="lfi-radio-btn"><input type="radio" name="thermique_isolation" value="5" required> 5</label>
-        </div>
-    </fieldset>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Avez-vous signalé les problèmes thermiques à NMH ? <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="thermique_signale_nmh" value="signale_resolu" required> Oui, NMH a fait des travaux qui ont résolu</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_signale_nmh" value="signale_insuffisant" required> Oui, travaux faits mais insuffisants</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_signale_nmh" value="signale_pas_travaux" required> Oui, NMH a répondu mais pas de travaux</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_signale_nmh" value="signale_pas_reponse" required> Oui, sans réponse de NMH</label>
-        <label class="lfi-radio"><input type="radio" name="thermique_signale_nmh" value="non_signale" required> Non, jamais signalé</label>
-    </fieldset>
-    <?php
-}
-
-function lfi_nct_section_6_demarches() {
-    ?>
-    <h2>Section 6 — Démarches déjà entreprises</h2>
-    <p class="lfi-section-desc">⭐ Section stratégique pour le dossier collectif. Vos démarches passées et votre intérêt à rejoindre une action collective sont des éléments clés.</p>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Avez-vous signalé un ou plusieurs des problèmes ci-dessus à Nantes Métropole Habitat ? <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="demarches_signale" value="oui" required> Oui</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_signale" value="non" required> Non</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_signale" value="partiel" required> Partiellement (certains problèmes signalés, pas tous)</label>
-    </fieldset>
-
-    <div data-show-if="demarches_signale:oui|partiel">
-        <label class="lfi-field">
-            <span class="lfi-label">Qu'est-ce que NMH a répondu ?</span>
-            <span class="lfi-help">Texte libre. Soyez précis : promesses non tenues, refus, silence, travaux faits mais insuffisants, etc.</span>
-            <textarea name="demarches_reponse_nmh" rows="4" placeholder="Ex : ils ont envoyé un technicien il y a 2 ans qui a constaté l'humidité, m'a promis des travaux, je n'ai jamais eu de nouvelles malgré 3 relances par mail."></textarea>
-        </label>
-    </div>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Avez-vous (ou avez-vous eu) une procédure judiciaire contre NMH ? <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="demarches_procedure" value="oui_en_cours" required> Oui, en cours</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_procedure" value="oui_passee" required> Oui, passée (jugée)</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_procedure" value="non" required> Non</label>
-    </fieldset>
-
-    <div data-show-if="demarches_procedure:oui_en_cours|oui_passee">
-        <label class="lfi-field">
-            <span class="lfi-label">Précisions sur la procédure</span>
-            <textarea name="demarches_procedure_precisions" rows="3" placeholder="Ex : conciliation déposée en avril 2025 pour humidité chronique, en attente d'audience."></textarea>
-        </label>
-    </div>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Seriez-vous intéressé·e par regrouper votre dossier avec un collectif d'habitants ? <span class="req">*</span></legend>
-        <span class="lfi-help">Action collective contre le bailleur, plus de poids juridique et politique.</span>
-        <label class="lfi-radio"><input type="radio" name="demarches_collectif" value="oui" required> Oui</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_collectif" value="a_voir" required> À voir, recontactez-moi pour en parler</label>
-        <label class="lfi-radio"><input type="radio" name="demarches_collectif" value="non" required> Non</label>
-    </fieldset>
-    <?php
-}
-
-function lfi_nct_section_7_demande() {
-    ?>
-    <h2>Section 7 — Demande du locataire</h2>
-    <p class="lfi-section-desc">Texte libre. Optionnel mais précieux pour comprendre les attentes des habitants.</p>
-
-    <label class="lfi-field">
-        <span class="lfi-label">Qu'est-ce qui améliorerait votre cadre de vie ici ?</span>
-        <span class="lfi-help">Travaux souhaités, équipements manquants, services attendus, etc.</span>
-        <textarea name="demande_locataire" rows="6" placeholder="Ex : refaire l'isolation, changer les fenêtres, installer une vraie VMC, plus de propreté dans les parties communes, sécurité du quartier..."></textarea>
-    </label>
-    <?php
-}
-
-function lfi_nct_section_8_contact() {
-    ?>
-    <h2>Section 8 — Contact (optionnel)</h2>
-    <p class="lfi-section-desc">Si la personne enquêtée souhaite être recontactée par LFI Nantes Sud Clos Toreau pour suivi du dossier.</p>
-
-    <fieldset class="lfi-field">
-        <legend class="lfi-label">Souhaite être recontacté·e par LFI Nantes Sud Clos Toreau ? <span class="req">*</span></legend>
-        <label class="lfi-radio"><input type="radio" name="contact_recontact" value="1" required> Oui</label>
-        <label class="lfi-radio"><input type="radio" name="contact_recontact" value="0" required> Non</label>
-    </fieldset>
-
-    <div data-show-if="contact_recontact:1">
-        <label class="lfi-field">
-            <span class="lfi-label">Prénom <span class="req">*</span></span>
-            <input type="text" name="contact_prenom" placeholder="Prénom">
-        </label>
-        <label class="lfi-field">
-            <span class="lfi-label">Nom</span>
-            <input type="text" name="contact_nom" placeholder="Nom">
-        </label>
-        <label class="lfi-field">
-            <span class="lfi-label">Téléphone</span>
-            <span class="lfi-help">Au moins l'un des deux : tél ou email.</span>
-            <input type="tel" name="contact_tel" placeholder="06...">
-        </label>
-        <label class="lfi-field">
-            <span class="lfi-label">Email</span>
-            <input type="email" name="contact_email" placeholder="ex@email.com">
-        </label>
-        <label class="lfi-field">
-            <span class="lfi-label">Numéro d'appartement</span>
-            <span class="lfi-help">Pour pouvoir vous retrouver précisément. Reste interne au GA.</span>
-            <input type="text" name="contact_appartement" placeholder="Ex : 305">
-        </label>
-
-        <div class="lfi-info-box">
-            🔒 <strong>RGPD</strong> : ces infos sont strictement internes au GA LFI Nantes Sud Clos Toreau, jamais transmises à un tiers. Vous pouvez demander leur suppression à tout moment.
-        </div>
-    </div>
-    <?php
-}
-
 /**
- * Rend un résumé imprimable de la réponse qui vient d'être envoyée.
- * Affiché après soumission pour que la personne (et le ou la militant·e)
- * puisse imprimer/photocopier la fiche pour garder une copie papier.
+ * Résumé imprimable de la réponse qui vient d'être envoyée.
  */
 function lfi_nct_render_submission_summary($id) {
     global $wpdb;
@@ -433,6 +139,40 @@ function lfi_nct_render_submission_summary($id) {
 
     $fresh_url = esc_url(remove_query_arg(['_wp_http_referer']));
 
+    $type_labels = [
+        'degats_eaux'      => 'Dégâts des eaux / infiltrations',
+        'humidite'         => 'Humidité / moisissures',
+        'insectes'         => 'Insectes / nuisibles',
+        'chauffage'        => 'Chauffage insuffisant',
+        'electricite'      => 'Problèmes électriques',
+        'ascenseur'        => 'Ascenseur',
+        'parties_communes' => 'Parties communes',
+        'bruit'            => 'Nuisances sonores',
+        'securite'         => 'Insécurité',
+        'autre'            => 'Autre',
+    ];
+    $duree_labels = [
+        'moins_1_mois' => "Moins d'un mois",
+        '1_6_mois'     => '1 à 6 mois',
+        '6_12_mois'    => '6 à 12 mois',
+        '1_5_ans'      => "Plus d'un an",
+        'plus_5_ans'   => 'Plus de 5 ans',
+    ];
+    $rec_labels = [
+        'permanent' => 'En permanence',
+        'parfois'   => 'Régulièrement',
+        'ponctuel'  => 'Ponctuel',
+    ];
+
+    $presence    = $data['problemes_presence'] ?? '';
+    $types       = (array) ($data['problemes_types'] ?? []);
+    $types_autre = $data['problemes_types_autre'] ?? '';
+    $duree       = $data['problemes_duree'] ?? '';
+    $rec         = $data['problemes_recurrent'] ?? '';
+    $gravite     = (int) ($data['problemes_gravite'] ?? 0);
+    $revenir     = $data['revenir_ok'] ?? '';
+    $appt        = $data['appartement'] ?? '';
+
     ob_start(); ?>
     <div class="lfi-survey lfi-submission">
         <div class="lfi-print-bar">
@@ -440,36 +180,51 @@ function lfi_nct_render_submission_summary($id) {
             <a href="<?php echo $fresh_url; ?>" class="lfi-btn-print" style="margin-left:.5em;text-decoration:none">📝 Saisir une nouvelle enquête</a>
         </div>
 
-        <h2>Votre réponse — enquête n°<?php echo (int) $row->id; ?></h2>
+        <h2>Réponse enregistrée — enquête n°<?php echo (int) $row->id; ?></h2>
         <p class="lfi-help">Enregistrée le <?php echo esc_html($row->submitted_at); ?>.</p>
 
-        <h3>Logement</h3>
+        <h3>📍 Logement</h3>
         <ul class="lfi-summary-list">
             <li><strong>Adresse :</strong> <?php echo esc_html($row->adresse); ?></li>
             <li><strong>Étage :</strong> <?php echo esc_html($row->etage); ?></li>
-            <li><strong>Année d'arrivée :</strong> <?php echo esc_html($row->annee_arrivee); ?></li>
+            <?php if ($appt !== ''): ?><li><strong>Appartement :</strong> <?php echo esc_html($appt); ?></li><?php endif; ?>
         </ul>
 
-        <?php if (!empty($data)): ?>
-        <h3>Réponses détaillées</h3>
-        <ul class="lfi-summary-list">
-            <?php foreach ($data as $k => $v):
-                $label = ucfirst(str_replace('_', ' ', (string) $k));
-                $value = is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v;
-                if ($value === '') continue; ?>
-                <li><strong><?php echo esc_html($label); ?> :</strong> <?php echo esc_html($value); ?></li>
-            <?php endforeach; ?>
-        </ul>
+        <h3>Problèmes</h3>
+        <p><strong><?php
+            if ($presence === 'oui') echo '⚠️ Oui';
+            elseif ($presence === 'non') echo '✅ Aucun';
+            else echo '—';
+        ?></strong></p>
+
+        <?php if ($presence === 'oui'): ?>
+            <ul class="lfi-summary-list">
+                <?php if ($types): ?>
+                    <li><strong>Types :</strong>
+                        <?php
+                        $labels = [];
+                        foreach ($types as $t) $labels[] = $type_labels[$t] ?? $t;
+                        echo esc_html(implode(' · ', $labels));
+                        if ($types_autre !== '') echo ' (autre : ' . esc_html($types_autre) . ')';
+                        ?>
+                    </li>
+                <?php endif; ?>
+                <?php if ($duree !== ''): ?><li><strong>Durée :</strong> <?php echo esc_html($duree_labels[$duree] ?? $duree); ?></li><?php endif; ?>
+                <?php if ($rec !== ''): ?><li><strong>Récurrence :</strong> <?php echo esc_html($rec_labels[$rec] ?? $rec); ?></li><?php endif; ?>
+                <?php if ($gravite > 0): ?><li><strong>Gravité ressentie :</strong> <?php echo $gravite; ?> / 10</li><?php endif; ?>
+            </ul>
         <?php endif; ?>
 
-        <h3>Contact</h3>
-        <ul class="lfi-summary-list">
-            <li><strong>Souhaite être recontacté·e :</strong> <?php echo $row->contact_recontact ? 'Oui' : 'Non'; ?></li>
-            <?php if ($row->contact_prenom): ?><li><strong>Prénom :</strong> <?php echo esc_html($row->contact_prenom); ?></li><?php endif; ?>
-            <?php if ($row->contact_nom): ?><li><strong>Nom :</strong> <?php echo esc_html($row->contact_nom); ?></li><?php endif; ?>
-            <?php if ($row->contact_tel): ?><li><strong>Téléphone :</strong> <?php echo esc_html($row->contact_tel); ?></li><?php endif; ?>
-            <?php if ($row->contact_email): ?><li><strong>Email :</strong> <?php echo esc_html($row->contact_email); ?></li><?php endif; ?>
-        </ul>
+        <h3>Suivi</h3>
+        <p><strong>Souhaite être recontacté·e :</strong> <?php echo $revenir === 'oui' ? '✅ Oui' : '❌ Non'; ?></p>
+        <?php if ($revenir === 'oui'): ?>
+            <ul class="lfi-summary-list">
+                <?php if ($row->contact_prenom !== ''): ?><li><strong>Prénom :</strong> <?php echo esc_html($row->contact_prenom); ?></li><?php endif; ?>
+                <?php if ($row->contact_nom !== ''): ?><li><strong>Nom :</strong> <?php echo esc_html($row->contact_nom); ?></li><?php endif; ?>
+                <?php if ($row->contact_tel !== ''): ?><li><strong>Téléphone :</strong> <?php echo esc_html($row->contact_tel); ?></li><?php endif; ?>
+                <?php if ($row->contact_email !== ''): ?><li><strong>Email :</strong> <?php echo esc_html($row->contact_email); ?></li><?php endif; ?>
+            </ul>
+        <?php endif; ?>
     </div>
     <?php
     return ob_get_clean();

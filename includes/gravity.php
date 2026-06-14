@@ -11,42 +11,16 @@
 if (!defined('ABSPATH')) exit;
 
 /**
- * Calcule le score brut (entier ≥ 0) à partir des données JSON décodées.
+ * Calcule le score brut (entier 0-10) à partir des données JSON décodées.
+ * Le formulaire porte-à-porte demande directement la gravité ressentie
+ * sur une échelle de 1 à 10 — on l'utilise telle quelle.
+ * Score 0 = pas de problème déclaré.
  */
 function lfi_nct_gravity_score($data) {
     if (!is_array($data)) return 0;
-    $score = 0;
-
-    // Insectes / nuisibles
-    if (($data['insectes_presence'] ?? '') === 'oui') $score += 3;
-
-    // Humidité
-    switch ($data['humidite_presence'] ?? '') {
-        case 'oui_visible':   $score += 3; break;
-        case 'oui_ressentie': $score += 2; break;
-        case 'oui_suspicion': $score += 1; break;
-    }
-
-    // Adéquation chauffage NMH
-    switch ($data['thermique_adequation'] ?? '') {
-        case 'non_panne': $score += 5; break;
-        case 'non_16':    $score += 4; break;
-        case 'non_18':    $score += 3; break;
-        case 'partiel':   $score += 2; break;
-    }
-
-    // Chauffage d'appoint (dépendance)
-    switch ($data['thermique_appoint'] ?? '') {
-        case 'oui_permanent': $score += 3; break;
-        case 'oui_quotidien': $score += 2; break;
-        case 'oui_ponctuel':
-        case 'oui_passe':     $score += 1; break;
-    }
-
-    // Infiltrations d'eau
-    if (($data['thermique_infiltration'] ?? '') === 'oui') $score += 2;
-
-    return $score;
+    if (($data['problemes_presence'] ?? '') !== 'oui') return 0;
+    $g = (int) ($data['problemes_gravite'] ?? 0);
+    return max(0, min(10, $g));
 }
 
 /**
@@ -54,10 +28,10 @@ function lfi_nct_gravity_score($data) {
  * Seuils ajustables ici.
  */
 function lfi_nct_gravity_level($score) {
-    if ($score >= 10) return ['critique',    '🚨 Critique',    '#7a0000'];
-    if ($score >= 6)  return ['grave',       '🔴 Grave',       '#c8102e'];
-    if ($score >= 3)  return ['preoccupant', '🟡 Préoccupant', '#bd8600'];
-    return                ['leger',       '🟢 Léger',       '#1a7f37'];
+    if ($score >= 8) return ['critique',    '🚨 Critique',    '#7a0000'];
+    if ($score >= 5) return ['grave',       '🔴 Grave',       '#c8102e'];
+    if ($score >= 1) return ['preoccupant', '🟡 Préoccupant', '#bd8600'];
+    return                ['leger',       '🟢 Sans souci',  '#1a7f37'];
 }
 
 /**
