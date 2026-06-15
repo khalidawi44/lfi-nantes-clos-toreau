@@ -38,21 +38,14 @@ function lfi_nct_admin_page() {
         exit;
     }
 
-    // === Édition d'une réponse (vue séparée) ===
-    if (($_GET['action'] ?? '') === 'edit' && !empty($_GET['id'])) {
-        lfi_nct_render_edit_form((int) $_GET['id']);
-        return;
-    }
-
-    $notice = '';
-
-    // === Sauvegarde des modifications ===
+    // === Sauvegarde des modifications (AVANT tout rendu, sinon l'edit form se ré-affiche) ===
     if (!empty($_POST['lfi_nct_edit_id'])) {
         $eid = (int) $_POST['lfi_nct_edit_id'];
         if ($eid > 0 && check_admin_referer('lfi_nct_edit_' . $eid)) {
             global $wpdb;
             $table = $wpdb->prefix . 'lfi_nct_responses';
             $current = $wpdb->get_row($wpdb->prepare("SELECT adresse, data FROM $table WHERE id = %d", $eid));
+            $adresse_changee = false;
             if ($current) {
                 $new_adr = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
                 $update = [
@@ -74,10 +67,27 @@ function lfi_nct_admin_page() {
                 $update['data'] = wp_json_encode($data, JSON_UNESCAPED_UNICODE);
                 $wpdb->update($table, $update, ['id' => $eid]);
                 delete_transient('lfi_nct_known_addresses');
-                $notice = 'success|✏️ Réponse n°' . $eid . ' modifiée'
-                        . ($adresse_changee ? ' — ses coordonnées GPS seront recalculées au prochain géocodage.' : '.');
             }
+            // Redirection vers la liste (évite la double-soumission au refresh).
+            wp_safe_redirect(add_query_arg([
+                'edited'   => $eid,
+                'addr_chg' => $adresse_changee ? 1 : 0,
+            ], admin_url('admin.php?page=lfi-nct-responses')));
+            exit;
         }
+    }
+
+    // === Édition d'une réponse (vue séparée) ===
+    if (($_GET['action'] ?? '') === 'edit' && !empty($_GET['id'])) {
+        lfi_nct_render_edit_form((int) $_GET['id']);
+        return;
+    }
+
+    $notice = '';
+    if (!empty($_GET['edited'])) {
+        $eid_n = (int) $_GET['edited'];
+        $notice = 'success|✏️ Réponse n°' . $eid_n . ' modifiée'
+                . (!empty($_GET['addr_chg']) ? ' — ses coordonnées GPS seront recalculées au prochain géocodage.' : '.');
     }
 
     // === Traitement des actions (suppression / restauration / purge) ===
