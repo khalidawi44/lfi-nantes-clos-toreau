@@ -102,11 +102,6 @@ function lfi_nct_value_labels() {
         'demarches_collectif' => [
             'oui' => 'Oui', 'a_voir' => 'À voir', 'non' => 'Non',
         ],
-        'eau_chaude_evoque' => [
-            'oui_probleme'     => "Évoqué comme un problème",
-            'oui_pas_probleme' => "Évoqué, mais pas ressenti comme un problème",
-            'non_evoque'       => "N'en a pas parlé / pas demandé",
-        ],
     ];
 }
 
@@ -141,10 +136,9 @@ function lfi_nct_compute_stats() {
         ],
         'recurrent_repartition' => ['permanent' => 0, 'parfois' => 0, 'ponctuel' => 0],
         'eau_chaude' => [
-            'oui_probleme'     => 0,
-            'oui_pas_probleme' => 0,
-            'non_evoque'       => 0,
-            'sans_reponse'     => 0,
+            'avec_donnee'  => 0, // nb d'enquêtes ayant au moins un champ rempli
+            'durees_max'   => [], // textes bruts saisis (« 3 semaines », etc.)
+            'nb_par_an'    => [], // textes bruts saisis
         ],
         'gravity'      => ['leger' => 0, 'preoccupant' => 0, 'grave' => 0, 'critique' => 0],
         'top_immeubles' => [],
@@ -185,13 +179,16 @@ function lfi_nct_compute_stats() {
 
         if ((int) $r->contact_recontact === 1) $stats['recontact']++;
 
-        // Coupures d'eau chaude (donnée contextuelle, pas un indicateur de gravité)
-        $ec = $data['eau_chaude_evoque'] ?? '';
-        if (isset($stats['eau_chaude'][$ec])) {
-            $stats['eau_chaude'][$ec]++;
-        } else {
-            $stats['eau_chaude']['sans_reponse']++;
+        // Coupures d'eau chaude — on récolte les chiffres bruts (fréquence + durée max).
+        // Le constat global (100 % touché·es) est affiché en bandeau, pas calculé.
+        $ec_nb    = trim((string) ($data['eau_chaude_nb_par_an'] ?? ''));
+        $ec_duree = trim((string) ($data['eau_chaude_duree_max'] ?? ''));
+        $ec_cit   = trim((string) ($data['eau_chaude_citation']  ?? ''));
+        if ($ec_nb !== '' || $ec_duree !== '' || $ec_cit !== '') {
+            $stats['eau_chaude']['avec_donnee']++;
         }
+        if ($ec_duree !== '') $stats['eau_chaude']['durees_max'][] = $ec_duree;
+        if ($ec_nb    !== '') $stats['eau_chaude']['nb_par_an'][]   = $ec_nb;
     }
 
     if ($stats['gravite_count'] > 0) {
@@ -251,15 +248,6 @@ function lfi_nct_get_filtered_responses($filter) {
             case 'gravite_critique':
                 $match = lfi_nct_gravity_at_least($data, 'critique');
                 break;
-            case 'eau_chaude_probleme':
-                $match = ($data['eau_chaude_evoque'] ?? '') === 'oui_probleme';
-                break;
-            case 'eau_chaude_pas_probleme':
-                $match = ($data['eau_chaude_evoque'] ?? '') === 'oui_pas_probleme';
-                break;
-            case 'eau_chaude_non_evoque':
-                $match = ($data['eau_chaude_evoque'] ?? '') === 'non_evoque';
-                break;
         }
         if ($match) $filtered[] = $r;
     }
@@ -283,9 +271,6 @@ function lfi_nct_filter_label($filter) {
         'gravite_preoccupant' => 'Cas au moins préoccupants',
         'gravite_grave'      => 'Cas graves ou critiques',
         'gravite_critique'   => 'Cas critiques',
-        'eau_chaude_probleme'     => "🚿 Eau chaude — évoquée comme un problème",
-        'eau_chaude_pas_probleme' => "🚿 Eau chaude — évoquée, pas vécue comme un problème",
-        'eau_chaude_non_evoque'   => "🚿 Eau chaude — pas évoquée",
     ][$filter] ?? $filter;
 }
 
@@ -400,31 +385,45 @@ function lfi_nct_render_stats_overview() {
             </div>
         </div>
 
-        <h2 style="margin-top:2em">🚿 Coupures d'eau chaude récurrentes (+5 ans)</h2>
-        <p class="description" style="margin-top:-.5em;margin-bottom:1em">
-            Problème connu de l'immeuble. Notez que tout le monde ne le ressent pas comme un problème — les déclarations sont reportées telles qu'exprimées.
-        </p>
-        <div class="lfi-stats-cards">
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('eau_chaude_probleme')); ?>">
-                <div class="nb"><?php echo $stats['eau_chaude']['oui_probleme']; ?></div>
-                <div class="label">L'évoquent comme un problème</div>
-                <div class="abs"><?php echo $pct($stats['eau_chaude']['oui_probleme'], $total); ?>%</div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('eau_chaude_pas_probleme')); ?>">
-                <div class="nb"><?php echo $stats['eau_chaude']['oui_pas_probleme']; ?></div>
-                <div class="label">L'évoquent sans le vivre comme un problème</div>
-                <div class="abs"><?php echo $pct($stats['eau_chaude']['oui_pas_probleme'], $total); ?>%</div>
-            </a>
-            <a class="lfi-stats-card" href="<?php echo esc_url($url('eau_chaude_non_evoque')); ?>">
-                <div class="nb"><?php echo $stats['eau_chaude']['non_evoque']; ?></div>
-                <div class="label">N'en ont pas parlé</div>
-                <div class="abs"><?php echo $pct($stats['eau_chaude']['non_evoque'], $total); ?>%</div>
-            </a>
-            <div class="lfi-stats-card lfi-card-static">
-                <div class="nb"><?php echo $stats['eau_chaude']['sans_reponse']; ?></div>
-                <div class="label">Sans réponse</div>
-                <div class="abs"><?php echo $pct($stats['eau_chaude']['sans_reponse'], $total); ?>%</div>
-            </div>
+        <h2 style="margin-top:2em">🚿 Coupures d'eau chaude récurrentes</h2>
+        <div class="lfi-fact-banner">
+            <div class="lfi-fact-headline"><strong>100 %</strong> des locataires enquêté·es subissent les coupures d'eau chaude.</div>
+            <ul class="lfi-fact-list">
+                <li>Plus de <strong>10 coupures par an</strong></li>
+                <li>Plus de <strong>10 jours cumulés</strong> sans eau chaude</li>
+                <li>Durée d'une coupure variant de <strong>2 jours à 3 semaines consécutives</strong> selon les immeubles</li>
+            </ul>
+            <?php if (!empty($stats['eau_chaude']['durees_max']) || !empty($stats['eau_chaude']['nb_par_an'])): ?>
+                <div class="lfi-fact-data">
+                    <strong>Déclarations recueillies (<?php echo (int) $stats['eau_chaude']['avec_donnee']; ?> enquête<?php echo $stats['eau_chaude']['avec_donnee'] > 1 ? 's' : ''; ?>) :</strong>
+                    <?php if (!empty($stats['eau_chaude']['durees_max'])): ?>
+                        <div>Plus longue coupure subie :
+                            <?php
+                            $uniq = array_count_values($stats['eau_chaude']['durees_max']);
+                            arsort($uniq);
+                            $pairs = [];
+                            foreach ($uniq as $val => $cnt) {
+                                $pairs[] = esc_html($val) . ' ×' . $cnt;
+                            }
+                            echo implode(' · ', $pairs);
+                            ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($stats['eau_chaude']['nb_par_an'])): ?>
+                        <div>Coupures par an déclarées :
+                            <?php
+                            $uniq = array_count_values($stats['eau_chaude']['nb_par_an']);
+                            arsort($uniq);
+                            $pairs = [];
+                            foreach ($uniq as $val => $cnt) {
+                                $pairs[] = esc_html($val) . ' ×' . $cnt;
+                            }
+                            echo implode(' · ', $pairs);
+                            ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
 
         <h2 style="margin-top:2em">Types de problèmes (multi-cases)</h2>
@@ -687,7 +686,8 @@ function lfi_nct_render_response_detail($id) {
         <div class="lfi-detail-section">
             <h2>🚿 Coupures d'eau chaude récurrentes</h2>
             <ul>
-                <li><strong>Perception :</strong> <?php echo $val('eau_chaude_evoque'); ?></li>
+                <li><strong>Coupures par an déclarées :</strong> <?php echo $text('eau_chaude_nb_par_an'); ?></li>
+                <li><strong>Plus longue coupure subie :</strong> <?php echo $text('eau_chaude_duree_max'); ?></li>
                 <li><strong>Déclaration verbatim :</strong> <?php echo $text('eau_chaude_citation'); ?></li>
             </ul>
         </div>
@@ -786,6 +786,21 @@ function lfi_nct_stats_styles() {
             background: #f0fdf4;
         }
         .lfi-detail-contact h2 { color: #2ecc71; }
+
+        .lfi-fact-banner {
+            background: #fff3f5;
+            border-left: 6px solid #c8102e;
+            padding: 18px 22px;
+            border-radius: 6px;
+            margin: 16px 0 28px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .lfi-fact-headline { font-size: 1.15em; margin-bottom: 8px; }
+        .lfi-fact-headline strong { color: #c8102e; font-size: 1.4em; }
+        .lfi-fact-list { margin: .3em 0 .6em 1.2em; padding: 0; }
+        .lfi-fact-list li { padding: 2px 0; }
+        .lfi-fact-data { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #c8102e; font-size: .95em; color: #555; }
+        .lfi-fact-data > div { margin: 4px 0; }
     </style>
     <?php
 }

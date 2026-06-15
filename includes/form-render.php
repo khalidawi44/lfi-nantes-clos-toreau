@@ -58,8 +58,8 @@ function lfi_nct_render_form() {
                 foreach ($types as $k => $label): ?>
                     <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
                 <?php endforeach; ?>
-                <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="autre"> Autre :</label>
-                <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="précisez">
+                <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="autre"> Autre — précisez :</label>
+                <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="Décrivez ici le problème (texte libre)">
             </fieldset>
 
             <fieldset class="lfi-fieldset">
@@ -96,12 +96,22 @@ function lfi_nct_render_form() {
         </div>
 
         <fieldset class="lfi-fieldset">
-            <legend class="lfi-legend">🚿 Coupures d'eau chaude répétées depuis plus de 5 ans</legend>
-            <p class="lfi-help">Problème connu de l'immeuble — mais tout le monde ne le vit pas pareil. Notez la déclaration telle qu'elle est exprimée, sans reformuler ni juger.</p>
-            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="oui_probleme"> L'évoque comme un problème</label>
-            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="oui_pas_probleme"> L'évoque, mais ne le ressent pas comme un problème</label>
-            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="non_evoque"> N'en a pas parlé / pas demandé</label>
-            <label class="lfi-field" style="margin-top:.6em">
+            <legend class="lfi-legend">🚿 Coupures d'eau chaude récurrentes</legend>
+            <p class="lfi-help">
+                <strong>Fait avéré sur le quartier</strong> : 100&nbsp;% des immeubles enquêtés sont touchés, avec
+                plus de 10 coupures par an et plus de 10 jours cumulés sans eau chaude. Durée variant de
+                2&nbsp;jours à 3&nbsp;semaines consécutives selon les immeubles.<br>
+                Notez ici les éléments concrets que la personne donne, et son verbatim ci-dessous.
+            </p>
+            <label class="lfi-field">
+                <span class="lfi-label">Nombre de coupures par an (estimation)</span>
+                <input type="text" name="eau_chaude_nb_par_an" placeholder="ex : 10, « plus de 15 », « je ne sais plus »">
+            </label>
+            <label class="lfi-field">
+                <span class="lfi-label">Plus longue coupure subie</span>
+                <input type="text" name="eau_chaude_duree_max" placeholder="ex : 3 semaines, 5 jours…">
+            </label>
+            <label class="lfi-field">
                 <span class="lfi-label">Citation / déclaration (verbatim)</span>
                 <textarea name="eau_chaude_citation" rows="2" placeholder="Notez tel que dit, sans rien changer"></textarea>
             </label>
@@ -229,18 +239,17 @@ function lfi_nct_render_submission_summary($id) {
         <?php endif; ?>
 
         <?php
-        $ec_labels = [
-            'oui_probleme'     => "Évoqué comme un problème",
-            'oui_pas_probleme' => "Évoqué, mais pas ressenti comme un problème",
-            'non_evoque'       => "N'en a pas parlé / pas demandé",
-        ];
-        $ec      = $data['eau_chaude_evoque']   ?? '';
-        $ec_cit  = trim((string) ($data['eau_chaude_citation'] ?? ''));
-        if ($ec !== '' || $ec_cit !== ''): ?>
-            <h3>🚿 Coupures d'eau chaude (immeuble)</h3>
+        $ec_nb     = trim((string) ($data['eau_chaude_nb_par_an'] ?? ''));
+        $ec_duree  = trim((string) ($data['eau_chaude_duree_max'] ?? ''));
+        $ec_cit    = trim((string) ($data['eau_chaude_citation']  ?? ''));
+        if ($ec_nb !== '' || $ec_duree !== '' || $ec_cit !== ''): ?>
+            <h3>🚿 Coupures d'eau chaude récurrentes</h3>
             <ul class="lfi-summary-list">
-                <?php if ($ec !== ''): ?>
-                    <li><strong>Perception :</strong> <?php echo esc_html($ec_labels[$ec] ?? $ec); ?></li>
+                <?php if ($ec_nb !== ''): ?>
+                    <li><strong>Coupures par an :</strong> <?php echo esc_html($ec_nb); ?></li>
+                <?php endif; ?>
+                <?php if ($ec_duree !== ''): ?>
+                    <li><strong>Plus longue coupure :</strong> <?php echo esc_html($ec_duree); ?></li>
                 <?php endif; ?>
                 <?php if ($ec_cit !== ''): ?>
                     <li><strong>Déclaration :</strong> «&nbsp;<?php echo esc_html($ec_cit); ?>&nbsp;»</li>
