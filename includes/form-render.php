@@ -96,6 +96,18 @@ function lfi_nct_render_form() {
         </div>
 
         <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">🚿 Coupures d'eau chaude répétées depuis plus de 5 ans</legend>
+            <p class="lfi-help">Problème connu de l'immeuble — mais tout le monde ne le vit pas pareil. Notez la déclaration telle qu'elle est exprimée, sans reformuler ni juger.</p>
+            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="oui_probleme"> L'évoque comme un problème</label>
+            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="oui_pas_probleme"> L'évoque, mais ne le ressent pas comme un problème</label>
+            <label class="lfi-radio"><input type="radio" name="eau_chaude_evoque" value="non_evoque"> N'en a pas parlé / pas demandé</label>
+            <label class="lfi-field" style="margin-top:.6em">
+                <span class="lfi-label">Citation / déclaration (verbatim)</span>
+                <textarea name="eau_chaude_citation" rows="2" placeholder="Notez tel que dit, sans rien changer"></textarea>
+            </label>
+        </fieldset>
+
+        <fieldset class="lfi-fieldset">
             <legend class="lfi-legend">Accepteriez-vous qu'on revienne ?</legend>
             <p class="lfi-help">On peut revenir constater sur place, vous accompagner pour faire pression sur Nantes Habitat, et vous aider juridiquement pour que le problème soit réglé.</p>
             <label class="lfi-radio"><input type="radio" name="revenir_ok" value="oui"> Oui, je suis intéressé·e</label>
@@ -213,6 +225,26 @@ function lfi_nct_render_submission_summary($id) {
                 <?php if ($duree !== ''): ?><li><strong>Durée :</strong> <?php echo esc_html($duree_labels[$duree] ?? $duree); ?></li><?php endif; ?>
                 <?php if ($rec !== ''): ?><li><strong>Récurrence :</strong> <?php echo esc_html($rec_labels[$rec] ?? $rec); ?></li><?php endif; ?>
                 <?php if ($gravite > 0): ?><li><strong>Gravité ressentie :</strong> <?php echo $gravite; ?> / 10</li><?php endif; ?>
+            </ul>
+        <?php endif; ?>
+
+        <?php
+        $ec_labels = [
+            'oui_probleme'     => "Évoqué comme un problème",
+            'oui_pas_probleme' => "Évoqué, mais pas ressenti comme un problème",
+            'non_evoque'       => "N'en a pas parlé / pas demandé",
+        ];
+        $ec      = $data['eau_chaude_evoque']   ?? '';
+        $ec_cit  = trim((string) ($data['eau_chaude_citation'] ?? ''));
+        if ($ec !== '' || $ec_cit !== ''): ?>
+            <h3>🚿 Coupures d'eau chaude (immeuble)</h3>
+            <ul class="lfi-summary-list">
+                <?php if ($ec !== ''): ?>
+                    <li><strong>Perception :</strong> <?php echo esc_html($ec_labels[$ec] ?? $ec); ?></li>
+                <?php endif; ?>
+                <?php if ($ec_cit !== ''): ?>
+                    <li><strong>Déclaration :</strong> «&nbsp;<?php echo esc_html($ec_cit); ?>&nbsp;»</li>
+                <?php endif; ?>
             </ul>
         <?php endif; ?>
 
