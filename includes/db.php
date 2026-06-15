@@ -25,6 +25,8 @@ function lfi_nct_create_table() {
         contact_tel VARCHAR(20) DEFAULT NULL,
         contact_email VARCHAR(150) DEFAULT NULL,
         deleted_at DATETIME DEFAULT NULL,
+        lat DECIMAL(10, 7) DEFAULT NULL,
+        lng DECIMAL(10, 7) DEFAULT NULL,
         PRIMARY KEY (id),
         KEY militant_user_id (militant_user_id),
         KEY submitted_at (submitted_at),
@@ -41,9 +43,9 @@ function lfi_nct_create_table() {
  */
 add_action('init', 'lfi_nct_maybe_upgrade_responses_table', 7);
 function lfi_nct_maybe_upgrade_responses_table() {
-    if (get_option('lfi_nct_responses_db_v') === '2') return;
+    if (get_option('lfi_nct_responses_db_v') === '3') return;
     lfi_nct_create_table();
-    update_option('lfi_nct_responses_db_v', '2', false);
+    update_option('lfi_nct_responses_db_v', '3', false);
 }
 
 /**

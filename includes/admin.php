@@ -139,7 +139,7 @@ function lfi_nct_admin_page() {
         <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>N°</th>
                     <th><?php echo $sort_link('date', 'Reçu le'); ?></th>
                     <th><?php echo $sort_link('gravite', 'Gravité'); ?></th>
                     <th><?php echo $sort_link('adresse', 'Adresse'); ?></th>
@@ -154,7 +154,8 @@ function lfi_nct_admin_page() {
             <tbody>
                 <?php if (empty($responses)): ?>
                     <tr><td colspan="10"><em>Aucune réponse <?php echo $view === 'corbeille' ? 'dans la corbeille' : 'enregistrée'; ?>.</em></td></tr>
-                <?php else: foreach ($responses as $r):
+                <?php else: foreach ($responses as $idx => $r):
+                    $rank = $idx + 1;
                     $data = $r->data ? json_decode($r->data, true) : [];
                     if (!is_array($data)) $data = [];
                     $appt = $data['appartement'] ?? '';
@@ -164,7 +165,7 @@ function lfi_nct_admin_page() {
                     $types_str = $presence === 'non' ? '—' : ($types ? implode(', ', $types) : '—');
                 ?>
                 <tr>
-                    <td><?php echo (int) $r->id; ?></td>
+                    <td><strong><?php echo $rank; ?></strong> <span style="color:#999;font-size:.82em" title="Identifiant interne de la réponse">#<?php echo (int) $r->id; ?></span></td>
                     <td><?php echo esc_html($r->submitted_at); ?></td>
                     <td><?php echo lfi_nct_gravity_badge_html($r); ?></td>
                     <td><?php echo esc_html($r->adresse); ?></td>
