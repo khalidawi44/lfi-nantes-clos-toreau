@@ -38,8 +38,49 @@ function lfi_nct_admin_page() {
         exit;
     }
 
-    // === Traitement des actions (suppression / restauration / purge) ===
+    // === Édition d'une réponse (vue séparée) ===
+    if (($_GET['action'] ?? '') === 'edit' && !empty($_GET['id'])) {
+        lfi_nct_render_edit_form((int) $_GET['id']);
+        return;
+    }
+
     $notice = '';
+
+    // === Sauvegarde des modifications ===
+    if (!empty($_POST['lfi_nct_edit_id'])) {
+        $eid = (int) $_POST['lfi_nct_edit_id'];
+        if ($eid > 0 && check_admin_referer('lfi_nct_edit_' . $eid)) {
+            global $wpdb;
+            $table = $wpdb->prefix . 'lfi_nct_responses';
+            $current = $wpdb->get_row($wpdb->prepare("SELECT adresse, data FROM $table WHERE id = %d", $eid));
+            if ($current) {
+                $new_adr = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+                $update = [
+                    'adresse'        => $new_adr,
+                    'etage'          => sanitize_text_field(wp_unslash($_POST['etage'] ?? '')),
+                    'contact_prenom' => sanitize_text_field(wp_unslash($_POST['contact_prenom'] ?? '')),
+                    'contact_nom'    => sanitize_text_field(wp_unslash($_POST['contact_nom'] ?? '')),
+                    'contact_tel'    => sanitize_text_field(wp_unslash($_POST['contact_tel'] ?? '')),
+                    'contact_email'  => sanitize_email(wp_unslash($_POST['contact_email'] ?? '')),
+                ];
+                $adresse_changee = (trim((string) $current->adresse) !== trim($new_adr));
+                if ($adresse_changee) {
+                    $update['lat'] = null;
+                    $update['lng'] = null;
+                }
+                $data = json_decode((string) $current->data, true);
+                if (!is_array($data)) $data = [];
+                $data['appartement'] = sanitize_text_field(wp_unslash($_POST['appartement'] ?? ''));
+                $update['data'] = wp_json_encode($data, JSON_UNESCAPED_UNICODE);
+                $wpdb->update($table, $update, ['id' => $eid]);
+                delete_transient('lfi_nct_known_addresses');
+                $notice = 'success|✏️ Réponse n°' . $eid . ' modifiée'
+                        . ($adresse_changee ? ' — ses coordonnées GPS seront recalculées au prochain géocodage.' : '.');
+            }
+        }
+    }
+
+    // === Traitement des actions (suppression / restauration / purge) ===
     if (!empty($_POST['lfi_nct_action']) && !empty($_POST['lfi_nct_id'])) {
         $action = sanitize_key($_POST['lfi_nct_action']);
         $id     = (int) $_POST['lfi_nct_id'];
@@ -49,9 +90,11 @@ function lfi_nct_admin_page() {
             $table = $wpdb->prefix . 'lfi_nct_responses';
             if ($action === 'delete') {
                 $wpdb->update($table, ['deleted_at' => current_time('mysql')], ['id' => $id]);
+                delete_transient('lfi_nct_known_addresses');
                 $notice = 'success|🗑 Réponse n°' . $id . ' déplacée à la corbeille (récupérable).';
             } elseif ($action === 'restore') {
                 $wpdb->update($table, ['deleted_at' => null], ['id' => $id]);
+                delete_transient('lfi_nct_known_addresses');
                 $notice = 'success|♻️ Réponse n°' . $id . ' restaurée.';
             } elseif ($action === 'destroy') {
                 // Sécurité supplémentaire : on ne supprime DÉFINITIVEMENT qu'une réponse déjà en corbeille.
@@ -176,6 +219,7 @@ function lfi_nct_admin_page() {
                     <td><?php echo $r->contact_recontact ? '✅ ' . esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom)) : '—'; ?></td>
                     <td>
                         <?php if ($view === 'actives'): ?>
+                            <a href="?page=lfi-nct-responses&action=edit&id=<?php echo (int)$r->id; ?>" class="button button-small">✏️ Modifier</a>
                             <form method="post" style="display:inline" onsubmit="return confirm('🗑 Mettre cette réponse à la corbeille ? Elle sera récupérable avec « Restaurer ».');">
                                 <?php wp_nonce_field('lfi_nct_delete_' . $r->id); ?>
                                 <input type="hidden" name="lfi_nct_action" value="delete">
@@ -263,4 +307,102 @@ function lfi_nct_admin_print_css() {
         .wp-list-table th, .wp-list-table td { padding: 4px 6px !important; }
     }
     </style>';
+}
+
+/**
+ * Récupère la liste des adresses déjà saisies (en cache 5 min) pour les
+ * datalists d'autocomplétion — front-end ET édition admin. Ça normalise
+ * naturellement la saisie : on tape, on choisit parmi les adresses déjà
+ * utilisées au lieu de risquer des variations « 14 rue st jean » vs
+ * « 14 rue Saint Jean de Luz ».
+ */
+function lfi_nct_known_addresses() {
+    $cached = get_transient('lfi_nct_known_addresses');
+    if (is_array($cached)) return $cached;
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $rows = $wpdb->get_col(
+        "SELECT DISTINCT adresse FROM $table
+         WHERE deleted_at IS NULL AND adresse IS NOT NULL AND adresse != ''
+         ORDER BY adresse"
+    );
+    $rows = $rows ?: [];
+    set_transient('lfi_nct_known_addresses', $rows, 5 * MINUTE_IN_SECONDS);
+    return $rows;
+}
+
+/**
+ * Sort un <datalist id="..."> avec toutes les adresses connues, à coupler
+ * avec un input list="...".
+ */
+function lfi_nct_addresses_datalist($id = 'lfi-known-addresses') {
+    $out = '<datalist id="' . esc_attr($id) . '">';
+    foreach (lfi_nct_known_addresses() as $a) {
+        $out .= '<option value="' . esc_attr($a) . '">';
+    }
+    return $out . '</datalist>';
+}
+
+/**
+ * Page « Modifier la réponse n°X ».
+ */
+function lfi_nct_render_edit_form($id) {
+    if (!current_user_can('manage_options')) return;
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $r = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", (int) $id));
+    if (!$r) {
+        echo '<div class="wrap"><div class="notice notice-error"><p>Réponse introuvable.</p></div>'
+           . '<p><a href="?page=lfi-nct-responses" class="button">← Retour</a></p></div>';
+        return;
+    }
+    $data = $r->data ? json_decode($r->data, true) : [];
+    if (!is_array($data)) $data = [];
+    $appt = $data['appartement'] ?? '';
+    ?>
+    <div class="wrap">
+        <h1>✏️ Modifier la réponse #<?php echo (int) $r->id; ?></h1>
+        <p><a href="?page=lfi-nct-responses" class="button">← Retour à la liste</a></p>
+        <p class="description">L'adresse propose une autocomplétion avec les adresses déjà saisies : choisissez-en une dans la liste pour rester cohérent (évite « 14 rue st jean » vs « 14 rue Saint Jean de Luz »).</p>
+
+        <form method="post">
+            <?php wp_nonce_field('lfi_nct_edit_' . (int) $r->id); ?>
+            <input type="hidden" name="lfi_nct_edit_id" value="<?php echo (int) $r->id; ?>">
+
+            <table class="form-table">
+                <tr><th><label for="lfi-ed-adresse">Adresse</label></th>
+                    <td>
+                        <input type="text" id="lfi-ed-adresse" name="adresse" value="<?php echo esc_attr($r->adresse); ?>" list="lfi-known-addresses" class="regular-text" autocomplete="off">
+                        <?php echo lfi_nct_addresses_datalist('lfi-known-addresses'); ?>
+                    </td>
+                </tr>
+                <tr><th><label>Étage</label></th>
+                    <td><input type="text" name="etage" value="<?php echo esc_attr($r->etage); ?>" class="regular-text"></td>
+                </tr>
+                <tr><th><label>Appartement</label></th>
+                    <td><input type="text" name="appartement" value="<?php echo esc_attr($appt); ?>" class="regular-text"></td>
+                </tr>
+                <tr><th colspan="2"><h3 style="margin:1em 0 0">Contact</h3></th></tr>
+                <tr><th><label>Prénom</label></th>
+                    <td><input type="text" name="contact_prenom" value="<?php echo esc_attr($r->contact_prenom); ?>" class="regular-text"></td>
+                </tr>
+                <tr><th><label>Nom</label></th>
+                    <td><input type="text" name="contact_nom" value="<?php echo esc_attr($r->contact_nom); ?>" class="regular-text"></td>
+                </tr>
+                <tr><th><label>Téléphone</label></th>
+                    <td><input type="text" name="contact_tel" value="<?php echo esc_attr($r->contact_tel); ?>" class="regular-text"></td>
+                </tr>
+                <tr><th><label>Email</label></th>
+                    <td><input type="email" name="contact_email" value="<?php echo esc_attr($r->contact_email); ?>" class="regular-text"></td>
+                </tr>
+            </table>
+
+            <p>
+                <button type="submit" class="button button-primary">💾 Enregistrer</button>
+                <a href="?page=lfi-nct-responses" class="button">Annuler</a>
+            </p>
+            <p class="description">⚠️ Changer l'adresse remet ses coordonnées GPS à zéro : la carte sera recalculée au prochain géocodage.</p>
+        </form>
+    </div>
+    <?php
 }

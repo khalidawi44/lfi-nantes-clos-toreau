@@ -21,7 +21,8 @@ function lfi_nct_render_form() {
             <legend class="lfi-legend">📍 Logement visité</legend>
             <label class="lfi-field">
                 <span class="lfi-label">Immeuble / adresse <span class="req">*</span></span>
-                <input type="text" name="adresse" required placeholder="Ex : 12 rue de Biarritz">
+                <input type="text" name="adresse" required placeholder="Ex : 12 rue de Biarritz" list="lfi-nct-known-adr" autocomplete="off">
+                <?php echo function_exists('lfi_nct_addresses_datalist') ? lfi_nct_addresses_datalist('lfi-nct-known-adr') : ''; ?>
             </label>
             <label class="lfi-field">
                 <span class="lfi-label">Étage <span class="req">*</span></span>
