@@ -179,7 +179,7 @@ function lfi_nct_admin_page() {
             <span style="margin-left:1em;color:#666">Tri actuel : <strong><?php echo esc_html(str_replace('_', ' ', $sort)); ?></strong> · Clic sur l'en-tête d'une colonne pour trier.</span>
         </p>
 
-        <table class="wp-list-table widefat fixed striped">
+        <table class="wp-list-table widefat striped" style="table-layout:auto">
             <thead>
                 <tr>
                     <th>N°</th>
@@ -189,14 +189,18 @@ function lfi_nct_admin_page() {
                     <th><?php echo $sort_link('etage', 'Étage'); ?></th>
                     <th>Appt</th>
                     <th><?php echo $sort_link('problemes', 'Problèmes'); ?></th>
+                    <th>Durée</th>
                     <th>Récurrence</th>
-                    <th><?php echo $sort_link('rdv', 'Souhaite RDV'); ?></th>
+                    <th><?php echo $sort_link('rdv', 'RDV'); ?></th>
+                    <th>Contact</th>
+                    <th>Téléphone</th>
+                    <th>Email</th>
                     <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($responses)): ?>
-                    <tr><td colspan="10"><em>Aucune réponse <?php echo $view === 'corbeille' ? 'dans la corbeille' : 'enregistrée'; ?>.</em></td></tr>
+                    <tr><td colspan="14"><em>Aucune réponse <?php echo $view === 'corbeille' ? 'dans la corbeille' : 'enregistrée'; ?>.</em></td></tr>
                 <?php else: foreach ($responses as $idx => $r):
                     $rank = $idx + 1;
                     $data = $r->data ? json_decode($r->data, true) : [];
@@ -215,10 +219,22 @@ function lfi_nct_admin_page() {
                     <td><?php echo esc_html($r->etage); ?></td>
                     <td><?php echo esc_html($appt); ?></td>
                     <td><?php echo esc_html($types_str); ?></td>
+                    <td><?php
+                        $duree_labels_full = [
+                            'moins_1_mois' => '<1 mois', '1_6_mois' => '1-6 mois',
+                            '6_12_mois' => '6-12 mois', '1_5_ans' => '>1 an', 'plus_5_ans' => '>5 ans',
+                        ];
+                        $duree = $data['problemes_duree'] ?? '';
+                        echo esc_html($duree_labels_full[$duree] ?? ($duree ?: '—'));
+                    ?></td>
                     <td><?php echo esc_html($rec); ?></td>
-                    <td><?php echo $r->contact_recontact ? '✅ ' . esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom)) : '—'; ?></td>
+                    <td><?php echo $r->contact_recontact ? '✅' : '—'; ?></td>
+                    <td><?php echo esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom)) ?: '—'; ?></td>
+                    <td><?php echo $r->contact_tel ? '<a href="tel:' . esc_attr($r->contact_tel) . '">' . esc_html($r->contact_tel) . '</a>' : '—'; ?></td>
+                    <td><?php echo $r->contact_email ? '<a href="mailto:' . esc_attr($r->contact_email) . '">' . esc_html($r->contact_email) . '</a>' : '—'; ?></td>
                     <td>
                         <?php if ($view === 'actives'): ?>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lfi-nct-stats&view=' . (int)$r->id)); ?>" class="button button-small" title="Voir tous les champs">👁 Détail</a>
                             <a href="?page=lfi-nct-responses&action=edit&id=<?php echo (int)$r->id; ?>" class="button button-small">✏️ Modifier</a>
                             <form method="post" style="display:inline" onsubmit="return confirm('🗑 Mettre cette réponse à la corbeille ? Elle sera récupérable avec « Restaurer ».');">
                                 <?php wp_nonce_field('lfi_nct_delete_' . $r->id); ?>
