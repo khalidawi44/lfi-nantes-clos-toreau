@@ -31,37 +31,130 @@ function lfi_nct_admin_menu() {
 }
 
 function lfi_nct_admin_page() {
-    if (isset($_GET['export']) && $_GET['export'] === 'csv' && current_user_can('manage_options')) {
+    if (!current_user_can('manage_options')) return;
+
+    if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         lfi_nct_export_csv();
         exit;
     }
 
-    $count = lfi_nct_count_responses();
-    $responses = lfi_nct_get_responses(50);
+    // === Traitement des actions (suppression / restauration / purge) ===
+    $notice = '';
+    if (!empty($_POST['lfi_nct_action']) && !empty($_POST['lfi_nct_id'])) {
+        $action = sanitize_key($_POST['lfi_nct_action']);
+        $id     = (int) $_POST['lfi_nct_id'];
+        if ($id > 0 && in_array($action, ['delete', 'restore', 'destroy'], true)
+            && check_admin_referer('lfi_nct_' . $action . '_' . $id)) {
+            global $wpdb;
+            $table = $wpdb->prefix . 'lfi_nct_responses';
+            if ($action === 'delete') {
+                $wpdb->update($table, ['deleted_at' => current_time('mysql')], ['id' => $id]);
+                $notice = 'success|🗑 Réponse n°' . $id . ' déplacée à la corbeille (récupérable).';
+            } elseif ($action === 'restore') {
+                $wpdb->update($table, ['deleted_at' => null], ['id' => $id]);
+                $notice = 'success|♻️ Réponse n°' . $id . ' restaurée.';
+            } elseif ($action === 'destroy') {
+                // Sécurité supplémentaire : on ne supprime DÉFINITIVEMENT qu'une réponse déjà en corbeille.
+                $row = $wpdb->get_row($wpdb->prepare("SELECT id, deleted_at FROM $table WHERE id = %d", $id));
+                if ($row && $row->deleted_at !== null) {
+                    $wpdb->delete($table, ['id' => $id]);
+                    $notice = 'warning|❌ Réponse n°' . $id . ' supprimée définitivement.';
+                } else {
+                    $notice = 'error|Refusé : pour une suppression définitive, la réponse doit d\'abord être dans la corbeille.';
+                }
+            }
+        }
+    }
+
+    $view = ($_GET['view'] ?? '') === 'corbeille' ? 'corbeille' : 'actives';
+    $sort = sanitize_key($_GET['sort'] ?? 'date_desc');
+
+    $count_actives   = lfi_nct_count_responses(false);
+    $count_corbeille = lfi_nct_count_responses(true);
+    $responses       = lfi_nct_get_responses(500, 0, $view === 'corbeille');
+
+    // === Tri en PHP (gravité et types sont dérivés du JSON) ===
+    $type_labels = [
+        'degats_eaux' => 'eaux', 'humidite' => 'humidité', 'insectes' => 'nuisibles',
+        'chauffage' => 'chauffage', 'electricite' => 'électr.', 'ascenseur' => 'ascenseur',
+        'parties_communes' => 'parties communes', 'bruit' => 'bruit', 'securite' => 'sécurité',
+        'autre' => 'autre',
+    ];
+    $rec_labels = ['permanent' => 'permanent', 'parfois' => 'régulier', 'ponctuel' => 'ponctuel'];
+
+    list($sort_col, $sort_dir) = array_pad(explode('_', $sort, 2), 2, 'desc');
+    $dir = $sort_dir === 'asc' ? 1 : -1;
+    $cmp = function($a, $b) use ($sort_col, $dir) {
+        $av = ''; $bv = '';
+        switch ($sort_col) {
+            case 'date':     $av = $a->submitted_at; $bv = $b->submitted_at; break;
+            case 'adresse':  $av = mb_strtolower((string)$a->adresse); $bv = mb_strtolower((string)$b->adresse); break;
+            case 'etage':    $av = (string)$a->etage; $bv = (string)$b->etage; break;
+            case 'gravite':
+                $av = lfi_nct_gravity_score(json_decode((string)$a->data, true));
+                $bv = lfi_nct_gravity_score(json_decode((string)$b->data, true));
+                break;
+            case 'rdv':      $av = (int)$a->contact_recontact; $bv = (int)$b->contact_recontact; break;
+            case 'problemes':
+                $da = json_decode((string)$a->data, true);
+                $db = json_decode((string)$b->data, true);
+                $av = implode(',', (array)($da['problemes_types'] ?? []));
+                $bv = implode(',', (array)($db['problemes_types'] ?? []));
+                break;
+            default:         $av = $a->submitted_at; $bv = $b->submitted_at;
+        }
+        if ($av == $bv) return 0;
+        return ($av < $bv ? -1 : 1) * $dir;
+    };
+    usort($responses, $cmp);
+
+    $sort_link = function($col, $label) use ($sort) {
+        $cur_dir = (strpos($sort, $col . '_') === 0) ? substr($sort, strlen($col) + 1) : '';
+        $next    = ($cur_dir === 'asc') ? 'desc' : 'asc';
+        $arrow   = $cur_dir === 'asc' ? ' ↑' : ($cur_dir === 'desc' ? ' ↓' : '');
+        $url     = add_query_arg(['sort' => $col . '_' . $next]);
+        return '<a href="' . esc_url($url) . '">' . esc_html($label) . $arrow . '</a>';
+    };
     ?>
     <div class="wrap">
-        <h1>LFI Clos Toreau — Réponses Enquête Logement <?php echo lfi_nct_print_button('Imprimer toutes les réponses'); ?></h1>
-        <p><strong><?php echo $count; ?></strong> réponse(s) enregistrée(s).</p>
-        <p><a href="?page=lfi-nct-responses&export=csv" class="button button-primary">📥 Exporter en CSV</a></p>
+        <h1>
+            LFI Clos Toreau — Réponses Enquête Logement
+            <?php echo lfi_nct_print_button('Imprimer toutes les réponses'); ?>
+        </h1>
+
+        <?php if ($notice): list($lvl, $msg) = explode('|', $notice, 2); ?>
+            <div class="notice notice-<?php echo esc_attr($lvl); ?> is-dismissible"><p><?php echo esc_html($msg); ?></p></div>
+        <?php endif; ?>
+
+        <h2 class="nav-tab-wrapper" style="border-bottom:none">
+            <a href="?page=lfi-nct-responses" class="nav-tab <?php echo $view === 'actives' ? 'nav-tab-active' : ''; ?>">📋 Actives (<?php echo $count_actives; ?>)</a>
+            <a href="?page=lfi-nct-responses&view=corbeille" class="nav-tab <?php echo $view === 'corbeille' ? 'nav-tab-active' : ''; ?>">🗑 Corbeille (<?php echo $count_corbeille; ?>)</a>
+        </h2>
+
+        <p style="margin-top:1em">
+            <a href="?page=lfi-nct-responses&export=csv" class="button button-primary">📥 Exporter en CSV</a>
+            <span style="margin-left:1em;color:#666">Tri actuel : <strong><?php echo esc_html(str_replace('_', ' ', $sort)); ?></strong> · Clic sur l'en-tête d'une colonne pour trier.</span>
+        </p>
 
         <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr>
-                    <th>ID</th><th>Reçu le</th><th>Gravité</th>
-                    <th>Adresse</th><th>Étage</th><th>Appt</th>
-                    <th>Problèmes</th><th>Récurrence</th><th>Souhaite RDV</th>
+                    <th>ID</th>
+                    <th><?php echo $sort_link('date', 'Reçu le'); ?></th>
+                    <th><?php echo $sort_link('gravite', 'Gravité'); ?></th>
+                    <th><?php echo $sort_link('adresse', 'Adresse'); ?></th>
+                    <th><?php echo $sort_link('etage', 'Étage'); ?></th>
+                    <th>Appt</th>
+                    <th><?php echo $sort_link('problemes', 'Problèmes'); ?></th>
+                    <th>Récurrence</th>
+                    <th><?php echo $sort_link('rdv', 'Souhaite RDV'); ?></th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
-                <?php
-                $type_labels = [
-                    'degats_eaux' => 'eaux', 'humidite' => 'humidité', 'insectes' => 'nuisibles',
-                    'chauffage' => 'chauffage', 'electricite' => 'électr.', 'ascenseur' => 'ascenseur',
-                    'parties_communes' => 'parties communes', 'bruit' => 'bruit', 'securite' => 'sécurité',
-                    'autre' => 'autre',
-                ];
-                $rec_labels = ['permanent' => 'permanent', 'parfois' => 'régulier', 'ponctuel' => 'ponctuel'];
-                foreach ($responses as $r):
+                <?php if (empty($responses)): ?>
+                    <tr><td colspan="10"><em>Aucune réponse <?php echo $view === 'corbeille' ? 'dans la corbeille' : 'enregistrée'; ?>.</em></td></tr>
+                <?php else: foreach ($responses as $r):
                     $data = $r->data ? json_decode($r->data, true) : [];
                     if (!is_array($data)) $data = [];
                     $appt = $data['appartement'] ?? '';
@@ -80,8 +173,31 @@ function lfi_nct_admin_page() {
                     <td><?php echo esc_html($types_str); ?></td>
                     <td><?php echo esc_html($rec); ?></td>
                     <td><?php echo $r->contact_recontact ? '✅ ' . esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom)) : '—'; ?></td>
+                    <td>
+                        <?php if ($view === 'actives'): ?>
+                            <form method="post" style="display:inline" onsubmit="return confirm('🗑 Mettre cette réponse à la corbeille ? Elle sera récupérable avec « Restaurer ».');">
+                                <?php wp_nonce_field('lfi_nct_delete_' . $r->id); ?>
+                                <input type="hidden" name="lfi_nct_action" value="delete">
+                                <input type="hidden" name="lfi_nct_id" value="<?php echo (int)$r->id; ?>">
+                                <button type="submit" class="button button-small">🗑 Corbeille</button>
+                            </form>
+                        <?php else: ?>
+                            <form method="post" style="display:inline">
+                                <?php wp_nonce_field('lfi_nct_restore_' . $r->id); ?>
+                                <input type="hidden" name="lfi_nct_action" value="restore">
+                                <input type="hidden" name="lfi_nct_id" value="<?php echo (int)$r->id; ?>">
+                                <button type="submit" class="button button-small">♻️ Restaurer</button>
+                            </form>
+                            <form method="post" style="display:inline" onsubmit="return confirm('⚠️ SUPPRIMER DÉFINITIVEMENT la réponse n°<?php echo (int)$r->id; ?> ?\n\nCette action est IRRÉVERSIBLE. Tape OK pour confirmer.') && prompt('Tape SUPPRIMER pour confirmer la suppression définitive') === 'SUPPRIMER';">
+                                <?php wp_nonce_field('lfi_nct_destroy_' . $r->id); ?>
+                                <input type="hidden" name="lfi_nct_action" value="destroy">
+                                <input type="hidden" name="lfi_nct_id" value="<?php echo (int)$r->id; ?>">
+                                <button type="submit" class="button button-small" style="color:#a00">❌ Supprimer définitivement</button>
+                            </form>
+                        <?php endif; ?>
+                    </td>
                 </tr>
-                <?php endforeach; ?>
+                <?php endforeach; endif; ?>
             </tbody>
         </table>
     </div>
