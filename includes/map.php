@@ -15,25 +15,48 @@ if (!defined('LFI_NCT_MAP_CENTER_ZOOM')) define('LFI_NCT_MAP_CENTER_ZOOM', 16);
 /* ------------------------------------------------------------------ */
 
 /**
- * Géocode une adresse libre via Nominatim. Renvoie [lat, lng] ou null.
- * Respect des CGU Nominatim : User-Agent identifié + 1 req/sec max côté appelant.
+ * Génère 1 à 3 variantes d'une adresse pour augmenter les chances de match Nominatim.
+ *   1) Adresse complète + Nantes + France
+ *   2) Sans le numéro initial (« 12 bis rue X » → « rue X »)
+ *   3) Avec code postal 44200 (Clos Toreau / Nantes Sud)
  */
-function lfi_nct_geocode($address) {
-    $address = trim((string) $address);
-    if ($address === '') return null;
+function lfi_nct_address_variants($address) {
+    $base = trim((string) $address);
+    if ($base === '') return [];
+    $variants = [];
 
-    // On contextualise l'adresse pour améliorer la précision sur Nantes Sud.
-    $query = $address;
-    if (stripos($query, 'nantes') === false) $query .= ', Nantes';
-    if (stripos($query, 'france') === false) $query .= ', France';
+    $v1 = $base;
+    if (stripos($v1, 'nantes') === false) $v1 .= ', Nantes';
+    if (stripos($v1, 'france') === false) $v1 .= ', France';
+    $variants[] = $v1;
 
+    $no_num = preg_replace('/^\s*\d+\s*(bis|ter|quater)?\s*/iu', '', $base);
+    if ($no_num && $no_num !== $base) {
+        $v2 = $no_num;
+        if (stripos($v2, 'nantes') === false) $v2 .= ', Nantes';
+        if (stripos($v2, 'france') === false) $v2 .= ', France';
+        $variants[] = $v2;
+    }
+
+    if (stripos($base, '44200') === false) {
+        $variants[] = $base . ', 44200 Nantes, France';
+    }
+
+    return array_values(array_unique($variants));
+}
+
+/**
+ * Une seule requête Nominatim, biaisée autour du Clos Toreau via viewbox.
+ */
+function lfi_nct_geocode_query($query) {
     $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
         'q'            => $query,
         'format'       => 'json',
         'limit'        => 1,
         'countrycodes' => 'fr',
+        'viewbox'      => '-1.560,47.205,-1.520,47.180',
+        'bounded'      => 0,
     ]);
-
     $resp = wp_remote_get($url, [
         'timeout' => 12,
         'headers' => [
@@ -42,13 +65,27 @@ function lfi_nct_geocode($address) {
         ],
     ]);
     if (is_wp_error($resp)) return null;
-
     $body = json_decode(wp_remote_retrieve_body($resp), true);
     if (!is_array($body) || empty($body)) return null;
     $first = $body[0];
     if (!isset($first['lat'], $first['lon'])) return null;
-
     return [(float) $first['lat'], (float) $first['lon']];
+}
+
+/**
+ * Géocode une adresse libre via Nominatim avec plusieurs tentatives. Renvoie [lat, lng] ou null.
+ * Respect des CGU Nominatim : User-Agent identifié + ~1 req/sec.
+ */
+function lfi_nct_geocode($address) {
+    $variants = lfi_nct_address_variants($address);
+    $first = true;
+    foreach ($variants as $q) {
+        if (!$first) usleep(1100000); // 1.1s entre essais
+        $first = false;
+        $coords = lfi_nct_geocode_query($q);
+        if ($coords) return $coords;
+    }
+    return null;
 }
 
 /**
@@ -231,7 +268,6 @@ function lfi_nct_map_page() {
         var el = document.getElementById('lfi-map');
         if (!el || typeof maplibregl === 'undefined') return;
 
-        var FLOOR_PX = 28;
         var center = [<?php echo (float) LFI_NCT_MAP_CENTER_LNG; ?>, <?php echo (float) LFI_NCT_MAP_CENTER_LAT; ?>];
 
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -290,32 +326,82 @@ function lfi_nct_map_page() {
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
         map.addControl(new maplibregl.ScaleControl({ maxWidth: 120 }));
 
-        // === Markers étagés (un par étage, empilés au-dessus de leur immeuble) ===
+        // === Bornes pour fit ===
         var bounds = new maplibregl.LngLatBounds();
-        markers.forEach(function (m) {
+
+        // === Construction des cubes 3D des enquêtes (vraie 3D fill-extrusion) ===
+        // Chaque entrée devient un petit cube ~4 m, à la hauteur de son étage.
+        // Plusieurs entrées au même endroit et même étage sont décalées latéralement.
+        var FLOOR_M = 3;        // 3 m par étage
+        var CUBE_M  = 4;        // côté du cube
+        var stackCounts = {};
+        var feats = [];
+
+        function squareAround(lng, lat, sizeM) {
+            var dLat = sizeM / 111111;
+            var dLng = sizeM / (111111 * Math.cos(lat * Math.PI / 180));
+            return [[
+                [lng - dLng / 2, lat - dLat / 2],
+                [lng + dLng / 2, lat - dLat / 2],
+                [lng + dLng / 2, lat + dLat / 2],
+                [lng - dLng / 2, lat + dLat / 2],
+                [lng - dLng / 2, lat - dLat / 2]
+            ]];
+        }
+
+        markers.forEach(function (m, idx) {
             var floor = parseFloor(m.etage);
-            var offY  = floor * FLOOR_PX;
-            var label = floor > 0 ? floor : '?';
-
-            var wrap = document.createElement('div');
-            wrap.className = 'lfi-3d-marker';
-            wrap.style.position = 'relative';
-            wrap.style.width  = '24px';
-            wrap.style.height = '24px';
-            wrap.innerHTML =
-                '<div class="lfi-3d-line" style="position:absolute;left:11px;top:-' + offY + 'px;width:2px;height:' + offY + 'px;background:' + m.gcolor + ';opacity:.6"></div>' +
-                '<div class="lfi-3d-dot" style="position:absolute;left:0;top:-' + offY + 'px;width:24px;height:24px;border-radius:50%;background:' + m.gcolor + ';border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;line-height:1">' +
-                  esc(label) +
-                '</div>';
-
-            new maplibregl.Marker({ element: wrap, anchor: 'center' })
-                .setLngLat([m.lng, m.lat])
-                .setPopup(new maplibregl.Popup({ offset: [0, -offY - 12], closeButton: true }).setHTML(popupHtml(m)))
-                .addTo(map);
+            var key = m.lat.toFixed(5) + '_' + m.lng.toFixed(5) + '_' + floor;
+            var rank = (stackCounts[key] = (stackCounts[key] || 0) + 1) - 1;
+            // jitter de ~5 m si plusieurs au même point/étage
+            var jitterM = rank * 5;
+            var dLng = jitterM / (111111 * Math.cos(m.lat * Math.PI / 180));
+            var base = floor * FLOOR_M + 0.5;
+            var top  = base + 2.5;
+            feats.push({
+                type: 'Feature',
+                id: idx,
+                geometry: { type: 'Polygon', coordinates: squareAround(m.lng + dLng, m.lat, CUBE_M) },
+                properties: {
+                    fid: idx,
+                    base: base,
+                    height: top,
+                    color: m.gcolor,
+                    popup: popupHtml(m)
+                }
+            });
             bounds.extend([m.lng, m.lat]);
         });
+        var surveysGJ = { type: 'FeatureCollection', features: feats };
+
         if (!bounds.isEmpty()) {
             map.fitBounds(bounds, { padding: 100, maxZoom: 18, pitch: 55, bearing: -15 });
+        }
+
+        function addSurveyLayer() {
+            if (map.getSource('surveys')) return;
+            map.addSource('surveys', { type: 'geojson', data: surveysGJ });
+            map.addLayer({
+                id: 'surveys-3d',
+                type: 'fill-extrusion',
+                source: 'surveys',
+                paint: {
+                    'fill-extrusion-color': ['get', 'color'],
+                    'fill-extrusion-base': ['get', 'base'],
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-opacity': 0.95
+                }
+            });
+            map.on('click', 'surveys-3d', function (e) {
+                if (!e.features || !e.features.length) return;
+                var f = e.features[0];
+                new maplibregl.Popup({ closeButton: true })
+                    .setLngLat(e.lngLat)
+                    .setHTML(f.properties.popup)
+                    .addTo(map);
+            });
+            map.on('mouseenter', 'surveys-3d', function () { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'surveys-3d', function () { map.getCanvas().style.cursor = ''; });
         }
 
         // === Extrusion 3D des immeubles via Overpass / OSM ===
@@ -353,6 +439,8 @@ function lfi_nct_map_page() {
         function addBuildingLayer(gj) {
             if (!map.isStyleLoaded() || map.getSource('buildings')) return;
             map.addSource('buildings', { type: 'geojson', data: gj });
+            // Bâtiments sous la layer des enquêtes pour que les cubes restent visibles
+            var beforeId = map.getLayer('surveys-3d') ? 'surveys-3d' : undefined;
             map.addLayer({
                 id: 'buildings-3d',
                 type: 'fill-extrusion',
@@ -361,11 +449,14 @@ function lfi_nct_map_page() {
                     'fill-extrusion-color': '#9aa0a8',
                     'fill-extrusion-height': ['get', '_h'],
                     'fill-extrusion-base': 0,
-                    'fill-extrusion-opacity': 0.78,
+                    'fill-extrusion-opacity': 0.55,
                 }
-            });
+            }, beforeId);
         }
-        map.on('load', loadBuildings);
+        map.on('load', function () {
+            addSurveyLayer();
+            loadBuildings();
+        });
     })();
     </script>
 
