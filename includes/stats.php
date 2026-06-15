@@ -116,7 +116,7 @@ function lfi_nct_label($field, $value) {
 function lfi_nct_compute_stats() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
-    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL");
 
     $stats = [
         'total' => $total,
@@ -141,7 +141,7 @@ function lfi_nct_compute_stats() {
 
     if ($total === 0) return $stats;
 
-    $responses = $wpdb->get_results("SELECT data, contact_recontact FROM $table");
+    $responses = $wpdb->get_results("SELECT data, contact_recontact FROM $table WHERE deleted_at IS NULL");
     foreach ($responses as $r) {
         $data = json_decode($r->data, true);
         if (!is_array($data)) continue;
@@ -179,7 +179,7 @@ function lfi_nct_compute_stats() {
         $stats['gravite_moyenne'] = round($stats['gravite_sum'] / $stats['gravite_count'], 1);
     }
 
-    $top = $wpdb->get_results("SELECT adresse, COUNT(*) as nb FROM $table GROUP BY adresse ORDER BY nb DESC LIMIT 10");
+    $top = $wpdb->get_results("SELECT adresse, COUNT(*) as nb FROM $table WHERE deleted_at IS NULL GROUP BY adresse ORDER BY nb DESC LIMIT 10");
     $stats['top_immeubles'] = $top ?: [];
 
     return $stats;
@@ -194,11 +194,11 @@ function lfi_nct_get_filtered_responses($filter) {
 
     // Filtres SQL purs (colonnes structurées)
     if ($filter === 'recontact') {
-        return $wpdb->get_results("SELECT * FROM $table WHERE contact_recontact = 1 ORDER BY submitted_at DESC");
+        return $wpdb->get_results("SELECT * FROM $table WHERE contact_recontact = 1 AND deleted_at IS NULL ORDER BY submitted_at DESC");
     }
 
     // Filtres sur le champ JSON 'data' : on récupère tout puis on filtre en PHP
-    $all = $wpdb->get_results("SELECT * FROM $table ORDER BY submitted_at DESC");
+    $all = $wpdb->get_results("SELECT * FROM $table WHERE deleted_at IS NULL ORDER BY submitted_at DESC");
     $filtered = [];
 
     foreach ($all as $r) {
@@ -677,6 +677,10 @@ function lfi_nct_stats_styles() {
         .lfi-stats-card .nb { font-size: 2.2em; font-weight: bold; color: #c8102e; line-height: 1; }
         .lfi-stats-card .label { color: #555; font-size: 0.95em; margin-top: 6px; }
         .lfi-stats-card .abs { color: #999; font-size: 0.8em; margin-top: 4px; }
+        /* Cartes Gravité : fond coloré → texte (nombres + libellés + %) en blanc */
+        .lfi-stats-card[style*="color:#fff"] .nb,
+        .lfi-stats-card[style*="color:#fff"] .label,
+        .lfi-stats-card[style*="color:#fff"] .abs { color: #fff !important; }
         .lfi-stats-charts {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
