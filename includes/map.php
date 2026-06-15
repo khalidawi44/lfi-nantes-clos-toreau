@@ -109,7 +109,10 @@ function lfi_nct_map_page() {
     $notice = '';
     if (!empty($_POST['lfi_nct_geocode'])) {
         check_admin_referer('lfi_nct_geocode');
-        $res = lfi_nct_geocode_pending(10);
+        $batch = (int) $_POST['lfi_nct_geocode_batch'] ?: 10;
+        $batch = max(1, min(100, $batch));
+        @set_time_limit(max(60, $batch * 2));
+        $res = lfi_nct_geocode_pending($batch);
         $notice = sprintf(
             '%d adresse(s) traitée(s), %d géocodée(s) avec succès. %d restant(e)s.',
             $res['traitees'], $res['geocodees'], $res['restantes']
@@ -175,14 +178,21 @@ function lfi_nct_map_page() {
         <?php endif; ?>
 
         <p>
-            <strong><?php echo count($markers); ?></strong> adresse(s) géolocalisée(s) sur la carte.
+            <strong><?php echo count($markers); ?></strong> enquête(s) géolocalisée(s) sur la carte.
             <?php if ($pending > 0): ?>
-                <strong style="color:#bd8600;margin-left:1em">⚠️ <?php echo $pending; ?> adresse(s) sans coordonnées</strong>
-                — <form method="post" style="display:inline">
+                <strong style="color:#bd8600;margin-left:1em">⚠️ <?php echo $pending; ?> enquête(s) sans coordonnées</strong>
+                —
+                <form method="post" style="display:inline">
                     <?php wp_nonce_field('lfi_nct_geocode'); ?>
-                    <button type="submit" name="lfi_nct_geocode" value="1" class="button">🌍 Géocoder 10 adresses</button>
+                    <input type="hidden" name="lfi_nct_geocode_batch" value="10">
+                    <button type="submit" name="lfi_nct_geocode" value="1" class="button">🌍 Géocoder 10</button>
                 </form>
-                <span class="description">(géocodage Nominatim/OpenStreetMap, ~1 sec par adresse)</span>
+                <form method="post" style="display:inline" onsubmit="return confirm('Va géocoder jusqu\'à 30 adresses, ~30 secondes. OK ?');">
+                    <?php wp_nonce_field('lfi_nct_geocode'); ?>
+                    <input type="hidden" name="lfi_nct_geocode_batch" value="30">
+                    <button type="submit" name="lfi_nct_geocode" value="1" class="button">🌍 Géocoder 30</button>
+                </form>
+                <span class="description">(Nominatim/OpenStreetMap, ~1 sec par adresse)</span>
             <?php endif; ?>
         </p>
 
@@ -204,31 +214,34 @@ function lfi_nct_map_page() {
         .lfi-leg-critique { background:#7a0000 }
         .lfi-pop-types li { margin: 0; padding: 0; }
         .lfi-pop-types { margin: .3em 0; padding-left: 1.2em; }
-        .leaflet-popup-content { font-size: 13px; line-height: 1.5; min-width: 200px; }
-        .leaflet-popup-content h3 { margin: 0 0 6px; font-size: 1.05em; color: #c8102e; }
-        .leaflet-popup-content .gravbadge { display:inline-block; padding:1px 8px; border-radius:10px; color:#fff; font-weight:600; font-size:.85em; }
+        .maplibregl-popup-content { font-size: 13px; line-height: 1.5; min-width: 220px; padding: 12px 14px; }
+        .maplibregl-popup-content h3 { margin: 0 0 6px; font-size: 1.05em; color: #c8102e; }
+        .maplibregl-popup-content .gravbadge { display:inline-block; padding:1px 8px; border-radius:10px; color:#fff; font-weight:600; font-size:.85em; }
+        .maplibregl-popup-content .lfi-pop-types { margin: .3em 0; padding-left: 1.2em; }
+        .lfi-3d-marker { pointer-events: auto; }
         </style>
     </div>
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>
     <script>
     (function () {
         var markers = <?php echo wp_json_encode($markers); ?>;
         var el = document.getElementById('lfi-map');
-        if (!el || typeof L === 'undefined') return;
+        if (!el || typeof maplibregl === 'undefined') return;
 
-        var center = [<?php echo (float) LFI_NCT_MAP_CENTER_LAT; ?>, <?php echo (float) LFI_NCT_MAP_CENTER_LNG; ?>];
-        var map = L.map(el).setView(center, <?php echo (int) LFI_NCT_MAP_CENTER_ZOOM; ?>);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-            maxZoom: 19,
-        }).addTo(map);
+        var FLOOR_PX = 28;
+        var center = [<?php echo (float) LFI_NCT_MAP_CENTER_LNG; ?>, <?php echo (float) LFI_NCT_MAP_CENTER_LAT; ?>];
 
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
             return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
         }); }
-
+        function parseFloor(s) {
+            if (!s) return 0;
+            var m = String(s).match(/(\d+)/);
+            return m ? parseInt(m[1], 10) : 0;
+        }
         function popupHtml(m) {
             var unite = 'Étage ' + esc(m.etage) + (m.appt ? ' · Appt ' + esc(m.appt) : '');
             var html = '<h3>' + esc(m.adresse) + '</h3>'
@@ -248,23 +261,139 @@ function lfi_nct_map_page() {
             return html;
         }
 
-        var bounds = [];
-        markers.forEach(function (m) {
-            var marker = L.circleMarker([m.lat, m.lng], {
-                radius: 9,
-                color: '#fff',
-                weight: 2,
-                fillColor: m.gcolor,
-                fillOpacity: 0.9,
-            }).addTo(map);
-            marker.bindPopup(popupHtml(m));
-            bounds.push([m.lat, m.lng]);
+        // === Carte MapLibre GL (vraie 3D : pitch + extrusion des immeubles) ===
+        var map = new maplibregl.Map({
+            container: 'lfi-map',
+            style: {
+                version: 8,
+                sources: {
+                    osm: {
+                        type: 'raster',
+                        tiles: [
+                            'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                        ],
+                        tileSize: 256,
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    }
+                },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+            },
+            center: center,
+            zoom: <?php echo (int) LFI_NCT_MAP_CENTER_ZOOM; ?>,
+            pitch: 55,
+            bearing: -15,
+            maxPitch: 75,
+            antialias: true,
         });
+        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 120 }));
 
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+        // === Markers étagés (un par étage, empilés au-dessus de leur immeuble) ===
+        var bounds = new maplibregl.LngLatBounds();
+        markers.forEach(function (m) {
+            var floor = parseFloor(m.etage);
+            var offY  = floor * FLOOR_PX;
+            var label = floor > 0 ? floor : '?';
+
+            var wrap = document.createElement('div');
+            wrap.className = 'lfi-3d-marker';
+            wrap.style.position = 'relative';
+            wrap.style.width  = '24px';
+            wrap.style.height = '24px';
+            wrap.innerHTML =
+                '<div class="lfi-3d-line" style="position:absolute;left:11px;top:-' + offY + 'px;width:2px;height:' + offY + 'px;background:' + m.gcolor + ';opacity:.6"></div>' +
+                '<div class="lfi-3d-dot" style="position:absolute;left:0;top:-' + offY + 'px;width:24px;height:24px;border-radius:50%;background:' + m.gcolor + ';border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;line-height:1">' +
+                  esc(label) +
+                '</div>';
+
+            new maplibregl.Marker({ element: wrap, anchor: 'center' })
+                .setLngLat([m.lng, m.lat])
+                .setPopup(new maplibregl.Popup({ offset: [0, -offY - 12], closeButton: true }).setHTML(popupHtml(m)))
+                .addTo(map);
+            bounds.extend([m.lng, m.lat]);
+        });
+        if (!bounds.isEmpty()) {
+            map.fitBounds(bounds, { padding: 100, maxZoom: 18, pitch: 55, bearing: -15 });
         }
+
+        // === Extrusion 3D des immeubles via Overpass / OSM ===
+        function loadBuildings() {
+            var b = map.getBounds();
+            var s = b.getSouth(), w = b.getWest(), n = b.getNorth(), e = b.getEast();
+            var pad = 0.001;
+            s -= pad; w -= pad; n += pad; e += pad;
+            var key = 'lfi_bldg_' + [s.toFixed(4), w.toFixed(4), n.toFixed(4), e.toFixed(4)].join('_');
+            try {
+                var cached = localStorage.getItem(key);
+                if (cached) { addBuildingLayer(JSON.parse(cached)); return; }
+            } catch (e2) {}
+            var q = '[out:json][timeout:25];(way["building"](' + s + ',' + w + ',' + n + ',' + e + ');relation["building"](' + s + ',' + w + ',' + n + ',' + e + '););out body;>;out skel qt;';
+            fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (typeof osmtogeojson === 'undefined') return;
+                    var gj = osmtogeojson(data);
+                    gj.features = (gj.features || []).filter(function (f) {
+                        return f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
+                    });
+                    gj.features.forEach(function (f) {
+                        var p = f.properties || {};
+                        var lvls = parseFloat(p['building:levels']);
+                        var h = parseFloat(p.height);
+                        if (!isFinite(h)) h = isFinite(lvls) ? lvls * 3 : 9;
+                        f.properties._h = Math.max(3, h);
+                    });
+                    try { localStorage.setItem(key, JSON.stringify(gj)); } catch (e2) {}
+                    addBuildingLayer(gj);
+                })
+                .catch(function (err) { console.warn('Overpass buildings fetch failed:', err); });
+        }
+        function addBuildingLayer(gj) {
+            if (!map.isStyleLoaded() || map.getSource('buildings')) return;
+            map.addSource('buildings', { type: 'geojson', data: gj });
+            map.addLayer({
+                id: 'buildings-3d',
+                type: 'fill-extrusion',
+                source: 'buildings',
+                paint: {
+                    'fill-extrusion-color': '#9aa0a8',
+                    'fill-extrusion-height': ['get', '_h'],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 0.78,
+                }
+            });
+        }
+        map.on('load', loadBuildings);
     })();
     </script>
+
+    <?php if ($pending > 0): ?>
+        <h2 style="margin-top:2em">Enquêtes non placées sur la carte (sans coordonnées)</h2>
+        <p class="description">Adresses pour lesquelles le géocodage n'a pas encore été fait — un clic sur « Géocoder » plus haut les ajoutera à la carte.</p>
+        <?php
+        $missing = $wpdb->get_results(
+            "SELECT id, adresse, etage, submitted_at FROM $table
+             WHERE deleted_at IS NULL
+                   AND (lat IS NULL OR lng IS NULL)
+                   AND adresse IS NOT NULL AND adresse != ''
+             ORDER BY id DESC LIMIT 500"
+        );
+        ?>
+        <table class="wp-list-table widefat striped" style="max-width:900px">
+            <thead><tr><th>N°</th><th>Reçu le</th><th>Adresse</th><th>Étage</th></tr></thead>
+            <tbody>
+                <?php foreach ($missing as $i => $mrow): ?>
+                    <tr>
+                        <td>#<?php echo (int) $mrow->id; ?></td>
+                        <td><?php echo esc_html($mrow->submitted_at); ?></td>
+                        <td><?php echo esc_html($mrow->adresse); ?></td>
+                        <td><?php echo esc_html($mrow->etage); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
     <?php
 }
