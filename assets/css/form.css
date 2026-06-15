@@ -33,7 +33,18 @@
     font-family: inherit;
 }
 .lfi-survey input:focus, .lfi-survey textarea:focus { border-color: #c8102e; outline: none; }
-.lfi-other-input { margin-top: 0.5em; }
+.lfi-other-input {
+    display: block;
+    width: 100%;
+    margin: 0.4em 0 0.8em;
+    padding: 12px;
+    font-size: 16px;
+    border: 2px dashed #c8102e;
+    border-radius: 6px;
+    background: #fff;
+    box-sizing: border-box;
+}
+.lfi-other-input::placeholder { color: #888; font-style: italic; }
 
 /* Radios et checkboxes en blocs cliquables */
 .lfi-radio, .lfi-check {
