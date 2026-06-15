@@ -33,11 +33,6 @@ function lfi_nct_admin_menu() {
 function lfi_nct_admin_page() {
     if (!current_user_can('manage_options')) return;
 
-    if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-        lfi_nct_export_csv();
-        exit;
-    }
-
     // === Sauvegarde des modifications (AVANT tout rendu, sinon l'edit form se ré-affiche) ===
     if (!empty($_POST['lfi_nct_edit_id'])) {
         $eid = (int) $_POST['lfi_nct_edit_id'];
@@ -275,8 +270,26 @@ function lfi_nct_admin_page() {
     <?php
 }
 
+/**
+ * Déclenchement précoce de l'export CSV : on doit le faire AVANT que WordPress
+ * n'envoie le header HTML de la page admin, sinon le téléchargement contient
+ * du HTML mélangé au CSV (« <!DOCTYPE… <script> id="wordfence…" »).
+ */
+add_action('admin_init', 'lfi_nct_handle_csv_export', 1);
+function lfi_nct_handle_csv_export() {
+    if (!current_user_can('manage_options')) return;
+    $page   = isset($_GET['page'])   ? (string) $_GET['page']   : '';
+    $export = isset($_GET['export']) ? (string) $_GET['export'] : '';
+    if ($page !== 'lfi-nct-responses' || $export !== 'csv') return;
+    lfi_nct_export_csv();
+    exit;
+}
+
 function lfi_nct_export_csv() {
     $responses = lfi_nct_get_responses(10000);
+    // Filet de sécurité : on vide tout buffer ouvert par un plugin tiers (LiteSpeed, etc.)
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    nocache_headers();
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename=lfi-clos-toreau-export-' . date('Y-m-d') . '.csv');
     $out = fopen('php://output', 'w');
@@ -284,6 +297,7 @@ function lfi_nct_export_csv() {
     fputcsv($out, [
         'ID', 'Reçu le', 'Adresse', 'Étage', 'Appartement',
         'Problèmes ?', 'Types', 'Autre type', 'Durée', 'Récurrence', 'Gravité (1-10)',
+        'Eau chaude — coupures/an', 'Eau chaude — plus longue coupure', 'Eau chaude — verbatim',
         'Souhaite RDV', 'Prénom', 'Nom', 'Tél', 'Email',
         'Données complètes (JSON)'
     ], ';');
@@ -298,6 +312,9 @@ function lfi_nct_export_csv() {
             $data['problemes_duree'] ?? '',
             $data['problemes_recurrent'] ?? '',
             $data['problemes_gravite'] ?? '',
+            $data['eau_chaude_nb_par_an'] ?? '',
+            $data['eau_chaude_duree_max'] ?? '',
+            $data['eau_chaude_citation']  ?? '',
             $r->contact_recontact ? 'Oui' : 'Non',
             $r->contact_prenom, $r->contact_nom, $r->contact_tel, $r->contact_email,
             $r->data,

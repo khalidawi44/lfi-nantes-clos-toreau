@@ -304,24 +304,37 @@ function lfi_nct_arpege_admin_menu() {
     );
 }
 
+/**
+ * Export CSV Arpège : déclenché tôt sur admin_init pour ne pas se faire
+ * polluer par le HTML de l'admin (cf. même bug que l'export enquête).
+ */
+add_action('admin_init', 'lfi_nct_arpege_handle_csv_export', 1);
+function lfi_nct_arpege_handle_csv_export() {
+    if (!current_user_can('manage_options')) return;
+    $page   = isset($_GET['page'])   ? (string) $_GET['page']   : '';
+    $export = isset($_GET['export']) ? (string) $_GET['export'] : '';
+    if ($page !== 'lfi-nct-arpege' || $export !== 'csv') return;
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_arpege';
+    $rows = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC");
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    nocache_headers();
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=lfi-arpege-' . date('Y-m-d') . '.csv');
+    $out = fopen('php://output', 'w');
+    fputs($out, "\xEF\xBB\xBF");
+    fputcsv($out, ['ID','Reçu le','Département','Type arrêt','Date blocage','Montant manquant','Prénom','Nom','Téléphone','Email','Description','Statut'], ';');
+    foreach ($rows as $r) {
+        fputcsv($out, [$r->id, $r->created_at, $r->departement, $r->type_arret, $r->date_premier_blocage, $r->montant_manquant, $r->prenom, $r->nom, $r->tel, $r->email, $r->description, $r->statut], ';');
+    }
+    fclose($out);
+    exit;
+}
+
 function lfi_nct_arpege_admin_page() {
     if (!current_user_can('manage_options')) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_arpege';
-
-    if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-        $rows = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC");
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=lfi-arpege-' . date('Y-m-d') . '.csv');
-        $out = fopen('php://output', 'w');
-        fputs($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['ID','Reçu le','Département','Type arrêt','Date blocage','Montant manquant','Prénom','Nom','Téléphone','Email','Description','Statut'], ';');
-        foreach ($rows as $r) {
-            fputcsv($out, [$r->id, $r->created_at, $r->departement, $r->type_arret, $r->date_premier_blocage, $r->montant_manquant, $r->prenom, $r->nom, $r->tel, $r->email, $r->description, $r->statut], ';');
-        }
-        fclose($out);
-        exit;
-    }
 
     $rows  = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 500");
     $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
