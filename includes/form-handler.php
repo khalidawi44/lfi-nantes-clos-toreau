@@ -70,6 +70,8 @@ function lfi_nct_handle_submission() {
         'contact_email'     => $contact_email,
     ]);
 
+    delete_transient('lfi_nct_known_addresses');
+
     if ($insert === false) {
         return 'Erreur DB : ' . esc_html($wpdb->last_error);
     }
