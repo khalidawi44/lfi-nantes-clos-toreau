@@ -112,26 +112,95 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     if ($thumb_id) set_post_thumbnail($new_id, $thumb_id);
 
     // Couvre tous les meta_keys de date / lieu utilisés par les thèmes connus
+    // Conversion en formats MySQL DATETIME et UTC, attendus par The Events Calendar et autres
+    $ts_debut         = strtotime($date_debut);
+    $date_debut_mysql = $ts_debut ? date('Y-m-d H:i:s', $ts_debut) : '';
+    $ts_fin           = $date_fin ? strtotime($date_fin) : 0;
+    $date_fin_mysql   = $ts_fin ? date('Y-m-d H:i:s', $ts_fin) : '';
+
     foreach (lfi_nct_theme_event_date_keys() as $k) {
-        update_post_meta($new_id, $k, $date_debut);
+        update_post_meta($new_id, $k, $date_debut_mysql ?: $date_debut);
     }
-    if ($date_fin) {
+    if ($date_fin_mysql) {
         foreach (['event_end_date', '_event_end_date', '_EventEndDate'] as $k) {
-            update_post_meta($new_id, $k, $date_fin);
-        }
-    }
-    $loc_full = trim(($lieu ? $lieu : '') . ($adresse ? (($lieu ? ' — ' : '') . $adresse) : ''));
-    if ($loc_full !== '') {
-        foreach (lfi_nct_theme_event_location_keys() as $k) {
-            update_post_meta($new_id, $k, $loc_full);
+            update_post_meta($new_id, $k, $date_fin_mysql);
         }
     }
     foreach (['event_time', 'heure', '_event_time', '_EventStartTime'] as $k) {
-        update_post_meta($new_id, $k, date('H:i', strtotime($date_debut)));
+        update_post_meta($new_id, $k, $ts_debut ? date('H:i', $ts_debut) : '');
+    }
+
+    // === Cas particulier The Events Calendar (CPT tribe_events) ===
+    if ($cpt === 'tribe_events' && $date_debut_mysql) {
+        update_post_meta($new_id, '_EventStartDate', $date_debut_mysql);
+        if ($date_fin_mysql) update_post_meta($new_id, '_EventEndDate', $date_fin_mysql);
+        update_post_meta($new_id, '_EventAllDay', 'no');
+        update_post_meta($new_id, '_EventTimezone', wp_timezone_string());
+
+        try {
+            $tz = wp_timezone();
+            $dt_debut_utc = new DateTime($date_debut_mysql, $tz);
+            $dt_debut_utc->setTimezone(new DateTimeZone('UTC'));
+            update_post_meta($new_id, '_EventStartDateUTC', $dt_debut_utc->format('Y-m-d H:i:s'));
+            if ($date_fin_mysql) {
+                $dt_fin_utc = new DateTime($date_fin_mysql, $tz);
+                $dt_fin_utc->setTimezone(new DateTimeZone('UTC'));
+                update_post_meta($new_id, '_EventEndDateUTC', $dt_fin_utc->format('Y-m-d H:i:s'));
+                $duration = $ts_fin - $ts_debut;
+                if ($duration > 0) update_post_meta($new_id, '_EventDuration', $duration);
+            }
+        } catch (Exception $e) { /* ignore */ }
+
+        // Venue : TEC l'attend comme un post lié au type tribe_venue
+        if ($lieu) {
+            $venue_id = lfi_nct_tec_find_or_create_venue($lieu, $adresse);
+            if ($venue_id) update_post_meta($new_id, '_EventVenueID', $venue_id);
+        }
+    } else {
+        // Cas générique : stockage en texte libre dans tous les meta keys de lieu connus
+        $loc_full = trim(($lieu ? $lieu : '') . ($adresse ? (($lieu ? ' — ' : '') . $adresse) : ''));
+        if ($loc_full !== '') {
+            foreach (lfi_nct_theme_event_location_keys() as $k) {
+                update_post_meta($new_id, $k, $loc_full);
+            }
+        }
     }
 
     // Pointe l'original pour ouvrir la page du plugin au clic depuis le calendrier
     update_post_meta($new_id, '_lfi_evt_origin_id', $post_id);
+}
+
+/**
+ * Trouve un tribe_venue par titre, ou le crée avec parsing simple de l'adresse.
+ */
+function lfi_nct_tec_find_or_create_venue($name, $address) {
+    if (!post_type_exists('tribe_venue')) return 0;
+    $existing = get_posts([
+        'post_type'      => 'tribe_venue',
+        'title'          => $name,
+        'posts_per_page' => 1,
+        'post_status'    => 'publish',
+    ]);
+    if (!empty($existing)) return (int) $existing[0]->ID;
+
+    $venue_id = wp_insert_post([
+        'post_type'    => 'tribe_venue',
+        'post_status'  => 'publish',
+        'post_title'   => $name,
+        'post_content' => $address ?: '',
+    ], true);
+    if (is_wp_error($venue_id) || !$venue_id) return 0;
+
+    if ($address) {
+        update_post_meta($venue_id, '_VenueAddress', $address);
+        // Parse simple "12 rue X, 44200 Nantes"
+        if (preg_match('/(\d{5})\s+([\p{L}\s\-]+)/u', $address, $m)) {
+            update_post_meta($venue_id, '_VenueZip',  $m[1]);
+            update_post_meta($venue_id, '_VenueCity', trim($m[2]));
+        }
+        update_post_meta($venue_id, '_VenueCountry', 'France');
+    }
+    return (int) $venue_id;
 }
 
 /* Quand on supprime un lfi_evenement → on supprime aussi son miroir */
@@ -190,22 +259,25 @@ function lfi_nct_hide_past_theme_events($q) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Seed initial : miroir tous les lfi_evenement déjà créés              */
+/* Auto-healing : à chaque init, miroir les lfi_evenement non encore
+   mirroirés OU dont le miroir a disparu. Évite la nécessité d'un flag
+   d'idempotence : auto-cohérent en permanence. Limité à 50 par requête
+   pour ne pas exploser le temps de chargement.                          */
 /* ------------------------------------------------------------------ */
 
-const LFI_NCT_THEME_MIRROR_SEED_FLAG = 'lfi_nct_theme_mirror_seed_done';
-
-add_action('init', 'lfi_nct_theme_mirror_existing_events', 35);
-function lfi_nct_theme_mirror_existing_events() {
-    if (get_option(LFI_NCT_THEME_MIRROR_SEED_FLAG) === 'done') return;
+add_action('init', 'lfi_nct_theme_mirror_missing_events', 35);
+function lfi_nct_theme_mirror_missing_events() {
     if (lfi_nct_detect_theme_event_cpt() === '') return;
+
     $posts = get_posts([
         'post_type'      => LFI_NCT_EVT_CPT,
         'post_status'    => 'publish',
-        'posts_per_page' => -1,
+        'posts_per_page' => 50,
+        'no_found_rows'  => true,
     ]);
     foreach ($posts as $p) {
+        $mirror_id = (int) get_post_meta($p->ID, LFI_NCT_THEME_MIRROR_META, true);
+        if ($mirror_id && get_post($mirror_id)) continue; // déjà mirroiré, on saute
         lfi_nct_mirror_event_to_theme_cpt($p->ID, $p, true);
     }
-    update_option(LFI_NCT_THEME_MIRROR_SEED_FLAG, 'done', false);
 }
