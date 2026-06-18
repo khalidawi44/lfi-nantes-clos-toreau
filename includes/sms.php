@@ -23,7 +23,7 @@ const LFI_NCT_SMS_DBVER = 'lfi_nct_sms_db_ver';
 
 add_action('init', 'lfi_nct_sms_db_setup', 5);
 function lfi_nct_sms_db_setup() {
-    if (get_option(LFI_NCT_SMS_DBVER) === '2') return;
+    if (get_option(LFI_NCT_SMS_DBVER) === '3') return;
     global $wpdb;
     $charset = $wpdb->get_charset_collate();
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -56,14 +56,14 @@ function lfi_nct_sms_db_setup() {
         KEY sent_at (sent_at)
     ) $charset;");
 
-    // Modèles par défaut au premier setup
-    $existing = (int) $wpdb->get_var("SELECT COUNT(*) FROM $tpl_table");
-    if ($existing === 0) {
+    // Modèles par défaut au premier setup (DBVER vide)
+    $first_install = get_option(LFI_NCT_SMS_DBVER) === false;
+    if ($first_install) {
         $defaults = [
-            ['Convocation réunion', 'reunion',     "Camarade {{prenom}}, on se retrouve VENDREDI 26 JUIN 15h à la Salle de Diffusion (4 place du Muguet) pour la réunion publique sur le logement. Compte sur toi !"],
-            ['Invitation événement', 'evenement',  "Salut {{prenom}}, nouveau rdv du GA Clos Toreau : {{evenement}} le {{date}}. Tu viens ? Infos : https://lfi-nantes-clostoreau.fr"],
-            ['Accueil nouveau membre','accueil',   "Bienvenue {{prenom}} dans le Groupe d'Action LFI Nantes Sud Clos Toreau ! Notre prochaine rencontre est annoncée sur lfi-nantes-clostoreau.fr. À très vite."],
-            ['Relance porte-à-porte', 'mobilisation',"{{prenom}}, on relance un porte-à-porte logement au Clos Toreau dimanche. RDV 13h30 rue de Biarritz. Tu peux nous filer un coup de main ?"],
+            ['Convocation réunion', 'reunion',     "Salut {{prenom}} ! On se retrouve {{event_jour}} {{event_date}} à {{event_heure}} pour {{event_titre}} ({{event_lieu}}). Infos & inscription : {{event_url_short}}"],
+            ['Invitation événement', 'evenement',  "{{prenom}}, nouveau rdv du GA Clos Toreau : {{event_titre}} le {{event_date}} à {{event_lieu}}. Tu viens ? {{event_url_short}}"],
+            ['Accueil nouveau membre','accueil',   "Bienvenue {{prenom}} dans le Groupe d'Action LFI Nantes Sud Clos Toreau ! Notre prochain rendez-vous : {{event_titre}}, {{event_jour}} {{event_date}}. {{event_url_short}}"],
+            ['Relance porte-à-porte', 'mobilisation',"{{prenom}}, on relance un porte-à-porte logement au Clos Toreau {{event_jour}}. RDV {{event_heure}} {{event_lieu}}. Infos : {{event_url_short}}"],
             ['Rappel cotisation',    'autre',       "Salut {{prenom}}, petit rappel : pense à ta cotisation annuelle au GA. Plus d'infos auprès des animateur·ices."],
             ['Info importante',      'autre',       "{{prenom}}, info GA Clos Toreau : [à compléter]. Plus d'infos sur lfi-nantes-clostoreau.fr"],
         ];
@@ -74,7 +74,22 @@ function lfi_nct_sms_db_setup() {
         }
     }
 
-    update_option(LFI_NCT_SMS_DBVER, '2', false);
+    // Upgrade vers DBVER 3 : ajoute 2 modèles dédiés au prochain événement, sans toucher aux existants
+    if (get_option(LFI_NCT_SMS_DBVER) === '2') {
+        $new_for_v3 = [
+            ['📅 Prochain événement (court)',  'evenement',
+                "{{prenom}}, prochain RDV du GA : {{event_titre}} — {{event_jour}} {{event_date}} {{event_heure}} à {{event_lieu}}. Inscris-toi : {{event_url_short}}"],
+            ['📅 Convocation détaillée',      'reunion',
+                "Camarade {{prenom}}, on compte sur toi pour {{event_titre}}.\nQuand : {{event_jour}} {{event_date}} à {{event_heure}}\nOù : {{event_lieu}}\nProgramme & inscription : {{event_url_short}}"],
+        ];
+        foreach ($new_for_v3 as $d) {
+            $wpdb->insert($tpl_table, [
+                'nom' => $d[0], 'categorie' => $d[1], 'body' => $d[2], 'ajouter_stop' => 1,
+            ]);
+        }
+    }
+
+    update_option(LFI_NCT_SMS_DBVER, '3', false);
 }
 
 function lfi_nct_sms_categories() {
@@ -103,6 +118,59 @@ function lfi_nct_sms_render($body, $membre, $extra = []) {
         $out = str_replace('{{' . $k . '}}', (string) $v, $out);
     }
     return $out;
+}
+
+/**
+ * Liste les événements à venir (CPT lfi_evenement) triés par date croissante.
+ */
+function lfi_nct_sms_upcoming_events($limit = 10) {
+    if (!post_type_exists(LFI_NCT_EVT_CPT)) return [];
+    return get_posts([
+        'post_type'      => LFI_NCT_EVT_CPT,
+        'post_status'    => 'publish',
+        'posts_per_page' => $limit,
+        'meta_key'       => '_lfi_evt_date_debut',
+        'orderby'        => 'meta_value',
+        'order'          => 'ASC',
+        'meta_query'     => [[
+            'key'     => '_lfi_evt_date_debut',
+            'value'   => current_time('Y-m-d H:i:s'),
+            'compare' => '>=',
+            'type'    => 'DATETIME',
+        ]],
+    ]);
+}
+
+/**
+ * Renvoie un tableau de variables {{event_*}} pour un post lfi_evenement.
+ * Liens : on raccourcit via wp_get_shortlink (format /?p=ID) pour économiser
+ * les caractères dans le SMS (un SMS = 160 chars max).
+ */
+function lfi_nct_sms_event_vars($event) {
+    if (!$event) {
+        return array_fill_keys([
+            'event_titre','event_url','event_url_short','event_date',
+            'event_jour','event_heure','event_lieu','event_adresse',
+            'event_date_complete',
+        ], '');
+    }
+    $debut   = get_post_meta($event->ID, '_lfi_evt_date_debut', true);
+    $lieu    = get_post_meta($event->ID, '_lfi_evt_lieu',       true);
+    $adresse = get_post_meta($event->ID, '_lfi_evt_adresse',    true);
+    $ts      = $debut ? strtotime($debut) : 0;
+    $short   = wp_get_shortlink($event->ID);
+    if (!$short) $short = get_permalink($event->ID);
+    return [
+        'event_titre'         => get_the_title($event),
+        'event_url'           => get_permalink($event),
+        'event_url_short'     => $short,
+        'event_date'          => $ts ? date_i18n('d/m', $ts) : '',
+        'event_jour'          => $ts ? date_i18n('l',  $ts) : '',
+        'event_heure'         => $ts ? date_i18n('H\hi', $ts) : '',
+        'event_lieu'          => (string) $lieu,
+        'event_adresse'       => (string) $adresse,
+        'event_date_complete' => $ts ? date_i18n('l j F · H\hi', $ts) : '',
+    ];
 }
 
 /* ------------------------------------------------------------------ */
@@ -173,11 +241,17 @@ function lfi_nct_sms_page_envoi() {
     $f_statut = isset($_GET['f_statut']) ? sanitize_text_field($_GET['f_statut']) : '';
     $q        = isset($_GET['q'])        ? sanitize_text_field($_GET['q'])        : '';
 
+    // Sélecteur d'événement : défaut = prochain à venir
+    $upcoming   = lfi_nct_sms_upcoming_events(20);
+    $event_id   = isset($_GET['event']) ? (int) $_GET['event'] : ($upcoming ? $upcoming[0]->ID : 0);
+    $event_post = $event_id ? get_post($event_id) : null;
+    $event_vars = lfi_nct_sms_event_vars($event_post);
+
     if (!empty($_GET['logged'])) {
         echo '<div class="notice notice-success is-dismissible"><p>✅ SMS noté comme envoyé.</p></div>';
     }
     ?>
-    <h2 style="margin-top:1em">1. Choisir un modèle</h2>
+    <h2 style="margin-top:1em">1. Choisir un modèle &amp; un événement à lier</h2>
     <form method="get" id="lfi-sms-form" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;background:#fff;padding:14px 18px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
         <input type="hidden" name="page" value="lfi-nct-sms">
         <input type="hidden" name="tab"  value="envoyer">
@@ -198,6 +272,17 @@ function lfi_nct_sms_page_envoi() {
                 }
                 if ($current_cat !== '') echo '</optgroup>';
                 ?>
+            </select>
+        </label>
+        <label>Événement lié
+            <select name="event" onchange="this.form.submit()">
+                <option value="0">— aucun —</option>
+                <?php foreach ($upcoming as $e):
+                    $dd = get_post_meta($e->ID, '_lfi_evt_date_debut', true);
+                    $label = get_the_title($e) . ($dd ? ' — ' . date_i18n('d/m H\hi', strtotime($dd)) : '');
+                    ?>
+                    <option value="<?php echo (int) $e->ID; ?>" <?php selected($event_id, $e->ID); ?>><?php echo esc_html($label); ?></option>
+                <?php endforeach; ?>
             </select>
         </label>
         <label>Recherche membre
@@ -225,12 +310,13 @@ function lfi_nct_sms_page_envoi() {
     endif; ?>
 
     <h2 style="margin-top:1.5em">2. Aperçu du modèle « <?php echo esc_html($tpl->nom); ?> »</h2>
-    <div style="background:#f8f8f8;border-left:4px solid #c8102e;padding:12px 16px;border-radius:4px;font-family:monospace;white-space:pre-wrap;max-width:600px">
-        <?php echo esc_html($tpl->body); ?>
-        <?php if ($tpl->ajouter_stop): ?>
-            <br><span style="color:#666">↳ + ajout auto : « <strong>STOP au 36180 pour ne plus recevoir</strong> »</span>
-        <?php endif; ?>
-    </div>
+    <?php
+    $preview_membre = (object) ['prenom' => 'Prénom', 'nom' => 'NOM', 'pseudo' => 'pseudo', 'statut' => 'Membre actif'];
+    $preview_body   = lfi_nct_sms_render($tpl->body, $preview_membre, $event_vars);
+    if ($tpl->ajouter_stop) $preview_body .= "\n— STOP au 36180 pour ne plus recevoir";
+    ?>
+    <div style="background:#f8f8f8;border-left:4px solid #c8102e;padding:12px 16px;border-radius:4px;font-family:monospace;white-space:pre-wrap;max-width:600px"><?php echo esc_html($preview_body); ?></div>
+    <p class="description" style="margin-top:.4em"><?php echo strlen($preview_body); ?> caractères<?php if ($event_post): ?> · événement lié : <strong><?php echo esc_html(get_the_title($event_post)); ?></strong><?php endif; ?></p>
 
     <h2 style="margin-top:1.5em">3. Destinataires (n'affiche QUE les membres ayant un téléphone)</h2>
     <?php
@@ -262,7 +348,7 @@ function lfi_nct_sms_page_envoi() {
         </thead>
         <tbody>
         <?php foreach ($rows as $m):
-            $body = lfi_nct_sms_render($tpl->body, $m);
+            $body = lfi_nct_sms_render($tpl->body, $m, $event_vars);
             if ($tpl->ajouter_stop) $body .= "\n— STOP au 36180 pour ne plus recevoir";
             $sms_url = 'sms:' . preg_replace('/[^\d+]/', '', $m->tel) . '?body=' . rawurlencode($body);
             $body_for_qr = $sms_url; // Le QR encode l'URL sms: complète
@@ -375,8 +461,11 @@ function lfi_nct_sms_page_modeles() {
                 <td>
                     <textarea id="body" name="body" rows="5" class="large-text" required placeholder="Salut {{prenom}}, …"><?php echo $edit ? esc_textarea($edit->body) : ''; ?></textarea>
                     <p class="description">
-                        Variables disponibles :
+                        <strong>Variables membre :</strong>
                         <code>{{prenom}}</code> · <code>{{nom}}</code> · <code>{{pseudo}}</code> · <code>{{statut}}</code><br>
+                        <strong>Variables événement</strong> (résolues automatiquement avec le prochain événement à venir, ou celui choisi sur la page Envoi) :<br>
+                        <code>{{event_titre}}</code> · <code>{{event_jour}}</code> · <code>{{event_date}}</code> · <code>{{event_heure}}</code> ·
+                        <code>{{event_lieu}}</code> · <code>{{event_adresse}}</code> · <code>{{event_url_short}}</code> · <code>{{event_date_complete}}</code><br>
                         Conseil : un SMS classique fait <strong>160 caractères</strong>. Au-delà, il sera coupé en plusieurs SMS (compte comme plusieurs SMS chez l'opérateur).
                     </p>
                 </td>
