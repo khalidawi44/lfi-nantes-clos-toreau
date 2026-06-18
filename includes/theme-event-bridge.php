@@ -134,8 +134,11 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     if ($cpt === 'tribe_events' && $date_debut_mysql) {
         update_post_meta($new_id, '_EventStartDate', $date_debut_mysql);
         if ($date_fin_mysql) update_post_meta($new_id, '_EventEndDate', $date_fin_mysql);
-        update_post_meta($new_id, '_EventAllDay', 'no');
-        update_post_meta($new_id, '_EventTimezone', wp_timezone_string());
+        update_post_meta($new_id, '_EventAllDay',      'no');
+        update_post_meta($new_id, '_EventTimezone',    wp_timezone_string());
+        update_post_meta($new_id, '_EventOrigin',      'plugin');
+        update_post_meta($new_id, '_EventShowMap',     'no');
+        update_post_meta($new_id, '_EventShowMapLink', 'no');
 
         try {
             $tz = wp_timezone();
@@ -156,6 +159,27 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
             $venue_id = lfi_nct_tec_find_or_create_venue($lieu, $adresse);
             if ($venue_id) update_post_meta($new_id, '_EventVenueID', $venue_id);
         }
+
+        // CRITIQUE : re-déclenche save_post_tribe_events maintenant que TOUTES les méta sont posées,
+        // pour que TEC puisse remplir ses tables custom tec_events / tec_occurrences. Sans ça
+        // l'événement existe en post mais n'apparaît dans aucune vue front (les vues TEC lisent
+        // les tables custom, pas wp_postmeta). Lock anti-réentrance.
+        static $tec_resaving = false;
+        if (!$tec_resaving) {
+            $tec_resaving = true;
+            wp_update_post(['ID' => $new_id]);
+            if (function_exists('tribe_update_event')) {
+                @tribe_update_event($new_id, [
+                    'EventStartDate' => $date_debut_mysql,
+                    'EventEndDate'   => $date_fin_mysql ?: $date_debut_mysql,
+                    'EventAllDay'    => 'no',
+                ]);
+            }
+            $tec_resaving = false;
+        }
+
+        // Purge LiteSpeed pour que la home reflète immédiatement le nouvel événement
+        do_action('litespeed_purge_all');
     } else {
         // Cas générique : stockage en texte libre dans tous les meta keys de lieu connus
         $loc_full = trim(($lieu ? $lieu : '') . ($adresse ? (($lieu ? ' — ' : '') . $adresse) : ''));
@@ -269,6 +293,12 @@ add_action('init', 'lfi_nct_theme_mirror_missing_events', 35);
 function lfi_nct_theme_mirror_missing_events() {
     if (lfi_nct_detect_theme_event_cpt() === '') return;
 
+    // Force un resync complet à chaque nouvelle version qui change la logique TEC.
+    // Bump cette constante pour rebalayer tout (ex: nouvelle méta TEC ajoutée).
+    $resync_version = 'v0.20.5_tec_custom_tables';
+    $last_resync    = get_option('lfi_nct_mirror_resync_version');
+    $force_resync   = ($last_resync !== $resync_version);
+
     $posts = get_posts([
         'post_type'      => LFI_NCT_EVT_CPT,
         'post_status'    => 'publish',
@@ -276,8 +306,14 @@ function lfi_nct_theme_mirror_missing_events() {
         'no_found_rows'  => true,
     ]);
     foreach ($posts as $p) {
-        $mirror_id = (int) get_post_meta($p->ID, LFI_NCT_THEME_MIRROR_META, true);
-        if ($mirror_id && get_post($mirror_id)) continue; // déjà mirroiré, on saute
+        if (!$force_resync) {
+            $mirror_id = (int) get_post_meta($p->ID, LFI_NCT_THEME_MIRROR_META, true);
+            if ($mirror_id && get_post($mirror_id)) continue; // déjà mirroiré, on saute
+        }
         lfi_nct_mirror_event_to_theme_cpt($p->ID, $p, true);
+    }
+
+    if ($force_resync) {
+        update_option('lfi_nct_mirror_resync_version', $resync_version, false);
     }
 }
