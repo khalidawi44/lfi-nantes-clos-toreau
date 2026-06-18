@@ -20,11 +20,16 @@ if (!defined('ABSPATH')) exit;
  * Liste des CPT susceptibles d'être utilisés par le thème pour les événements.
  */
 function lfi_nct_theme_event_cpt_candidates() {
+    // ORDRE = PRIORITÉ. Si plusieurs CPT existent, on prend le PREMIER trouvé.
+    // → on cherche d'abord les CPT du thème AG Starter (Alliance Groupe) qui
+    //   alimentent le calendrier de la home, puis les noms génériques, puis
+    //   les plugins tiers (TEC, MEC) en dernier.
     return apply_filters('lfi_nct_theme_event_cpt_candidates', [
+        'ag_evenement', 'ag_evenements', 'ag_event', 'ag_events',
         'mobilisation', 'mobilisations',
         'evenement', 'evenements',
         'event', 'events',
-        'ag_event', 'ag_evenement', 'ag_events',
+        'agenda',
         'tribe_events', 'mec-events',
     ]);
 }
@@ -280,6 +285,58 @@ function lfi_nct_hide_past_theme_events($q) {
     if (!is_array($existing)) $existing = [];
     $existing[] = $or;
     $q->set('meta_query', $existing);
+}
+
+/* ------------------------------------------------------------------ */
+/* Diagnostic admin : liste tous les CPT publics et leur nombre d'items
+   pour qu'on sache quel CPT alimente le calendrier du thème.           */
+/* ------------------------------------------------------------------ */
+
+add_action('admin_menu', 'lfi_nct_event_bridge_diag_menu', 50);
+function lfi_nct_event_bridge_diag_menu() {
+    add_submenu_page(
+        'lfi-nct-responses',
+        'Diag CPT événements',
+        '🔍 Diag CPT',
+        'manage_options',
+        'lfi-nct-cpt-diag',
+        'lfi_nct_event_bridge_diag_page'
+    );
+}
+
+function lfi_nct_event_bridge_diag_page() {
+    if (!current_user_can('manage_options')) return;
+    $detected = lfi_nct_detect_theme_event_cpt();
+    $all = get_post_types(['_builtin' => false], 'objects');
+    ?>
+    <div class="wrap">
+        <h1>🔍 Diagnostic CPT événements</h1>
+        <p>CPT détecté pour le miroir : <strong><?php echo $detected !== '' ? esc_html($detected) : '<em>aucun</em>'; ?></strong></p>
+        <p>Candidats parcourus (dans l'ordre) : <code><?php echo esc_html(implode(', ', lfi_nct_theme_event_cpt_candidates())); ?></code></p>
+        <h2>Tous les CPT non-builtin enregistrés sur ce site</h2>
+        <table class="wp-list-table widefat striped">
+            <thead><tr><th>Nom CPT (slug)</th><th>Label</th><th>Public</th><th>Nb publiés</th><th>3 plus récents</th></tr></thead>
+            <tbody>
+            <?php foreach ($all as $cpt): ?>
+                <?php
+                $count = wp_count_posts($cpt->name);
+                $recent = get_posts(['post_type' => $cpt->name, 'numberposts' => 3, 'post_status' => 'any']);
+                $rec_str = [];
+                foreach ($recent as $r) $rec_str[] = '#' . $r->ID . ' ' . wp_trim_words($r->post_title, 4);
+                ?>
+                <tr<?php echo $cpt->name === $detected ? ' style="background:#d4edda"' : ''; ?>>
+                    <td><strong><?php echo esc_html($cpt->name); ?></strong></td>
+                    <td><?php echo esc_html($cpt->label); ?></td>
+                    <td><?php echo $cpt->public ? 'Oui' : 'Non'; ?></td>
+                    <td><?php echo (int) ($count->publish ?? 0); ?></td>
+                    <td><?php echo esc_html(implode(' · ', $rec_str)); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="description">La ligne verte = CPT actuellement utilisé par le bridge. Si ce n'est pas le bon, dis-moi quel CPT alimente le calendrier sur la home et j'adapte.</p>
+    </div>
+    <?php
 }
 
 /* ------------------------------------------------------------------ */
