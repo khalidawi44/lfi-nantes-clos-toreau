@@ -182,9 +182,6 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
             }
             $tec_resaving = false;
         }
-
-        // Purge LiteSpeed pour que la home reflète immédiatement le nouvel événement
-        do_action('litespeed_purge_all');
     } else {
         // Cas générique : stockage en texte libre dans tous les meta keys de lieu connus
         $loc_full = trim(($lieu ? $lieu : '') . ($adresse ? (($lieu ? ' — ' : '') . $adresse) : ''));
@@ -346,15 +343,22 @@ function lfi_nct_event_bridge_diag_page() {
    pour ne pas exploser le temps de chargement.                          */
 /* ------------------------------------------------------------------ */
 
-add_action('init', 'lfi_nct_theme_mirror_missing_events', 35);
+// Self-healing UNIQUEMENT côté admin (admin_init), pas sur chaque page front.
+// Ça évite les requêtes get_posts en boucle qui peuvent surcharger ou perturber
+// les sessions sur les hits anonymes. Le mirror reste live via save_post.
+add_action('admin_init', 'lfi_nct_theme_mirror_missing_events');
 function lfi_nct_theme_mirror_missing_events() {
+    if (!current_user_can('manage_options')) return;
     if (lfi_nct_detect_theme_event_cpt() === '') return;
 
-    // Force un resync complet à chaque nouvelle version qui change la logique TEC.
-    // Bump cette constante pour rebalayer tout (ex: nouvelle méta TEC ajoutée).
-    $resync_version = 'v0.20.5_tec_custom_tables';
+    $resync_version = 'v0.20.7_tec_custom_tables';
     $last_resync    = get_option('lfi_nct_mirror_resync_version');
     $force_resync   = ($last_resync !== $resync_version);
+
+    // Throttle : pas plus d'une fois par 5 min sauf force_resync
+    $last_run = (int) get_option('lfi_nct_mirror_last_run_ts', 0);
+    if (!$force_resync && (time() - $last_run) < 300) return;
+    update_option('lfi_nct_mirror_last_run_ts', time(), false);
 
     $posts = get_posts([
         'post_type'      => LFI_NCT_EVT_CPT,
@@ -365,7 +369,7 @@ function lfi_nct_theme_mirror_missing_events() {
     foreach ($posts as $p) {
         if (!$force_resync) {
             $mirror_id = (int) get_post_meta($p->ID, LFI_NCT_THEME_MIRROR_META, true);
-            if ($mirror_id && get_post($mirror_id)) continue; // déjà mirroiré, on saute
+            if ($mirror_id && get_post($mirror_id)) continue;
         }
         lfi_nct_mirror_event_to_theme_cpt($p->ID, $p, true);
     }
