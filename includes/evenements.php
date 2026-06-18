@@ -261,7 +261,14 @@ function lfi_nct_event_render_rsvp_form($event_id) {
                     <label>Nom<br><input type="text" name="nom" style="width:100%"></label>
                     <label>Téléphone<br><input type="tel" name="tel" placeholder="06 12 34 56 78" style="width:100%"></label>
                     <label>Email<br><input type="email" name="email" placeholder="vous@email.fr" style="width:100%"></label>
-                    <label style="grid-column:1/-1">Nombre de personnes<br><input type="number" name="avec_qui" value="1" min="1" max="20" style="width:100%"></label>
+                    <div style="grid-column:1/-1">
+                        <div style="margin-bottom:.3em">Nombre de personnes (vous compris)</div>
+                        <div class="lfi-evt-stepper">
+                            <button type="button" class="lfi-step-minus" aria-label="Moins">−</button>
+                            <input type="number" name="avec_qui" value="1" min="1" max="20" readonly inputmode="numeric">
+                            <button type="button" class="lfi-step-plus"  aria-label="Plus">+</button>
+                        </div>
+                    </div>
                     <label style="grid-column:1/-1">Un mot ?<br><textarea name="commentaire" rows="2" style="width:100%"></textarea></label>
                 </div>
                 <p style="margin-top:1em"><button type="submit" name="lfi_evt_rsvp_submit" value="1" style="background:#c8102e;color:#fff;border:none;padding:.7em 1.4em;border-radius:4px;font-weight:700;cursor:pointer">✓ Je participe</button></p>
@@ -273,6 +280,76 @@ function lfi_nct_event_render_rsvp_form($event_id) {
             uniquement pour te reconfirmer cet événement.
         </p>
     </div>
+    <style>
+    .lfi-evt-stepper {
+        display: inline-flex;
+        align-items: stretch;
+        border: 2px solid #c8102e;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .lfi-evt-stepper button {
+        background: #c8102e;
+        color: #fff;
+        border: none;
+        width: 56px;
+        height: 56px;
+        font-size: 1.8em;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+    .lfi-evt-stepper button:hover,
+    .lfi-evt-stepper button:active { background: #a30b25; }
+    .lfi-evt-stepper button:disabled { background: #ddd; color: #999; cursor: not-allowed; }
+    .lfi-evt-stepper input {
+        width: 80px;
+        text-align: center;
+        font-size: 1.6em;
+        font-weight: 700;
+        border: none;
+        background: #fff;
+        color: #222;
+        padding: 0;
+        -moz-appearance: textfield;
+    }
+    .lfi-evt-stepper input::-webkit-outer-spin-button,
+    .lfi-evt-stepper input::-webkit-inner-spin-button {
+        -webkit-appearance: none; margin: 0;
+    }
+    .lfi-evt-stepper input:focus { outline: none; background: #fff3f5; }
+    </style>
+    <script>
+    (function(){
+        document.querySelectorAll('.lfi-evt-stepper').forEach(function(box){
+            var input = box.querySelector('input[type=number]');
+            var minus = box.querySelector('.lfi-step-minus');
+            var plus  = box.querySelector('.lfi-step-plus');
+            var min = parseInt(input.min, 10) || 1;
+            var max = parseInt(input.max, 10) || 20;
+            function refresh(){
+                var v = parseInt(input.value, 10) || min;
+                v = Math.max(min, Math.min(max, v));
+                input.value = v;
+                minus.disabled = (v <= min);
+                plus.disabled  = (v >= max);
+            }
+            minus.addEventListener('click', function(){
+                input.value = (parseInt(input.value, 10) || min) - 1;
+                refresh();
+            });
+            plus.addEventListener('click', function(){
+                input.value = (parseInt(input.value, 10) || min) + 1;
+                refresh();
+            });
+            refresh();
+        });
+    })();
+    </script>
     <?php
     return ob_get_clean();
 }
