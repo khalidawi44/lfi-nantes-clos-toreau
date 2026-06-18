@@ -186,8 +186,14 @@ function lfi_nct_reunion_confluences_shortcode() {
             </fieldset>
             <fieldset class="lfi-fieldset">
                 <legend class="lfi-legend">Vous venez à combien ?</legend>
-                <label class="lfi-field"><span class="lfi-label">Nombre de personnes (vous compris)</span>
-                    <input type="number" name="avec_qui" value="1" min="1" max="20"></label>
+                <div class="lfi-field">
+                    <span class="lfi-label">Nombre de personnes (vous compris)</span>
+                    <div class="lfi-evt-stepper">
+                        <button type="button" class="lfi-step-minus" aria-label="Moins">−</button>
+                        <input type="number" name="avec_qui" value="1" min="1" max="20" readonly inputmode="numeric">
+                        <button type="button" class="lfi-step-plus"  aria-label="Plus">+</button>
+                    </div>
+                </div>
                 <label class="lfi-field"><span class="lfi-label">Un mot, une question ?</span>
                     <textarea name="commentaire" rows="2" placeholder="Si vous voulez nous dire quelque chose avant la réunion"></textarea></label>
             </fieldset>
@@ -201,6 +207,47 @@ function lfi_nct_reunion_confluences_shortcode() {
             sont utilisées uniquement pour vous reconfirmer la réunion, et ne sont jamais transmises à un tiers.
         </div>
     </div>
+    <style>
+    .lfi-evt-stepper {
+        display: inline-flex; align-items: stretch; border: 2px solid #c8102e;
+        border-radius: 10px; overflow: hidden; background: #fff;
+        user-select: none; -webkit-user-select: none; margin-top: .3em;
+    }
+    .lfi-evt-stepper button {
+        background: #c8102e; color: #fff; border: none; width: 56px; height: 56px;
+        font-size: 1.8em; font-weight: 700; line-height: 1; cursor: pointer; touch-action: manipulation;
+    }
+    .lfi-evt-stepper button:hover, .lfi-evt-stepper button:active { background: #a30b25; }
+    .lfi-evt-stepper button:disabled { background: #ddd; color: #999; cursor: not-allowed; }
+    .lfi-evt-stepper input {
+        width: 80px; text-align: center; font-size: 1.6em; font-weight: 700;
+        border: none; background: #fff; color: #222; padding: 0; -moz-appearance: textfield;
+    }
+    .lfi-evt-stepper input::-webkit-outer-spin-button,
+    .lfi-evt-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .lfi-evt-stepper input:focus { outline: none; background: #fff3f5; }
+    </style>
+    <script>
+    (function(){
+        document.querySelectorAll('.lfi-evt-stepper').forEach(function(box){
+            var input = box.querySelector('input[type=number]');
+            var minus = box.querySelector('.lfi-step-minus');
+            var plus  = box.querySelector('.lfi-step-plus');
+            var min = parseInt(input.min, 10) || 1;
+            var max = parseInt(input.max, 10) || 20;
+            function refresh(){
+                var v = parseInt(input.value, 10) || min;
+                v = Math.max(min, Math.min(max, v));
+                input.value = v;
+                minus.disabled = (v <= min);
+                plus.disabled  = (v >= max);
+            }
+            minus.addEventListener('click', function(){ input.value = (parseInt(input.value, 10) || min) - 1; refresh(); });
+            plus.addEventListener('click',  function(){ input.value = (parseInt(input.value, 10) || min) + 1; refresh(); });
+            refresh();
+        });
+    })();
+    </script>
     <?php
     return ob_get_clean();
 }
