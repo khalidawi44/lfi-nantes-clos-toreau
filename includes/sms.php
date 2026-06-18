@@ -23,7 +23,7 @@ const LFI_NCT_SMS_DBVER = 'lfi_nct_sms_db_ver';
 
 add_action('init', 'lfi_nct_sms_db_setup', 5);
 function lfi_nct_sms_db_setup() {
-    if (get_option(LFI_NCT_SMS_DBVER) === '3') return;
+    if (get_option(LFI_NCT_SMS_DBVER) === '4') return;
     global $wpdb;
     $charset = $wpdb->get_charset_collate();
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -69,7 +69,7 @@ function lfi_nct_sms_db_setup() {
         ];
         foreach ($defaults as $d) {
             $wpdb->insert($tpl_table, [
-                'nom' => $d[0], 'categorie' => $d[1], 'body' => $d[2], 'ajouter_stop' => 1,
+                'nom' => $d[0], 'categorie' => $d[1], 'body' => $d[2], 'ajouter_stop' => 0,
             ]);
         }
     }
@@ -84,12 +84,19 @@ function lfi_nct_sms_db_setup() {
         ];
         foreach ($new_for_v3 as $d) {
             $wpdb->insert($tpl_table, [
-                'nom' => $d[0], 'categorie' => $d[1], 'body' => $d[2], 'ajouter_stop' => 1,
+                'nom' => $d[0], 'categorie' => $d[1], 'body' => $d[2], 'ajouter_stop' => 0,
             ]);
         }
     }
 
-    update_option(LFI_NCT_SMS_DBVER, '3', false);
+    // Upgrade vers DBVER 4 : retire la mention STOP sur TOUS les modèles existants.
+    // Ce sont des camarades inscrit·es au groupe, pas du marketing ; la mention
+    // « STOP au 36180 » n'a pas de sens pour ces destinataires.
+    if (in_array(get_option(LFI_NCT_SMS_DBVER), ['1','2','3'], true)) {
+        $wpdb->query("UPDATE $tpl_table SET ajouter_stop = 0");
+    }
+
+    update_option(LFI_NCT_SMS_DBVER, '4', false);
 }
 
 function lfi_nct_sms_categories() {
@@ -472,8 +479,9 @@ function lfi_nct_sms_page_modeles() {
             </tr>
             <tr>
                 <th>Mention STOP</th>
-                <td><label><input type="checkbox" name="ajouter_stop" value="1" <?php checked($edit ? $edit->ajouter_stop : 1); ?>>
-                    Ajouter automatiquement « STOP au 36180 pour ne plus recevoir » à la fin (recommandé)</label></td>
+                <td><label><input type="checkbox" name="ajouter_stop" value="1" <?php checked($edit ? $edit->ajouter_stop : 0); ?>>
+                    Ajouter « STOP au 36180 » à la fin</label>
+                <p class="description">Pas nécessaire pour les camarades inscrit·es au GA, c'est utile uniquement pour les listes de prospects froides (style SMS de campagne électorale grand public).</p></td>
             </tr>
         </table>
         <p>

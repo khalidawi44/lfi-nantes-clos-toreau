@@ -20,7 +20,7 @@ const LFI_NCT_MEMBRES_DBVER  = 'lfi_nct_membres_db_ver';
 
 add_action('init', 'lfi_nct_membres_db_setup', 5);
 function lfi_nct_membres_db_setup() {
-    if (get_option(LFI_NCT_MEMBRES_DBVER) === '1') return;
+    if (get_option(LFI_NCT_MEMBRES_DBVER) === '2') return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_membres';
     $charset = $wpdb->get_charset_collate();
@@ -44,12 +44,21 @@ function lfi_nct_membres_db_setup() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
-        UNIQUE KEY email (email),
+        KEY email_idx (email),
         KEY statut (statut),
         KEY abonne_emails (abonne_emails),
         KEY jetable (jetable)
     ) $charset;");
-    update_option(LFI_NCT_MEMBRES_DBVER, '1', false);
+
+    // Upgrade : retire l'index UNIQUE sur email pour permettre plusieurs contacts
+    // ajoutés à la main sans email (= ''). MySQL accepte plusieurs '' tant que
+    // l'index n'est plus UNIQUE.
+    if (get_option(LFI_NCT_MEMBRES_DBVER) === '1') {
+        // Sera silencieux si l'index n'existe pas
+        $wpdb->query("ALTER TABLE $table DROP INDEX email");
+        $wpdb->query("ALTER TABLE $table ADD INDEX email_idx (email)");
+    }
+    update_option(LFI_NCT_MEMBRES_DBVER, '2', false);
 }
 
 /**
@@ -223,6 +232,40 @@ function lfi_nct_membres_admin_page() {
 
     $notice = '';
 
+    /* ----- Ajout manuel d'un contact ----- */
+    if (!empty($_POST['lfi_nct_membres_add']) && check_admin_referer('lfi_nct_membres_add')) {
+        $prenom  = sanitize_text_field(wp_unslash($_POST['prenom']  ?? ''));
+        $nom     = sanitize_text_field(wp_unslash($_POST['nom']     ?? ''));
+        $tel     = sanitize_text_field(wp_unslash($_POST['tel']     ?? ''));
+        $email   = sanitize_email(wp_unslash($_POST['email']        ?? ''));
+        $statut  = sanitize_text_field(wp_unslash($_POST['statut']  ?? '')) ?: 'Contact perso';
+        $adresse = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+        $notes   = sanitize_textarea_field(wp_unslash($_POST['notes'] ?? ''));
+        if ($prenom === '' && $nom === '' && $email === '' && $tel === '') {
+            $notice = 'error|Indiquez au moins un prénom, un nom, un téléphone ou un email.';
+        } else {
+            $email_lc = strtolower($email);
+            $ok = $wpdb->insert($table, [
+                'statut'            => $statut,
+                'pseudo'            => '',
+                'prenom'            => $prenom,
+                'nom'               => $nom,
+                'email'             => $email_lc,
+                'tel'               => $tel,
+                'adresse'           => $adresse,
+                'abonne_ap'         => 0,
+                'abonne_emails'     => 1,
+                'jetable'           => $email_lc ? (lfi_nct_email_is_disposable($email_lc) ? 1 : 0) : 0,
+                'unsubscribe_token' => lfi_nct_make_unsub_token(),
+                'source'            => 'manuel',
+                'notes'             => $notes,
+            ]);
+            $notice = $ok
+                ? 'success|Contact ajouté : ' . esc_html(trim("$prenom $nom") ?: ($email ?: $tel))
+                : 'error|Erreur DB : ' . esc_html($wpdb->last_error);
+        }
+    }
+
     /* ----- Import CSV ----- */
     if (!empty($_POST['lfi_nct_membres_import']) && check_admin_referer('lfi_nct_membres_import')) {
         if (empty($_FILES['csvfile']['tmp_name']) || $_FILES['csvfile']['error'] !== UPLOAD_ERR_OK) {
@@ -315,6 +358,25 @@ function lfi_nct_membres_admin_page() {
                 <div>Désabonné·es</div>
             </a>
         </div>
+
+        <details style="background:#fff;padding:14px 18px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin:16px 0">
+            <summary style="font-size:1.1em;font-weight:600;cursor:pointer">➕ Ajouter un contact manuellement</summary>
+            <p class="description" style="margin-top:.8em">
+                Pour ajouter une personne hors Action Populaire (un contact du téléphone, un sympathisant croisé en porte-à-porte, etc.).
+                Au moins <strong>un prénom, un nom, un téléphone OU un email</strong> est requis.
+            </p>
+            <form method="post" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:760px">
+                <?php wp_nonce_field('lfi_nct_membres_add'); ?>
+                <label>Prénom<br><input type="text" name="prenom" style="width:100%"></label>
+                <label>Nom<br><input type="text" name="nom" style="width:100%"></label>
+                <label>Téléphone<br><input type="tel" name="tel" placeholder="06 12 34 56 78" style="width:100%"></label>
+                <label>Email<br><input type="email" name="email" placeholder="contact@email.fr" style="width:100%"></label>
+                <label>Statut / catégorie<br><input type="text" name="statut" placeholder="Contact perso" style="width:100%"></label>
+                <label>Adresse<br><input type="text" name="adresse" placeholder="ex : Clos Toreau, Nantes" style="width:100%"></label>
+                <label style="grid-column:1/-1">Notes<br><textarea name="notes" rows="2" placeholder="Comment vous l'avez rencontré, ce qu'il/elle a dit, etc." style="width:100%"></textarea></label>
+                <p style="grid-column:1/-1;margin:0"><button type="submit" name="lfi_nct_membres_add" value="1" class="button button-primary">➕ Ajouter le contact</button></p>
+            </form>
+        </details>
 
         <details style="background:#fff;padding:14px 18px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin:16px 0" <?php echo $total === 0 ? 'open' : ''; ?>>
             <summary style="font-size:1.1em;font-weight:600;cursor:pointer">📥 Importer un CSV Action Populaire</summary>
