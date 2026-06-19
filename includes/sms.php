@@ -128,55 +128,35 @@ function lfi_nct_sms_render($body, $membre, $extra = []) {
 }
 
 /**
- * Liste les événements à venir (CPT lfi_evenement) triés par date croissante.
+ * Liste les événements à venir — délègue au module events.php.
  */
 function lfi_nct_sms_upcoming_events($limit = 10) {
-    if (!post_type_exists(LFI_NCT_EVT_CPT)) return [];
-    return get_posts([
-        'post_type'      => LFI_NCT_EVT_CPT,
-        'post_status'    => 'publish',
-        'posts_per_page' => $limit,
-        'meta_key'       => '_lfi_evt_date_debut',
-        'orderby'        => 'meta_value',
-        'order'          => 'ASC',
-        'meta_query'     => [[
-            'key'     => '_lfi_evt_date_debut',
-            'value'   => current_time('Y-m-d H:i:s'),
-            'compare' => '>=',
-            'type'    => 'DATETIME',
-        ]],
-    ]);
+    if (!function_exists('lfi_nct_upcoming_events')) return [];
+    return lfi_nct_upcoming_events($limit);
 }
 
 /**
- * Renvoie un tableau de variables {{event_*}} pour un post lfi_evenement.
- * Liens : on raccourcit via wp_get_shortlink (format /?p=ID) pour économiser
- * les caractères dans le SMS (un SMS = 160 chars max).
+ * Variables {{event_*}} pour un post événement (CPT du thème ou fallback).
  */
 function lfi_nct_sms_event_vars($event) {
-    if (!$event) {
+    if (!$event || !function_exists('lfi_nct_event_data')) {
         return array_fill_keys([
             'event_titre','event_url','event_url_short','event_date',
             'event_jour','event_heure','event_lieu','event_adresse',
             'event_date_complete',
         ], '');
     }
-    $debut   = get_post_meta($event->ID, '_lfi_evt_date_debut', true);
-    $lieu    = get_post_meta($event->ID, '_lfi_evt_lieu',       true);
-    $adresse = get_post_meta($event->ID, '_lfi_evt_adresse',    true);
-    $ts      = $debut ? strtotime($debut) : 0;
-    $short   = wp_get_shortlink($event->ID);
-    if (!$short) $short = get_permalink($event->ID);
+    $d = lfi_nct_event_data($event);
     return [
-        'event_titre'         => get_the_title($event),
-        'event_url'           => get_permalink($event),
-        'event_url_short'     => $short,
-        'event_date'          => $ts ? date_i18n('d/m', $ts) : '',
-        'event_jour'          => $ts ? date_i18n('l',  $ts) : '',
-        'event_heure'         => $ts ? date_i18n('H\hi', $ts) : '',
-        'event_lieu'          => (string) $lieu,
-        'event_adresse'       => (string) $adresse,
-        'event_date_complete' => $ts ? date_i18n('l j F · H\hi', $ts) : '',
+        'event_titre'         => $d['titre'],
+        'event_url'           => $d['url'],
+        'event_url_short'     => $d['short_url'],
+        'event_date'          => $d['date_fr'],
+        'event_jour'          => $d['jour'],
+        'event_heure'         => $d['heure_debut'],
+        'event_lieu'          => $d['lieu'],
+        'event_adresse'       => $d['adresse'],
+        'event_date_complete' => $d['date_complete'],
     ];
 }
 

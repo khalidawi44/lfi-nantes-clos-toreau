@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.21.5
+ * Version: 0.22.0
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.21.5');
+define('LFI_NCT_VERSION', '0.22.0');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -24,13 +24,10 @@ require_once LFI_NCT_PATH . 'includes/compte.php';
 require_once LFI_NCT_PATH . 'includes/rdv.php';
 require_once LFI_NCT_PATH . 'includes/arpege.php';
 require_once LFI_NCT_PATH . 'includes/map.php';
-require_once LFI_NCT_PATH . 'includes/event-porte-a-porte-20260614.php';
 require_once LFI_NCT_PATH . 'includes/event-reunion-confluences-20260626.php';
 require_once LFI_NCT_PATH . 'includes/membres.php';
 require_once LFI_NCT_PATH . 'includes/sms.php';
-require_once LFI_NCT_PATH . 'includes/evenements.php';
-require_once LFI_NCT_PATH . 'includes/theme-event-bridge.php';
-require_once LFI_NCT_PATH . 'includes/seed-reunion-26juin-cpt.php';
+require_once LFI_NCT_PATH . 'includes/events.php';
 require_once LFI_NCT_PATH . 'includes/hide-theme-promo.php';
 require_once LFI_NCT_PATH . 'includes/social-share.php';
 
