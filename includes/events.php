@@ -346,6 +346,62 @@ function lfi_nct_render_event_rsvp_form($event_id) {
 }
 
 /* ------------------------------------------------------------------ */
+/* CSS fix : empêche le calendrier de chevaucher les événements sur     */
+/* mobile sur l'archive /evenements/                                    */
+/* ------------------------------------------------------------------ */
+
+add_action('wp_head', 'lfi_nct_archive_css_fix', 100);
+function lfi_nct_archive_css_fix() {
+    if (!is_post_type_archive(lfi_nct_event_cpt())) return;
+    ?>
+    <style id="lfi-nct-archive-fix">
+    .ag-evt-wrap {
+        display: flex !important;
+        gap: 32px !important;
+        align-items: flex-start !important;
+        position: relative !important;
+    }
+    .ag-evt-calendar {
+        position: sticky !important;
+        top: 20px !important;
+        flex: 0 0 320px !important;
+        max-width: 320px !important;
+    }
+    .ag-evt-list {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 20px !important;
+    }
+    .ag-evt-card {
+        position: static !important;
+        margin: 0 !important;
+        clear: both !important;
+    }
+    @media (max-width: 900px) {
+        .ag-evt-wrap {
+            flex-direction: column !important;
+            gap: 24px !important;
+        }
+        .ag-evt-calendar {
+            position: static !important;
+            top: auto !important;
+            order: -1 !important;
+            flex: 0 0 auto !important;
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+        .ag-evt-list {
+            width: 100% !important;
+            order: 1 !important;
+        }
+    }
+    </style>
+    <?php
+}
+
+/* ------------------------------------------------------------------ */
 /* DONOTCACHEPAGE sur le single                                          */
 /* ------------------------------------------------------------------ */
 
