@@ -571,6 +571,50 @@ function lfi_nct_event_diag_page() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Auto-purge des événements démo du thème AG Starter (one-shot)        */
+/* ------------------------------------------------------------------ */
+
+const LFI_NCT_AUTOPURGE_DEMOS = 'lfi_nct_autopurge_demos_v1';
+
+add_action('init', 'lfi_nct_autopurge_theme_demos', 45);
+function lfi_nct_autopurge_theme_demos() {
+    if (get_option(LFI_NCT_AUTOPURGE_DEMOS) === 'done') return;
+    if (lfi_nct_event_cpt() !== LFI_NCT_EVT_CPT_THEME) return;
+
+    // Liste blanche des titres exacts à supprimer (les démos installés par AG Starter)
+    $demo_titles = [
+        'Marche pour la justice climatique',
+        'Assemblée générale annuelle',
+        'Université d\'été du Mouvement',
+        'Université d\'été du mouvement',
+    ];
+
+    $deleted = 0;
+    foreach ($demo_titles as $title) {
+        $posts = get_posts([
+            'post_type'      => LFI_NCT_EVT_CPT_THEME,
+            'post_status'    => 'any',
+            'posts_per_page' => 10,
+            'title'          => $title,
+        ]);
+        foreach ($posts as $p) {
+            // Sécurité : on ne touche jamais à un événement marqué LFI
+            if (get_post_meta($p->ID, '_lfi_evt_url_ap',   true)) continue;
+            if (get_post_meta($p->ID, '_lfi_evt_capacite', true)) continue;
+            if (get_post_meta($p->ID, '_lfi_evt_origin_id', true)) continue;
+            if ($p->post_name === 'votre-logement-votre-droit-reunion-26-juin') continue;
+            wp_delete_post($p->ID, true);
+            $deleted++;
+        }
+    }
+    if ($deleted > 0) {
+        do_action('litespeed_purge_all');
+        if (function_exists('wp_cache_flush')) wp_cache_flush();
+    }
+    update_option(LFI_NCT_AUTOPURGE_DEMOS, 'done', false);
+}
+
+/* ------------------------------------------------------------------ */
 /* Seed de la réunion du 26 juin (idempotent)                           */
 /* ------------------------------------------------------------------ */
 
