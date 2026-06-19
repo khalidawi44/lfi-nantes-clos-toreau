@@ -355,6 +355,29 @@ function lfi_nct_event_bridge_diag_page() {
         $sync_notice = sprintf('%d événement(s) re-mirroirés dans %s. Cache purgé.', $count_done, $detected ?: '(rien)');
     }
 
+    // Bouton « Vider les événements demo du thème »
+    $demo_notice = '';
+    if (!empty($_POST['lfi_nct_purge_demos']) && check_admin_referer('lfi_nct_purge_demos')) {
+        if ($detected !== '') {
+            $all_theme = get_posts([
+                'post_type'      => $detected,
+                'post_status'    => 'any',
+                'posts_per_page' => 500,
+            ]);
+            $deleted = 0;
+            foreach ($all_theme as $p) {
+                // Garde ceux qui sont mirroirés depuis mon plugin (= les vrais)
+                $origin = get_post_meta($p->ID, '_lfi_evt_origin_id', true);
+                if ($origin) continue;
+                wp_delete_post($p->ID, true);
+                $deleted++;
+            }
+            do_action('litespeed_purge_all');
+            if (function_exists('wp_cache_flush')) wp_cache_flush();
+            $demo_notice = "$deleted événement(s) démo supprimé(s). Tu peux maintenant créer/gérer tes propres événements via le menu Événements LFI.";
+        }
+    }
+
     $all = get_post_types(['_builtin' => false], 'objects');
     ?>
     <div class="wrap">
@@ -362,15 +385,49 @@ function lfi_nct_event_bridge_diag_page() {
         <?php if ($sync_notice): ?>
             <div class="notice notice-success is-dismissible"><p><strong>✅ <?php echo esc_html($sync_notice); ?></strong></p></div>
         <?php endif; ?>
+        <?php if ($demo_notice): ?>
+            <div class="notice notice-success is-dismissible"><p><strong>🗑 <?php echo esc_html($demo_notice); ?></strong></p></div>
+        <?php endif; ?>
         <p>CPT détecté pour le miroir : <strong><?php echo $detected !== '' ? esc_html($detected) : '<em>aucun</em>'; ?></strong></p>
         <p>Candidats parcourus (dans l'ordre) : <code><?php echo esc_html(implode(', ', lfi_nct_theme_event_cpt_candidates())); ?></code></p>
 
         <form method="post" style="background:#fff3f5;padding:14px 18px;border-radius:4px;border-left:4px solid #c8102e;margin:16px 0">
             <?php wp_nonce_field('lfi_nct_sync_now'); ?>
             <p style="margin:0 0 .6em"><strong>🔄 Forcer la synchro des événements maintenant</strong></p>
-            <p class="description" style="margin:0 0 .8em">Pour chaque événement de mon CPT <code>lfi_evenement</code>, je re-crée ou mets à jour son miroir dans <code><?php echo esc_html($detected ?: '?'); ?></code> avec les bonnes méta de date (au format MySQL) et de lieu. Utile après modif de la logique ou si le calendrier de la home n'affiche pas un événement.</p>
+            <p class="description" style="margin:0 0 .8em">Re-créer ou mettre à jour le miroir de chaque <code>lfi_evenement</code> dans <code><?php echo esc_html($detected ?: '?'); ?></code> avec les bonnes méta (date, lieu, _ag_event_*).</p>
             <button type="submit" name="lfi_nct_sync_now" value="1" class="button button-primary">🔄 Sync maintenant</button>
         </form>
+
+        <?php
+        // Compte les événements du thème qui ne sont pas les miens
+        $demos_count = 0;
+        $demos_list  = [];
+        if ($detected !== '') {
+            $all_theme = get_posts([
+                'post_type'      => $detected,
+                'post_status'    => 'any',
+                'posts_per_page' => 500,
+            ]);
+            foreach ($all_theme as $p) {
+                if (!get_post_meta($p->ID, '_lfi_evt_origin_id', true)) {
+                    $demos_count++;
+                    $demos_list[] = '#' . $p->ID . ' ' . wp_trim_words($p->post_title, 8);
+                }
+            }
+        }
+        ?>
+        <?php if ($demos_count > 0): ?>
+        <form method="post" style="background:#fff;padding:14px 18px;border-radius:4px;border-left:4px solid #bd8600;margin:16px 0" onsubmit="return confirm('Supprimer définitivement <?php echo $demos_count; ?> événement(s) démo du thème ? Ne touche pas aux événements créés par le plugin LFI.');">
+            <?php wp_nonce_field('lfi_nct_purge_demos'); ?>
+            <p style="margin:0 0 .6em"><strong>🗑 Vider les événements démo du thème AG Starter</strong></p>
+            <p class="description" style="margin:0 0 .6em">
+                Le thème a installé <strong><?php echo $demos_count; ?> événement(s) démo</strong> dans <code><?php echo esc_html($detected); ?></code> (Marche pour la justice climatique, AG annuelle, Université d'été, etc.). Ils n'ont rien à voir avec ton GA et trônent sur la home.
+            </p>
+            <p class="description" style="margin:0 0 .6em"><strong>À supprimer :</strong> <?php echo esc_html(implode(' · ', array_slice($demos_list, 0, 10))); ?><?php if (count($demos_list) > 10) echo ' …'; ?></p>
+            <p class="description" style="margin:0 0 .8em"><em>Les événements créés via mon plugin LFI sont préservés (ils ont un marqueur <code>_lfi_evt_origin_id</code>).</em></p>
+            <button type="submit" name="lfi_nct_purge_demos" value="1" class="button" style="background:#bd8600;color:#fff;border-color:#bd8600">🗑 Supprimer les <?php echo $demos_count; ?> événement(s) démo</button>
+        </form>
+        <?php endif; ?>
         <h2>Tous les CPT non-builtin enregistrés sur ce site</h2>
         <table class="wp-list-table widefat striped">
             <thead><tr><th>Nom CPT (slug)</th><th>Label</th><th>Public</th><th>Nb publiés</th><th>3 plus récents</th></tr></thead>
