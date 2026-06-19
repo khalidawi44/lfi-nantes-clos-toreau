@@ -741,6 +741,92 @@ function lfi_nct_find_reunion_post($cpt) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Seed one-shot : réunion GA Clos Toreau du 19 juin 18h Place du      */
+/* Pays Basque (ajoutée à la demande, 19 juin 2026)                     */
+/* ------------------------------------------------------------------ */
+
+const LFI_SEED_19JUIN_FLAG = 'lfi_nct_seed_19juin_paysbasque';
+
+add_action('init', 'lfi_nct_seed_19juin_paysbasque', 55);
+function lfi_nct_seed_19juin_paysbasque() {
+    if (get_option(LFI_SEED_19JUIN_FLAG) === 'done') return;
+
+    global $wpdb;
+    $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : 'lfi_evenement';
+    if (!post_type_exists($cpt)) return;
+
+    $slug  = 'reunion-ga-clos-toreau-19-juin';
+    $title = "Réunion du Groupe d'Action Clos Toreau";
+
+    // Cherche d'abord si elle existe déjà
+    $existing = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT ID FROM {$wpdb->posts}
+         WHERE post_type = %s
+           AND post_status NOT IN ('auto-draft','inherit')
+           AND (post_name = %s OR post_title = %s)
+         LIMIT 1",
+        $cpt, $slug, $title
+    ));
+
+    if (!$existing) {
+        $now = current_time('mysql');
+        $now_gmt = get_gmt_from_date($now);
+        $content = "Réunion du Groupe d'Action LFI Nantes Sud Clos Toreau ce soir.\n\nOn se retrouve Place du Pays Basque à 18h pour faire le point sur les actions en cours et préparer la suite.\n\nOuvert à tou·tes — adhérent·es comme sympathisant·es.";
+
+        $wpdb->insert($wpdb->posts, [
+            'post_author'       => 1,
+            'post_date'         => $now,
+            'post_date_gmt'     => $now_gmt,
+            'post_content'      => $content,
+            'post_title'        => $title,
+            'post_excerpt'      => "Réunion ce soir 18h, Place du Pays Basque — point sur les actions du GA Clos Toreau.",
+            'post_status'       => 'publish',
+            'comment_status'    => 'closed',
+            'ping_status'       => 'closed',
+            'post_name'         => $slug,
+            'post_modified'     => $now,
+            'post_modified_gmt' => $now_gmt,
+            'post_type'         => $cpt,
+            'comment_count'     => 0,
+        ]);
+        $id = (int) $wpdb->insert_id;
+        if (!$id) return;
+    } else {
+        $id = $existing;
+        $wpdb->update($wpdb->posts, [
+            'post_status' => 'publish',
+            'post_name'   => $slug,
+            'post_title'  => $title,
+        ], ['ID' => $id]);
+    }
+
+    // Méta AG Starter
+    $metas = [
+        '_ag_event_date'      => '2026-06-19',
+        '_ag_event_time'      => '18h00',
+        '_ag_event_end'       => '20h00',
+        '_ag_event_place'     => 'Place du Pays Basque',
+        '_ag_event_city'      => 'Nantes',
+        '_lfi_evt_capacite'   => '30',
+        '_lfi_evt_rsvp_actif' => '1',
+        '_lfi_evt_origin_id'  => 'lfi-seed-19juin',  // marqueur anti-purge
+    ];
+    foreach ($metas as $key => $value) {
+        $meta_id = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1",
+            $id, $key
+        ));
+        if ($meta_id) $wpdb->update($wpdb->postmeta, ['meta_value' => $value], ['meta_id' => $meta_id]);
+        else          $wpdb->insert($wpdb->postmeta, ['post_id' => $id, 'meta_key' => $key, 'meta_value' => $value]);
+    }
+
+    clean_post_cache($id);
+    do_action('litespeed_purge_all');
+
+    update_option(LFI_SEED_19JUIN_FLAG, 'done', false);
+}
+
+/* ------------------------------------------------------------------ */
 /* Auto-purge des événements démo du thème AG Starter                   */
 /* Tourne à chaque init (pas de flag) avec un match SQL LIKE robuste    */
 /* aux apostrophes typographiques et différences d'encodage.            */
