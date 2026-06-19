@@ -571,6 +571,93 @@ function lfi_nct_event_diag_page() {
 }
 
 /* ------------------------------------------------------------------ */
+/* FORCE de la réunion 26 juin à chaque init                            */
+/* Bulletproof : pas de flag, on revalide à chaque hit. Trouve ou crée  */
+/* le post dans le CPT actif, et force TOUTES les méta correctes.       */
+/* ------------------------------------------------------------------ */
+
+const LFI_FORCE_REUNION_SLUG   = 'votre-logement-votre-droit-reunion-26-juin';
+const LFI_FORCE_REUNION_TITLE  = 'Votre logement, votre droit — Réunion publique';
+const LFI_FORCE_REUNION_DATE   = '2026-06-26';
+const LFI_FORCE_REUNION_TIME   = '15h00';
+const LFI_FORCE_REUNION_END    = '17h00';
+const LFI_FORCE_REUNION_PLACE  = 'Salle de Diffusion — Confluences';
+const LFI_FORCE_REUNION_CITY   = 'Nantes';
+const LFI_FORCE_REUNION_URL_AP = 'https://actionpopulaire.fr/evenements/b9e423c3-a850-4d5b-8507-7a979b791299/';
+
+add_action('init', 'lfi_nct_force_reunion_26juin', 50);
+function lfi_nct_force_reunion_26juin() {
+    $cpt = lfi_nct_event_cpt();
+    if (!post_type_exists($cpt)) return;
+
+    $existing = lfi_nct_find_reunion_post($cpt);
+
+    if (!$existing) {
+        $content = "<!-- wp:paragraph -->\n<p>Depuis plusieurs mois, le Groupe d'Action LFI Nantes Sud Clos Toreau mène une <strong>enquête de voisinage sur l'insalubrité au Clos Toreau</strong> : humidité, moisissures, nuisibles, logements dégradés, coupures d'eau chaude à répétition. Des problèmes que <em>vous</em> subissez.</p>\n<!-- /wp:paragraph -->\n<!-- wp:paragraph -->\n<p>Il est temps de faire le point ensemble et de <strong>passer à l'action</strong>.</p>\n<!-- /wp:paragraph -->\n<!-- wp:heading -->\n<h2>Au programme</h2>\n<!-- /wp:heading -->\n<!-- wp:list {\"ordered\":true} -->\n<ol><li><strong>Résultats de l'enquête de voisinage</strong> — chiffres et témoignages.</li><li><strong>Vos droits et les recours possibles</strong> — démarches concrètes.</li><li><strong>Questions / Réponses</strong> — partagez votre situation.</li></ol>\n<!-- /wp:list -->\n<!-- wp:paragraph {\"align\":\"center\"} -->\n<p class=\"has-text-align-center\"><strong>VENEZ, PARLEZ, ON VOUS ÉCOUTE.</strong></p>\n<!-- /wp:paragraph -->";
+
+        $id = wp_insert_post([
+            'post_type'    => $cpt,
+            'post_status'  => 'publish',
+            'post_title'   => LFI_FORCE_REUNION_TITLE,
+            'post_name'    => LFI_FORCE_REUNION_SLUG,
+            'post_content' => $content,
+            'post_excerpt' => "Présentation des résultats de l'enquête de voisinage sur l'insalubrité au Clos Toreau.",
+            'post_author'  => 1,
+        ], true);
+        if (is_wp_error($id) || !$id) return;
+    } else {
+        $id = $existing->ID;
+        // Met à jour le post si nécessaire (statut publish, slug, titre)
+        $needs_update = false;
+        $args = ['ID' => $id];
+        if ($existing->post_status !== 'publish')          { $args['post_status'] = 'publish';                 $needs_update = true; }
+        if ($existing->post_name   !== LFI_FORCE_REUNION_SLUG)  { $args['post_name']   = LFI_FORCE_REUNION_SLUG;  $needs_update = true; }
+        if ($existing->post_title  !== LFI_FORCE_REUNION_TITLE) { $args['post_title']  = LFI_FORCE_REUNION_TITLE; $needs_update = true; }
+        if ($needs_update) wp_update_post($args);
+    }
+
+    // === FORCE les méta AG Starter (thème) ===
+    update_post_meta($id, '_ag_event_date',  LFI_FORCE_REUNION_DATE);
+    update_post_meta($id, '_ag_event_time',  LFI_FORCE_REUNION_TIME);
+    update_post_meta($id, '_ag_event_end',   LFI_FORCE_REUNION_END);
+    update_post_meta($id, '_ag_event_place', LFI_FORCE_REUNION_PLACE);
+    update_post_meta($id, '_ag_event_city',  LFI_FORCE_REUNION_CITY);
+
+    // === Marqueurs LFI (pour la protection anti-purge) ===
+    update_post_meta($id, '_lfi_evt_url_ap',     LFI_FORCE_REUNION_URL_AP);
+    update_post_meta($id, '_lfi_evt_capacite',   80);
+    update_post_meta($id, '_lfi_evt_rsvp_actif', '1');
+}
+
+function lfi_nct_find_reunion_post($cpt) {
+    // 1. Par slug
+    $by_slug = get_page_by_path(LFI_FORCE_REUNION_SLUG, OBJECT, $cpt);
+    if ($by_slug) return $by_slug;
+
+    // 2. Par marqueur méta unique
+    $by_meta = get_posts([
+        'post_type'      => $cpt,
+        'meta_key'       => '_lfi_evt_url_ap',
+        'meta_value'     => LFI_FORCE_REUNION_URL_AP,
+        'posts_per_page' => 1,
+        'post_status'    => 'any',
+    ]);
+    if (!empty($by_meta)) return $by_meta[0];
+
+    // 3. Par titre exact (tous statuts y compris corbeille)
+    global $wpdb;
+    $found = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM {$wpdb->posts}
+         WHERE post_type = %s
+           AND post_status IN ('publish','draft','pending','private','future','trash')
+           AND post_title = %s
+         LIMIT 1",
+        $cpt, LFI_FORCE_REUNION_TITLE
+    ));
+    return $found ?: null;
+}
+
+/* ------------------------------------------------------------------ */
 /* Auto-purge des événements démo du thème AG Starter                   */
 /* Tourne à chaque init (pas de flag) avec un match SQL LIKE robuste    */
 /* aux apostrophes typographiques et différences d'encodage.            */
@@ -614,70 +701,6 @@ function lfi_nct_autopurge_theme_demos() {
     if ($deleted > 0) {
         do_action('litespeed_purge_all');
         if (function_exists('wp_cache_flush')) wp_cache_flush();
-    }
-}
-
-/* ------------------------------------------------------------------ */
-/* Seed de la réunion du 26 juin (idempotent)                           */
-/* ------------------------------------------------------------------ */
-
-const LFI_NCT_SEED_REUNION_V3 = 'lfi_nct_seed_reunion_26juin_v3';
-
-add_action('init', 'lfi_nct_seed_reunion_26juin', 30);
-function lfi_nct_seed_reunion_26juin() {
-    if (get_option(LFI_NCT_SEED_REUNION_V3) === 'done') return;
-    $cpt = lfi_nct_event_cpt();
-    if (!post_type_exists($cpt)) return;
-
-    $slug = 'votre-logement-votre-droit-reunion-26-juin';
-    $existing = get_page_by_path($slug, OBJECT, $cpt);
-    if (!$existing) {
-        $by_title = get_posts(['post_type' => $cpt, 'title' => 'Votre logement, votre droit — Réunion publique', 'posts_per_page' => 1, 'post_status' => 'any']);
-        if (!empty($by_title)) $existing = $by_title[0];
-    }
-
-    $meta_ag = [
-        '_ag_event_date'  => '2026-06-26',
-        '_ag_event_time'  => '15h00',
-        '_ag_event_end'   => '17h00',
-        '_ag_event_place' => 'Salle de Diffusion — Confluences',
-        '_ag_event_city'  => 'Nantes',
-    ];
-    $meta_lfi = [
-        '_lfi_evt_capacite'   => 80,
-        '_lfi_evt_rsvp_actif' => '1',
-        '_lfi_evt_url_ap'     => 'https://actionpopulaire.fr/evenements/b9e423c3-a850-4d5b-8507-7a979b791299/',
-    ];
-
-    if ($existing) {
-        foreach ($meta_ag as $k => $v)  update_post_meta($existing->ID, $k, $v);
-        foreach ($meta_lfi as $k => $v) update_post_meta($existing->ID, $k, $v);
-        update_option(LFI_NCT_SEED_REUNION_V3, 'done', false);
-        return;
-    }
-
-    $content = <<<HTML
-<!-- wp:paragraph --><p>Depuis plusieurs mois, le Groupe d'Action LFI Nantes Sud Clos Toreau mène une <strong>enquête de voisinage sur l'insalubrité au Clos Toreau</strong> : humidité, moisissures, nuisibles, logements dégradés, coupures d'eau chaude à répétition. Des problèmes que <em>vous</em> subissez.</p><!-- /wp:paragraph -->
-<!-- wp:paragraph --><p>Il est temps de faire le point ensemble et de <strong>passer à l'action</strong>.</p><!-- /wp:paragraph -->
-<!-- wp:heading --><h2>Au programme</h2><!-- /wp:heading -->
-<!-- wp:list {"ordered":true} --><ol><li><strong>Résultats de l'enquête de voisinage</strong> — chiffres et témoignages à l'appui.</li><li><strong>Vos droits et les recours possibles</strong> — démarches concrètes.</li><li><strong>Questions / Réponses</strong> — partagez votre situation, on vous écoute.</li></ol><!-- /wp:list -->
-<!-- wp:paragraph {"align":"center"} --><p class="has-text-align-center"><strong>VENEZ, PARLEZ, ON VOUS ÉCOUTE.</strong></p><!-- /wp:paragraph -->
-HTML;
-
-    $id = wp_insert_post([
-        'post_type'    => $cpt,
-        'post_status'  => 'publish',
-        'post_title'   => 'Votre logement, votre droit — Réunion publique',
-        'post_name'    => $slug,
-        'post_content' => $content,
-        'post_excerpt' => "Présentation des résultats de l'enquête de voisinage sur l'insalubrité au Clos Toreau et organisation de la suite.",
-        'post_author'  => 1,
-    ], true);
-
-    if (!is_wp_error($id) && $id) {
-        foreach ($meta_ag as $k => $v)  update_post_meta($id, $k, $v);
-        foreach ($meta_lfi as $k => $v) update_post_meta($id, $k, $v);
-        update_option(LFI_NCT_SEED_REUNION_V3, 'done', false);
     }
 }
 
