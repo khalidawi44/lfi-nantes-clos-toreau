@@ -53,6 +53,9 @@ function lfi_nct_detect_theme_event_cpt() {
  */
 function lfi_nct_theme_event_date_keys() {
     return apply_filters('lfi_nct_theme_event_date_keys', [
+        // EN PREMIER : AG Starter Association (vérifié dans archive-ag_evenement.php du thème)
+        '_ag_event_date',
+        // Autres conventions courantes
         'event_date', 'date_evenement', '_event_start_date', 'start_date',
         'event_start_date', '_EventStartDate', 'mec_event_date',
     ]);
@@ -139,6 +142,28 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     }
     foreach (['event_time', 'heure', '_event_time', '_EventStartTime'] as $k) {
         update_post_meta($new_id, $k, $ts_debut ? date('H:i', $ts_debut) : '');
+    }
+
+    // === Cas particulier AG Starter Association (CPT ag_evenement) ===
+    // Meta keys vérifiées dans archive-ag_evenement.php du thème :
+    // _ag_event_date (Y-m-d), _ag_event_time, _ag_event_end, _ag_event_city, _ag_event_place
+    if ($cpt === 'ag_evenement' && $ts_debut) {
+        update_post_meta($new_id, '_ag_event_date',  date('Y-m-d', $ts_debut));
+        update_post_meta($new_id, '_ag_event_time',  date('H\hi',  $ts_debut));
+        if ($ts_fin) update_post_meta($new_id, '_ag_event_end', date('H\hi', $ts_fin));
+        if ($lieu)   update_post_meta($new_id, '_ag_event_place', $lieu);
+
+        // Ville : extraite de l'adresse (regex « 44200 Nantes » → « Nantes »)
+        $ville = '';
+        if ($adresse && preg_match('/\d{5}\s+([\p{L}\s\-]+)/u', $adresse, $m)) {
+            $ville = trim(preg_replace('/\s+/', ' ', $m[1]));
+        }
+        if ($ville === '' && $adresse) {
+            // Fallback : prendre ce qui suit la dernière virgule
+            $parts = explode(',', $adresse);
+            $ville = trim(end($parts));
+        }
+        if ($ville !== '') update_post_meta($new_id, '_ag_event_city', $ville);
     }
 
     // === Cas particulier The Events Calendar (CPT tribe_events) ===
@@ -387,7 +412,7 @@ function lfi_nct_theme_mirror_missing_events() {
     if (!current_user_can('manage_options')) return;
     if (lfi_nct_detect_theme_event_cpt() === '') return;
 
-    $resync_version = 'v0.20.7_tec_custom_tables';
+    $resync_version = 'v0.21.4_ag_evenement_meta';
     $last_resync    = get_option('lfi_nct_mirror_resync_version');
     $force_resync   = ($last_resync !== $resync_version);
 
