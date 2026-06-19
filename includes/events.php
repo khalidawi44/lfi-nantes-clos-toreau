@@ -571,34 +571,38 @@ function lfi_nct_event_diag_page() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Auto-purge des événements démo du thème AG Starter (one-shot)        */
+/* Auto-purge des événements démo du thème AG Starter                   */
+/* Tourne à chaque init (pas de flag) avec un match SQL LIKE robuste    */
+/* aux apostrophes typographiques et différences d'encodage.            */
 /* ------------------------------------------------------------------ */
-
-const LFI_NCT_AUTOPURGE_DEMOS = 'lfi_nct_autopurge_demos_v1';
 
 add_action('init', 'lfi_nct_autopurge_theme_demos', 45);
 function lfi_nct_autopurge_theme_demos() {
-    if (get_option(LFI_NCT_AUTOPURGE_DEMOS) === 'done') return;
     if (lfi_nct_event_cpt() !== LFI_NCT_EVT_CPT_THEME) return;
 
-    // Liste blanche des titres exacts à supprimer (les démos installés par AG Starter)
-    $demo_titles = [
-        'Marche pour la justice climatique',
-        'Assemblée générale annuelle',
-        'Université d\'été du Mouvement',
-        'Université d\'été du mouvement',
+    global $wpdb;
+
+    // Patterns SQL LIKE — `_` matche un caractère quelconque (utile pour
+    // apostrophes droites/typographiques et accents instables).
+    $patterns = [
+        '%Marche%pour%la%justice%climatique%',
+        '%Assembl_e%g_n_rale%annuelle%',
+        '%Universit_%t_%du%Mouvement%',
+        '%Universit_%t_%du%mouvement%',
     ];
 
     $deleted = 0;
-    foreach ($demo_titles as $title) {
-        $posts = get_posts([
-            'post_type'      => LFI_NCT_EVT_CPT_THEME,
-            'post_status'    => 'any',
-            'posts_per_page' => 10,
-            'title'          => $title,
-        ]);
+    foreach ($patterns as $pat) {
+        $posts = $wpdb->get_results($wpdb->prepare(
+            "SELECT ID, post_name FROM {$wpdb->posts}
+             WHERE post_type = %s
+               AND post_status IN ('publish','draft','pending','private','future')
+               AND post_title LIKE %s
+             LIMIT 20",
+            LFI_NCT_EVT_CPT_THEME, $pat
+        ));
         foreach ($posts as $p) {
-            // Sécurité : on ne touche jamais à un événement marqué LFI
+            // Garde-fous : on ne supprime JAMAIS un événement marqué LFI
             if (get_post_meta($p->ID, '_lfi_evt_url_ap',   true)) continue;
             if (get_post_meta($p->ID, '_lfi_evt_capacite', true)) continue;
             if (get_post_meta($p->ID, '_lfi_evt_origin_id', true)) continue;
@@ -611,7 +615,6 @@ function lfi_nct_autopurge_theme_demos() {
         do_action('litespeed_purge_all');
         if (function_exists('wp_cache_flush')) wp_cache_flush();
     }
-    update_option(LFI_NCT_AUTOPURGE_DEMOS, 'done', false);
 }
 
 /* ------------------------------------------------------------------ */
