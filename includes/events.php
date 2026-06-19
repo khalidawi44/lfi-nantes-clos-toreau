@@ -587,46 +587,129 @@ const LFI_FORCE_REUNION_URL_AP = 'https://actionpopulaire.fr/evenements/b9e423c3
 
 add_action('init', 'lfi_nct_force_reunion_26juin', 50);
 function lfi_nct_force_reunion_26juin() {
-    $cpt = lfi_nct_event_cpt();
+    global $wpdb;
+
+    // Détecte le CPT à utiliser : ag_evenement si dispo, sinon lfi_evenement
+    $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : 'lfi_evenement';
     if (!post_type_exists($cpt)) return;
 
-    $existing = lfi_nct_find_reunion_post($cpt);
+    // === RECHERCHE DIRECTE EN SQL (bypass des filtres WP) ===
+    $post_id = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT ID FROM {$wpdb->posts}
+         WHERE post_type = %s
+           AND post_status NOT IN ('auto-draft','inherit')
+           AND (
+                post_name = %s
+             OR post_title = %s
+             OR ID IN (
+                SELECT post_id FROM {$wpdb->postmeta}
+                WHERE meta_key = '_lfi_evt_url_ap'
+                  AND meta_value = %s
+             )
+           )
+         ORDER BY post_status = 'publish' DESC, ID DESC
+         LIMIT 1",
+        $cpt,
+        LFI_FORCE_REUNION_SLUG,
+        LFI_FORCE_REUNION_TITLE,
+        LFI_FORCE_REUNION_URL_AP
+    ));
 
-    if (!$existing) {
-        $content = "<!-- wp:paragraph -->\n<p>Depuis plusieurs mois, le Groupe d'Action LFI Nantes Sud Clos Toreau mène une <strong>enquête de voisinage sur l'insalubrité au Clos Toreau</strong> : humidité, moisissures, nuisibles, logements dégradés, coupures d'eau chaude à répétition. Des problèmes que <em>vous</em> subissez.</p>\n<!-- /wp:paragraph -->\n<!-- wp:paragraph -->\n<p>Il est temps de faire le point ensemble et de <strong>passer à l'action</strong>.</p>\n<!-- /wp:paragraph -->\n<!-- wp:heading -->\n<h2>Au programme</h2>\n<!-- /wp:heading -->\n<!-- wp:list {\"ordered\":true} -->\n<ol><li><strong>Résultats de l'enquête de voisinage</strong> — chiffres et témoignages.</li><li><strong>Vos droits et les recours possibles</strong> — démarches concrètes.</li><li><strong>Questions / Réponses</strong> — partagez votre situation.</li></ol>\n<!-- /wp:list -->\n<!-- wp:paragraph {\"align\":\"center\"} -->\n<p class=\"has-text-align-center\"><strong>VENEZ, PARLEZ, ON VOUS ÉCOUTE.</strong></p>\n<!-- /wp:paragraph -->";
+    // === CRÉATION DIRECTE EN SQL si introuvable ===
+    if (!$post_id) {
+        $now = current_time('mysql');
+        $now_gmt = get_gmt_from_date($now);
+        $content = "Depuis plusieurs mois, le Groupe d'Action LFI Nantes Sud Clos Toreau mène une enquête de voisinage sur l'insalubrité au Clos Toreau : humidité, moisissures, nuisibles, logements dégradés, coupures d'eau chaude à répétition.\n\nIl est temps de faire le point ensemble et de passer à l'action.\n\nAu programme :\n1. Résultats de l'enquête de voisinage\n2. Vos droits et les recours possibles\n3. Questions / Réponses\n\nVENEZ, PARLEZ, ON VOUS ÉCOUTE.";
 
-        $id = wp_insert_post([
-            'post_type'    => $cpt,
-            'post_status'  => 'publish',
-            'post_title'   => LFI_FORCE_REUNION_TITLE,
-            'post_name'    => LFI_FORCE_REUNION_SLUG,
-            'post_content' => $content,
-            'post_excerpt' => "Présentation des résultats de l'enquête de voisinage sur l'insalubrité au Clos Toreau.",
-            'post_author'  => 1,
-        ], true);
-        if (is_wp_error($id) || !$id) return;
+        $wpdb->insert($wpdb->posts, [
+            'post_author'           => 1,
+            'post_date'             => $now,
+            'post_date_gmt'         => $now_gmt,
+            'post_content'          => $content,
+            'post_title'            => LFI_FORCE_REUNION_TITLE,
+            'post_excerpt'          => "Présentation des résultats de l'enquête de voisinage sur l'insalubrité au Clos Toreau.",
+            'post_status'           => 'publish',
+            'comment_status'        => 'closed',
+            'ping_status'           => 'closed',
+            'post_name'             => LFI_FORCE_REUNION_SLUG,
+            'post_modified'         => $now,
+            'post_modified_gmt'     => $now_gmt,
+            'post_type'             => $cpt,
+            'comment_count'         => 0,
+        ]);
+        $post_id = (int) $wpdb->insert_id;
+        if (!$post_id) return;
     } else {
-        $id = $existing->ID;
-        // Met à jour le post si nécessaire (statut publish, slug, titre)
-        $needs_update = false;
-        $args = ['ID' => $id];
-        if ($existing->post_status !== 'publish')          { $args['post_status'] = 'publish';                 $needs_update = true; }
-        if ($existing->post_name   !== LFI_FORCE_REUNION_SLUG)  { $args['post_name']   = LFI_FORCE_REUNION_SLUG;  $needs_update = true; }
-        if ($existing->post_title  !== LFI_FORCE_REUNION_TITLE) { $args['post_title']  = LFI_FORCE_REUNION_TITLE; $needs_update = true; }
-        if ($needs_update) wp_update_post($args);
+        // Si trouvé mais pas publié, on force publish + slug + title en SQL direct
+        $wpdb->update($wpdb->posts, [
+            'post_status' => 'publish',
+            'post_name'   => LFI_FORCE_REUNION_SLUG,
+            'post_title'  => LFI_FORCE_REUNION_TITLE,
+        ], ['ID' => $post_id]);
     }
 
-    // === FORCE les méta AG Starter (thème) ===
-    update_post_meta($id, '_ag_event_date',  LFI_FORCE_REUNION_DATE);
-    update_post_meta($id, '_ag_event_time',  LFI_FORCE_REUNION_TIME);
-    update_post_meta($id, '_ag_event_end',   LFI_FORCE_REUNION_END);
-    update_post_meta($id, '_ag_event_place', LFI_FORCE_REUNION_PLACE);
-    update_post_meta($id, '_ag_event_city',  LFI_FORCE_REUNION_CITY);
+    // === FORCE TOUTES LES MÉTA EN SQL DIRECT ===
+    $metas = [
+        '_ag_event_date'      => LFI_FORCE_REUNION_DATE,
+        '_ag_event_time'      => LFI_FORCE_REUNION_TIME,
+        '_ag_event_end'       => LFI_FORCE_REUNION_END,
+        '_ag_event_place'     => LFI_FORCE_REUNION_PLACE,
+        '_ag_event_city'      => LFI_FORCE_REUNION_CITY,
+        '_lfi_evt_url_ap'     => LFI_FORCE_REUNION_URL_AP,
+        '_lfi_evt_capacite'   => '80',
+        '_lfi_evt_rsvp_actif' => '1',
+    ];
 
-    // === Marqueurs LFI (pour la protection anti-purge) ===
-    update_post_meta($id, '_lfi_evt_url_ap',     LFI_FORCE_REUNION_URL_AP);
-    update_post_meta($id, '_lfi_evt_capacite',   80);
-    update_post_meta($id, '_lfi_evt_rsvp_actif', '1');
+    foreach ($metas as $key => $value) {
+        $meta_id = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s LIMIT 1",
+            $post_id, $key
+        ));
+        if ($meta_id) {
+            $wpdb->update($wpdb->postmeta, ['meta_value' => $value], ['meta_id' => $meta_id]);
+        } else {
+            $wpdb->insert($wpdb->postmeta, [
+                'post_id'    => $post_id,
+                'meta_key'   => $key,
+                'meta_value' => $value,
+            ]);
+        }
+    }
+
+    // Vide le cache du post + purge LiteSpeed
+    clean_post_cache($post_id);
+    do_action('litespeed_purge_all');
+
+    // Stocke l'ID pour la notice diag
+    set_transient('lfi_nct_force_reunion_id', $post_id, HOUR_IN_SECONDS);
+}
+
+/* ------------------------------------------------------------------ */
+/* Notice admin avec diagnostic de la réunion                            */
+/* ------------------------------------------------------------------ */
+
+add_action('admin_notices', 'lfi_nct_force_reunion_notice');
+function lfi_nct_force_reunion_notice() {
+    if (!current_user_can('manage_options')) return;
+    if (!post_type_exists(lfi_nct_event_cpt())) return;
+
+    $id   = (int) get_transient('lfi_nct_force_reunion_id');
+    $post = $id ? get_post($id) : null;
+    if (!$post) {
+        echo '<div class="notice notice-error"><p>⛔ MU force-reunion : pas d\'ID en cache. Recharge.</p></div>';
+        return;
+    }
+
+    $date  = get_post_meta($id, '_ag_event_date',  true);
+    $time  = get_post_meta($id, '_ag_event_time',  true);
+    $place = get_post_meta($id, '_ag_event_place', true);
+    $ok    = ($date === LFI_FORCE_REUNION_DATE && $place === LFI_FORCE_REUNION_PLACE && $post->post_status === 'publish');
+
+    echo '<div class="notice ' . ($ok ? 'notice-success' : 'notice-warning') . ' is-dismissible">';
+    echo '<p><strong>' . ($ok ? '✅' : '⚠️') . ' Force-réunion v0.22.5</strong> · Post #' . $id . ' « ' . esc_html($post->post_title) . ' » (status: <code>' . esc_html($post->post_status) . '</code>)</p>';
+    echo '<p style="margin:.3em 0">_ag_event_date = <code>' . esc_html($date) . '</code> · _ag_event_time = <code>' . esc_html($time) . '</code> · _ag_event_place = <code>' . esc_html($place) . '</code></p>';
+    echo '<p style="margin:.3em 0">→ <a href="' . esc_url(get_permalink($id)) . '" target="_blank">Voir la page</a> · <a href="' . esc_url(home_url('/evenements/')) . '" target="_blank">Voir /evenements/</a> · <a href="' . esc_url(home_url('/')) . '" target="_blank">Voir la home</a></p>';
+    echo '</div>';
 }
 
 function lfi_nct_find_reunion_post($cpt) {
