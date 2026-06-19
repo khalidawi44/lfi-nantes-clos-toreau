@@ -101,6 +101,11 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     $ts_fin           = $date_fin ? strtotime($date_fin) : 0;
     $date_fin_mysql   = $ts_fin ? date('Y-m-d H:i:s', $ts_fin) : '';
 
+    // IMPORTANT : on NE met PAS post_date = date de l'événement.
+    // Beaucoup de thèmes (dont AG Starter) filtrent leur archive sur
+    // `post_status='publish' AND post_date <= NOW()` (= déjà publié),
+    // ce qui exclurait nos événements à venir. La date d'événement est
+    // stockée dans les meta_keys (event_date, _EventStartDate, etc.).
     $args = [
         'post_type'    => $cpt,
         'post_status'  => 'publish',
@@ -108,11 +113,6 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
         'post_content' => $content,
         'post_excerpt' => $excerpt,
     ];
-    // post_date = date de l'événement (utile si le thème trie par post_date asc)
-    if ($date_debut_mysql) {
-        $args['post_date']     = $date_debut_mysql;
-        $args['post_date_gmt'] = get_gmt_from_date($date_debut_mysql);
-    }
     if ($exists && $exists->post_type === $cpt) {
         $args['ID'] = $mirror_id;
         $new_id = wp_update_post($args, true);
@@ -251,11 +251,7 @@ function lfi_nct_delete_theme_mirror($post_id) {
 
 add_action('pre_get_posts', 'lfi_nct_hide_past_theme_events', 20);
 function lfi_nct_hide_past_theme_events($q) {
-    if (is_admin() || !$q->is_main_query()) {
-        // On laisse aussi les sous-requêtes "Mobilisations à venir" passer ce filtre.
-        // pre_get_posts est appelé pour toutes les WP_Query. On filtre uniquement quand
-        // le post_type matche un CPT thème connu.
-    }
+    if (is_admin()) return;
     $post_type = $q->get('post_type');
     if (empty($post_type)) return;
     if (is_array($post_type)) {
@@ -267,9 +263,12 @@ function lfi_nct_hide_past_theme_events($q) {
     // Ne touche pas si l'admin demande explicitement "all".
     if ($q->get('lfi_show_past') === '1') return;
 
-    $now = current_time('Y-m-d H:i:s');
+    // Si le thème filtre par post_date, on force le filtre sur la date d'événement à la place.
+    $q->set('date_query', '');
+
+    $now   = current_time('Y-m-d H:i:s');
     $today = current_time('Y-m-d');
-    $or = ['relation' => 'OR'];
+    $or    = ['relation' => 'OR'];
     foreach (lfi_nct_theme_event_date_keys() as $k) {
         $or[] = [
             'key'     => $k,

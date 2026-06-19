@@ -22,9 +22,9 @@ add_action('init', 'lfi_nct_event_register_cpt', 10);
 function lfi_nct_event_register_cpt() {
     register_post_type(LFI_NCT_EVT_CPT, [
         'labels' => [
-            'name'               => 'Événements',
-            'singular_name'      => 'Événement',
-            'menu_name'          => '📅 Événements',
+            'name'               => 'Événements LFI',
+            'singular_name'      => 'Événement LFI',
+            'menu_name'          => '📅 Événements LFI',
             'add_new'            => 'Ajouter',
             'add_new_item'       => 'Nouvel événement',
             'edit_item'          => 'Éditer l\'événement',
@@ -40,16 +40,19 @@ function lfi_nct_event_register_cpt() {
         'show_in_rest'       => true,
         'menu_icon'          => 'dashicons-calendar-alt',
         'menu_position'      => 26,
-        'has_archive'        => 'evenements',
-        'rewrite'            => ['slug' => 'evenements', 'with_front' => false],
+        // ⚠️ Le thème AG Starter utilise déjà le slug "evenements" pour son CPT
+        // ag_evenement. On ne se met PAS dessus pour éviter conflit de routing
+        // (qui peut casser la session admin). On utilise un slug LFI dédié.
+        'has_archive'        => false,
+        'rewrite'            => ['slug' => 'mes-evenements-lfi', 'with_front' => false],
         'supports'           => ['title', 'editor', 'thumbnail', 'excerpt', 'revisions'],
         'capability_type'    => 'post',
         'hierarchical'       => false,
     ]);
 
-    if (get_option(LFI_NCT_EVT_FLUSHED) !== '1') {
+    if (get_option(LFI_NCT_EVT_FLUSHED) !== '2') {
         flush_rewrite_rules(false);
-        update_option(LFI_NCT_EVT_FLUSHED, '1', false);
+        update_option(LFI_NCT_EVT_FLUSHED, '2', false);
     }
 }
 
