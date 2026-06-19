@@ -93,14 +93,26 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     $content = $post->post_content;
     $excerpt = $post->post_excerpt;
 
+    // Conversion DÉFINITIVE en MySQL datetime AVANT wp_insert/update_post.
+    // Le _lfi_evt_date_debut est au format HTML datetime-local (Y-m-d\TH:i),
+    // WordPress veut Y-m-d H:i:s sinon ça part en NOW() silencieusement.
+    $ts_debut         = $date_debut ? strtotime($date_debut) : 0;
+    $date_debut_mysql = $ts_debut ? date('Y-m-d H:i:s', $ts_debut) : '';
+    $ts_fin           = $date_fin ? strtotime($date_fin) : 0;
+    $date_fin_mysql   = $ts_fin ? date('Y-m-d H:i:s', $ts_fin) : '';
+
     $args = [
         'post_type'    => $cpt,
         'post_status'  => 'publish',
         'post_title'   => $title,
         'post_content' => $content,
         'post_excerpt' => $excerpt,
-        'post_date'    => $date_debut, // post_date = date de l'événement (utile si thème trie là-dessus)
     ];
+    // post_date = date de l'événement (utile si le thème trie par post_date asc)
+    if ($date_debut_mysql) {
+        $args['post_date']     = $date_debut_mysql;
+        $args['post_date_gmt'] = get_gmt_from_date($date_debut_mysql);
+    }
     if ($exists && $exists->post_type === $cpt) {
         $args['ID'] = $mirror_id;
         $new_id = wp_update_post($args, true);
@@ -116,13 +128,7 @@ function lfi_nct_mirror_event_to_theme_cpt($post_id, $post, $update) {
     $thumb_id = get_post_thumbnail_id($post_id);
     if ($thumb_id) set_post_thumbnail($new_id, $thumb_id);
 
-    // Couvre tous les meta_keys de date / lieu utilisés par les thèmes connus
-    // Conversion en formats MySQL DATETIME et UTC, attendus par The Events Calendar et autres
-    $ts_debut         = strtotime($date_debut);
-    $date_debut_mysql = $ts_debut ? date('Y-m-d H:i:s', $ts_debut) : '';
-    $ts_fin           = $date_fin ? strtotime($date_fin) : 0;
-    $date_fin_mysql   = $ts_fin ? date('Y-m-d H:i:s', $ts_fin) : '';
-
+    // ($ts_debut, $date_debut_mysql, etc. déjà calculés plus haut pour le post_date)
     foreach (lfi_nct_theme_event_date_keys() as $k) {
         update_post_meta($new_id, $k, $date_debut_mysql ?: $date_debut);
     }
@@ -304,12 +310,43 @@ function lfi_nct_event_bridge_diag_menu() {
 function lfi_nct_event_bridge_diag_page() {
     if (!current_user_can('manage_options')) return;
     $detected = lfi_nct_detect_theme_event_cpt();
+
+    // Bouton « Sync maintenant »
+    $sync_notice = '';
+    if (!empty($_POST['lfi_nct_sync_now']) && check_admin_referer('lfi_nct_sync_now')) {
+        $events = get_posts([
+            'post_type'      => LFI_NCT_EVT_CPT,
+            'post_status'    => 'publish',
+            'posts_per_page' => 200,
+        ]);
+        $count_done = 0; $count_fail = 0;
+        foreach ($events as $p) {
+            try {
+                lfi_nct_mirror_event_to_theme_cpt($p->ID, $p, true);
+                $count_done++;
+            } catch (Exception $e) { $count_fail++; }
+        }
+        do_action('litespeed_purge_all');
+        if (function_exists('wp_cache_flush')) wp_cache_flush();
+        $sync_notice = sprintf('%d événement(s) re-mirroirés dans %s. Cache purgé.', $count_done, $detected ?: '(rien)');
+    }
+
     $all = get_post_types(['_builtin' => false], 'objects');
     ?>
     <div class="wrap">
         <h1>🔍 Diagnostic CPT événements</h1>
+        <?php if ($sync_notice): ?>
+            <div class="notice notice-success is-dismissible"><p><strong>✅ <?php echo esc_html($sync_notice); ?></strong></p></div>
+        <?php endif; ?>
         <p>CPT détecté pour le miroir : <strong><?php echo $detected !== '' ? esc_html($detected) : '<em>aucun</em>'; ?></strong></p>
         <p>Candidats parcourus (dans l'ordre) : <code><?php echo esc_html(implode(', ', lfi_nct_theme_event_cpt_candidates())); ?></code></p>
+
+        <form method="post" style="background:#fff3f5;padding:14px 18px;border-radius:4px;border-left:4px solid #c8102e;margin:16px 0">
+            <?php wp_nonce_field('lfi_nct_sync_now'); ?>
+            <p style="margin:0 0 .6em"><strong>🔄 Forcer la synchro des événements maintenant</strong></p>
+            <p class="description" style="margin:0 0 .8em">Pour chaque événement de mon CPT <code>lfi_evenement</code>, je re-crée ou mets à jour son miroir dans <code><?php echo esc_html($detected ?: '?'); ?></code> avec les bonnes méta de date (au format MySQL) et de lieu. Utile après modif de la logique ou si le calendrier de la home n'affiche pas un événement.</p>
+            <button type="submit" name="lfi_nct_sync_now" value="1" class="button button-primary">🔄 Sync maintenant</button>
+        </form>
         <h2>Tous les CPT non-builtin enregistrés sur ce site</h2>
         <table class="wp-list-table widefat striped">
             <thead><tr><th>Nom CPT (slug)</th><th>Label</th><th>Public</th><th>Nb publiés</th><th>3 plus récents</th></tr></thead>
