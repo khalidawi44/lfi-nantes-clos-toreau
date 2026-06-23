@@ -19,7 +19,67 @@
  */
 if (!defined('ABSPATH')) exit;
 
-const LFI_NCT_NEWS_SEED_FLAG = 'lfi_nct_news_seed_v1';
+const LFI_NCT_NEWS_SEED_FLAG = 'lfi_nct_news_seed_v2';
+
+/* ------------------------------------------------------------------ */
+/* 0. Output buffer : arrache les cards démos du HTML /actu/            */
+/* ------------------------------------------------------------------ */
+
+add_action('template_redirect', 'lfi_nct_actu_buffer_start', 0);
+function lfi_nct_actu_buffer_start() {
+    if (is_admin()) return;
+    if (defined('DOING_AJAX') && DOING_AJAX) return;
+    if (defined('REST_REQUEST') && REST_REQUEST) return;
+    // On bufferise sur toutes les pages publiques. Le strip ne s'active
+    // que si du texte démo est détecté (fast-path sinon).
+    ob_start('lfi_nct_actu_strip_demos_html');
+}
+
+function lfi_nct_actu_strip_demos_html($html) {
+    if (!$html || strlen($html) < 100) return $html;
+
+    $needles = [
+        'Hôpital public',
+        'hôpital public',
+        'Pétition climat',
+        'pétition climat',
+        'Nouveau groupe local à Saint',
+        'nouveau groupe local à Saint',
+        'Encadrement des loyers : on relance',
+        'encadrement des loyers : on relance',
+        'Témoignages habitat : ce qu',
+        'TÉMOIGNAGES HABITAT',
+        'groupe LFI Clos Toreau a démarré',
+        'LFI Clos Toreau a démarré',
+        'a démarré ses permanences',
+        'A DÉMARRÉ SES PERMANENCES',
+        'recueilli ce trimestre',
+        'RECUEILLI CE TRIMESTRE',
+        'relance Nantes Métropole',
+        'RELANCE NANTES MÉTROPOLE',
+    ];
+    $found = false;
+    foreach ($needles as $n) {
+        if (stripos($html, $n) !== false) { $found = true; break; }
+    }
+    if (!$found) return $html;
+
+    // Patterns d'arrachage : article.ag-asso-actu contenant le mot-clé
+    foreach ($needles as $kw) {
+        $kw_re = preg_quote($kw, '/');
+        $patterns = [
+            '/<article[^>]*class\s*=\s*"[^"]*ag-asso-actu[^"]*"[^>]*>(?:(?!<\/article>)[\s\S]){0,6000}?' . $kw_re . '(?:(?!<\/article>)[\s\S]){0,6000}?<\/article>/i',
+            '/<article\b[^>]*>(?:(?!<\/article>)[\s\S]){0,6000}?' . $kw_re . '(?:(?!<\/article>)[\s\S]){0,6000}?<\/article>/i',
+            '/<div[^>]*class\s*=\s*"[^"]*ag-asso-actu[^"]*"[^>]*>(?:(?!<\/div>)[\s\S]){0,6000}?' . $kw_re . '(?:(?!<\/div>)[\s\S]){0,6000}?<\/div>/i',
+            '/<a[^>]*class\s*=\s*"[^"]*ag-asso-actu[^"]*"[^>]*>(?:(?!<\/a>)[\s\S]){0,6000}?' . $kw_re . '(?:(?!<\/a>)[\s\S]){0,6000}?<\/a>/i',
+        ];
+        foreach ($patterns as $pat) {
+            $new = @preg_replace($pat, '', $html);
+            if ($new !== null && $new !== $html) $html = $new;
+        }
+    }
+    return $html;
+}
 
 /* ------------------------------------------------------------------ */
 /* 1. Purge des articles démo (à chaque init, idempotent)              */
@@ -62,43 +122,66 @@ function lfi_nct_seed_real_news() {
     if (get_option(LFI_NCT_NEWS_SEED_FLAG) === 'done') return;
     global $wpdb;
 
+    // Bannière SVG colorée + emoji thématique. C'est un data:URI auto-suffisant,
+    // pas besoin d'uploader une image — fonctionne dans n'importe quel navigateur.
+    $img = function ($emoji, $color1, $color2, $caption) {
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' . $color1 . '"/><stop offset="1" stop-color="' . $color2 . '"/></linearGradient></defs><rect width="800" height="400" fill="url(#g)"/><text x="400" y="180" text-anchor="middle" font-size="120" fill="white">' . $emoji . '</text><text x="400" y="290" text-anchor="middle" font-family="Arial,sans-serif" font-size="32" font-weight="700" fill="white" letter-spacing="2">' . htmlspecialchars(strtoupper($caption), ENT_QUOTES, 'UTF-8') . '</text></svg>';
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+    };
+
     $news = [
         [
             'slug'    => 'enquete-voisinage-insalubrite-clos-toreau',
             'title'   => 'Notre enquête de voisinage sur l\'insalubrité au Clos Toreau',
             'excerpt' => 'Depuis plusieurs mois, le Groupe d\'Action mène une enquête de voisinage porte-à-porte sur l\'état du logement social au Clos Toreau. Premiers résultats : 100% des immeubles touchés par les coupures d\'eau chaude récurrentes.',
-            'content' => "<!-- wp:paragraph --><p>Depuis l'automne, les militant·es du Groupe d'Action LFI Nantes Sud Clos Toreau frappent aux portes des immeubles du quartier pour recueillir la parole des habitant·es sur leurs conditions de logement.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on a déjà constaté</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li><strong>100% des immeubles enquêtés</strong> subissent des coupures d'eau chaude récurrentes (+ de 10 par an, + de 10 jours cumulés)</li><li>Durée variant de <strong>2 jours à 3 semaines consécutives</strong> selon les immeubles</li><li>Présence massive d'<strong>humidité, moisissures, nuisibles</strong></li><li>Parties communes dégradées, ascenseurs en panne</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Ces données sont alarmantes. Elles seront présentées en détail lors de notre réunion publique du <strong>vendredi 26 juin</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir la réunion du 26 juin</a></p><!-- /wp:paragraph -->",
+            'image'   => $img('🏠', '#c8102e', '#7a0000', 'Enquête logement'),
+            'content' => '',
             'days_ago' => 2,
         ],
         [
             'slug'    => 'reunion-publique-26-juin-votre-logement-votre-droit',
             'title'   => 'Réunion publique du 26 juin : Votre logement, votre droit',
             'excerpt' => 'Le vendredi 26 juin de 15h à 17h à la Salle de Diffusion (Confluences, 4 place du Muguet), on présente les résultats de l\'enquête et on s\'organise pour la suite.',
-            'content' => "<!-- wp:paragraph --><p>Nous y sommes presque. Après des mois d'enquête de voisinage, le Groupe d'Action Clos Toreau organise une <strong>grande réunion publique</strong> pour partager les résultats et passer à l'action collective.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Au programme</h2><!-- /wp:heading -->\n\n<!-- wp:list {\"ordered\":true} --><ol><li>Résultats de l'enquête de voisinage — chiffres et témoignages</li><li>Vos droits et les recours possibles — démarches concrètes</li><li>Questions / Réponses — partagez votre situation</li></ol><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>📅 Vendredi 26 juin 2026, 15h-17h<br>📍 Salle de Diffusion – Confluences, 4 place du Muguet, Nantes<br>👉 Entrée libre, pas besoin de s'inscrire (mais ça nous aide à prévoir les chaises !)</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir l'événement et confirmer ta venue</a></p><!-- /wp:paragraph -->",
+            'image'   => $img('📅', '#1a7f37', '#0d5020', 'Réunion 26 juin'),
+            'content' => '',
             'days_ago' => 5,
         ],
         [
             'slug'    => 'eau-chaude-coupures-repetition-clos-toreau',
             'title'   => 'Coupures d\'eau chaude : ce qu\'on a découvert dans les immeubles du quartier',
             'excerpt' => 'Plus de 10 coupures par an, plus de 10 jours cumulés sans eau chaude, durées allant de 2 jours à 3 semaines consécutives. Toutes les enquêtées concernées.',
-            'content' => "<!-- wp:paragraph --><p>C'est probablement le résultat le plus marquant de notre enquête de voisinage : <strong>100% des locataires interrogé·es subissent des coupures d'eau chaude récurrentes</strong>. Aucune exception.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Chiffres clés</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>Plus de <strong>10 coupures par an</strong> en moyenne</li><li>Plus de <strong>10 jours cumulés</strong> sans eau chaude</li><li>Durée d'une coupure variant de <strong>2 jours</strong> à <strong>3 semaines consécutives</strong> selon les immeubles</li><li>Phénomène présent depuis <strong>plus de 5 ans</strong> sans amélioration significative</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Certains habitant·es n'évoquent même plus ces coupures comme un problème — ils ou elles ont fini par s'y habituer. C'est précisément cette banalisation que nous voulons casser : pas d'eau chaude pendant 3 semaines, ce n'est pas « comme ça », c'est une <strong>défaillance grave du bailleur</strong> qui doit être traitée.</p><!-- /wp:paragraph -->",
+            'image'   => $img('💧', '#0088cc', '#005a8a', 'Eau chaude'),
+            'content' => '',
             'days_ago' => 9,
         ],
         [
             'slug'    => 'permanences-logement-clos-toreau',
             'title'   => 'Permanences habitat : on vous accompagne dans vos démarches',
             'excerpt' => 'Le Groupe d\'Action tient des permanences d\'accompagnement administratif et juridique pour les habitant·es du quartier. Premières permanences déjà tenues.',
-            'content' => "<!-- wp:paragraph --><p>Vous avez un problème de logement avec votre bailleur ? Une demande de logement social qui n'avance pas ? Une APL qui a été suspendue ? Le Groupe d'Action est là pour vous accompagner.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on fait pendant la permanence</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>On vous aide à rédiger des courriers (mise en demeure, recours)</li><li>On vous oriente vers les bons interlocuteurs (CAF, conciliation, ADIL, justice)</li><li>On peut vous accompagner physiquement dans les démarches</li><li>On vous explique vos droits clairement, sans jargon</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Prendre rendez-vous</a> ou <a href=\"/enquete-logement/\">remplir le formulaire d'enquête logement</a></p><!-- /wp:paragraph -->",
+            'image'   => $img('⚖️', '#bd8600', '#7a5500', 'Permanences'),
+            'content' => '',
             'days_ago' => 14,
         ],
         [
             'slug'    => 'porte-a-porte-clos-toreau',
             'title'   => 'Porte-à-porte : nos militant·es à votre rencontre',
             'excerpt' => 'Toutes les semaines, des militant·es du Groupe d\'Action font du porte-à-porte au Clos Toreau pour discuter logement, droits et combats à mener.',
-            'content' => "<!-- wp:paragraph --><p>Notre travail commence à votre porte. Régulièrement, des militant·es du Groupe d'Action sillonnent les immeubles du Clos Toreau pour échanger directement avec les habitant·es.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Pourquoi le porte-à-porte ?</h2><!-- /wp:heading -->\n\n<!-- wp:paragraph --><p>Parce que c'est sur le pas de votre porte que se mesure vraiment la situation. Les statistiques officielles invisibilisent souvent les vrais problèmes ; en venant frapper chez vous, on entend les <strong>vrais témoignages, les vrais combats du quotidien</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>Si vous voulez nous rejoindre pour un porte-à-porte, ou simplement nous signaler qu'on passe dans votre immeuble :</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Contactez-nous</a></p><!-- /wp:paragraph -->",
+            'image'   => $img('🚪', '#7a0000', '#3d0000', 'Porte-à-porte'),
+            'content' => '',
             'days_ago' => 20,
         ],
     ];
+
+    // Contenus riches (avec image inline en tête)
+    $news[0]['content'] = "<!-- wp:image --><figure class=\"wp-block-image size-large\"><img src=\"" . $news[0]['image'] . "\" alt=\"Enquête logement\"/></figure><!-- /wp:image -->\n\n<!-- wp:paragraph --><p>Depuis l'automne, les militant·es du Groupe d'Action LFI Nantes Sud Clos Toreau frappent aux portes des immeubles du quartier pour recueillir la parole des habitant·es sur leurs conditions de logement.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on a déjà constaté</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li><strong>100% des immeubles enquêtés</strong> subissent des coupures d'eau chaude récurrentes (+ de 10 par an, + de 10 jours cumulés)</li><li>Durée variant de <strong>2 jours à 3 semaines consécutives</strong> selon les immeubles</li><li>Présence massive d'<strong>humidité, moisissures, nuisibles</strong></li><li>Parties communes dégradées, ascenseurs en panne</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Ces données sont alarmantes. Elles seront présentées en détail lors de notre réunion publique du <strong>vendredi 26 juin</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir la réunion du 26 juin</a></p><!-- /wp:paragraph -->";
+
+    $news[1]['content'] = "<!-- wp:image --><figure class=\"wp-block-image size-large\"><img src=\"" . $news[1]['image'] . "\" alt=\"Réunion 26 juin\"/></figure><!-- /wp:image -->\n\n<!-- wp:paragraph --><p>Nous y sommes presque. Après des mois d'enquête de voisinage, le Groupe d'Action Clos Toreau organise une <strong>grande réunion publique</strong> pour partager les résultats et passer à l'action collective.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Au programme</h2><!-- /wp:heading -->\n\n<!-- wp:list {\"ordered\":true} --><ol><li>Résultats de l'enquête de voisinage — chiffres et témoignages</li><li>Vos droits et les recours possibles — démarches concrètes</li><li>Questions / Réponses — partagez votre situation</li></ol><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>📅 Vendredi 26 juin 2026, 15h-17h<br>📍 Salle de Diffusion – Confluences, 4 place du Muguet, Nantes<br>👉 Entrée libre, pas besoin de s'inscrire (mais ça nous aide à prévoir les chaises !)</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir l'événement et confirmer ta venue</a></p><!-- /wp:paragraph -->";
+
+    $news[2]['content'] = "<!-- wp:image --><figure class=\"wp-block-image size-large\"><img src=\"" . $news[2]['image'] . "\" alt=\"Coupures d'eau chaude\"/></figure><!-- /wp:image -->\n\n<!-- wp:paragraph --><p>C'est probablement le résultat le plus marquant de notre enquête de voisinage : <strong>100% des locataires interrogé·es subissent des coupures d'eau chaude récurrentes</strong>. Aucune exception.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Chiffres clés</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>Plus de <strong>10 coupures par an</strong> en moyenne</li><li>Plus de <strong>10 jours cumulés</strong> sans eau chaude</li><li>Durée d'une coupure variant de <strong>2 jours</strong> à <strong>3 semaines consécutives</strong> selon les immeubles</li><li>Phénomène présent depuis <strong>plus de 5 ans</strong> sans amélioration significative</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Certains habitant·es n'évoquent même plus ces coupures comme un problème — ils ou elles ont fini par s'y habituer. C'est précisément cette banalisation que nous voulons casser : pas d'eau chaude pendant 3 semaines, ce n'est pas « comme ça », c'est une <strong>défaillance grave du bailleur</strong> qui doit être traitée.</p><!-- /wp:paragraph -->";
+
+    $news[3]['content'] = "<!-- wp:image --><figure class=\"wp-block-image size-large\"><img src=\"" . $news[3]['image'] . "\" alt=\"Permanences\"/></figure><!-- /wp:image -->\n\n<!-- wp:paragraph --><p>Vous avez un problème de logement avec votre bailleur ? Une demande de logement social qui n'avance pas ? Une APL qui a été suspendue ? Le Groupe d'Action est là pour vous accompagner.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on fait pendant la permanence</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>On vous aide à rédiger des courriers (mise en demeure, recours)</li><li>On vous oriente vers les bons interlocuteurs (CAF, conciliation, ADIL, justice)</li><li>On peut vous accompagner physiquement dans les démarches</li><li>On vous explique vos droits clairement, sans jargon</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Prendre rendez-vous</a> ou <a href=\"/enquete-logement/\">remplir le formulaire d'enquête logement</a></p><!-- /wp:paragraph -->";
+
+    $news[4]['content'] = "<!-- wp:image --><figure class=\"wp-block-image size-large\"><img src=\"" . $news[4]['image'] . "\" alt=\"Porte-à-porte\"/></figure><!-- /wp:image -->\n\n<!-- wp:paragraph --><p>Notre travail commence à votre porte. Régulièrement, des militant·es du Groupe d'Action sillonnent les immeubles du Clos Toreau pour échanger directement avec les habitant·es.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Pourquoi le porte-à-porte ?</h2><!-- /wp:heading -->\n\n<!-- wp:paragraph --><p>Parce que c'est sur le pas de votre porte que se mesure vraiment la situation. Les statistiques officielles invisibilisent souvent les vrais problèmes ; en venant frapper chez vous, on entend les <strong>vrais témoignages, les vrais combats du quotidien</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>Si vous voulez nous rejoindre pour un porte-à-porte, ou simplement nous signaler qu'on passe dans votre immeuble :</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Contactez-nous</a></p><!-- /wp:paragraph -->";
 
     foreach ($news as $n) {
         $existing = get_page_by_path($n['slug'], OBJECT, 'post');
@@ -118,6 +201,9 @@ function lfi_nct_seed_real_news() {
         ]);
         if (!is_wp_error($id) && $id) {
             update_post_meta($id, '_lfi_news_origin', 'seed');
+            if (!empty($n['image'])) {
+                update_post_meta($id, '_lfi_news_image', $n['image']);
+            }
         }
     }
     update_option(LFI_NCT_NEWS_SEED_FLAG, 'done', false);
