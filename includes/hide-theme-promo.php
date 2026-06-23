@@ -14,19 +14,33 @@ add_action('wp_head', 'lfi_nct_hide_theme_promo_css', 99);
 function lfi_nct_hide_theme_promo_css() {
     ?>
     <style id="lfi-nct-hide-theme-promo">
+    /* Classes / IDs connus du thème AG Starter */
     [class*="ag-starter-promo"],
     [class*="ag-promo"],
     [class*="ag-template-promo"],
     [class*="alliance-promo"],
     [class*="alliance-popup"],
+    [class*="alliance-group"],
     [class*="theme-promo"],
     [class*="template-promo"],
+    [class*="rail-template"],
+    [class*="side-rail"],
+    [class*="vertical-promo"],
     [id*="ag-starter-modal"],
     [id*="alliance-promo"],
-    [id*="ag-promo"] { display: none !important; visibility: hidden !important; pointer-events: none !important; }
-    body.lfi-promo-purged { /* sécurité, neutralise certains effets de scroll-lock */
-        overflow: auto !important;
-    }
+    [id*="alliance-group"],
+    [id*="ag-promo"] { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }
+
+    /* Rails latéraux : tout aside.fixed sur les côtés avec du texte vertical */
+    aside[class*="rail"], aside[class*="banner-side"],
+    .ag-asso-rail, .ag-rail-left, .ag-rail-right,
+    .alliance-rail-left, .alliance-rail-right { display: none !important; }
+
+    /* Petite fusée du thème (souvent en haut à gauche) */
+    a[href*="alliance-groupe"], a[href*="alliancegroupe"],
+    a[href*="ag-starter"], a[href*="agstarter"] { display: none !important; }
+
+    body.lfi-promo-purged { overflow: auto !important; }
     </style>
     <?php
 }
@@ -38,9 +52,23 @@ function lfi_nct_hide_theme_promo_js() {
     (function () {
         var promoNeedles = [
             'VOUS AIMEZ CE SITE',
+            'Vous aimez ce site',
+            'vous aimez ce site',
             'Fièrement créé par Alliance Groupe',
+            'fièrement créé par alliance groupe',
+            'Créé avec Alliance Groupe',
             'TÉLÉCHARGER LE TEMPLATE GRATUIT',
+            'Télécharger le template gratuit',
             'AG Starter Association',
+            'ag-starter-association',
+            'TEMPLATE GRATUIT',
+            'Template gratuit',
+            'ALLIANCE GROUPE',
+            'Alliance Groupe',
+            'alliance groupe',
+            'allianceassociation',
+            'Découvrez nos templates',
+            'Aimez-vous notre design',
         ];
 
         function isPromoText(t) {
@@ -88,13 +116,25 @@ function lfi_nct_hide_theme_promo_js() {
         setTimeout(hideMatching,  300);
         setTimeout(hideMatching, 1200);
         setTimeout(hideMatching, 3000);
+        setTimeout(hideMatching, 6000);
+        setTimeout(hideMatching, 12000);
 
-        // Observe les ajouts dynamiques pendant 8 sec (le popup peut apparaître après scroll/délai)
+        // Observe les ajouts dynamiques pendant 30 sec (le popup peut apparaître après scroll/délai long)
         if (typeof MutationObserver !== 'undefined' && document.body) {
             var obs = new MutationObserver(function () { hideMatching(); });
             obs.observe(document.body, { childList: true, subtree: true });
-            setTimeout(function () { try { obs.disconnect(); } catch (e) {} }, 8000);
+            setTimeout(function () { try { obs.disconnect(); } catch (e) {} }, 30000);
         }
+
+        // Aussi : intercepte les clics sur les déclencheurs « TEMPLATE GRATUIT »
+        document.addEventListener('click', function(e) {
+            var el = e.target;
+            for (var i = 0; i < 5 && el; i++) {
+                var t = (el.textContent || '').trim();
+                if (isPromoText(t)) { e.preventDefault(); e.stopPropagation(); return false; }
+                el = el.parentNode;
+            }
+        }, true);
     })();
     </script>
     <?php

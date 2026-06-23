@@ -1,0 +1,187 @@
+<?php
+/**
+ * Module Actualités — purge des démos AG Starter + seed des vrais articles
+ *
+ * Le thème AG Starter Association injecte par défaut 3-6 articles
+ * de démo dans wp_posts (« Hôpital public », « Pétition climat »,
+ * « Nouveau groupe à Saint-Étienne », « démarré ses permanences »,
+ * « Témoignages habitat », « Encadrement des loyers ») qui n'ont
+ * pas grand rapport avec le Groupe d'Action Clos Toreau.
+ *
+ * Ce module :
+ *   1. Purge à chaque init les articles dont le titre matche ces
+ *      patterns démos (mais préserve ceux qui ont le marqueur LFI)
+ *   2. Seed 5 vrais articles basés sur l'activité réelle du GA :
+ *      enquête de voisinage, réunion 26 juin, eau chaude, permanences,
+ *      porte-à-porte. Ne s'insère qu'une fois (flag).
+ *   3. Auto-crée un article « Save the date » à chaque nouvel
+ *      événement publié dans ag_evenement (avec marqueur LFI)
+ */
+if (!defined('ABSPATH')) exit;
+
+const LFI_NCT_NEWS_SEED_FLAG = 'lfi_nct_news_seed_v1';
+
+/* ------------------------------------------------------------------ */
+/* 1. Purge des articles démo (à chaque init, idempotent)              */
+/* ------------------------------------------------------------------ */
+
+add_action('init', 'lfi_nct_purge_news_demos', 1100);
+function lfi_nct_purge_news_demos() {
+    global $wpdb;
+    $patterns = [
+        '%H_pital%public%contre%budget%',
+        '%P_tition%climat%signatures%',
+        '%nouveau%groupe%saint%tienne%',
+        '%Encadrement%loyers%Nantes%M_tropole%',
+        '%T_moignages%habitat%trimestre%',
+        '%groupe%LFI%Clos%Toreau%d_marr_%permanences%',
+    ];
+    foreach ($patterns as $pat) {
+        $posts = $wpdb->get_results($wpdb->prepare(
+            "SELECT ID FROM {$wpdb->posts}
+             WHERE post_type = 'post'
+               AND post_status IN ('publish','draft','pending','private','future','trash')
+               AND post_title LIKE %s
+             LIMIT 20",
+            $pat
+        ));
+        foreach ($posts as $p) {
+            // On préserve les articles marqués LFI
+            if (get_post_meta($p->ID, '_lfi_news_origin', true)) continue;
+            wp_delete_post($p->ID, true);
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Seed des vrais articles (idempotent)                              */
+/* ------------------------------------------------------------------ */
+
+add_action('init', 'lfi_nct_seed_real_news', 1200);
+function lfi_nct_seed_real_news() {
+    if (get_option(LFI_NCT_NEWS_SEED_FLAG) === 'done') return;
+    global $wpdb;
+
+    $news = [
+        [
+            'slug'    => 'enquete-voisinage-insalubrite-clos-toreau',
+            'title'   => 'Notre enquête de voisinage sur l\'insalubrité au Clos Toreau',
+            'excerpt' => 'Depuis plusieurs mois, le Groupe d\'Action mène une enquête de voisinage porte-à-porte sur l\'état du logement social au Clos Toreau. Premiers résultats : 100% des immeubles touchés par les coupures d\'eau chaude récurrentes.',
+            'content' => "<!-- wp:paragraph --><p>Depuis l'automne, les militant·es du Groupe d'Action LFI Nantes Sud Clos Toreau frappent aux portes des immeubles du quartier pour recueillir la parole des habitant·es sur leurs conditions de logement.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on a déjà constaté</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li><strong>100% des immeubles enquêtés</strong> subissent des coupures d'eau chaude récurrentes (+ de 10 par an, + de 10 jours cumulés)</li><li>Durée variant de <strong>2 jours à 3 semaines consécutives</strong> selon les immeubles</li><li>Présence massive d'<strong>humidité, moisissures, nuisibles</strong></li><li>Parties communes dégradées, ascenseurs en panne</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Ces données sont alarmantes. Elles seront présentées en détail lors de notre réunion publique du <strong>vendredi 26 juin</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir la réunion du 26 juin</a></p><!-- /wp:paragraph -->",
+            'days_ago' => 2,
+        ],
+        [
+            'slug'    => 'reunion-publique-26-juin-votre-logement-votre-droit',
+            'title'   => 'Réunion publique du 26 juin : Votre logement, votre droit',
+            'excerpt' => 'Le vendredi 26 juin de 15h à 17h à la Salle de Diffusion (Confluences, 4 place du Muguet), on présente les résultats de l\'enquête et on s\'organise pour la suite.',
+            'content' => "<!-- wp:paragraph --><p>Nous y sommes presque. Après des mois d'enquête de voisinage, le Groupe d'Action Clos Toreau organise une <strong>grande réunion publique</strong> pour partager les résultats et passer à l'action collective.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Au programme</h2><!-- /wp:heading -->\n\n<!-- wp:list {\"ordered\":true} --><ol><li>Résultats de l'enquête de voisinage — chiffres et témoignages</li><li>Vos droits et les recours possibles — démarches concrètes</li><li>Questions / Réponses — partagez votre situation</li></ol><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>📅 Vendredi 26 juin 2026, 15h-17h<br>📍 Salle de Diffusion – Confluences, 4 place du Muguet, Nantes<br>👉 Entrée libre, pas besoin de s'inscrire (mais ça nous aide à prévoir les chaises !)</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/evenements/votre-logement-votre-droit-reunion-26-juin/\">Voir l'événement et confirmer ta venue</a></p><!-- /wp:paragraph -->",
+            'days_ago' => 5,
+        ],
+        [
+            'slug'    => 'eau-chaude-coupures-repetition-clos-toreau',
+            'title'   => 'Coupures d\'eau chaude : ce qu\'on a découvert dans les immeubles du quartier',
+            'excerpt' => 'Plus de 10 coupures par an, plus de 10 jours cumulés sans eau chaude, durées allant de 2 jours à 3 semaines consécutives. Toutes les enquêtées concernées.',
+            'content' => "<!-- wp:paragraph --><p>C'est probablement le résultat le plus marquant de notre enquête de voisinage : <strong>100% des locataires interrogé·es subissent des coupures d'eau chaude récurrentes</strong>. Aucune exception.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Chiffres clés</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>Plus de <strong>10 coupures par an</strong> en moyenne</li><li>Plus de <strong>10 jours cumulés</strong> sans eau chaude</li><li>Durée d'une coupure variant de <strong>2 jours</strong> à <strong>3 semaines consécutives</strong> selon les immeubles</li><li>Phénomène présent depuis <strong>plus de 5 ans</strong> sans amélioration significative</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>Certains habitant·es n'évoquent même plus ces coupures comme un problème — ils ou elles ont fini par s'y habituer. C'est précisément cette banalisation que nous voulons casser : pas d'eau chaude pendant 3 semaines, ce n'est pas « comme ça », c'est une <strong>défaillance grave du bailleur</strong> qui doit être traitée.</p><!-- /wp:paragraph -->",
+            'days_ago' => 9,
+        ],
+        [
+            'slug'    => 'permanences-logement-clos-toreau',
+            'title'   => 'Permanences habitat : on vous accompagne dans vos démarches',
+            'excerpt' => 'Le Groupe d\'Action tient des permanences d\'accompagnement administratif et juridique pour les habitant·es du quartier. Premières permanences déjà tenues.',
+            'content' => "<!-- wp:paragraph --><p>Vous avez un problème de logement avec votre bailleur ? Une demande de logement social qui n'avance pas ? Une APL qui a été suspendue ? Le Groupe d'Action est là pour vous accompagner.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Ce qu'on fait pendant la permanence</h2><!-- /wp:heading -->\n\n<!-- wp:list --><ul><li>On vous aide à rédiger des courriers (mise en demeure, recours)</li><li>On vous oriente vers les bons interlocuteurs (CAF, conciliation, ADIL, justice)</li><li>On peut vous accompagner physiquement dans les démarches</li><li>On vous explique vos droits clairement, sans jargon</li></ul><!-- /wp:list -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Prendre rendez-vous</a> ou <a href=\"/enquete-logement/\">remplir le formulaire d'enquête logement</a></p><!-- /wp:paragraph -->",
+            'days_ago' => 14,
+        ],
+        [
+            'slug'    => 'porte-a-porte-clos-toreau',
+            'title'   => 'Porte-à-porte : nos militant·es à votre rencontre',
+            'excerpt' => 'Toutes les semaines, des militant·es du Groupe d\'Action font du porte-à-porte au Clos Toreau pour discuter logement, droits et combats à mener.',
+            'content' => "<!-- wp:paragraph --><p>Notre travail commence à votre porte. Régulièrement, des militant·es du Groupe d'Action sillonnent les immeubles du Clos Toreau pour échanger directement avec les habitant·es.</p><!-- /wp:paragraph -->\n\n<!-- wp:heading --><h2>Pourquoi le porte-à-porte ?</h2><!-- /wp:heading -->\n\n<!-- wp:paragraph --><p>Parce que c'est sur le pas de votre porte que se mesure vraiment la situation. Les statistiques officielles invisibilisent souvent les vrais problèmes ; en venant frapper chez vous, on entend les <strong>vrais témoignages, les vrais combats du quotidien</strong>.</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>Si vous voulez nous rejoindre pour un porte-à-porte, ou simplement nous signaler qu'on passe dans votre immeuble :</p><!-- /wp:paragraph -->\n\n<!-- wp:paragraph --><p>👉 <a href=\"/rendez-vous/\">Contactez-nous</a></p><!-- /wp:paragraph -->",
+            'days_ago' => 20,
+        ],
+    ];
+
+    foreach ($news as $n) {
+        $existing = get_page_by_path($n['slug'], OBJECT, 'post');
+        if ($existing) continue;
+        $date    = date('Y-m-d H:i:s', strtotime('-' . $n['days_ago'] . ' days'));
+        $gmt_date = get_gmt_from_date($date);
+        $id = wp_insert_post([
+            'post_type'     => 'post',
+            'post_status'   => 'publish',
+            'post_title'    => $n['title'],
+            'post_name'     => $n['slug'],
+            'post_excerpt'  => $n['excerpt'],
+            'post_content'  => $n['content'],
+            'post_date'     => $date,
+            'post_date_gmt' => $gmt_date,
+            'post_author'   => 1,
+        ]);
+        if (!is_wp_error($id) && $id) {
+            update_post_meta($id, '_lfi_news_origin', 'seed');
+        }
+    }
+    update_option(LFI_NCT_NEWS_SEED_FLAG, 'done', false);
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Auto-création d'un article quand un événement est publié          */
+/* ------------------------------------------------------------------ */
+
+add_action('save_post_ag_evenement', 'lfi_nct_auto_news_from_event', 30, 3);
+function lfi_nct_auto_news_from_event($post_id, $post, $update) {
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+    if (wp_is_post_revision($post_id)) return;
+    if ($post->post_status !== 'publish') return;
+
+    // Évite la création multiple : on stocke l'ID news associé
+    $news_id = (int) get_post_meta($post_id, '_lfi_news_post_id', true);
+    if ($news_id && get_post($news_id)) {
+        // Article déjà créé, on met juste à jour
+        wp_update_post([
+            'ID'           => $news_id,
+            'post_title'   => '📅 ' . get_the_title($post),
+            'post_content' => lfi_nct_news_content_from_event($post),
+            'post_excerpt' => wp_trim_words(get_the_excerpt($post), 30),
+        ]);
+        return;
+    }
+
+    // Création
+    $event_date = get_post_meta($post_id, '_ag_event_date', true);
+    $event_time = get_post_meta($post_id, '_ag_event_time', true);
+    $event_lieu = get_post_meta($post_id, '_ag_event_place', true);
+    $excerpt = "Le " . ($event_date ? date_i18n('j F Y', strtotime($event_date)) : '') . ($event_time ? ' à ' . $event_time : '') . ($event_lieu ? ' à ' . $event_lieu : '') . ' — viens nous rejoindre.';
+
+    $news_id = wp_insert_post([
+        'post_type'    => 'post',
+        'post_status'  => 'publish',
+        'post_title'   => '📅 ' . get_the_title($post),
+        'post_excerpt' => $excerpt,
+        'post_content' => lfi_nct_news_content_from_event($post),
+        'post_author'  => $post->post_author ?: 1,
+    ]);
+    if (!is_wp_error($news_id) && $news_id) {
+        update_post_meta($news_id,   '_lfi_news_origin',    'event');
+        update_post_meta($news_id,   '_lfi_news_event_id',  $post_id);
+        update_post_meta($post_id,   '_lfi_news_post_id',   $news_id);
+    }
+}
+
+function lfi_nct_news_content_from_event($event_post) {
+    $date  = get_post_meta($event_post->ID, '_ag_event_date',  true);
+    $time  = get_post_meta($event_post->ID, '_ag_event_time',  true);
+    $end   = get_post_meta($event_post->ID, '_ag_event_end',   true);
+    $place = get_post_meta($event_post->ID, '_ag_event_place', true);
+    $city  = get_post_meta($event_post->ID, '_ag_event_city',  true);
+    $perma = get_permalink($event_post);
+
+    $when = $date ? date_i18n('l j F Y', strtotime($date)) : '';
+    if ($time) $when .= ' · ' . $time . ($end ? ' – ' . $end : '');
+
+    $where = trim(($place ? $place : '') . ($city ? ($place ? ', ' : '') . $city : ''));
+
+    return "<!-- wp:paragraph --><p>📅 <strong>" . esc_html($when) . "</strong></p><!-- /wp:paragraph -->\n"
+         . "<!-- wp:paragraph --><p>📍 " . esc_html($where) . "</p><!-- /wp:paragraph -->\n"
+         . "<!-- wp:paragraph --><p>" . wp_kses_post($event_post->post_excerpt ?: '') . "</p><!-- /wp:paragraph -->\n"
+         . "<!-- wp:paragraph --><p>👉 <a href=\"" . esc_url($perma) . "\">Voir les détails et confirmer ta venue</a></p><!-- /wp:paragraph -->";
+}
