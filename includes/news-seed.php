@@ -22,6 +22,116 @@ if (!defined('ABSPATH')) exit;
 const LFI_NCT_NEWS_SEED_FLAG = 'lfi_nct_news_seed_v2';
 
 /* ------------------------------------------------------------------ */
+/* 0bis. Strip côté navigateur (JS) en filet de sécurité                */
+/* Si le buffer serveur a été bypassé par un autre plugin, ce JS         */
+/* nettoie les cards démos directement dans le DOM.                     */
+/* ------------------------------------------------------------------ */
+
+add_action('wp_footer', 'lfi_nct_actu_strip_js', 999);
+function lfi_nct_actu_strip_js() {
+    if (is_admin()) return;
+    ?>
+    <script id="lfi-nct-actu-strip">
+    (function () {
+        var demoNeedles = [
+            'Marche pour la justice climatique',
+            'Hôpital public',
+            'hôpital public',
+            'Pétition climat',
+            'pétition climat',
+            'Nouveau groupe local',
+            'nouveau groupe local',
+            'Encadrement des loyers',
+            'encadrement des loyers',
+            'Témoignages habitat',
+            'TÉMOIGNAGES HABITAT',
+            'témoignages habitat',
+            'a démarré ses permanences',
+            'A DÉMARRÉ SES PERMANENCES',
+            'recueilli ce trimestre',
+            'RECUEILLI CE TRIMESTRE',
+            'relance Nantes Métropole',
+            'RELANCE NANTES MÉTROPOLE',
+            // Démos supplémentaires détectés
+            'Hello world',
+            'hello world',
+            'HELLO WORLD',
+            'Welcome to WordPress',
+            'NOS 12 PROPOSITIONS',
+            'Nos 12 propositions',
+            '12 propositions pour 2027',
+            'Encadrement réel des loyers',
+            'AG 2026',
+            'CE QUI A ÉTÉ VOTÉ',
+            'Ce qui a été voté',
+            'Bilan financier, élection du CA',
+            'programme stratégique 2027',
+        ];
+
+        function isDemo(text) {
+            if (!text) return false;
+            text = text.trim();
+            if (!text.length) return false;
+            for (var i = 0; i < demoNeedles.length; i++) {
+                if (text.indexOf(demoNeedles[i]) !== -1) return true;
+            }
+            return false;
+        }
+
+        function strip() {
+            // Sélecteurs des cards d'articles du thème AG Starter
+            var selectors = [
+                'article.ag-asso-actu',
+                '.ag-asso-actu',
+                '.ag-asso-actu-grid > article',
+                '.ag-asso-actu-grid > a',
+                '.ag-asso-actu-grid > div',
+            ];
+            for (var s = 0; s < selectors.length; s++) {
+                var nodes = document.querySelectorAll(selectors[s]);
+                for (var i = 0; i < nodes.length; i++) {
+                    var n = nodes[i];
+                    if (isDemo(n.textContent)) {
+                        n.style.display = 'none';
+                        if (n.parentNode) {
+                            try { n.parentNode.removeChild(n); } catch (e) {}
+                        }
+                    }
+                }
+            }
+            // Catch-all : tout article contenant le texte démo
+            var allArticles = document.querySelectorAll('article, .card, [class*="actu"], [class*="news"], [class*="post"]');
+            for (var j = 0; j < allArticles.length; j++) {
+                var a = allArticles[j];
+                if (a.children.length > 50) continue;
+                if (isDemo(a.textContent) && a.textContent.length < 800) {
+                    a.style.display = 'none';
+                    if (a.parentNode) {
+                        try { a.parentNode.removeChild(a); } catch (e) {}
+                    }
+                }
+            }
+        }
+
+        strip();
+        document.addEventListener('DOMContentLoaded', strip);
+        setTimeout(strip,  100);
+        setTimeout(strip,  500);
+        setTimeout(strip, 1500);
+        setTimeout(strip, 3000);
+
+        // Observe les ajouts dynamiques (au cas où les cards seraient ajoutées par JS du thème)
+        if (typeof MutationObserver !== 'undefined' && document.body) {
+            var obs = new MutationObserver(strip);
+            obs.observe(document.body, { childList: true, subtree: true });
+            setTimeout(function () { try { obs.disconnect(); } catch (e) {} }, 10000);
+        }
+    })();
+    </script>
+    <?php
+}
+
+/* ------------------------------------------------------------------ */
 /* 0. Output buffer : arrache les cards démos du HTML /actu/            */
 /* ------------------------------------------------------------------ */
 
@@ -95,6 +205,15 @@ function lfi_nct_purge_news_demos() {
         '%Encadrement%loyers%Nantes%M_tropole%',
         '%T_moignages%habitat%trimestre%',
         '%groupe%LFI%Clos%Toreau%d_marr_%permanences%',
+        // Démos sample WordPress + AG Starter additionnels
+        'Hello world%',
+        'Hello, world%',
+        '%12 propositions pour 2027%',
+        '%Encadrement r_el des loyers%',
+        '%AG 2026%CE QUI%VOT_%',
+        '%AG 2026%vot_%',
+        '%Bilan financier%lection du CA%',
+        '%programme strat_gique 2027%',
     ];
     foreach ($patterns as $pat) {
         $posts = $wpdb->get_results($wpdb->prepare(

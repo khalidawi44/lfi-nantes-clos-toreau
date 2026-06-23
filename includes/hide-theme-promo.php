@@ -24,12 +24,22 @@ function lfi_nct_hide_theme_promo_css() {
     [class*="theme-promo"],
     [class*="template-promo"],
     [class*="rail-template"],
-    [class*="side-rail"],
+    [class*="side-rail-template"],
     [class*="vertical-promo"],
+    [class*="rail-left"],
+    [class*="left-rail-promo"],
+    [class*="ag-rail-template"],
+    [class*="ag-template-rail"],
     [id*="ag-starter-modal"],
     [id*="alliance-promo"],
     [id*="alliance-group"],
-    [id*="ag-promo"] { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }
+    [id*="ag-promo"],
+    [id*="rail-template"] { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }
+
+    /* Fusée rocket en haut à gauche du template */
+    body > a[href*="alliance"],
+    body > div[class*="rocket"]:not([class*="back-to-top"]),
+    .ag-asso-rocket-promo { display: none !important; }
 
     /* Rails latéraux : tout aside.fixed sur les côtés avec du texte vertical */
     aside[class*="rail"], aside[class*="banner-side"],
