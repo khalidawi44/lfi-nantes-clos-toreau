@@ -304,8 +304,10 @@ function lfi_nct_app_shortcode() {
                     case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
                     case 'stats':           lfi_nct_app_view_stats();           break;
                     case 'cache':           lfi_nct_app_view_cache();           break;
-                    case 'comptes':         lfi_nct_app_view_comptes();         break;
-                    case 'temoignage-add':  lfi_nct_app_view_temoignage_add();  break;
+                    case 'comptes':            lfi_nct_app_view_comptes();              break;
+                    case 'comptes-ga':         lfi_nct_app_view_comptes_ga();           break;
+                    case 'comptes-locataires': lfi_nct_app_view_comptes_locataires();   break;
+                    case 'temoignage-add':     lfi_nct_app_view_temoignage_add();       break;
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
@@ -877,7 +879,8 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📣', 'Inscrits 26 juin',       $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
             ['🗂', 'Dossiers locataires',    'Photos · historique',                 lfi_nct_app_url('dossiers')],
             ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
-            ['🪪', 'Comptes GA + locataires','Créer · réinitialiser',               lfi_nct_app_url('comptes')],
+            ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
+            ['🏠', 'Comptes Locataires',     'Créer · reset mot de passe',          lfi_nct_app_url('comptes-locataires')],
         ],
         '📨 COMMUNICATION' => [
             ['📱', 'Envoyer SMS',            'Modèles + diffusion',                 lfi_nct_app_url('sms')],
