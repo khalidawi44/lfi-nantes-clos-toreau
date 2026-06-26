@@ -703,6 +703,39 @@ function lfi_nct_app_render_styles() {
     /* Checkbox + label en ligne dans les forms */
     .lfi-app-checkbox-row { flex-direction: row !important; align-items: flex-start; gap: 10px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer; }
     .lfi-app-checkbox-row input { width: 20px; height: 20px; margin-top: 2px; flex-shrink: 0; }
+
+    /* Bloc problème(s) signalé(s) dans les cards enquête */
+    .lfi-app-problem { background: #fff8e6; border-left: 3px solid #ffd400; border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+    .lfi-app-problem.inline { margin: 10px 0; }
+    .lfi-app-problem .prob-head { font-size: .78em; font-weight: 700; color: #886e00; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; }
+    .lfi-app-problem .prob-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .lfi-app-problem .prob-chip { background: #fff; border: 1px solid #ffe4a0; padding: 4px 9px; border-radius: 999px; font-size: .82em; color: #3a3a3a; }
+    .lfi-app-problem .prob-grav {
+        display: inline-block; font-size: .72em; font-weight: 700; padding: 1px 7px;
+        border-radius: 999px; background: #ddd; color: #444; margin-left: 4px;
+    }
+    .lfi-app-problem .prob-grav.g7, .lfi-app-problem .prob-grav.g8 { background: #ffcc99; color: #8a3a00; }
+    .lfi-app-problem .prob-grav.g9, .lfi-app-problem .prob-grav.g10 { background: #ffb3b3; color: #a30b25; }
+    .lfi-app-problem .prob-recur { font-size: .72em; font-weight: 700; color: #c8102e; margin-left: 4px; }
+
+    /* Onglets de modes pour SMS / email enquête */
+    .lfi-app-modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 0 0 14px; }
+    .lfi-app-modes .md {
+        text-align: center; padding: 10px 8px; background: #fff;
+        border: 1.5px solid #ddd; border-radius: 10px;
+        text-decoration: none; color: #555; font-size: .82em; font-weight: 600;
+    }
+    .lfi-app-modes .md.on { background: #c8102e; color: #fff; border-color: #c8102e; }
+    .lfi-app-modes .md:active { background: #f5f5f5; }
+    .lfi-app-modes .md.on:active { background: #a30b25; }
+
+    /* Textarea SMS éditable */
+    .sms-preview textarea.sms-body {
+        background: #f8f8f8; min-height: 130px;
+    }
+    .sms-preview textarea.sms-body:focus {
+        background: #fff; border-color: #c8102e;
+    }
     </style>
     <?php
 }
@@ -1215,6 +1248,115 @@ function lfi_nct_app_view_email() {
     lfi_nct_app_screen_close();
 }
 
+/* ---------- Helpers enquête : extrait le problème principal ----- */
+function lfi_nct_app_enq_problem($row) {
+    $data = !empty($row->data) ? json_decode($row->data, true) : [];
+    if (!is_array($data)) $data = [];
+
+    $types       = (array) ($data['problemes_types']       ?? []);
+    $types_autre = trim((string) ($data['problemes_types_autre'] ?? ''));
+    $gravite     = (int)         ($data['problemes_gravite']     ?? 0);
+    $recurrent   = (string)      ($data['problemes_recurrent']   ?? '');
+    $duree       = (string)      ($data['problemes_duree']       ?? '');
+    $ec_nb       = trim((string) ($data['eau_chaude_nb_par_an']  ?? ''));
+    $ec_duree    = trim((string) ($data['eau_chaude_duree_max']  ?? ''));
+
+    $labels = [
+        'degats_eaux'      => ['💧', 'dégâts des eaux'],
+        'humidite'         => ['🌫', 'humidité / moisissures'],
+        'insectes'         => ['🐜', 'nuisibles (cafards, rats…)'],
+        'chauffage'        => ['🥶', 'chauffage défaillant'],
+        'electricite'      => ['⚡', 'électricité défectueuse'],
+        'ascenseur'        => ['🛗', 'ascenseur en panne'],
+        'parties_communes' => ['🚪', 'parties communes dégradées'],
+        'bruit'            => ['🔊', 'nuisances sonores'],
+        'securite'         => ['🚨', 'insécurité'],
+    ];
+
+    $chips = [];
+    foreach ($types as $t) {
+        if (isset($labels[$t])) $chips[] = $labels[$t];
+    }
+    if ($types_autre) $chips[] = ['❗', $types_autre];
+    if ($ec_nb || $ec_duree) {
+        $detail = trim('coupures d\'eau chaude' . ($ec_nb ? ' (' . $ec_nb . ' / an)' : ''));
+        $chips[] = ['🚿', $detail];
+    }
+    if (!$chips) return null;
+
+    return [
+        'main'      => $chips[0],
+        'chips'     => $chips,
+        'gravite'   => $gravite,
+        'recurrent' => $recurrent,
+        'duree'     => $duree,
+    ];
+}
+
+/* Rend une phrase qui décrit le(s) problème(s) sans pronom, pour SMS/email */
+function lfi_nct_app_enq_phrase($problem) {
+    if (!$problem) return '';
+    $names = array_map(function ($c) { return $c[1]; }, $problem['chips']);
+    $n = count($names);
+    if ($n === 1) return $names[0];
+    if ($n === 2) return $names[0] . ' et ' . $names[1];
+    $last = array_pop($names);
+    return implode(', ', $names) . ' et ' . $last;
+}
+
+/* Modèles de messages personnalisés enquête (SMS court + email + sujet) */
+function lfi_nct_app_enq_message_template($mode, $row, $event_post = null) {
+    $prenom = (string) ($row->contact_prenom ?? '');
+    $problem = lfi_nct_app_enq_problem($row);
+    $phrase  = lfi_nct_app_enq_phrase($problem);
+
+    $ev_titre = $event_post ? get_the_title($event_post) : '';
+    $ev_date  = $event_post ? get_post_meta($event_post->ID, '_ag_event_date', true) : '';
+    $ev_time  = $event_post ? get_post_meta($event_post->ID, '_ag_event_time', true) : '';
+    $ev_place = $event_post ? get_post_meta($event_post->ID, '_ag_event_place', true) : '';
+    $ev_url   = $event_post ? get_permalink($event_post) : home_url('/reunion-26-juin-2026/');
+    $ev_when  = trim($ev_date . ($ev_time ? ' à ' . $ev_time : ''));
+
+    switch ($mode) {
+        case 'reunion':
+            $body = "Bonjour " . ($prenom ?: 'camarade') . ", c'est le Groupe d'Action LFI Nantes Sud Clos Toreau. On organise une réunion publique sur le logement vendredi 26 juin à 15h à la salle Confluences (4 pl. du Muguet). Venez ? Infos : " . home_url('/reunion-26-juin-2026/');
+            $sujet = "Réunion logement vendredi 26 juin — Confluences";
+            return ['body' => $body, 'sujet' => $sujet];
+
+        case 'event':
+            if (!$event_post) {
+                $body = "Bonjour " . ($prenom ?: '') . ", suivi de votre enquête logement : retrouvez nous bientôt, on vous tient au courant des prochains événements. Calendrier : " . home_url('/evenements/');
+                $sujet = "Suivi enquête logement — LFI Clos Toreau";
+                return ['body' => $body, 'sujet' => $sujet];
+            }
+            $body = "Bonjour " . ($prenom ?: 'camarade') . ", prochain rendez-vous du GA LFI Clos Toreau : " . $ev_titre;
+            if ($ev_when)  $body .= " — " . $ev_when;
+            if ($ev_place) $body .= " à " . $ev_place;
+            $body .= ". Infos & inscription : " . $ev_url;
+            $sujet = $ev_titre . ($ev_when ? ' — ' . $ev_when : '');
+            return ['body' => $body, 'sujet' => $sujet];
+
+        case 'probleme':
+            $intro = $prenom ? "Bonjour " . $prenom . ", " : "Bonjour, ";
+            if ($phrase) {
+                $body = $intro . "suite à votre réponse à notre enquête de voisinage où vous nous avez signalé " . $phrase . ", on continue le travail collectif sur le logement au Clos Toreau.";
+            } else {
+                $body = $intro . "merci d'avoir répondu à notre enquête de voisinage. On continue le travail collectif sur le logement au Clos Toreau.";
+            }
+            if ($event_post) {
+                $body .= " On en parle " . ($ev_when ?: 'lors de notre prochaine réunion') . " à " . ($ev_place ?: 'Confluences') . ". Inscription : " . $ev_url;
+            } else {
+                $body .= " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . home_url('/reunion-26-juin-2026/');
+            }
+            $sujet = "Suivi de votre enquête logement" . ($phrase ? ' — ' . $phrase : '');
+            return ['body' => $body, 'sujet' => $sujet];
+
+        case 'libre':
+        default:
+            return ['body' => '', 'sujet' => ''];
+    }
+}
+
 /* ---------- 🏠 Enquêtes logement : liste + filtres + actions ----- */
 function lfi_nct_app_view_enquetes() {
     global $wpdb;
@@ -1233,7 +1375,7 @@ function lfi_nct_app_view_enquetes() {
 
     $rows = $wpdb->get_results(
         "SELECT id, submitted_at, adresse, etage, contact_recontact,
-                contact_prenom, contact_nom, contact_tel, contact_email
+                contact_prenom, contact_nom, contact_tel, contact_email, data
          FROM $table $where
          ORDER BY submitted_at DESC LIMIT 300"
     ) ?: [];
@@ -1279,6 +1421,23 @@ function lfi_nct_app_view_enquetes() {
             $adr = trim($r->adresse . ($r->etage ? ' · ét. ' . $r->etage : ''));
             if ($adr) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html($adr) . '</span></div>';
 
+            /* Problème principal — synthèse + gravité */
+            $problem = lfi_nct_app_enq_problem($r);
+            if ($problem) {
+                echo '<div class="lfi-app-problem">';
+                echo '<div class="prob-head">Problème(s) signalé(s)';
+                if ($problem['gravite']) {
+                    echo ' <span class="prob-grav g' . (int) $problem['gravite'] . '">gravité ' . (int) $problem['gravite'] . '/10</span>';
+                }
+                if ($problem['recurrent'] === 'permanent') echo ' <span class="prob-recur">en permanence</span>';
+                echo '</div>';
+                echo '<div class="prob-chips">';
+                foreach ($problem['chips'] as $ch) {
+                    echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
+                }
+                echo '</div></div>';
+            }
+
             echo '<div class="meta">';
             if (!empty($r->contact_tel)) {
                 $tel_clean = preg_replace('/[^\d+]/', '', $r->contact_tel);
@@ -1303,26 +1462,24 @@ function lfi_nct_app_view_enquetes() {
 function lfi_nct_app_view_enquetes_sms() {
     global $wpdb;
     $rep  = $wpdb->prefix . 'lfi_nct_responses';
-    $tpl  = $wpdb->prefix . 'lfi_nct_sms_templates';
     $logt = $wpdb->prefix . 'lfi_nct_sms_log';
 
-    /* Marquer comme envoyé */
     if (!empty($_POST['lfi_app_sms_sent']) && check_admin_referer('lfi_app_enq_sms_sent')) {
         $wpdb->insert($logt, [
-            'template_id' => ((int) ($_POST['tpl_id'] ?? 0)) ?: null,
+            'template_id' => null,
             'membre_id'   => null,
             'tel'         => sanitize_text_field(wp_unslash($_POST['tel']  ?? '')),
             'body_sent'   => sanitize_textarea_field(wp_unslash($_POST['body'] ?? '')),
             'sent_by'     => get_current_user_id(),
         ]);
-        $i = (int) ($_POST['next'] ?? 0);
-        $tpl_id = (int) ($_POST['tpl_id'] ?? 0);
-        wp_safe_redirect(lfi_nct_app_url('enquetes-sms', ['i' => $i, 'tpl' => $tpl_id, 'logged' => 1]));
+        $next = (int) ($_POST['next'] ?? 0);
+        $mode = sanitize_key($_POST['mode'] ?? 'reunion');
+        wp_safe_redirect(lfi_nct_app_url('enquetes-sms', ['i' => $next, 'mode' => $mode, 'logged' => 1]));
         exit;
     }
 
     $contacts = $wpdb->get_results(
-        "SELECT id, contact_prenom, contact_nom, contact_tel
+        "SELECT id, contact_prenom, contact_nom, contact_tel, data
          FROM $rep
          WHERE deleted_at IS NULL AND contact_tel <> '' AND contact_tel IS NOT NULL
                AND contact_recontact = 1
@@ -1330,22 +1487,20 @@ function lfi_nct_app_view_enquetes_sms() {
     ) ?: [];
     $n = count($contacts);
 
-    $i      = isset($_GET['i'])   ? max(0, min($n - 1, (int) $_GET['i'])) : 0;
-    $tpl_id = isset($_GET['tpl']) ? (int) $_GET['tpl'] : 0;
-    $tpl_row = $tpl_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tpl WHERE id = %d", $tpl_id)) : null;
+    $i    = isset($_GET['i'])    ? max(0, min(max(0, $n - 1), (int) $_GET['i'])) : 0;
+    $mode = isset($_GET['mode']) ? sanitize_key($_GET['mode']) : 'reunion';
 
-    /* Événement lié */
-    $event_id   = isset($_GET['event']) ? (int) $_GET['event'] : 0;
+    /* Prochain événement (par défaut : la réunion 26 juin a son URL fixe) */
+    $event_id = isset($_GET['event']) ? (int) $_GET['event'] : 0;
     if (!$event_id && function_exists('lfi_nct_sms_upcoming_events')) {
         $upc = lfi_nct_sms_upcoming_events(1);
         if ($upc) $event_id = $upc[0]->ID;
     }
     $event_post = $event_id ? get_post($event_id) : null;
-    $event_vars = function_exists('lfi_nct_sms_event_vars') ? lfi_nct_sms_event_vars($event_post) : [];
 
     lfi_nct_app_screen_open('📱 SMS aux répondant·es', $n . ' personne(s) avec tél & recontact OK');
 
-    if (!empty($_GET['logged'])) lfi_nct_app_flash('✅ SMS noté envoyé. Suivant·e.');
+    if (!empty($_GET['logged'])) lfi_nct_app_flash('✅ SMS noté envoyé. Au suivant·e.');
 
     if (!$n) {
         echo '<div class="lfi-app-empty">Personne avec tél + consentement recontact.</div>';
@@ -1353,36 +1508,26 @@ function lfi_nct_app_view_enquetes_sms() {
         return;
     }
 
-    /* Sélection du modèle */
-    $templates = $wpdb->get_results("SELECT id, nom, categorie FROM $tpl ORDER BY categorie, nom") ?: [];
-    echo '<form method="get" class="lfi-app-form">';
-    echo '<input type="hidden" name="vue" value="enquetes-sms">';
-    echo '<input type="hidden" name="i"   value="' . $i . '">';
-    echo '<label>💬 Modèle de SMS<select name="tpl" onchange="this.form.submit()">';
-    echo '<option value="">— choisir un modèle —</option>';
-    foreach ($templates as $t) {
-        echo '<option value="' . (int) $t->id . '" ' . selected($tpl_id, $t->id, false) . '>' . esc_html($t->nom) . '</option>';
-    }
-    echo '</select></label>';
-    if ($event_post) echo '<div class="lfi-app-help">📅 Événement lié : <strong>' . esc_html(get_the_title($event_post)) . '</strong></div>';
-    echo '</form>';
-
-    /* Carrousel */
     $c = $contacts[$i];
-    $fake_membre = (object) [
-        'id'     => $c->id,
-        'prenom' => $c->contact_prenom,
-        'nom'    => $c->contact_nom,
-        'pseudo' => '',
-        'tel'    => $c->contact_tel,
-    ];
-    $body = '';
-    if ($tpl_row && function_exists('lfi_nct_sms_render')) {
-        $body = lfi_nct_sms_render($tpl_row->body, $fake_membre, $event_vars);
-    } elseif ($tpl_row) {
-        $body = $tpl_row->body;
-    }
+    $msg = lfi_nct_app_enq_message_template($mode, $c, $event_post);
+    $body = $msg['body'];
+    $problem = lfi_nct_app_enq_problem($c);
 
+    /* Onglets de modes */
+    $modes = [
+        'reunion'  => '📣 Réunion 26 juin',
+        'event'    => '📅 Prochain événement',
+        'probleme' => '🏠 Lié à leur problème',
+        'libre'    => '✍️ Texte libre',
+    ];
+    echo '<div class="lfi-app-modes">';
+    foreach ($modes as $k => $label) {
+        $cls = $mode === $k ? 'on' : '';
+        echo '<a class="md ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('enquetes-sms', ['i' => $i, 'mode' => $k])) . '">' . esc_html($label) . '</a>';
+    }
+    echo '</div>';
+
+    /* Fiche contact + rappel du problème */
     echo '<div class="lfi-app-card sms-preview">';
     echo '<div class="head">';
     echo '<div class="who">' . esc_html(trim($c->contact_prenom . ' ' . $c->contact_nom)) . '</div>';
@@ -1390,41 +1535,70 @@ function lfi_nct_app_view_enquetes_sms() {
     echo '</div>';
     echo '<div class="meta"><span class="meta-chip">📞 ' . esc_html($c->contact_tel) . '</span></div>';
 
-    if ($body) {
-        $tel_clean = preg_replace('/[^\d+]/', '', $c->contact_tel);
-        $sms_url = 'sms:' . $tel_clean . '?body=' . rawurlencode($body);
-        echo '<textarea readonly rows="6" class="sms-body" id="lfi-enq-sms-body">' . esc_textarea($body) . '</textarea>';
-        echo '<div class="lfi-app-help"><small>' . strlen($body) . ' caractères</small></div>';
-        echo '<div class="row-actions">';
-        echo '<a class="btn-primary big" href="' . esc_url($sms_url) . '">📲 Ouvrir mon SMS</a>';
+    if ($problem) {
+        echo '<div class="lfi-app-problem inline">';
+        echo '<div class="prob-head">📝 Pour mémoire — problème(s) signalé(s)';
+        if ($problem['gravite']) echo ' <span class="prob-grav g' . (int) $problem['gravite'] . '">gravité ' . (int) $problem['gravite'] . '/10</span>';
         echo '</div>';
-        echo '<form method="post" class="row-actions">';
-        wp_nonce_field('lfi_app_enq_sms_sent');
-        echo '<input type="hidden" name="lfi_app_sms_sent" value="1">';
-        echo '<input type="hidden" name="tpl_id" value="' . (int) $tpl_id . '">';
-        echo '<input type="hidden" name="tel"    value="' . esc_attr($c->contact_tel) . '">';
-        echo '<input type="hidden" name="body"   value="' . esc_attr($body) . '">';
-        echo '<input type="hidden" name="next"   value="' . ($i + 1 < $n ? $i + 1 : $i) . '">';
-        echo '<button type="submit" class="btn-ghost">✅ Envoyé · passer au suivant →</button>';
-        echo '</form>';
-    } else {
-        echo '<div class="lfi-app-help">Choisis un modèle au-dessus pour voir le SMS prêt à envoyer.</div>';
+        echo '<div class="prob-chips">';
+        foreach ($problem['chips'] as $ch) {
+            echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
+        }
+        echo '</div></div>';
     }
+
+    /* Textarea modifiable + lien sms: live */
+    $tel_clean = preg_replace('/[^\d+]/', '', $c->contact_tel);
+    echo '<label for="enq-sms-body" style="display:block;margin-top:8px;font-size:.85em;color:#555">Texte du SMS — modifiable</label>';
+    echo '<textarea id="enq-sms-body" rows="7" class="sms-body" data-tel="' . esc_attr($tel_clean) . '">' . esc_textarea($body) . '</textarea>';
+    echo '<div class="lfi-app-help"><small><span id="enq-sms-count">' . mb_strlen($body) . '</span> caractères</small></div>';
+
+    echo '<div class="row-actions">';
+    echo '<a id="enq-sms-link" class="btn-primary big" href="sms:' . esc_attr($tel_clean) . '">📲 Ouvrir mon SMS</a>';
+    echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'enq-sms-body\').value);this.textContent=\'✓ Copié\';">📋 Copier</button>';
     echo '</div>';
 
-    /* Navigation prev/next */
-    echo '<div class="lfi-app-pager">';
-    if ($i > 0) {
-        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-sms', ['i' => $i - 1, 'tpl' => $tpl_id])) . '">← Précédent</a>';
-    } else {
-        echo '<span class="btn-ghost dis">← Précédent</span>';
-    }
-    if ($i + 1 < $n) {
-        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-sms', ['i' => $i + 1, 'tpl' => $tpl_id])) . '">Suivant →</a>';
-    } else {
-        echo '<span class="btn-ghost dis">Fin de liste</span>';
-    }
+    echo '<form method="post" class="row-actions" id="enq-sms-mark">';
+    wp_nonce_field('lfi_app_enq_sms_sent');
+    echo '<input type="hidden" name="lfi_app_sms_sent" value="1">';
+    echo '<input type="hidden" name="tel"  value="' . esc_attr($c->contact_tel) . '">';
+    echo '<input type="hidden" name="body" id="enq-sms-body-h" value="' . esc_attr($body) . '">';
+    echo '<input type="hidden" name="next" value="' . ($i + 1 < $n ? $i + 1 : $i) . '">';
+    echo '<input type="hidden" name="mode" value="' . esc_attr($mode) . '">';
+    echo '<button type="submit" class="btn-ghost">✅ Envoyé · passer au suivant →</button>';
+    echo '</form>';
+
     echo '</div>';
+
+    /* Pager */
+    echo '<div class="lfi-app-pager">';
+    if ($i > 0) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-sms', ['i' => $i - 1, 'mode' => $mode])) . '">← Précédent</a>';
+    else        echo '<span class="btn-ghost dis">← Précédent</span>';
+    if ($i + 1 < $n) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-sms', ['i' => $i + 1, 'mode' => $mode])) . '">Suivant →</a>';
+    else             echo '<span class="btn-ghost dis">Fin de liste</span>';
+    echo '</div>';
+
+    /* JS : mise à jour live du lien sms: et compteur */
+    ?>
+    <script>
+    (function () {
+        var ta = document.getElementById('enq-sms-body');
+        var lnk = document.getElementById('enq-sms-link');
+        var cnt = document.getElementById('enq-sms-count');
+        var hid = document.getElementById('enq-sms-body-h');
+        if (!ta || !lnk) return;
+        var tel = ta.dataset.tel || '';
+        function refresh() {
+            var b = ta.value || '';
+            lnk.href = 'sms:' + tel + '?body=' + encodeURIComponent(b);
+            if (cnt) cnt.textContent = b.length;
+            if (hid) hid.value = b;
+        }
+        ta.addEventListener('input', refresh);
+        refresh();
+    })();
+    </script>
+    <?php
 
     lfi_nct_app_screen_close();
 }
@@ -1435,50 +1609,64 @@ function lfi_nct_app_view_enquetes_email() {
     $rep = $wpdb->prefix . 'lfi_nct_responses';
 
     if (!empty($_POST['lfi_app_enq_email_send']) && check_admin_referer('lfi_app_enq_email_send')) {
-        $sujet = sanitize_text_field(wp_unslash($_POST['sujet'] ?? ''));
-        $body  = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
+        $sujet         = sanitize_text_field(wp_unslash($_POST['sujet'] ?? ''));
+        $body          = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
         $include_event = !empty($_POST['include_event']);
+        $personalize   = !empty($_POST['personalize']);
         if ($sujet && $body) {
             $recipients = $wpdb->get_results(
-                "SELECT contact_prenom AS prenom, contact_email AS email
+                "SELECT contact_prenom, contact_email, data
                  FROM $rep
                  WHERE deleted_at IS NULL
                        AND contact_email <> '' AND contact_email IS NOT NULL
                        AND contact_recontact = 1"
             ) ?: [];
 
-            /* Bloc événement optionnel */
-            $event_html = '';
+            $event_post = null;
             if ($include_event && function_exists('lfi_nct_sms_upcoming_events')) {
                 $upc = lfi_nct_sms_upcoming_events(1);
-                if ($upc) {
-                    $ep = $upc[0];
-                    $date  = get_post_meta($ep->ID, '_ag_event_date',  true);
-                    $time  = get_post_meta($ep->ID, '_ag_event_time',  true);
-                    $place = get_post_meta($ep->ID, '_ag_event_place', true);
-                    $event_html  = '<div style="background:#fff3f5;border-left:4px solid #c8102e;padding:14px 18px;margin:18px 0;border-radius:4px">';
-                    $event_html .= '<div style="font-weight:700;color:#c8102e;margin-bottom:6px">📅 ' . esc_html(get_the_title($ep)) . '</div>';
-                    if ($date)  $event_html .= '<div>🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</div>';
-                    if ($place) $event_html .= '<div>📍 ' . esc_html($place) . '</div>';
-                    $event_html .= '<div style="margin-top:8px"><a href="' . esc_url(get_permalink($ep)) . '" style="background:#c8102e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block;font-weight:700">✓ Je participe</a></div>';
-                    $event_html .= '</div>';
-                }
+                if ($upc) $event_post = $upc[0];
+            }
+            $event_html = '';
+            if ($event_post) {
+                $date  = get_post_meta($event_post->ID, '_ag_event_date',  true);
+                $time  = get_post_meta($event_post->ID, '_ag_event_time',  true);
+                $place = get_post_meta($event_post->ID, '_ag_event_place', true);
+                $event_html  = '<div style="background:#fff3f5;border-left:4px solid #c8102e;padding:14px 18px;margin:18px 0;border-radius:4px">';
+                $event_html .= '<div style="font-weight:700;color:#c8102e;margin-bottom:6px">📅 ' . esc_html(get_the_title($event_post)) . '</div>';
+                if ($date)  $event_html .= '<div>🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</div>';
+                if ($place) $event_html .= '<div>📍 ' . esc_html($place) . '</div>';
+                $event_html .= '<div style="margin-top:8px"><a href="' . esc_url(get_permalink($event_post)) . '" style="background:#c8102e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;display:inline-block;font-weight:700">✓ Je participe</a></div>';
+                $event_html .= '</div>';
             }
 
             $sent = 0; $errs = 0;
             add_filter('wp_mail_content_type', '__return_html');
             add_filter('wp_mail_from_name', function() { return 'LFI Nantes Sud Clos Toreau'; });
             foreach ($recipients as $r) {
-                if (!is_email($r->email)) { $errs++; continue; }
+                if (!is_email($r->contact_email)) { $errs++; continue; }
+                $body_resolved = $body;
+                $sujet_resolved = $sujet;
+                /* Remplace les variables */
+                $vars = [
+                    '{{prenom}}' => $r->contact_prenom ?: '',
+                ];
+                if ($personalize) {
+                    $problem = lfi_nct_app_enq_problem($r);
+                    $vars['{{probleme}}']      = lfi_nct_app_enq_phrase($problem);
+                    $vars['{{probleme_main}}'] = $problem && !empty($problem['main']) ? $problem['main'][1] : '';
+                }
+                $body_resolved  = strtr($body_resolved,  $vars);
+                $sujet_resolved = strtr($sujet_resolved, $vars);
                 $html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">'
                       . '<div style="background:#c8102e;color:#fff;padding:14px;border-radius:6px;text-align:center;margin-bottom:18px"><strong>LFI Nantes Sud Clos Toreau</strong></div>'
-                      . '<p>Bonjour ' . esc_html($r->prenom ?: '') . ',</p>'
-                      . wpautop($body)
+                      . '<p>Bonjour ' . esc_html($r->contact_prenom ?: '') . ',</p>'
+                      . wpautop($body_resolved)
                       . $event_html
                       . '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">'
                       . '<p style="font-size:.85em;color:#777">Vous recevez cet email car vous avez répondu à l\'enquête de voisinage logement et accepté d\'être recontacté·e par notre Groupe d\'Action.</p>'
                       . '</div>';
-                if (wp_mail($r->email, $sujet, $html)) $sent++; else $errs++;
+                if (wp_mail($r->contact_email, $sujet_resolved, $html)) $sent++; else $errs++;
             }
             remove_all_filters('wp_mail_content_type');
             remove_all_filters('wp_mail_from_name');
@@ -1494,11 +1682,28 @@ function lfi_nct_app_view_enquetes_email() {
                AND contact_recontact = 1"
     );
 
-    /* Récupère le prochain événement pour la pré-cocher dans le bloc */
-    $next_event_title = '';
+    /* Mode de pré-remplissage */
+    $mode = isset($_GET['mode']) ? sanitize_key($_GET['mode']) : 'libre';
+    $event_post = null;
     if (function_exists('lfi_nct_sms_upcoming_events')) {
         $upc = lfi_nct_sms_upcoming_events(1);
-        if ($upc) $next_event_title = get_the_title($upc[0]);
+        if ($upc) $event_post = $upc[0];
+    }
+
+    /* On utilise une « fiche fictive » pour pré-remplir : prénom = {{prenom}}, pas de problème
+       car le problème est résolu par destinataire au moment de l'envoi (cocher Personnaliser). */
+    $stub_row = (object) ['contact_prenom' => '{{prenom}}', 'data' => null];
+    $msg = lfi_nct_app_enq_message_template($mode, $stub_row, $event_post);
+
+    /* Pour le mode « probleme », montre la variable {{probleme}} comme placeholder */
+    if ($mode === 'probleme') {
+        $msg['body'] = "Bonjour {{prenom}}, suite à votre réponse à notre enquête de voisinage où vous nous avez signalé {{probleme}}, on continue le travail collectif sur le logement au Clos Toreau."
+                     . ($event_post
+                         ? " On en parle " . trim(get_post_meta($event_post->ID, '_ag_event_date', true) . ' à ' . get_post_meta($event_post->ID, '_ag_event_time', true))
+                            . " à " . get_post_meta($event_post->ID, '_ag_event_place', true)
+                            . ". Inscription : " . get_permalink($event_post)
+                         : " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . home_url('/reunion-26-juin-2026/'));
+        $msg['sujet'] = "Suivi de votre enquête logement — {{probleme_main}}";
     }
 
     lfi_nct_app_screen_open('✉️ Email aux répondant·es', $n . ' email(s) consentent au recontact');
@@ -1508,15 +1713,37 @@ function lfi_nct_app_view_enquetes_email() {
         lfi_nct_app_flash("✅ {$s} envoyé(s)" . ($e ? " · ⚠️ {$e} échec(s)" : ''));
     }
 
+    /* Onglets de modes */
+    $modes = [
+        'reunion'  => '📣 Réunion 26 juin',
+        'event'    => '📅 Prochain événement',
+        'probleme' => '🏠 Lié à leur problème',
+        'libre'    => '✍️ Texte libre',
+    ];
+    echo '<div class="lfi-app-modes">';
+    foreach ($modes as $k => $label) {
+        $cls = $mode === $k ? 'on' : '';
+        echo '<a class="md ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('enquetes-email', ['mode' => $k])) . '">' . esc_html($label) . '</a>';
+    }
+    echo '</div>';
+
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_enq_email_send');
     echo '<input type="hidden" name="lfi_app_enq_email_send" value="1">';
-    echo '<label>Sujet<input type="text" name="sujet" required placeholder="Ex : Réunion publique sur le logement le 26 juin"></label>';
-    echo '<label>Message<textarea name="body" rows="10" required placeholder="Bonjour, suite à votre réponse à l\'enquête de voisinage…"></textarea></label>';
-    if ($next_event_title) {
-        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="include_event" value="1" checked> Inclure le prochain événement (<em>' . esc_html($next_event_title) . '</em>) avec bouton « Je participe »</label>';
+    echo '<label>Sujet<input type="text" name="sujet" required value="' . esc_attr($msg['sujet']) . '" placeholder="Ex : Réunion publique sur le logement le 26 juin"></label>';
+    echo '<label>Message<textarea name="body" rows="10" required>' . esc_textarea($msg['body']) . '</textarea></label>';
+    echo '<div class="lfi-app-help">Variables disponibles : <code>{{prenom}}</code>';
+    if ($mode === 'probleme') echo ' · <code>{{probleme}}</code> (texte complet) · <code>{{probleme_main}}</code> (principal)';
+    echo '</div>';
+    if ($mode === 'probleme') {
+        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="personalize" value="1" checked> Personnaliser pour chaque destinataire (insère son problème individuel à la place de <code>{{probleme}}</code>)</label>';
+    } else {
+        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="personalize" value="1"> Personnaliser par destinataire (insère leur problème individuel si <code>{{probleme}}</code> est dans le texte)</label>';
     }
-    echo '<div class="lfi-app-help">⚠️ Envoyé à <strong>' . $n . '</strong> personne(s). Seuls les répondant·es qui ont coché « j\'accepte d\'être recontacté·e » sont inclus·es (RGPD).</div>';
+    if ($event_post) {
+        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="include_event" value="1" ' . checked(in_array($mode, ['reunion','event','probleme'], true), true, false) . '> Inclure le bloc événement « ' . esc_html(get_the_title($event_post)) . ' » avec bouton « ✓ Je participe »</label>';
+    }
+    echo '<div class="lfi-app-help">⚠️ Envoyé à <strong>' . $n . '</strong> personne(s). Seuls celles ayant coché « j\'accepte d\'être recontacté·e » sont incluses (RGPD).</div>';
     echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Envoyer à ' . $n . ' répondant·es ?\');">📤 Envoyer maintenant</button>';
     echo '</form>';
 
