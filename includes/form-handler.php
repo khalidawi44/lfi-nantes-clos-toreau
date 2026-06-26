@@ -10,7 +10,9 @@ function lfi_nct_handle_submission() {
     $militant_user_id = $user->ID;
     $militant_login   = $user->ID ? $user->user_login : 'anonyme';
 
-    $adresse = sanitize_text_field($_POST['adresse'] ?? '');
+    $adresse_raw = sanitize_text_field($_POST['adresse'] ?? '');
+    /* Auto-correction orthographique des rues du Clos Toreau */
+    $adresse = function_exists('lfi_nct_normalize_address') ? lfi_nct_normalize_address($adresse_raw) : $adresse_raw;
     $etage   = sanitize_text_field($_POST['etage'] ?? '');
     if ($adresse === '' || $etage === '') {
         return "L'adresse et l'étage sont obligatoires.";
@@ -53,6 +55,25 @@ function lfi_nct_handle_submission() {
         } else {
             $data[$key] = sanitize_textarea_field($value);
         }
+    }
+    /* Apprend automatiquement un nouveau type de problème si « Autre » a été précisé */
+    if (function_exists('lfi_nct_learn_custom_problem')) {
+        $autre_label = trim((string) ($data['problemes_types_autre'] ?? ''));
+        $types_arr   = (array) ($data['problemes_types'] ?? []);
+        if ($autre_label !== '' && (in_array('autre', $types_arr, true) || empty($types_arr))) {
+            $new_slug = lfi_nct_learn_custom_problem($autre_label);
+            if ($new_slug) {
+                /* On l'ajoute aux types cochés et on retire le placeholder « autre » */
+                if (!in_array($new_slug, $types_arr, true)) $types_arr[] = $new_slug;
+                $types_arr = array_values(array_diff($types_arr, ['autre']));
+                $data['problemes_types']       = $types_arr;
+                $data['problemes_types_autre'] = '';
+            }
+        }
+    }
+    /* Trace si l'adresse a été corrigée */
+    if (isset($adresse_raw) && $adresse_raw !== $adresse) {
+        $data['adresse_brute'] = $adresse_raw;
     }
 
     global $wpdb;

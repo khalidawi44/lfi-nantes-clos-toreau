@@ -20,6 +20,200 @@ const LFI_NCT_ROLE_GA     = 'lfi_nct_ga_member';
 const LFI_NCT_ROLE_TENANT = 'lfi_nct_tenant';
 
 /* ============================================================== *
+ *  Rues canoniques du Clos Toreau + auto-correction orthographique *
+ * ============================================================== */
+
+/**
+ * Liste de rues du quartier (thème pays basque) que l'app suggère
+ * par défaut. La liste s'étoffe automatiquement avec les adresses
+ * déjà saisies dans les enquêtes (cf. lfi_nct_known_addresses()).
+ */
+function lfi_nct_clos_toreau_streets() {
+    $streets = [
+        "rue d'Ascain",
+        "rue de Biarritz",
+        "rue d'Hendaye",
+        "rue de Saint-Jean-de-Luz",
+        "place du Pays Basque",
+    ];
+    return apply_filters('lfi_nct_clos_toreau_streets', $streets);
+}
+
+/**
+ * Corrige les fautes d'orthographe connues sur une adresse
+ * et ré-applique une capitalisation propre.
+ */
+function lfi_nct_normalize_address($input) {
+    $input = trim((string) $input);
+    if ($input === '') return '';
+
+    /* 1) Mappe les fautes connues vers le nom propre canonique.
+          On capture aussi le « d' » ou « d » optionnel devant pour ne pas
+          le doubler ensuite. */
+    $corrections = [
+        // Saint-Jean-de-Luz et variantes (Luse / Luz / sans tirets)
+        '/\bsaint[- ]?jean[- ]?de[- ]?lu(?:se|z|s)\b/iu' => 'Saint-Jean-de-Luz',
+        '/\bst[- ]?jean[- ]?de[- ]?lu(?:se|z|s)\b/iu'    => 'Saint-Jean-de-Luz',
+        // Hendaye et variantes
+        "/\b(?:d['’\s])?dandaille?\b/iu"                  => "d'Hendaye",
+        "/\b(?:d['’\s])?endaille?\b/iu"                   => "d'Hendaye",
+        "/\b(?:d['’\s])?hendaille?\b/iu"                  => "d'Hendaye",
+        "/\b(?:d['’\s])?dendaye\b/iu"                     => "d'Hendaye",
+        // Ascain et variantes (Asquin)
+        "/\b(?:d['’\s])?asquin\b/iu"                      => "d'Ascain",
+        // Biarritz
+        '/\bbiarit(?:z|s)\b/iu'  => 'Biarritz',
+        '/\bbiarritze\b/iu'      => 'Biarritz',
+        '/\bbiarits\b/iu'        => 'Biarritz',
+        // Pays Basque
+        '/\bpays[- ]?basque\b/iu' => 'Pays Basque',
+    ];
+    foreach ($corrections as $pat => $rep) {
+        $input = preg_replace($pat, $rep, $input);
+    }
+
+    /* 2) Met les types de voie en minuscules */
+    $input = preg_replace_callback(
+        '/\b(rue|place|avenue|boulevard|impasse|all[ée]+e|chemin|passage|quai|square)\b/iu',
+        function ($m) { return mb_strtolower($m[1]); },
+        $input
+    );
+
+    /* 3) Title-case sur les noms propres canoniques (corrige les ALL CAPS) */
+    $proper_nouns = [
+        'Hendaye', 'Biarritz', 'Ascain', 'Saint-Jean-de-Luz',
+        'Bayonne', 'Pau', 'Dax', 'Anglet', 'Hasparren',
+        'Pays Basque', 'Pays-Basque',
+    ];
+    foreach ($proper_nouns as $name) {
+        $input = preg_replace('/\b' . preg_quote($name, '/') . '\b/iu', $name, $input);
+    }
+
+    /* 4) « D'HENDAYE », « d hendaye », « d ascain » → « d'Hendaye » / « d'Ascain »
+          - flag /i pour matcher quelle que soit la casse
+          - on lowercase la lettre d'élision, on uppercase la première du nom propre */
+    $input = preg_replace_callback(
+        "/\b([dlnst])[ '’]([a-zà-ÿ])/iu",
+        function ($m) { return mb_strtolower($m[1]) . "'" . mb_strtoupper($m[2]); },
+        $input
+    );
+
+    /* 5) Pour les rues qui devraient avoir « d' » mais où l'utilisateur a
+          tapé juste « rue Hendaye » : on injecte la liaison correcte. */
+    $input = preg_replace(
+        '/\brue\s+(Hendaye|Ascain|Anglet|Hasparren)\b/u',
+        "rue d'$1",
+        $input
+    );
+
+    /* 6) Espaces multiples → simple */
+    $input = preg_replace('/\s+/u', ' ', trim($input));
+
+    return $input;
+}
+
+/**
+ * Datalist combinant rues canoniques + adresses déjà saisies.
+ */
+function lfi_nct_streets_datalist($id = 'lfi-nct-known-streets') {
+    $items = [];
+    foreach (lfi_nct_clos_toreau_streets() as $s) $items[$s] = true;
+    if (function_exists('lfi_nct_known_addresses')) {
+        foreach (lfi_nct_known_addresses() as $a) $items[$a] = true;
+    }
+    $list = array_keys($items);
+    sort($list, SORT_NATURAL | SORT_FLAG_CASE);
+    $out = '<datalist id="' . esc_attr($id) . '">';
+    foreach ($list as $a) {
+        $out .= '<option value="' . esc_attr($a) . '">';
+    }
+    return $out . '</datalist>';
+}
+
+/* ============================================================== *
+ *  Types de problèmes : base + appris automatiquement              *
+ * ============================================================== */
+
+function lfi_nct_problem_types_base() {
+    return [
+        'degats_eaux'      => '💧 Dégâts des eaux / fuites',
+        'humidite'         => '🌫 Humidité / moisissures',
+        'insectes'         => '🐜 Nuisibles (cafards, rats, punaises)',
+        'chauffage'        => '🥶 Chauffage défaillant',
+        'electricite'      => '⚡ Électricité',
+        'ascenseur'        => '🛗 Ascenseur en panne',
+        'parties_communes' => '🚪 Parties communes dégradées',
+        'bruit'            => '🔊 Nuisances sonores',
+        'securite'         => '🚨 Insécurité',
+    ];
+}
+
+function lfi_nct_problem_types_custom() {
+    $opt = get_option('lfi_nct_custom_problem_labels', []);
+    return is_array($opt) ? $opt : [];
+}
+
+function lfi_nct_problem_types_all() {
+    return array_merge(lfi_nct_problem_types_base(), lfi_nct_problem_types_custom());
+}
+
+/**
+ * Slug stable pour une étiquette libre (clé de la checkbox).
+ */
+function lfi_nct_problem_slug($label) {
+    $label = trim($label);
+    if ($label === '') return '';
+    $slug = sanitize_title($label);
+    $slug = str_replace('-', '_', $slug);
+    if (strlen($slug) > 40) $slug = substr($slug, 0, 40);
+    return 'custom_' . $slug;
+}
+
+/**
+ * Ajoute (si nouvelle) une étiquette de problème personnalisée à
+ * l'option WordPress. Renvoie le slug attribué.
+ */
+function lfi_nct_learn_custom_problem($label) {
+    $label = trim((string) $label);
+    if ($label === '' || mb_strlen($label) > 80) return '';
+    /* Préfixe par un emoji neutre si l'utilisateur n'en a pas mis */
+    if (!preg_match('/^\p{So}|^\p{S}|^[^\w\s]/u', $label)) {
+        $display = '🏠 ' . ucfirst($label);
+    } else {
+        $display = $label;
+    }
+    $slug = lfi_nct_problem_slug($label);
+    if (!$slug) return '';
+
+    $custom = lfi_nct_problem_types_custom();
+    /* Ne pas dupliquer (même slug ou label identique en lowercase) */
+    foreach ($custom as $k => $existing) {
+        if ($k === $slug) return $k;
+        if (mb_strtolower(trim($existing)) === mb_strtolower($display)) return $k;
+    }
+    /* Idem : ne pas dupliquer un label déjà dans la base */
+    foreach (lfi_nct_problem_types_base() as $existing) {
+        if (mb_strtolower(trim($existing)) === mb_strtolower($display)) return null;
+    }
+    $custom[$slug] = $display;
+    update_option('lfi_nct_custom_problem_labels', $custom, false);
+    return $slug;
+}
+
+/**
+ * Supprime une étiquette personnalisée (utilitaire admin).
+ */
+function lfi_nct_forget_custom_problem($slug) {
+    $custom = lfi_nct_problem_types_custom();
+    if (isset($custom[$slug])) {
+        unset($custom[$slug]);
+        update_option('lfi_nct_custom_problem_labels', $custom, false);
+        return true;
+    }
+    return false;
+}
+
+/* ============================================================== *
  *  Création des rôles                                              *
  * ============================================================== */
 add_action('init', 'lfi_nct_setup_roles', 4);
@@ -1125,7 +1319,8 @@ function lfi_nct_app_view_temoignage_add() {
         $nom       = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
         $tel       = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
         $email     = sanitize_email(wp_unslash($_POST['email'] ?? ''));
-        $adresse   = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+        $adresse_raw = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+        $adresse   = lfi_nct_normalize_address($adresse_raw); // auto-correction orthographique
         $etage     = sanitize_text_field(wp_unslash($_POST['etage'] ?? ''));
         $arrivee   = (int) ($_POST['annee_arrivee'] ?? 0);
         $recontact = !empty($_POST['contact_recontact']) ? 1 : 0;
@@ -1133,6 +1328,20 @@ function lfi_nct_app_view_temoignage_add() {
         $problems_presence = !empty($_POST['problemes_types']) ? 'oui' : 'non';
         $types = array_map('sanitize_text_field', (array) ($_POST['problemes_types'] ?? []));
         $types_autre = sanitize_text_field(wp_unslash($_POST['problemes_types_autre'] ?? ''));
+
+        /* Apprend le nouveau problème pour les prochains formulaires */
+        if ($types_autre !== '' && (in_array('autre', $types, true) || !$types)) {
+            $new_slug = lfi_nct_learn_custom_problem($types_autre);
+            if ($new_slug) {
+                /* On l'ajoute aussi aux types cochés pour cette réponse */
+                $types[] = $new_slug;
+                /* On vide le champ texte libre puisqu'il devient une checkbox réutilisable */
+                $types_autre = '';
+                /* Et on retire le tag « autre » s'il y était */
+                $types = array_values(array_diff($types, ['autre']));
+            }
+        }
+
         $duree       = sanitize_text_field(wp_unslash($_POST['problemes_duree']     ?? ''));
         $recurrent   = sanitize_text_field(wp_unslash($_POST['problemes_recurrent'] ?? ''));
         $gravite     = (int) ($_POST['problemes_gravite'] ?? 0);
@@ -1145,6 +1354,7 @@ function lfi_nct_app_view_temoignage_add() {
             'saisi_par_admin'      => 1,
             'admin_user'           => wp_get_current_user()->user_login,
             'notes_admin'          => $notes,
+            'adresse_brute'        => $adresse_raw !== $adresse ? $adresse_raw : null,
             'problemes_presence'   => $problems_presence,
             'problemes_types'      => $types,
             'problemes_types_autre'=> $types_autre,
@@ -1172,6 +1382,7 @@ function lfi_nct_app_view_temoignage_add() {
             'contact_email'     => $email,
         ]);
         if ($ok) {
+            delete_transient('lfi_nct_known_addresses'); // refresh datalist
             wp_safe_redirect(lfi_nct_app_url('temoignage-add', ['added' => $wpdb->insert_id]));
             exit;
         }
@@ -1193,29 +1404,26 @@ function lfi_nct_app_view_temoignage_add() {
     echo '<label>Nom<input type="text" name="nom"></label>';
     echo '<label>Téléphone<input type="tel" name="tel" placeholder="06 12 34 56 78"></label>';
     echo '<label>Email<input type="email" name="email" placeholder="@"></label>';
-    echo '<label>Adresse / immeuble<input type="text" name="adresse" placeholder="Ex : 12 rue du Clos Toreau"></label>';
+
+    /* Adresse avec datalist (rues canoniques + déjà saisies) + auto-correction au save */
+    echo '<label>Adresse / immeuble<input type="text" name="adresse" list="lfi-nct-known-streets" autocomplete="off" placeholder="ex : 12 rue d\'Hendaye"></label>';
+    echo lfi_nct_streets_datalist('lfi-nct-known-streets');
+    echo '<div class="lfi-app-help"><small>💡 Tape pour voir les suggestions. L\'orthographe est corrigée automatiquement (ex : « Saint-Jean-de-Luse » → « Saint-Jean-de-Luz »).</small></div>';
+
     echo '<label>Étage<input type="text" name="etage"></label>';
     echo '<label>Année d\'arrivée dans le logement<input type="number" name="annee_arrivee" placeholder="ex : 2018" min="1950" max="' . date('Y') . '"></label>';
     echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="contact_recontact" value="1" checked> ✓ La personne accepte d\'être recontactée par le GA (RGPD)</label>';
 
     echo '<h3 style="margin:18px 0 0">🏠 Problèmes signalés</h3>';
-    $types_lab = [
-        'degats_eaux'      => '💧 Dégâts des eaux / fuites',
-        'humidite'         => '🌫 Humidité / moisissures',
-        'insectes'         => '🐜 Nuisibles (cafards, rats, punaises…)',
-        'chauffage'        => '🥶 Chauffage défaillant',
-        'electricite'      => '⚡ Électricité',
-        'ascenseur'        => '🛗 Ascenseur en panne',
-        'parties_communes' => '🚪 Parties communes dégradées',
-        'bruit'            => '🔊 Nuisances sonores',
-        'securite'         => '🚨 Insécurité',
-    ];
+    $types_lab = lfi_nct_problem_types_all();
+    $custom_keys = array_keys(lfi_nct_problem_types_custom());
     echo '<div class="lfi-checkbox-grid">';
     foreach ($types_lab as $k => $l) {
-        echo '<label class="lfi-app-checkbox-row" style="cursor:pointer"><input type="checkbox" name="problemes_types[]" value="' . esc_attr($k) . '"> <span>' . $l . '</span></label>';
+        $tag = in_array($k, $custom_keys, true) ? ' <small style="opacity:.6;font-weight:400">(appris)</small>' : '';
+        echo '<label class="lfi-app-checkbox-row" style="cursor:pointer"><input type="checkbox" name="problemes_types[]" value="' . esc_attr($k) . '"> <span>' . $l . $tag . '</span></label>';
     }
     echo '</div>';
-    echo '<label>Autre problème (texte libre)<input type="text" name="problemes_types_autre"></label>';
+    echo '<label>Autre problème (texte libre) — sera ajouté aux choix la prochaine fois<input type="text" name="problemes_types_autre" placeholder="Ex : « porte d\'entrée cassée »"></label>';
 
     echo '<label>Depuis combien de temps ?<select name="problemes_duree">';
     foreach (['' => '—', 'moins_1_mois'=>"< 1 mois", '1_6_mois'=>"1 à 6 mois", '6_12_mois'=>"6 à 12 mois", '1_5_ans'=>"> 1 an", 'plus_5_ans'=>"> 5 ans"] as $k => $l) {

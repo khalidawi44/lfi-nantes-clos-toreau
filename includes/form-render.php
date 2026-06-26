@@ -44,7 +44,8 @@ function lfi_nct_render_form() {
             <fieldset class="lfi-fieldset">
                 <legend class="lfi-legend">Lesquels ? (cochez tout ce qui s'applique)</legend>
                 <?php
-                $types = [
+                /* Types de base + ceux appris des saisies précédentes (cf. lfi_nct_learn_custom_problem) */
+                $types = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [
                     'degats_eaux'      => '💧 Dégâts des eaux / fuites / infiltrations',
                     'humidite'         => '🌫️ Humidité / moisissures',
                     'insectes'         => '🐜 Insectes / nuisibles (cafards, punaises, rats…)',
