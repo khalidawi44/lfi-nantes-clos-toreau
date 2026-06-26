@@ -274,7 +274,7 @@ function lfi_nct_app_head_meta() {
 }
 
 /* ============================================================== *
- *  Shortcode [lfi_nct_app] — coquille de la PWA                   *
+ *  Shortcode [lfi_nct_app] — coquille de la PWA + router          *
  * ============================================================== */
 add_shortcode('lfi_nct_app', 'lfi_nct_app_shortcode');
 function lfi_nct_app_shortcode() {
@@ -282,14 +282,71 @@ function lfi_nct_app_shortcode() {
 
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
+    } elseif (!current_user_can('manage_options')) {
+        echo '<div class="lfi-app"><div class="lfi-app-error">Console réservée aux admins du GA. <a href="' . esc_url(wp_logout_url(home_url('/app/'))) . '">Se déconnecter</a>.</div></div>';
     } else {
-        lfi_nct_app_render_dashboard();
+        $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+        switch ($vue) {
+            case 'reunion':    lfi_nct_app_view_reunion();    break;
+            case 'membres':    lfi_nct_app_view_membres();    break;
+            case 'evenements': lfi_nct_app_view_evenements(); break;
+            case 'sms':        lfi_nct_app_view_sms();        break;
+            case 'email':      lfi_nct_app_view_email();      break;
+            case 'enquetes':   lfi_nct_app_view_enquetes();   break;
+            case 'stats':      lfi_nct_app_view_stats();      break;
+            case 'cache':      lfi_nct_app_view_cache();      break;
+            default:           lfi_nct_app_render_dashboard();
+        }
     }
 
     lfi_nct_app_render_styles();
     lfi_nct_app_render_register_sw();
 
     return ob_get_clean();
+}
+
+/* Helpers réutilisés par les écrans natifs */
+function lfi_nct_app_url($vue = '', $extra = []) {
+    $base = home_url('/' . LFI_NCT_APP_SLUG . '/');
+    $args = [];
+    if ($vue) $args['vue'] = $vue;
+    if ($extra) $args = array_merge($args, $extra);
+    return $args ? add_query_arg($args, $base) : $base;
+}
+
+function lfi_nct_app_screen_open($title, $subtitle = '') {
+    ?>
+    <div class="lfi-app lfi-app-screen">
+        <div class="lfi-app-navbar">
+            <a class="lfi-app-back" href="<?php echo esc_url(lfi_nct_app_url()); ?>" aria-label="Retour à l'accueil">←</a>
+            <div class="lfi-app-screen-title">
+                <div class="t"><?php echo esc_html($title); ?></div>
+                <?php if ($subtitle): ?><div class="s"><?php echo esc_html($subtitle); ?></div><?php endif; ?>
+            </div>
+            <a class="lfi-app-home" href="<?php echo esc_url(lfi_nct_app_url()); ?>" aria-label="Accueil">⌂</a>
+        </div>
+        <div class="lfi-app-screen-body">
+    <?php
+}
+
+function lfi_nct_app_screen_close($more_tiles = true) {
+    if ($more_tiles) {
+        $tiles = lfi_nct_admin_get_tiles();
+        echo '<div class="lfi-app-other-shortcuts"><div class="lab">Aller à un autre écran</div><div class="row">';
+        foreach ($tiles as $t) {
+            if (strpos($t[3], '/app/?vue=') === false && strpos($t[3], 'lfi-nct') === false) continue;
+            $vue_url = $t[3];
+            if (strpos($vue_url, lfi_nct_app_url()) !== 0 && strpos($vue_url, '?vue=') === false) continue;
+            echo '<a class="chip" href="' . esc_url($vue_url) . '">' . $t[0] . ' ' . esc_html($t[1]) . '</a>';
+        }
+        echo '</div></div>';
+    }
+    echo '</div></div>';
+}
+
+function lfi_nct_app_flash($msg, $type = 'ok') {
+    $class = $type === 'ok' ? 'lfi-app-flash ok' : 'lfi-app-flash err';
+    echo '<div class="' . esc_attr($class) . '">' . esc_html($msg) . '</div>';
 }
 
 function lfi_nct_app_render_login() {
@@ -488,6 +545,140 @@ function lfi_nct_app_render_styles() {
         body.page-app .ag-asso-header, body.page-app .ag-asso-footer { display: none !important; }
         body.page-app { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
     }
+
+    /* =============== ÉCRANS NATIFS =============== */
+    .lfi-app-screen { padding-top: 0 !important; padding-bottom: 80px; }
+
+    .lfi-app-navbar {
+        position: sticky; top: 0; z-index: 50;
+        display: flex; align-items: center; gap: 8px;
+        background: linear-gradient(180deg, #c8102e, #a30b25); color: #fff;
+        padding: 12px 14px; margin: -14px -14px 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    .lfi-app-back, .lfi-app-home {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 42px; height: 42px; padding: 0 10px;
+        background: rgba(255,255,255,.18); color: #fff;
+        border-radius: 10px; text-decoration: none; font-size: 1.3em; font-weight: 700;
+    }
+    .lfi-app-back:active, .lfi-app-home:active { background: rgba(255,255,255,.3); }
+    .lfi-app-screen-title { flex: 1; min-width: 0; }
+    .lfi-app-screen-title .t { font-weight: 700; font-size: 1.05em; line-height: 1.2; }
+    .lfi-app-screen-title .s { font-size: .78em; opacity: .9; margin-top: 2px; line-height: 1.2; }
+
+    .lfi-app-screen-body { padding-bottom: 12px; }
+
+    .lfi-app-flash {
+        padding: 12px 14px; border-radius: 10px; margin: 0 0 12px;
+        font-size: .92em;
+    }
+    .lfi-app-flash.ok  { background: #e7f5ee; border: 1px solid #b6e2c8; color: #186a3b; }
+    .lfi-app-flash.err { background: #fff3f5; border: 1px solid #f5b5c0; color: #a30b25; }
+
+    .lfi-app-empty {
+        text-align: center; padding: 40px 20px; color: #777;
+        background: #fff; border-radius: 14px; border: 1px dashed #ddd;
+    }
+
+    .lfi-app-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .lfi-app-card {
+        background: #fff; border-radius: 14px; padding: 14px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .lfi-app-card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+    .lfi-app-card .who { font-weight: 700; font-size: 1em; color: #1a1a1a; }
+    .lfi-app-card .when { font-size: .8em; color: #888; flex-shrink: 0; }
+    .lfi-app-card .badge {
+        background: #f0eaff; color: #5a3eb0; padding: 2px 8px;
+        border-radius: 999px; font-size: .72em; font-weight: 600;
+    }
+    .lfi-app-card .meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+    .meta-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: #f5f5f5; color: #444;
+        padding: 6px 10px; border-radius: 8px; font-size: .82em;
+        text-decoration: none;
+    }
+    .meta-chip:hover { background: #e9e9e9; color: #1a1a1a; }
+    .meta-chip.nb { background: #fff3f5; color: #c8102e; font-weight: 700; }
+    .meta-chip.act { background: #c8102e; color: #fff; font-weight: 700; }
+    .meta-chip.act:hover { background: #a30b25; color: #fff; }
+    .lfi-app-card .com { font-style: italic; color: #555; margin: 8px 0; padding-left: 10px; border-left: 3px solid #c8102e; font-size: .9em; }
+
+    .lfi-app-card .row-actions, .lfi-app-card form.row-actions { margin: 8px 0 0; display: flex; gap: 6px; flex-wrap: wrap; }
+    .btn-del {
+        background: transparent; color: #c8102e; border: 1px solid #f5b5c0;
+        padding: 8px 12px; border-radius: 8px; font-size: .82em; cursor: pointer;
+        font-family: inherit;
+    }
+    .btn-del:active { background: #fff3f5; }
+    .btn-primary {
+        background: #c8102e; color: #fff; border: none;
+        padding: 12px 16px; border-radius: 10px; font-size: .95em; font-weight: 700;
+        cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+        font-family: inherit;
+    }
+    .btn-primary.big { padding: 16px 20px; font-size: 1.05em; width: 100%; }
+    .btn-primary:active { background: #a30b25; }
+    .btn-ghost {
+        background: #fff; color: #c8102e; border: 1.5px solid #c8102e;
+        padding: 10px 14px; border-radius: 10px; font-size: .9em; font-weight: 700;
+        cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+        font-family: inherit;
+    }
+    .btn-ghost:active { background: #fff3f5; }
+
+    /* Forms */
+    .lfi-app-form { display: flex; flex-direction: column; gap: 12px; background: #fff; border-radius: 14px; padding: 16px; margin: 0 0 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .lfi-app-form label { display: flex; flex-direction: column; gap: 4px; font-size: .85em; color: #555; }
+    .lfi-app-form input[type=text], .lfi-app-form input[type=email], .lfi-app-form input[type=tel],
+    .lfi-app-form input[type=search], .lfi-app-form select, .lfi-app-form textarea {
+        padding: 12px 12px; border: 1.5px solid #ddd; border-radius: 10px; font-size: 1em;
+        background: #fafafa; font-family: inherit;
+    }
+    .lfi-app-form input:focus, .lfi-app-form select:focus, .lfi-app-form textarea:focus {
+        outline: none; border-color: #c8102e; background: #fff;
+    }
+    .lfi-app-form textarea { resize: vertical; min-height: 100px; }
+    .lfi-app-help { font-size: .85em; color: #666; padding: 8px 10px; background: #fff8e6; border-left: 3px solid #ffd400; border-radius: 6px; }
+
+    .lfi-app-searchbar { display: flex; gap: 6px; margin: 0 0 14px; }
+    .lfi-app-searchbar input { flex: 1; padding: 12px; border: 1.5px solid #ddd; border-radius: 10px; font-size: 1em; }
+    .lfi-app-searchbar button, .lfi-app-searchbar .clear {
+        padding: 0 14px; background: #c8102e; color: #fff; border: none;
+        border-radius: 10px; font-size: 1.1em; cursor: pointer; text-decoration: none;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .lfi-app-searchbar .clear { background: #ddd; color: #555; }
+
+    .lfi-app-collapse { background: #fff; border-radius: 14px; margin: 0 0 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+    .lfi-app-collapse summary { padding: 14px 16px; font-weight: 700; color: #c8102e; cursor: pointer; user-select: none; }
+    .lfi-app-collapse[open] summary { border-bottom: 1px solid #eee; }
+    .lfi-app-collapse .lfi-app-form { margin: 0; box-shadow: none; }
+
+    .sms-preview .sms-body {
+        width: 100%; min-height: 130px; padding: 12px; border: 1px solid #ddd;
+        border-radius: 10px; background: #f8f8f8; font-size: .95em;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        margin: 8px 0;
+    }
+
+    .lfi-app-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    .lfi-app-stats-grid .stat { background: #fff; border-radius: 14px; padding: 18px 10px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .lfi-app-stats-grid .ico { font-size: 1.8em; }
+    .lfi-app-stats-grid .n { font-size: 2em; font-weight: 800; color: #c8102e; line-height: 1.1; margin: 4px 0; }
+    .lfi-app-stats-grid .l { font-size: .8em; color: #777; }
+
+    .lfi-app-other-shortcuts { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid #eee; }
+    .lfi-app-other-shortcuts .lab { font-size: .8em; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+    .lfi-app-other-shortcuts .row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .lfi-app-other-shortcuts .chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 8px 12px; background: #fff; border: 1px solid #ddd;
+        border-radius: 999px; text-decoration: none; color: #444; font-size: .82em;
+    }
+    .lfi-app-other-shortcuts .chip:active { background: #f5f5f5; }
     </style>
     <?php
 }
@@ -518,17 +709,17 @@ function lfi_nct_app_render_register_sw() {
 function lfi_nct_admin_get_tiles($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
     return [
-        ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', admin_url('admin.php?page=lfi-nct-reunion-rsvp')],
-        ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     admin_url('admin.php?page=lfi-nct-responses')],
-        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   admin_url('admin.php?page=lfi-nct-event-rsvp')],
-        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    admin_url('admin.php?page=lfi-nct-membres')],
-        ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    admin_url('admin.php?page=lfi-nct-sms')],
-        ['✉️', 'Email blast',               'Campagne mail',                       admin_url('admin.php?page=lfi-nct-email')],
-        ['📊', 'Statistiques',              'Vue d\'ensemble',                     admin_url('admin.php?page=lfi-nct-stats')],
-        ['📰', 'Articles',                  'Actus du GA',                         admin_url('edit.php')],
-        ['📍', 'Carte / RDV',               'Demandes en cours',                   admin_url('admin.php?page=lfi-nct-rdv')],
-        ['🔥', 'Purger le cache',           'Forcer la maj',                       admin_url('admin.php?page=lfi-nct-maintenance')],
-        ['📝', 'Pages',                     'Édition rapide',                      admin_url('edit.php?post_type=page')],
+        ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
+        ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
+        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
+        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+        ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    lfi_nct_app_url('sms')],
+        ['✉️', 'Email blast',               'Campagne mail',                       lfi_nct_app_url('email')],
+        ['📊', 'Statistiques',              'Vue d\'ensemble',                     lfi_nct_app_url('stats')],
+        ['🔥', 'Purger le cache',           'Forcer la maj',                       lfi_nct_app_url('cache')],
+        ['📰', 'Articles',                  'Édition WP',                          admin_url('edit.php')],
+        ['📝', 'Pages',                     'Édition WP',                          admin_url('edit.php?post_type=page')],
+        ['📍', 'Carte / RDV',               'Demandes',                            admin_url('admin.php?page=lfi-nct-rdv')],
         ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/'))],
     ];
 }
@@ -656,4 +847,426 @@ function lfi_nct_admin_homepage_strip() {
     })();
     </script>
     <?php
+}
+
+/* ============================================================== *
+ *  ÉCRANS NATIFS                                                  *
+ *                                                                  *
+ *  Chacun fait son SQL en direct + rend du HTML mobile-friendly.  *
+ *  Le bouton Accueil du navbar ramène à /app/.                    *
+ * ============================================================== */
+
+/* ---------- 📣 Inscrits réunion 26 juin ---------- */
+function lfi_nct_app_view_reunion() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_reunion_rsvp';
+
+    if (!empty($_POST['lfi_app_del']) && check_admin_referer('lfi_app_reunion_del')) {
+        $wpdb->delete($table, ['id' => (int) $_POST['lfi_app_del']]);
+        wp_safe_redirect(lfi_nct_app_url('reunion', ['deleted' => 1]));
+        exit;
+    }
+
+    $rows  = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 200") ?: [];
+    $total = count($rows);
+    $pers  = (int) $wpdb->get_var("SELECT COALESCE(SUM(avec_qui),0) FROM $table");
+
+    lfi_nct_app_screen_open('📣 Réunion 26 juin', $total . ' inscription(s) · ' . $pers . ' personne(s) annoncée(s)');
+
+    if (!empty($_GET['deleted'])) lfi_nct_app_flash('Inscription supprimée.');
+
+    if (empty($rows)) {
+        echo '<div class="lfi-app-empty">Aucune inscription pour l\'instant.<br><small>Partage le tract pour faire venir du monde.</small></div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($rows as $r) {
+            $name = trim($r->prenom . ' ' . $r->nom) ?: '(anonyme)';
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($name) . '</div><div class="when">' . esc_html(wp_date('j M H:i', strtotime($r->created_at))) . '</div></div>';
+            echo '<div class="meta">';
+            if (!empty($r->tel))   echo '<a class="meta-chip" href="tel:' . esc_attr($r->tel) . '">📞 ' . esc_html($r->tel) . '</a>';
+            if (!empty($r->email)) echo '<a class="meta-chip" href="mailto:' . esc_attr($r->email) . '">✉️ ' . esc_html($r->email) . '</a>';
+            echo '<span class="meta-chip nb">👥 ' . (int) $r->avec_qui . '</span>';
+            echo '</div>';
+            if (!empty($r->commentaire)) {
+                echo '<div class="com">« ' . esc_html($r->commentaire) . ' »</div>';
+            }
+            echo '<form method="post" class="row-actions" onsubmit="return confirm(\'Supprimer ' . esc_js($name) . ' ?\');">';
+            wp_nonce_field('lfi_app_reunion_del');
+            echo '<input type="hidden" name="lfi_app_del" value="' . (int) $r->id . '">';
+            echo '<button type="submit" class="btn-del">🗑 Supprimer</button>';
+            echo '</form>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 👥 Adhérents ---------- */
+function lfi_nct_app_view_membres() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_membres';
+
+    // Ajout
+    if (!empty($_POST['lfi_app_add']) && check_admin_referer('lfi_app_membre_add')) {
+        $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
+        $nom    = sanitize_text_field(wp_unslash($_POST['nom']    ?? ''));
+        $email  = sanitize_email(wp_unslash($_POST['email']       ?? ''));
+        $tel    = sanitize_text_field(wp_unslash($_POST['tel']    ?? ''));
+        $statut = sanitize_text_field(wp_unslash($_POST['statut'] ?? 'membre'));
+        if ($prenom || $email || $tel) {
+            $wpdb->insert($table, [
+                'statut' => $statut, 'prenom' => $prenom, 'nom' => $nom,
+                'email' => $email, 'tel' => $tel,
+                'abonne_emails' => 1, 'source' => 'app',
+                'unsubscribe_token' => function_exists('lfi_nct_make_unsub_token') ? lfi_nct_make_unsub_token() : bin2hex(random_bytes(20)),
+                'membre_depuis' => current_time('mysql'),
+            ]);
+            wp_safe_redirect(lfi_nct_app_url('membres', ['added' => 1]));
+            exit;
+        }
+    }
+    // Suppression
+    if (!empty($_POST['lfi_app_del']) && check_admin_referer('lfi_app_membre_del')) {
+        $wpdb->delete($table, ['id' => (int) $_POST['lfi_app_del']]);
+        wp_safe_redirect(lfi_nct_app_url('membres', ['deleted' => 1]));
+        exit;
+    }
+
+    $q = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
+    if ($q) {
+        $like = '%' . $wpdb->esc_like($q) . '%';
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE prenom LIKE %s OR nom LIKE %s OR email LIKE %s OR tel LIKE %s ORDER BY created_at DESC LIMIT 200",
+            $like, $like, $like, $like
+        )) ?: [];
+    } else {
+        $rows = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 200") ?: [];
+    }
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+
+    lfi_nct_app_screen_open('👥 Adhérents', $total . ' adhérent(s) au total');
+
+    if (!empty($_GET['added']))   lfi_nct_app_flash('Adhérent ajouté.');
+    if (!empty($_GET['deleted'])) lfi_nct_app_flash('Adhérent supprimé.');
+
+    echo '<form method="get" class="lfi-app-searchbar">';
+    echo '<input type="hidden" name="vue" value="membres">';
+    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Recherche prénom, nom, email, tél…">';
+    echo '<button type="submit">🔍</button>';
+    if ($q) echo '<a class="clear" href="' . esc_url(lfi_nct_app_url('membres')) . '">×</a>';
+    echo '</form>';
+
+    echo '<details class="lfi-app-collapse"><summary>+ Ajouter un adhérent</summary>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_membre_add');
+    echo '<input type="hidden" name="lfi_app_add" value="1">';
+    echo '<label>Prénom<input type="text" name="prenom" required></label>';
+    echo '<label>Nom<input type="text" name="nom"></label>';
+    echo '<label>Email<input type="email" name="email" placeholder="exemple@email.fr"></label>';
+    echo '<label>Téléphone<input type="tel" name="tel" placeholder="06 12 34 56 78"></label>';
+    echo '<label>Statut<select name="statut"><option value="membre">Membre</option><option value="sympathisant">Sympathisant</option><option value="contact">Contact</option></select></label>';
+    echo '<button type="submit" class="btn-primary">✓ Ajouter</button>';
+    echo '</form></details>';
+
+    if (empty($rows)) {
+        echo '<div class="lfi-app-empty">' . ($q ? 'Aucun résultat pour « ' . esc_html($q) . ' ».' : 'Aucun adhérent.') . '</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($rows as $r) {
+            $name = trim($r->prenom . ' ' . $r->nom) ?: ($r->pseudo ?: '(sans nom)');
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($name) . '</div>';
+            if (!empty($r->statut)) echo '<div class="badge">' . esc_html($r->statut) . '</div>';
+            echo '</div>';
+            echo '<div class="meta">';
+            if (!empty($r->tel))   echo '<a class="meta-chip" href="tel:' . esc_attr($r->tel) . '">📞 ' . esc_html($r->tel) . '</a>';
+            if (!empty($r->email)) echo '<a class="meta-chip" href="mailto:' . esc_attr($r->email) . '">✉️ ' . esc_html($r->email) . '</a>';
+            if (!empty($r->tel)) {
+                echo '<a class="meta-chip act" href="' . esc_url(lfi_nct_app_url('sms', ['membre' => $r->id])) . '">📱 SMS</a>';
+            }
+            echo '</div>';
+            echo '<form method="post" class="row-actions" onsubmit="return confirm(\'Supprimer ' . esc_js($name) . ' ?\');">';
+            wp_nonce_field('lfi_app_membre_del');
+            echo '<input type="hidden" name="lfi_app_del" value="' . (int) $r->id . '">';
+            echo '<button type="submit" class="btn-del">🗑 Supprimer</button>';
+            echo '</form>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 📅 Événements ---------- */
+function lfi_nct_app_view_evenements() {
+    $cpts = [];
+    if (post_type_exists('ag_evenement'))  $cpts[] = 'ag_evenement';
+    if (post_type_exists('lfi_evenement')) $cpts[] = 'lfi_evenement';
+    if (empty($cpts)) {
+        lfi_nct_app_screen_open('📅 Événements');
+        echo '<div class="lfi-app-empty">CPT événement absent.</div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+    $events = get_posts(['post_type' => $cpts, 'post_status' => 'publish', 'posts_per_page' => 100, 'orderby' => 'meta_value', 'meta_key' => '_ag_event_date', 'order' => 'ASC']);
+    $total = count($events);
+    lfi_nct_app_screen_open('📅 Événements', $total . ' événement(s)');
+
+    if (empty($events)) {
+        echo '<div class="lfi-app-empty">Aucun événement.</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($events as $p) {
+            $date  = get_post_meta($p->ID, '_ag_event_date', true) ?: get_post_meta($p->ID, '_lfi_evt_date_debut', true);
+            $time  = get_post_meta($p->ID, '_ag_event_time', true);
+            $place = get_post_meta($p->ID, '_ag_event_place', true);
+            $city  = get_post_meta($p->ID, '_ag_event_city',  true);
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html(get_the_title($p)) . '</div></div>';
+            echo '<div class="meta">';
+            if ($date)  echo '<span class="meta-chip">🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</span>';
+            if ($place) echo '<span class="meta-chip">📍 ' . esc_html($place) . ($city ? ', ' . esc_html($city) : '') . '</span>';
+            echo '</div>';
+            echo '<div class="row-actions">';
+            echo '<a class="btn-primary" href="' . esc_url(get_permalink($p)) . '" target="_blank">🔗 Page publique</a>';
+            echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 📱 Envoyer SMS ---------- */
+function lfi_nct_app_view_sms() {
+    global $wpdb;
+    $mem  = $wpdb->prefix . 'lfi_nct_membres';
+    $tpl  = $wpdb->prefix . 'lfi_nct_sms_templates';
+    $logt = $wpdb->prefix . 'lfi_nct_sms_log';
+
+    // Log d'envoi
+    if (!empty($_POST['lfi_app_sms_sent']) && check_admin_referer('lfi_app_sms_sent')) {
+        $wpdb->insert($logt, [
+            'template_id' => ((int) ($_POST['tpl_id'] ?? 0)) ?: null,
+            'membre_id'   => ((int) ($_POST['membre_id'] ?? 0)) ?: null,
+            'tel'         => sanitize_text_field(wp_unslash($_POST['tel']  ?? '')),
+            'body_sent'   => sanitize_textarea_field(wp_unslash($_POST['body'] ?? '')),
+            'sent_by'     => get_current_user_id(),
+        ]);
+        wp_safe_redirect(lfi_nct_app_url('sms', ['logged' => 1, 'tpl' => (int) $_POST['tpl_id'], 'membre' => (int) $_POST['membre_id']]));
+        exit;
+    }
+
+    $membre_id = isset($_GET['membre']) ? (int) $_GET['membre'] : 0;
+    $tpl_id    = isset($_GET['tpl'])    ? (int) $_GET['tpl']    : 0;
+    $membre = $membre_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $mem WHERE id = %d", $membre_id)) : null;
+    $tpl_row = $tpl_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tpl WHERE id = %d", $tpl_id)) : null;
+
+    $event_id = isset($_GET['event']) ? (int) $_GET['event'] : 0;
+    if (!$event_id && function_exists('lfi_nct_sms_upcoming_events')) {
+        $upc = lfi_nct_sms_upcoming_events(1);
+        if ($upc) $event_id = $upc[0]->ID;
+    }
+    $event_post = $event_id ? get_post($event_id) : null;
+    $event_vars = function_exists('lfi_nct_sms_event_vars') ? lfi_nct_sms_event_vars($event_post) : [];
+
+    $body = '';
+    if ($tpl_row && $membre && function_exists('lfi_nct_sms_render')) {
+        $body = lfi_nct_sms_render($tpl_row->body, $membre, $event_vars);
+    } elseif ($tpl_row) {
+        $body = $tpl_row->body;
+    }
+
+    $templates = $wpdb->get_results("SELECT * FROM $tpl ORDER BY categorie, nom") ?: [];
+    $membres   = $wpdb->get_results("SELECT id, prenom, nom, tel FROM $mem WHERE tel <> '' ORDER BY prenom, nom LIMIT 300") ?: [];
+
+    lfi_nct_app_screen_open('📱 Envoyer un SMS', 'Choisis un membre + un modèle, puis ouvre ton appli SMS');
+
+    if (!empty($_GET['logged'])) lfi_nct_app_flash('SMS noté comme envoyé. 👍');
+
+    echo '<form method="get" class="lfi-app-form">';
+    echo '<input type="hidden" name="vue" value="sms">';
+
+    echo '<label>👤 Destinataire<select name="membre" onchange="this.form.submit()">';
+    echo '<option value="">— choisir un membre —</option>';
+    foreach ($membres as $m) {
+        $lbl = trim($m->prenom . ' ' . $m->nom) . ' — ' . $m->tel;
+        echo '<option value="' . (int) $m->id . '" ' . selected($membre_id, $m->id, false) . '>' . esc_html($lbl) . '</option>';
+    }
+    echo '</select></label>';
+
+    echo '<label>💬 Modèle<select name="tpl" onchange="this.form.submit()">';
+    echo '<option value="">— choisir un modèle —</option>';
+    foreach ($templates as $t) {
+        echo '<option value="' . (int) $t->id . '" ' . selected($tpl_id, $t->id, false) . '>' . esc_html($t->nom) . '</option>';
+    }
+    echo '</select></label>';
+
+    if ($event_post) {
+        echo '<div class="lfi-app-help">📅 Événement lié : <strong>' . esc_html(get_the_title($event_post)) . '</strong></div>';
+    }
+    echo '</form>';
+
+    if ($membre && $body) {
+        $sms_url = 'sms:' . preg_replace('/[^\d+]/', '', $membre->tel) . '?body=' . rawurlencode($body);
+        echo '<div class="lfi-app-card sms-preview">';
+        echo '<div class="head"><div class="who">📱 ' . esc_html(trim($membre->prenom . ' ' . $membre->nom)) . '</div><div class="badge">' . esc_html($membre->tel) . '</div></div>';
+        echo '<textarea readonly rows="6" class="sms-body" id="lfi-sms-body">' . esc_textarea($body) . '</textarea>';
+        echo '<div class="lfi-app-help"><small>' . strlen($body) . ' caractères</small></div>';
+        echo '<div class="row-actions">';
+        echo '<a class="btn-primary big" href="' . esc_url($sms_url) . '">📲 Ouvrir mon SMS</a>';
+        echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'lfi-sms-body\').value);this.textContent=\'✓ Copié\';">📋 Copier</button>';
+        echo '</div>';
+        echo '<form method="post" class="row-actions">';
+        wp_nonce_field('lfi_app_sms_sent');
+        echo '<input type="hidden" name="lfi_app_sms_sent" value="1">';
+        echo '<input type="hidden" name="tpl_id"    value="' . (int) $tpl_id . '">';
+        echo '<input type="hidden" name="membre_id" value="' . (int) $membre_id . '">';
+        echo '<input type="hidden" name="tel"  value="' . esc_attr($membre->tel) . '">';
+        echo '<input type="hidden" name="body" value="' . esc_attr($body) . '">';
+        echo '<button type="submit" class="btn-ghost">✅ Marquer comme envoyé</button>';
+        echo '</form>';
+        echo '</div>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- ✉️ Email blast ---------- */
+function lfi_nct_app_view_email() {
+    global $wpdb;
+    $mem = $wpdb->prefix . 'lfi_nct_membres';
+
+    if (!empty($_POST['lfi_app_email_send']) && check_admin_referer('lfi_app_email_send')) {
+        $sujet = sanitize_text_field(wp_unslash($_POST['sujet'] ?? ''));
+        $body  = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
+        if ($sujet && $body) {
+            $recipients = $wpdb->get_results(
+                "SELECT id, prenom, email, unsubscribe_token FROM $mem
+                 WHERE email <> '' AND abonne_emails = 1 AND jetable = 0"
+            ) ?: [];
+            $sent = 0; $errs = 0;
+            add_filter('wp_mail_content_type', '__return_html');
+            add_filter('wp_mail_from_name', function() { return 'LFI Nantes Sud Clos Toreau'; });
+            foreach ($recipients as $r) {
+                if (!is_email($r->email)) { $errs++; continue; }
+                $html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">'
+                      . '<p>Bonjour ' . esc_html($r->prenom ?: '') . ',</p>'
+                      . wpautop($body)
+                      . '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">'
+                      . '<p style="font-size:.85em;color:#777">Groupe d\'Action LFI Nantes Sud Clos Toreau</p>'
+                      . '</div>';
+                if (wp_mail($r->email, $sujet, $html)) $sent++; else $errs++;
+            }
+            remove_all_filters('wp_mail_content_type');
+            remove_all_filters('wp_mail_from_name');
+            wp_safe_redirect(lfi_nct_app_url('email', ['sent' => $sent, 'errs' => $errs]));
+            exit;
+        }
+    }
+
+    $abonnes = (int) $wpdb->get_var("SELECT COUNT(*) FROM $mem WHERE email <> '' AND abonne_emails = 1 AND jetable = 0");
+
+    lfi_nct_app_screen_open('✉️ Email à tous', $abonnes . ' destinataire(s) abonné(s)');
+
+    if (isset($_GET['sent'])) {
+        $s = (int) $_GET['sent']; $e = (int) ($_GET['errs'] ?? 0);
+        lfi_nct_app_flash("✅ {$s} envoyé(s)" . ($e ? " · ⚠️ {$e} échec(s)" : ''));
+    }
+
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_email_send');
+    echo '<input type="hidden" name="lfi_app_email_send" value="1">';
+    echo '<label>Sujet<input type="text" name="sujet" required placeholder="Objet de l\'email"></label>';
+    echo '<label>Message<textarea name="body" rows="10" required placeholder="Écris ton message — HTML simple OK (les sauts de ligne deviennent des paragraphes)"></textarea></label>';
+    echo '<div class="lfi-app-help">⚠️ Sera envoyé à <strong>' . $abonnes . '</strong> personne(s). Action immédiate, pas de brouillon.</div>';
+    echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Envoyer maintenant à ' . $abonnes . ' destinataire(s) ?\');">📤 Envoyer maintenant</button>';
+    echo '</form>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 🏠 Enquêtes logement ---------- */
+function lfi_nct_app_view_enquetes() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $rows = $wpdb->get_results("SELECT id, submitted_at, prenom, nom, tel, email, batiment, escalier, etage, porte FROM $table ORDER BY submitted_at DESC LIMIT 200") ?: [];
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+
+    lfi_nct_app_screen_open('🏠 Enquêtes logement', $total . ' réponse(s) totales');
+
+    if (empty($rows)) {
+        echo '<div class="lfi-app-empty">Aucune réponse pour l\'instant.</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($rows as $r) {
+            $name = trim($r->prenom . ' ' . $r->nom) ?: '(anonyme)';
+            $adr = array_filter([
+                $r->batiment ? 'Bât ' . $r->batiment : '',
+                $r->escalier ? 'Esc ' . $r->escalier : '',
+                $r->etage    ? 'Ét '  . $r->etage    : '',
+                $r->porte    ? 'Pt '  . $r->porte    : '',
+            ]);
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($name) . '</div><div class="when">' . esc_html(wp_date('j M', strtotime($r->submitted_at))) . '</div></div>';
+            if ($adr) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html(implode(' · ', $adr)) . '</span></div>';
+            echo '<div class="meta">';
+            if (!empty($r->tel))   echo '<a class="meta-chip" href="tel:' . esc_attr($r->tel) . '">📞 ' . esc_html($r->tel) . '</a>';
+            if (!empty($r->email)) echo '<a class="meta-chip" href="mailto:' . esc_attr($r->email) . '">✉️ ' . esc_html($r->email) . '</a>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 📊 Statistiques ---------- */
+function lfi_nct_app_view_stats() {
+    global $wpdb;
+    $s = lfi_nct_app_quick_stats();
+    $sms_sent   = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_sms_log");
+    $emails_sent = (int) $wpdb->get_var("SELECT COALESCE(SUM(recipients_count),0) FROM {$wpdb->prefix}lfi_nct_email_campaigns");
+    $cards = [
+        ['📣', $s['reunion'], 'Inscrits 26 juin'],
+        ['🏠', $s['surveys'], 'Enquêtes logement'],
+        ['📅', $s['events'],  'Événements'],
+        ['👥', $s['membres'], 'Adhérents'],
+        ['📱', $sms_sent,     'SMS envoyés (logs)'],
+        ['✉️', $emails_sent,  'Emails envoyés'],
+    ];
+    lfi_nct_app_screen_open('📊 Statistiques', 'État du GA en chiffres');
+    echo '<div class="lfi-app-stats-grid">';
+    foreach ($cards as $c) {
+        echo '<div class="stat"><div class="ico">' . $c[0] . '</div><div class="n">' . (int) $c[1] . '</div><div class="l">' . esc_html($c[2]) . '</div></div>';
+    }
+    echo '</div>';
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 🔥 Purger le cache ---------- */
+function lfi_nct_app_view_cache() {
+    if (!empty($_POST['lfi_app_cache_purge']) && check_admin_referer('lfi_app_cache_purge')) {
+        do_action('litespeed_purge_all');
+        if (function_exists('wp_cache_flush'))      wp_cache_flush();
+        if (function_exists('opcache_reset'))       opcache_reset();
+        if (function_exists('w3tc_flush_all'))      w3tc_flush_all();
+        if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+        wp_safe_redirect(lfi_nct_app_url('cache', ['purged' => 1]));
+        exit;
+    }
+    lfi_nct_app_screen_open('🔥 Purger les caches', 'Force la mise à jour du site');
+    if (!empty($_GET['purged'])) lfi_nct_app_flash('✅ Tous les caches ont été vidés. Le site est rechargé en frais.');
+    echo '<div class="lfi-app-help">Utile si tu viens de déployer une mise à jour et que tu ne la vois pas tout de suite sur le site public. Purge LiteSpeed Cache, l\'opcache PHP, et les caches WordPress.</div>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_cache_purge');
+    echo '<input type="hidden" name="lfi_app_cache_purge" value="1">';
+    echo '<button type="submit" class="btn-primary big">🔥 Tout purger maintenant</button>';
+    echo '</form>';
+    lfi_nct_app_screen_close();
 }
