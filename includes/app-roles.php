@@ -113,6 +113,41 @@ function lfi_nct_normalize_address($input) {
 }
 
 /**
+ * Clé canonique d'une adresse — sert à regrouper les variantes
+ * orthographiques d'une même rue : « rue Saint-Jean-de-Luz », « rue st
+ * jean de luse », « Rue de Saint-Jean de Luz » → tous la même clé.
+ *
+ * On normalise d'abord, puis on retire numéro + type de voie + article,
+ * on lowercase et on garde seulement [a-z0-9].
+ */
+function lfi_nct_address_canonical_key($adr) {
+    $adr = lfi_nct_normalize_address((string) $adr);
+    $key = remove_accents($adr);
+    $key = mb_strtolower($key);
+    // Retire « 12 », « 12bis », « 14 ter », etc. en tête
+    $key = preg_replace('/^\s*\d+\s*(bis|ter|quater)?\s*/iu', '', $key);
+    // Retire le type de voie + article éventuel
+    // Ordre crucial : « de\s+la » > « de » > « d['] » pour ne pas matcher
+    // juste « d » dans « de saint » et laisser un « e » orphelin.
+    $key = preg_replace(
+        "/^(rue|place|avenue|boulevard|impasse|allee|chemin|passage|quai|square)(\s+(de\s+la|de\s+l['’]|des|du|de|d['’]|la|le|les|l['’]))?\s*/iu",
+        '',
+        $key
+    );
+    // Garde seulement alphanum
+    $key = preg_replace('/[^a-z0-9]+/u', '', $key);
+    return $key;
+}
+
+/**
+ * Forme affichable canonique d'une adresse (normalize + numéro conservé).
+ * Utile dans les listes (« top des adresses ») pour avoir un libellé propre.
+ */
+function lfi_nct_address_canonical_display($adr) {
+    return lfi_nct_normalize_address((string) $adr);
+}
+
+/**
  * Datalist combinant rues canoniques + adresses déjà saisies.
  */
 function lfi_nct_streets_datalist($id = 'lfi-nct-known-streets') {

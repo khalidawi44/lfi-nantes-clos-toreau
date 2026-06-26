@@ -500,7 +500,8 @@ function lfi_nct_app_view_signatures() {
 }
 
 /* ============================================================== *
- *  ADMIN : Carte interactive (Leaflet + OpenStreetMap)             *
+ *  ADMIN : Carte 3D — MapLibre GL avec extrusion bâtiments OSM     *
+ *  (même rendu que la page wp-admin /lfi-nct-map)                  *
  * ============================================================== */
 
 function lfi_nct_app_view_carte() {
@@ -508,7 +509,6 @@ function lfi_nct_app_view_carte() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 
-    /* Bouton « géocoder ce qui manque » */
     if (!empty($_POST['lfi_app_geocode']) && check_admin_referer('lfi_app_geocode')) {
         @set_time_limit(120);
         $batch = 25;
@@ -533,35 +533,54 @@ function lfi_nct_app_view_carte() {
                AND deleted_at IS NULL"
     );
 
-    /* Construit les markers JSON */
+    /* Labels + niveaux de gravité (cohérents avec map.php) */
+    $type_labels = [
+        'degats_eaux' => '💧 Dégâts des eaux', 'humidite' => '🌫 Humidité', 'insectes' => '🐜 Nuisibles',
+        'chauffage' => '🥶 Chauffage', 'electricite' => '⚡ Électricité', 'ascenseur' => '🛗 Ascenseur',
+        'parties_communes' => '🚪 Parties communes', 'bruit' => '🔊 Bruit', 'securite' => '🚨 Insécurité',
+        'autre' => '❗ Autre',
+    ];
+    $rec_labels = ['permanent' => 'En permanence', 'parfois' => 'Régulièrement', 'ponctuel' => 'Ponctuel'];
+
     $markers = [];
     foreach ($rows as $r) {
         $data = json_decode((string) $r->data, true);
         if (!is_array($data)) $data = [];
+        $score = function_exists('lfi_nct_gravity_score') ? lfi_nct_gravity_score($data) : (int) ($data['problemes_gravite'] ?? 0);
+        if (function_exists('lfi_nct_gravity_level')) {
+            list($gkey, $glabel, $gcolor) = lfi_nct_gravity_level($score);
+        } else {
+            if      ($score >= 8) { $gkey='critique';    $glabel='Critique';    $gcolor='#7a0000'; }
+            elseif  ($score >= 6) { $gkey='grave';       $glabel='Grave';       $gcolor='#c8102e'; }
+            elseif  ($score >= 3) { $gkey='preoccupant'; $glabel='Préoccupant'; $gcolor='#bd8600'; }
+            else                  { $gkey='leger';       $glabel='Sans souci';  $gcolor='#1a7f37'; }
+        }
         $types_raw = (array) ($data['problemes_types'] ?? []);
-        $gravite = (int) ($data['problemes_gravite'] ?? 0);
-
-        if      ($gravite >= 9) $color = '#a30b25';
-        elseif  ($gravite >= 7) $color = '#e8201e';
-        elseif  ($gravite >= 5) $color = '#ffa500';
-        elseif  ($gravite >= 3) $color = '#fdd835';
-        elseif  ($gravite >  0) $color = '#9ccc65';
-        else                    $color = '#90a4ae';
-
+        $types = array_map(function ($t) use ($type_labels) { return $type_labels[$t] ?? ucfirst($t); }, $types_raw);
         $markers[] = [
-            'id'    => (int) $r->id,
-            'lat'   => (float) $r->lat,
-            'lng'   => (float) $r->lng,
-            'adr'   => (string) $r->adresse,
-            'et'    => (string) $r->etage,
-            'g'     => $gravite,
-            'col'   => $color,
-            't'     => $types_raw,
-            'date'  => wp_date('j M Y', strtotime($r->submitted_at)),
+            'id'        => (int) $r->id,
+            'lat'       => (float) $r->lat,
+            'lng'       => (float) $r->lng,
+            'adresse'   => (string) $r->adresse,
+            'etage'     => (string) $r->etage,
+            'appt'      => (string) ($data['appartement'] ?? ''),
+            'date'      => wp_date('j M Y', strtotime($r->submitted_at)),
+            'score'     => $score,
+            'gkey'      => $gkey,
+            'glabel'    => $glabel,
+            'gcolor'    => $gcolor,
+            'types'     => $types,
+            'recurrent' => $rec_labels[$data['problemes_recurrent'] ?? ''] ?? '',
+            'presence'  => $data['problemes_presence'] ?? '',
+            'detail_url'=> lfi_nct_app_url('dossiers'),
         ];
     }
 
-    lfi_nct_app_screen_open('🗺 Carte des signalements', count($rows) . ' point(s) géolocalisé(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
+    $center_lat  = defined('LFI_NCT_MAP_CENTER_LAT')  ? (float) LFI_NCT_MAP_CENTER_LAT  : 47.1933;
+    $center_lng  = defined('LFI_NCT_MAP_CENTER_LNG')  ? (float) LFI_NCT_MAP_CENTER_LNG  : -1.5380;
+    $center_zoom = defined('LFI_NCT_MAP_CENTER_ZOOM') ? (int)   LFI_NCT_MAP_CENTER_ZOOM : 16;
+
+    lfi_nct_app_screen_open('🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
 
     if (isset($_GET['geo_traitees'])) {
         lfi_nct_app_flash(sprintf('Géocodage : %d traité(s), %d réussi(s), %d restant(s).', (int) $_GET['geo_traitees'], (int) $_GET['geo_ok'], (int) $_GET['geo_remain']));
@@ -574,55 +593,174 @@ function lfi_nct_app_view_carte() {
         echo '<form method="post" style="margin:0 0 12px;text-align:center">';
         wp_nonce_field('lfi_app_geocode');
         echo '<input type="hidden" name="lfi_app_geocode" value="1">';
-        echo '<button type="submit" class="btn-ghost">📍 Géocoder ' . min(25, $pending) . ' adresse(s) en attente</button>';
+        echo '<button type="submit" class="btn-ghost">🌍 Géocoder ' . min(25, $pending) . ' adresse(s) en attente</button>';
         echo '</form>';
     }
 
-    /* Légende */
+    /* Légende du site (4 paliers) */
     echo '<div class="lfi-map-legend">';
-    foreach ([
-        ['#a30b25', '9-10 critique'],
-        ['#e8201e', '7-8 grave'],
-        ['#ffa500', '5-6 moyen'],
-        ['#fdd835', '3-4 mineur'],
-        ['#9ccc65', '1-2 faible'],
-        ['#90a4ae', '— non renseigné'],
-    ] as $l) {
-        echo '<span><i style="background:' . esc_attr($l[0]) . '"></i> ' . esc_html($l[1]) . '</span>';
-    }
+    echo '<span><i style="background:#1a7f37"></i> 🟢 Sans souci</span>';
+    echo '<span><i style="background:#bd8600"></i> 🟡 Préoccupant</span>';
+    echo '<span><i style="background:#c8102e"></i> 🔴 Grave</span>';
+    echo '<span><i style="background:#7a0000"></i> 🚨 Critique</span>';
     echo '</div>';
 
-    echo '<div id="lfi-map" style="height:60vh;min-height:380px;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)"></div>';
+    echo '<div id="lfi-map" style="width:100%;height:65vh;min-height:420px;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);background:#f5f5f5"></div>';
+    echo '<div class="lfi-app-help" style="margin-top:8px"><small>📱 Bouge à 2 doigts pour incliner la vue 3D. Pince pour zoomer. Touche un cube pour voir le détail.</small></div>';
 
-    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
-    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    echo '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">';
+    echo '<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>';
+    echo '<script src="https://unpkg.com/osmtogeojson@3.0.0-beta.5/osmtogeojson.js"></script>';
     ?>
     <script>
     (function () {
         var markers = <?php echo wp_json_encode($markers); ?>;
-        if (!window.L || !markers.length) {
-            document.getElementById('lfi-map').innerHTML = '<div style="padding:30px;text-align:center;color:#777">' + (markers.length ? 'Carte indisponible (Leaflet non chargé).' : 'Aucune adresse géocodée. Clique sur « Géocoder » au-dessus.') + '</div>';
+        var el = document.getElementById('lfi-map');
+        if (!el || typeof maplibregl === 'undefined') {
+            if (el) el.innerHTML = '<div style="padding:30px;text-align:center;color:#777">Carte 3D indisponible.</div>';
             return;
         }
-        var map = L.map('lfi-map').setView([markers[0].lat, markers[0].lng], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap',
-            maxZoom: 19
-        }).addTo(map);
-        var typeLabels = { degats_eaux:'💧 Dégâts eaux', humidite:'🌫 Humidité', insectes:'🐜 Nuisibles', chauffage:'🥶 Chauffage', electricite:'⚡ Électricité', ascenseur:'🛗 Ascenseur', parties_communes:'🚪 Parties communes', bruit:'🔊 Bruit', securite:'🚨 Insécurité' };
-        var group = L.featureGroup();
-        markers.forEach(function (m) {
-            var typeChips = (m.t || []).map(function (t) { return typeLabels[t] || t; }).join(' · ');
-            var pop = '<strong>' + (m.adr || '#' + m.id) + '</strong>' + (m.et ? ' · ét. ' + m.et : '');
-            pop += '<br><small>gravité ' + (m.g || '—') + '/10</small>';
-            if (typeChips) pop += '<br>' + typeChips;
-            pop += '<br><small>' + (m.date || '') + '</small>';
-            L.circleMarker([m.lat, m.lng], {
-                radius: 9, color: '#fff', weight: 2, fillColor: m.col, fillOpacity: .85
-            }).bindPopup(pop).addTo(group);
+        if (!markers.length) {
+            el.innerHTML = '<div style="padding:30px;text-align:center;color:#777">Aucune adresse géocodée. Clique sur « Géocoder » au-dessus.</div>';
+            return;
+        }
+        var center = [<?php echo (float) $center_lng; ?>, <?php echo (float) $center_lat; ?>];
+        function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+        function parseFloor(s){ if(!s) return 0; var m=String(s).match(/(\d+)/); return m?parseInt(m[1],10):0; }
+        function popupHtml(m){
+            var unite = 'Étage ' + esc(m.etage) + (m.appt ? ' · Appt ' + esc(m.appt) : '');
+            var html = '<h3>' + esc(m.adresse) + '</h3>'
+                     + '<div>' + unite + '</div>'
+                     + '<div style="margin:.4em 0"><span class="gravbadge" style="background:'+esc(m.gcolor)+';color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:.85em">'
+                     + esc(m.glabel) + (m.score ? ' (' + m.score + '/10)' : '') + '</span></div>';
+            if (m.presence === 'non') html += '<div>✅ Aucun problème déclaré.</div>';
+            else if (m.types && m.types.length) {
+                html += '<div><strong>Problèmes :</strong><ul style="margin:.3em 0;padding-left:1.2em">';
+                m.types.forEach(function(t){ html += '<li>' + esc(t) + '</li>'; });
+                html += '</ul></div>';
+                if (m.recurrent) html += '<div><strong>Récurrence :</strong> ' + esc(m.recurrent) + '</div>';
+            }
+            html += '<div style="margin-top:.5em;font-size:.85em;color:#666">' + esc(m.date) + '</div>';
+            return html;
+        }
+
+        var map = new maplibregl.Map({
+            container: 'lfi-map',
+            style: {
+                version: 8,
+                sources: { osm: {
+                    type: 'raster',
+                    tiles: [
+                        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }},
+                layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+            },
+            center: center,
+            zoom: <?php echo (int) $center_zoom; ?>,
+            pitch: 55, bearing: -15, maxPitch: 75, antialias: true,
         });
-        group.addTo(map);
-        try { map.fitBounds(group.getBounds().pad(0.15)); } catch (e) {}
+        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 100 }));
+
+        var bounds = new maplibregl.LngLatBounds();
+        var FLOOR_M = 3, CUBE_M = 4;
+        var stackCounts = {};
+        var feats = [];
+        function squareAround(lng, lat, sizeM) {
+            var dLat = sizeM / 111111;
+            var dLng = sizeM / (111111 * Math.cos(lat * Math.PI / 180));
+            return [[
+                [lng - dLng/2, lat - dLat/2],
+                [lng + dLng/2, lat - dLat/2],
+                [lng + dLng/2, lat + dLat/2],
+                [lng - dLng/2, lat + dLat/2],
+                [lng - dLng/2, lat - dLat/2]
+            ]];
+        }
+        markers.forEach(function (m, idx) {
+            var floor = parseFloor(m.etage);
+            var key = m.lat.toFixed(5) + '_' + m.lng.toFixed(5) + '_' + floor;
+            var rank = (stackCounts[key] = (stackCounts[key] || 0) + 1) - 1;
+            var jitterM = rank * 5;
+            var dLng = jitterM / (111111 * Math.cos(m.lat * Math.PI / 180));
+            var base = floor * FLOOR_M + 0.5;
+            var top  = base + 2.5;
+            feats.push({
+                type: 'Feature', id: idx,
+                geometry: { type: 'Polygon', coordinates: squareAround(m.lng + dLng, m.lat, CUBE_M) },
+                properties: { fid: idx, base: base, height: top, color: m.gcolor, popup: popupHtml(m) }
+            });
+            bounds.extend([m.lng, m.lat]);
+        });
+        var surveysGJ = { type: 'FeatureCollection', features: feats };
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 18, pitch: 55, bearing: -15 });
+
+        function addSurveyLayer() {
+            if (map.getSource('surveys')) return;
+            map.addSource('surveys', { type: 'geojson', data: surveysGJ });
+            map.addLayer({
+                id: 'surveys-3d', type: 'fill-extrusion', source: 'surveys',
+                paint: {
+                    'fill-extrusion-color': ['get', 'color'],
+                    'fill-extrusion-base': ['get', 'base'],
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-opacity': 0.95
+                }
+            });
+            map.on('click', 'surveys-3d', function (e) {
+                if (!e.features || !e.features.length) return;
+                new maplibregl.Popup({ closeButton: true })
+                    .setLngLat(e.lngLat)
+                    .setHTML(e.features[0].properties.popup)
+                    .addTo(map);
+            });
+        }
+        function loadBuildings() {
+            var b = map.getBounds();
+            var s = b.getSouth(), w = b.getWest(), n = b.getNorth(), e = b.getEast();
+            var pad = 0.001;
+            s -= pad; w -= pad; n += pad; e += pad;
+            var key = 'lfi_bldg_' + [s.toFixed(4), w.toFixed(4), n.toFixed(4), e.toFixed(4)].join('_');
+            try { var cached = localStorage.getItem(key); if (cached) { addBuildingLayer(JSON.parse(cached)); return; } } catch (e2) {}
+            var q = '[out:json][timeout:25];(way["building"](' + s + ',' + w + ',' + n + ',' + e + ');relation["building"](' + s + ',' + w + ',' + n + ',' + e + '););out body;>;out skel qt;';
+            fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (typeof osmtogeojson === 'undefined') return;
+                    var gj = osmtogeojson(data);
+                    gj.features = (gj.features || []).filter(function (f) { return f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'); });
+                    gj.features.forEach(function (f) {
+                        var p = f.properties || {};
+                        var lvls = parseFloat(p['building:levels']);
+                        var h = parseFloat(p.height);
+                        if (!isFinite(h)) h = isFinite(lvls) ? lvls * 3 : 9;
+                        f.properties._h = Math.max(3, h);
+                    });
+                    try { localStorage.setItem(key, JSON.stringify(gj)); } catch (e2) {}
+                    addBuildingLayer(gj);
+                })
+                .catch(function (err) { console.warn('Overpass buildings fetch failed:', err); });
+        }
+        function addBuildingLayer(gj) {
+            if (!map.isStyleLoaded() || map.getSource('buildings')) return;
+            map.addSource('buildings', { type: 'geojson', data: gj });
+            var beforeId = map.getLayer('surveys-3d') ? 'surveys-3d' : undefined;
+            map.addLayer({
+                id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings',
+                paint: {
+                    'fill-extrusion-color': '#9aa0a8',
+                    'fill-extrusion-height': ['get', '_h'],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 0.55,
+                }
+            }, beforeId);
+        }
+        map.on('load', function () { addSurveyLayer(); loadBuildings(); });
     })();
     </script>
     <?php
@@ -644,11 +782,12 @@ function lfi_nct_app_view_stats_enquete() {
     ) ?: [];
     $total = count($rows);
 
-    /* Agrégats */
+    /* Agrégats — adresses groupées par clé canonique pour fusionner les
+       variantes orthographiques (« rue Saint-Jean-de-Luz » et « rue st jean
+       de luse » deviennent une seule entrée). */
     $problem_types  = [];   // slug => count
-    $address_count  = [];   // adresse => count
+    $address_groups = [];   // clé canonique => ['n' => count, 'display' => libellé propre]
     $gravity_bucket = [0,0,0,0,0]; // [1-2, 3-4, 5-6, 7-8, 9-10]
-    $with_recontact = 0;
     foreach ($rows as $r) {
         $data = json_decode((string) $r->data, true);
         if (!is_array($data)) $data = [];
@@ -656,9 +795,15 @@ function lfi_nct_app_view_stats_enquete() {
             $problem_types[$t] = ($problem_types[$t] ?? 0) + 1;
         }
         $adr = trim((string) $r->adresse);
-        /* Normalise au nom de rue (vire les numéros au début) */
-        $street = preg_replace('/^\s*\d+\s+/u', '', $adr) ?: $adr;
-        if ($street) $address_count[$street] = ($address_count[$street] ?? 0) + 1;
+        if ($adr !== '') {
+            $key = lfi_nct_address_canonical_key($adr);
+            if ($key !== '') {
+                if (!isset($address_groups[$key])) {
+                    $address_groups[$key] = ['n' => 0, 'display' => lfi_nct_address_canonical_display($adr)];
+                }
+                $address_groups[$key]['n']++;
+            }
+        }
         $g = (int) ($data['problemes_gravite'] ?? 0);
         if      ($g >= 9) $gravity_bucket[4]++;
         elseif  ($g >= 7) $gravity_bucket[3]++;
@@ -667,7 +812,8 @@ function lfi_nct_app_view_stats_enquete() {
         elseif  ($g >= 1) $gravity_bucket[0]++;
     }
     arsort($problem_types);
-    arsort($address_count);
+    /* Tri par count desc */
+    uasort($address_groups, function ($a, $b) { return $b['n'] <=> $a['n']; });
 
     $labels_base = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [];
 
@@ -676,7 +822,7 @@ function lfi_nct_app_view_stats_enquete() {
     /* Bandeau résumé */
     echo '<div class="lfi-app-stats-grid">';
     echo '<div class="stat"><div class="ico">📋</div><div class="n">' . $total . '</div><div class="l">Réponses</div></div>';
-    echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . count($address_count) . '</div><div class="l">Immeubles touchés</div></div>';
+    echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . count($address_groups) . '</div><div class="l">Immeubles touchés</div></div>';
     echo '<div class="stat"><div class="ico">🚨</div><div class="n">' . ($gravity_bucket[3] + $gravity_bucket[4]) . '</div><div class="l">Cas graves (≥7)</div></div>';
     echo '<div class="stat"><div class="ico">📝</div><div class="n">' . count($problem_types) . '</div><div class="l">Types de problèmes</div></div>';
     echo '</div>';
@@ -697,20 +843,22 @@ function lfi_nct_app_view_stats_enquete() {
         echo '</div>';
     }
 
-    /* Top des immeubles touchés */
+    /* Top des immeubles touchés (variantes orthographiques regroupées) */
     echo '<h3 style="margin:18px 0 8px">📍 Adresses les plus représentées</h3>';
-    if (empty($address_count)) {
+    if (empty($address_groups)) {
         echo '<div class="lfi-app-empty">Aucune adresse renseignée.</div>';
     } else {
-        $top_addresses = array_slice($address_count, 0, 12, true);
-        $max_a = max($top_addresses);
+        $top_addresses = array_slice($address_groups, 0, 12, true);
+        $max_a = 0;
+        foreach ($top_addresses as $g) { if ($g['n'] > $max_a) $max_a = $g['n']; }
         echo '<div class="lfi-app-bars">';
-        foreach ($top_addresses as $street => $n) {
-            $pct = $max_a ? round($n / $max_a * 100) : 0;
-            echo '<div class="bar-row"><div class="bar-label">' . esc_html($street) . '</div>';
-            echo '<div class="bar-track"><div class="bar-fill" style="width:' . $pct . '%;background:#3a3a3a"></div><div class="bar-n">' . $n . '</div></div></div>';
+        foreach ($top_addresses as $g) {
+            $pct = $max_a ? round($g['n'] / $max_a * 100) : 0;
+            echo '<div class="bar-row"><div class="bar-label">' . esc_html($g['display']) . '</div>';
+            echo '<div class="bar-track"><div class="bar-fill" style="width:' . $pct . '%;background:#3a3a3a"></div><div class="bar-n">' . (int) $g['n'] . '</div></div></div>';
         }
         echo '</div>';
+        echo '<div class="lfi-app-help"><small>Les variantes d\'orthographe sont regroupées automatiquement (« rue Saint-Jean-de-Luz » et « rue st jean de luse » comptent comme une seule rue).</small></div>';
     }
 
     /* Histogramme de gravité */
