@@ -740,33 +740,6 @@ function lfi_nct_force_reunion_26juin() {
     set_transient('lfi_nct_force_reunion_id', $post_id, HOUR_IN_SECONDS);
 }
 
-/* ------------------------------------------------------------------ */
-/* Notice admin avec diagnostic de la réunion                            */
-/* ------------------------------------------------------------------ */
-
-add_action('admin_notices', 'lfi_nct_force_reunion_notice');
-function lfi_nct_force_reunion_notice() {
-    if (!current_user_can('manage_options')) return;
-    if (!post_type_exists(lfi_nct_event_cpt())) return;
-
-    $id   = (int) get_transient('lfi_nct_force_reunion_id');
-    $post = $id ? get_post($id) : null;
-    if (!$post) {
-        echo '<div class="notice notice-error"><p>⛔ MU force-reunion : pas d\'ID en cache. Recharge.</p></div>';
-        return;
-    }
-
-    $date  = get_post_meta($id, '_ag_event_date',  true);
-    $time  = get_post_meta($id, '_ag_event_time',  true);
-    $place = get_post_meta($id, '_ag_event_place', true);
-    $ok    = ($date === LFI_FORCE_REUNION_DATE && $place === LFI_FORCE_REUNION_PLACE && $post->post_status === 'publish');
-
-    echo '<div class="notice ' . ($ok ? 'notice-success' : 'notice-warning') . ' is-dismissible">';
-    echo '<p><strong>' . ($ok ? '✅' : '⚠️') . ' Force-réunion v0.22.5</strong> · Post #' . $id . ' « ' . esc_html($post->post_title) . ' » (status: <code>' . esc_html($post->post_status) . '</code>)</p>';
-    echo '<p style="margin:.3em 0">_ag_event_date = <code>' . esc_html($date) . '</code> · _ag_event_time = <code>' . esc_html($time) . '</code> · _ag_event_place = <code>' . esc_html($place) . '</code></p>';
-    echo '<p style="margin:.3em 0">→ <a href="' . esc_url(get_permalink($id)) . '" target="_blank">Voir la page</a> · <a href="' . esc_url(home_url('/evenements/')) . '" target="_blank">Voir /evenements/</a> · <a href="' . esc_url(home_url('/')) . '" target="_blank">Voir la home</a></p>';
-    echo '</div>';
-}
 
 function lfi_nct_find_reunion_post($cpt) {
     // 1. Par slug
