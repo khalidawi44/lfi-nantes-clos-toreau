@@ -447,11 +447,12 @@ function lfi_nct_app_role_dispatch(&$handled) {
     if (lfi_nct_user_role_tenant()) {
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
-            case 'lettre':  lfi_nct_app_view_tenant_lettre(); break;
-            case 'droits':  lfi_nct_app_view_tenant_droits(); break;
-            case 'notifs':  lfi_nct_app_view_tenant_notifs(); break;
-            case 'mon-enquete': lfi_nct_app_view_tenant_enquete(); break;
-            default:        lfi_nct_app_view_tenant_dashboard();
+            case 'lettre':       lfi_nct_app_view_tenant_lettre();   break;
+            case 'droits':       lfi_nct_app_view_tenant_droits();   break;
+            case 'notifs':       lfi_nct_app_view_tenant_notifs();   break;
+            case 'mon-enquete':  lfi_nct_app_view_tenant_enquete();  break;
+            case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
+            default:             lfi_nct_app_view_tenant_dashboard();
         }
         $handled = true; return;
     }
@@ -552,6 +553,7 @@ function lfi_nct_app_view_tenant_dashboard() {
     }
 
     $tiles = [
+        ['📷', 'Envoyer une photo', 'Documenter votre logement',      lfi_nct_app_url('envoyer-photo')],
         ['📝', 'Modèle de lettre',  'Pour Nantes Métropole Habitat',  lfi_nct_app_url('lettre')],
         ['⚖️', 'Mes droits',        'Lois et recours',                lfi_nct_app_url('droits')],
         ['🔔', 'Conseils du jour',  'Rappels quotidiens / hebdo',     lfi_nct_app_url('notifs')],

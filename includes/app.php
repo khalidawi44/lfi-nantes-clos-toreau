@@ -306,6 +306,9 @@ function lfi_nct_app_shortcode() {
                     case 'cache':           lfi_nct_app_view_cache();           break;
                     case 'comptes':         lfi_nct_app_view_comptes();         break;
                     case 'temoignage-add':  lfi_nct_app_view_temoignage_add();  break;
+                    case 'dossiers':        lfi_nct_app_view_dossiers();        break;
+                    case 'dossier':         lfi_nct_app_view_dossier();         break;
+                    case 'signatures':      lfi_nct_app_view_signatures();      break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -827,6 +830,8 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
         ['➕', '+ Saisir une réponse d\'enquête', 'Porte-à-porte / collecte papier', lfi_nct_app_url('temoignage-add')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
+        ['🗂', 'Dossiers locataires',        'Photos, enquête, historique',         lfi_nct_app_url('dossiers')],
+        ['✍️', 'Signatures email',           'Le Collectif, Fabrice, etc.',         lfi_nct_app_url('signatures')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    lfi_nct_app_url('sms')],
@@ -1261,6 +1266,7 @@ function lfi_nct_app_view_email() {
     if (!empty($_POST['lfi_app_email_send']) && check_admin_referer('lfi_app_email_send')) {
         $sujet = sanitize_text_field(wp_unslash($_POST['sujet'] ?? ''));
         $body  = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
+        $signature_key = sanitize_key($_POST['signature'] ?? 'collectif');
         if ($sujet && $body) {
             $recipients = $wpdb->get_results(
                 "SELECT id, prenom, email, unsubscribe_token FROM $mem
@@ -1271,12 +1277,9 @@ function lfi_nct_app_view_email() {
             add_filter('wp_mail_from_name', function() { return 'LFI Nantes Sud Clos Toreau'; });
             foreach ($recipients as $r) {
                 if (!is_email($r->email)) { $errs++; continue; }
-                $html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">'
-                      . '<p>Bonjour ' . esc_html($r->prenom ?: '') . ',</p>'
-                      . wpautop($body)
-                      . '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">'
-                      . '<p style="font-size:.85em;color:#777">Groupe d\'Action LFI Nantes Sud Clos Toreau</p>'
-                      . '</div>';
+                $html = function_exists('lfi_nct_email_wrap_html')
+                    ? lfi_nct_email_wrap_html($r->prenom, wpautop($body), '', $signature_key)
+                    : '<div>' . wpautop($body) . '</div>';
                 if (wp_mail($r->email, $sujet, $html)) $sent++; else $errs++;
             }
             remove_all_filters('wp_mail_content_type');
@@ -1300,7 +1303,16 @@ function lfi_nct_app_view_email() {
     echo '<input type="hidden" name="lfi_app_email_send" value="1">';
     echo '<label>Sujet<input type="text" name="sujet" required placeholder="Objet de l\'email"></label>';
     echo '<label>Message<textarea name="body" rows="10" required placeholder="Écris ton message — HTML simple OK (les sauts de ligne deviennent des paragraphes)"></textarea></label>';
-    echo '<div class="lfi-app-help">⚠️ Sera envoyé à <strong>' . $abonnes . '</strong> personne(s). Action immédiate, pas de brouillon.</div>';
+    if (function_exists('lfi_nct_signatures')) {
+        $sigs = lfi_nct_signatures();
+        echo '<label>✍️ Signataire<select name="signature">';
+        foreach ($sigs as $k => $s) {
+            echo '<option value="' . esc_attr($k) . '" ' . selected('collectif', $k, false) . '>' . esc_html($s['nom']) . ($s['role'] ? ' — ' . esc_html($s['role']) : '') . '</option>';
+        }
+        echo '</select></label>';
+        echo '<div class="lfi-app-help"><small>Gère les signataires : <a href="' . esc_url(lfi_nct_app_url('signatures')) . '">✍️ Signatures</a></small></div>';
+    }
+    echo '<div class="lfi-app-help">⚠️ Sera envoyé à <strong>' . $abonnes . '</strong> personne(s). Action immédiate, pas de brouillon. En-tête LFI Clos Toreau ajoutée automatiquement.</div>';
     echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Envoyer maintenant à ' . $abonnes . ' destinataire(s) ?\');">📤 Envoyer maintenant</button>';
     echo '</form>';
 
@@ -1672,6 +1684,7 @@ function lfi_nct_app_view_enquetes_email() {
         $body          = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
         $include_event = !empty($_POST['include_event']);
         $personalize   = !empty($_POST['personalize']);
+        $signature_key = sanitize_key($_POST['signature'] ?? 'collectif');
         if ($sujet && $body) {
             $recipients = $wpdb->get_results(
                 "SELECT contact_prenom, contact_email, data
@@ -1717,14 +1730,15 @@ function lfi_nct_app_view_enquetes_email() {
                 }
                 $body_resolved  = strtr($body_resolved,  $vars);
                 $sujet_resolved = strtr($sujet_resolved, $vars);
-                $html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">'
-                      . '<div style="background:#c8102e;color:#fff;padding:14px;border-radius:6px;text-align:center;margin-bottom:18px"><strong>LFI Nantes Sud Clos Toreau</strong></div>'
-                      . '<p>Bonjour ' . esc_html($r->contact_prenom ?: '') . ',</p>'
-                      . wpautop($body_resolved)
-                      . $event_html
-                      . '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">'
-                      . '<p style="font-size:.85em;color:#777">Vous recevez cet email car vous avez répondu à l\'enquête de voisinage logement et accepté d\'être recontacté·e par notre Groupe d\'Action.</p>'
-                      . '</div>';
+                $html = function_exists('lfi_nct_email_wrap_html')
+                    ? lfi_nct_email_wrap_html(
+                        $r->contact_prenom,
+                        wpautop($body_resolved) . $event_html,
+                        '',
+                        $signature_key,
+                        'Vous recevez cet email car vous avez répondu à l\'enquête de voisinage logement et accepté d\'être recontacté·e par notre Groupe d\'Action.'
+                    )
+                    : '<div>' . wpautop($body_resolved) . $event_html . '</div>';
                 if (wp_mail($r->contact_email, $sujet_resolved, $html)) $sent++; else $errs++;
             }
             remove_all_filters('wp_mail_content_type');
@@ -1791,6 +1805,16 @@ function lfi_nct_app_view_enquetes_email() {
     echo '<input type="hidden" name="lfi_app_enq_email_send" value="1">';
     echo '<label>Sujet<input type="text" name="sujet" required value="' . esc_attr($msg['sujet']) . '" placeholder="Ex : Réunion publique sur le logement le 26 juin"></label>';
     echo '<label>Message<textarea name="body" rows="10" required>' . esc_textarea($msg['body']) . '</textarea></label>';
+    /* Sélecteur de signature */
+    if (function_exists('lfi_nct_signatures')) {
+        $sigs = lfi_nct_signatures();
+        echo '<label>✍️ Signataire<select name="signature">';
+        foreach ($sigs as $k => $s) {
+            echo '<option value="' . esc_attr($k) . '" ' . selected('collectif', $k, false) . '>' . esc_html($s['nom']) . ($s['role'] ? ' — ' . esc_html($s['role']) : '') . '</option>';
+        }
+        echo '</select></label>';
+        echo '<div class="lfi-app-help"><small>Gère les signataires : <a href="' . esc_url(lfi_nct_app_url('signatures')) . '">✍️ Signatures</a></small></div>';
+    }
     echo '<div class="lfi-app-help">Variables disponibles : <code>{{prenom}}</code>';
     if ($mode === 'probleme') echo ' · <code>{{probleme}}</code> (texte complet) · <code>{{probleme_main}}</code> (principal)';
     echo '</div>';
