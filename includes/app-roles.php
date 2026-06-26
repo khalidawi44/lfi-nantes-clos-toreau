@@ -821,31 +821,48 @@ function lfi_nct_app_view_comptes() {
     }
 
     if (!empty($_POST['lfi_app_import_all_membres']) && check_admin_referer('lfi_app_import_all_membres')) {
+        /* Évite les timeouts PHP / OOM sur les imports volumineux */
+        @set_time_limit(0);
+        if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('admin');
+        if (function_exists('ignore_user_abort'))     ignore_user_abort(true);
+        /* Coupe les notifications WP de nouveau compte (pas d'envoi mail synchrone × 200) */
+        if (!function_exists('wp_new_user_notification') && !defined('LFI_NCT_SUPPRESS_NEW_USER_NOTIF')) {
+            define('LFI_NCT_SUPPRESS_NEW_USER_NOTIF', 1);
+        }
+
+        $CHUNK = 30; // sécurise contre les timeouts (~3s par compte sur Hostinger mutualisé)
         $existing_mids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
         $existing_in = $existing_mids ? '(' . implode(',', array_map('intval', $existing_mids)) . ')' : '(0)';
         $to_import = $wpdb->get_results(
-            "SELECT * FROM {$wpdb->prefix}lfi_nct_membres
+            "SELECT id, prenom, nom, pseudo, email, tel
+             FROM {$wpdb->prefix}lfi_nct_membres
              WHERE jetable = 0 AND id NOT IN $existing_in
-             ORDER BY prenom, nom LIMIT 200"
+             ORDER BY prenom, nom LIMIT $CHUNK"
         ) ?: [];
-        $batch = [];
+
+        $batch = []; $skipped = [];
         foreach ($to_import as $row) {
             $prenom = (string) ($row->prenom ?: '');
             $nom    = (string) ($row->nom    ?: $row->pseudo ?: '');
             $email  = (string) ($row->email  ?: '');
             $tel    = (string) ($row->tel    ?: '');
-            $login  = lfi_nct_app_make_username($prenom, $nom);
-            $pwd    = lfi_nct_app_make_password();
-            $uid    = wp_insert_user([
+            /* Sécurité : si email déjà utilisé par un user WP, on saute pour ne pas planter wp_insert_user */
+            $clean_email = (is_email($email) && !email_exists($email)) ? $email : '';
+            $login = lfi_nct_app_make_username($prenom, $nom);
+            $pwd   = lfi_nct_app_make_password();
+            $uid   = wp_insert_user([
                 'user_login'   => $login,
                 'user_pass'    => $pwd,
-                'user_email'   => is_email($email) ? $email : '',
+                'user_email'   => $clean_email,
                 'first_name'   => $prenom,
                 'last_name'    => $nom,
                 'display_name' => trim($prenom . ' ' . $nom) ?: $login,
                 'role'         => LFI_NCT_ROLE_GA,
             ]);
-            if (is_wp_error($uid)) continue;
+            if (is_wp_error($uid)) {
+                $skipped[] = ['mid' => $row->id, 'name' => trim($prenom . ' ' . $nom), 'err' => $uid->get_error_message()];
+                continue;
+            }
             update_user_meta($uid, 'lfi_nct_membre_id', $row->id);
             if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
             $batch[] = [
@@ -854,16 +871,29 @@ function lfi_nct_app_view_comptes() {
                 'name' => trim($prenom . ' ' . $nom) ?: $login,
             ];
         }
-        if ($batch) {
-            set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 600);
-        }
-        wp_safe_redirect(lfi_nct_app_url('comptes', ['batched' => count($batch)]));
+        /* Stocke uniquement le lot courant (l'utilisateur SMS et vide avant de relancer) */
+        if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
+
+        /* Combien d'adhérents restent à importer ? */
+        $existing_mids_2 = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
+        $existing_in_2 = $existing_mids_2 ? '(' . implode(',', array_map('intval', $existing_mids_2)) . ')' : '(0)';
+        $remaining = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres WHERE jetable = 0 AND id NOT IN $existing_in_2");
+
+        wp_safe_redirect(lfi_nct_app_url('comptes', [
+            'batched'   => count($batch),
+            'skipped'   => count($skipped),
+            'remaining' => $remaining,
+        ]));
         exit;
     }
 
-    /* Liste des comptes existants créés par cette voie */
-    $users_ga      = get_users(['role' => LFI_NCT_ROLE_GA,     'fields' => ['ID','user_login','display_name','user_email']]);
-    $users_tenant  = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID','user_login','display_name','user_email']]);
+    /* Liste des comptes existants — paginée pour ne pas exploser la page */
+    $LIST_LIMIT = 50;
+    $users_ga_total     = count_users();
+    $users_ga_total_n   = $users_ga_total['avail_roles'][LFI_NCT_ROLE_GA]     ?? 0;
+    $users_tenant_total = $users_ga_total['avail_roles'][LFI_NCT_ROLE_TENANT] ?? 0;
+    $users_ga      = get_users(['role' => LFI_NCT_ROLE_GA,     'fields' => ['ID','user_login','display_name','user_email'], 'number' => $LIST_LIMIT, 'orderby' => 'registered', 'order' => 'DESC']);
+    $users_tenant  = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID','user_login','display_name','user_email'], 'number' => $LIST_LIMIT, 'orderby' => 'registered', 'order' => 'DESC']);
 
     /* Répondant·es non encore liés à un compte */
     $linked_ids = $wpdb->get_col(
@@ -879,17 +909,38 @@ function lfi_nct_app_view_comptes() {
          ORDER BY submitted_at DESC LIMIT 50"
     ) ?: [];
 
-    /* Adhérents existants sans compte WP encore créé */
+    /* Adhérents existants sans compte WP encore créé — on affiche 30 max,
+       l'import en masse fait son propre SELECT côté handler */
     $linked_membre_ids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
     $linked_mem_in = $linked_membre_ids ? '(' . implode(',', array_map('intval', $linked_membre_ids)) . ')' : '(0)';
+    $unlinked_total = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres
+         WHERE jetable = 0 AND id NOT IN $linked_mem_in"
+    );
     $unlinked_membres = $wpdb->get_results(
         "SELECT id, prenom, nom, pseudo, email, tel, statut
          FROM {$wpdb->prefix}lfi_nct_membres
          WHERE jetable = 0 AND id NOT IN $linked_mem_in
-         ORDER BY prenom, nom LIMIT 200"
+         ORDER BY prenom, nom LIMIT 30"
     ) ?: [];
 
-    lfi_nct_app_screen_open('🪪 Comptes', count($users_ga) . ' membre(s) GA · ' . count($users_tenant) . ' locataire(s) · ' . count($unlinked_membres) . ' adhérent(s) à importer');
+    lfi_nct_app_screen_open('🪪 Comptes', (int) $users_ga_total_n . ' membre(s) GA · ' . (int) $users_tenant_total . ' locataire(s)');
+
+    /* Banner « il en reste à importer » */
+    if (isset($_GET['remaining']) && (int) $_GET['remaining'] > 0) {
+        $rem = (int) $_GET['remaining'];
+        echo '<div class="lfi-app-flash ok" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">';
+        echo '<div><strong>📋 ' . $rem . ' adhérent(s) restent à importer.</strong> SMS d\'abord les identifiants ci-dessous, puis relance.</div>';
+        echo '<form method="post" style="margin:0">';
+        wp_nonce_field('lfi_app_import_all_membres');
+        echo '<input type="hidden" name="lfi_app_import_all_membres" value="1">';
+        echo '<button type="submit" class="btn-primary">⚡ Importer les ' . min(30, $rem) . ' suivants</button>';
+        echo '</form>';
+        echo '</div>';
+    }
+    if (isset($_GET['skipped']) && (int) $_GET['skipped'] > 0) {
+        lfi_nct_app_flash('⚠️ ' . (int) $_GET['skipped'] . ' adhérent(s) sauté(s) (email déjà utilisé ou données invalides). Ils restent dans la liste à traiter manuellement.', 'err');
+    }
 
     /* Batch d'identifiants à afficher après un import en masse */
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
@@ -942,15 +993,17 @@ function lfi_nct_app_view_comptes() {
 
     /* Section : Importer les adhérents existants (depuis wp_lfi_nct_membres) */
     if (!empty($unlinked_membres)) {
-        echo '<details class="lfi-app-collapse" open><summary>🔄 Importer les adhérents existants (' . count($unlinked_membres) . ' sans compte)</summary>';
+        echo '<details class="lfi-app-collapse" open><summary>🔄 Importer les adhérents existants (' . $unlinked_total . ' sans compte)</summary>';
         echo '<div style="padding:14px 16px;background:#fff;border-top:1px solid #eee">';
         echo '<div class="lfi-app-help" style="margin-bottom:12px">Ces personnes sont déjà dans ta liste d\'adhérents (Action Populaire) mais n\'ont pas encore d\'accès à l\'app. Crée-leur un compte « Membre du GA » et envoie-leur les identifiants par SMS.</div>';
         /* Bulk import */
         echo '<form method="post" style="margin:0 0 14px;text-align:center">';
         wp_nonce_field('lfi_app_import_all_membres');
         echo '<input type="hidden" name="lfi_app_import_all_membres" value="1">';
-        echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Créer ' . count($unlinked_membres) . ' compte(s) en une fois ? Les identifiants seront affichés ensuite à copier/SMSer.\');">⚡ Tout importer (' . count($unlinked_membres) . ')</button>';
+        $next_n = min(30, $unlinked_total);
+        echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Créer ' . $next_n . ' compte(s) ? Les identifiants seront affichés à copier/SMSer. (Total restant : ' . $unlinked_total . ')\');">⚡ Importer les ' . $next_n . ' suivants</button>';
         echo '</form>';
+        echo '<div class="lfi-app-help" style="margin-bottom:8px"><small>L\'import se fait par lots de 30 pour éviter les timeouts du serveur. Tu pourras relancer après chaque lot.</small></div>';
         echo '<div style="font-size:.85em;color:#777;margin-bottom:8px">Ou un par un :</div>';
         echo '<ul class="lfi-app-list">';
         foreach ($unlinked_membres as $m) {
