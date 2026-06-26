@@ -282,22 +282,33 @@ function lfi_nct_app_shortcode() {
 
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
-    } elseif (!current_user_can('manage_options')) {
-        echo '<div class="lfi-app"><div class="lfi-app-error">Console réservée aux admins du GA. <a href="' . esc_url(wp_logout_url(home_url('/app/'))) . '">Se déconnecter</a>.</div></div>';
     } else {
-        $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-        switch ($vue) {
-            case 'reunion':         lfi_nct_app_view_reunion();         break;
-            case 'membres':         lfi_nct_app_view_membres();         break;
-            case 'evenements':      lfi_nct_app_view_evenements();      break;
-            case 'sms':             lfi_nct_app_view_sms();             break;
-            case 'email':           lfi_nct_app_view_email();           break;
-            case 'enquetes':        lfi_nct_app_view_enquetes();        break;
-            case 'enquetes-sms':    lfi_nct_app_view_enquetes_sms();    break;
-            case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
-            case 'stats':           lfi_nct_app_view_stats();           break;
-            case 'cache':           lfi_nct_app_view_cache();           break;
-            default:                lfi_nct_app_render_dashboard();
+        $handled = false;
+        if (function_exists('lfi_nct_app_role_dispatch')) {
+            lfi_nct_app_role_dispatch($handled);
+        }
+        if (!$handled) {
+            /* Admin path */
+            if (!current_user_can('manage_options')) {
+                echo '<div class="lfi-app"><div class="lfi-app-error">Console réservée. <a href="' . esc_url(wp_logout_url(home_url('/app/'))) . '">Se déconnecter</a>.</div></div>';
+            } else {
+                $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+                switch ($vue) {
+                    case 'reunion':         lfi_nct_app_view_reunion();         break;
+                    case 'membres':         lfi_nct_app_view_membres();         break;
+                    case 'evenements':      lfi_nct_app_view_evenements();      break;
+                    case 'sms':             lfi_nct_app_view_sms();             break;
+                    case 'email':           lfi_nct_app_view_email();           break;
+                    case 'enquetes':        lfi_nct_app_view_enquetes();        break;
+                    case 'enquetes-sms':    lfi_nct_app_view_enquetes_sms();    break;
+                    case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
+                    case 'stats':           lfi_nct_app_view_stats();           break;
+                    case 'cache':           lfi_nct_app_view_cache();           break;
+                    case 'comptes':         lfi_nct_app_view_comptes();         break;
+                    case 'temoignage-add':  lfi_nct_app_view_temoignage_add();  break;
+                    default:                lfi_nct_app_render_dashboard();
+                }
+            }
         }
     }
 
@@ -736,6 +747,52 @@ function lfi_nct_app_render_styles() {
     .sms-preview textarea.sms-body:focus {
         background: #fff; border-color: #c8102e;
     }
+
+    /* Carte « prochain événement » sur dashboard locataire */
+    .lfi-tenant-event {
+        display: block; padding: 16px; margin-bottom: 14px;
+        background: linear-gradient(135deg, #c8102e, #a30b25); color: #fff;
+        border-radius: 14px; text-decoration: none;
+        box-shadow: 0 4px 12px rgba(200,16,46,.2);
+    }
+    .lfi-tenant-event:hover, .lfi-tenant-event:focus { color: #fff; }
+    .lfi-tenant-event .lab { font-size: .72em; opacity: .85; letter-spacing: .5px; }
+    .lfi-tenant-event .ti  { font-weight: 800; font-size: 1.1em; margin: 4px 0; line-height: 1.2; }
+    .lfi-tenant-event .me  { font-size: .85em; opacity: .92; }
+    .lfi-tenant-event .cta { margin-top: 10px; font-weight: 700; font-size: .9em; }
+
+    /* Banner conseil du jour pour locataire */
+    .lfi-tenant-tip {
+        background: #fff8e6; border-left: 4px solid #ffd400;
+        padding: 12px 14px; border-radius: 8px; margin-bottom: 14px;
+    }
+    .lfi-tenant-tip .lab { font-size: .75em; font-weight: 700; color: #886e00; text-transform: uppercase; letter-spacing: .3px; margin-bottom: 4px; }
+    .lfi-tenant-tip .tx { font-size: .92em; color: #1a1a1a; }
+    .lfi-tenant-tip .more { margin-top: 6px; font-size: .82em; }
+    .lfi-tenant-tip .more a { color: #c8102e; font-weight: 600; text-decoration: none; }
+
+    /* Page Droits — sections juridiques */
+    .lfi-droits section { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .lfi-droits section h3 { margin: 0 0 8px; font-size: 1em; color: #c8102e; }
+    .lfi-droits section p { margin: 0 0 6px; line-height: 1.45; font-size: .92em; }
+    .lfi-droits section ol { margin: 6px 0 0 18px; padding: 0; }
+    .lfi-droits section ol li { margin-bottom: 4px; font-size: .92em; line-height: 1.4; }
+
+    /* Lettre area */
+    .lfi-lettre-area {
+        width: 100%; padding: 14px; border: 1.5px solid #ddd;
+        border-radius: 10px; background: #fafafa;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: .85em; line-height: 1.4; resize: vertical;
+    }
+    @media print {
+        .lfi-quickbar, .lfi-app-navbar, .row-actions, .lfi-app-other-shortcuts { display: none !important; }
+        .lfi-lettre-area { border: 0; background: #fff; }
+    }
+
+    /* Grille de checkboxes (témoignage) */
+    .lfi-checkbox-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
+    @media (min-width: 600px) { .lfi-checkbox-grid { grid-template-columns: 1fr 1fr; } }
     </style>
     <?php
 }
@@ -768,6 +825,8 @@ function lfi_nct_admin_get_tiles($stats = null) {
     return [
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
+        ['➕', '+ Ajouter un témoignage',    'Saisie manuelle',                     lfi_nct_app_url('temoignage-add')],
+        ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    lfi_nct_app_url('sms')],
