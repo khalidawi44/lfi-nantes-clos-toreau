@@ -95,6 +95,130 @@ function lfi_nct_login_redirect_to_app($redirect_to, $requested, $user) {
 }
 
 /* ============================================================== *
+ *  VERROUILLAGE TOTAL : aucun affichage WordPress visible          *
+ *  pour les non-admins. Tout est aspiré dans /app/.               *
+ * ============================================================== */
+
+/**
+ * 1) /wp-login.php en GET → /app/ (la page de connexion est dans l'app).
+ *    Les POST (formulaire de login) restent acceptés normalement.
+ *    Les actions de récupération de mot de passe restent accessibles
+ *    pour pouvoir se servir des liens email reçus.
+ */
+add_action('login_init', 'lfi_nct_block_wp_login_display', 1);
+function lfi_nct_block_wp_login_display() {
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($method !== 'GET') return; // les soumissions de formulaire passent
+
+    $action = isset($_REQUEST['action']) ? (string) $_REQUEST['action'] : '';
+    /* On laisse passer les flux de récupération / confirmation / déconnexion */
+    $allowed_actions = ['lostpassword', 'retrievepassword', 'rp', 'resetpass', 'postpass', 'logout', 'confirmaction'];
+    if (in_array($action, $allowed_actions, true)) return;
+
+    wp_safe_redirect(home_url('/app/'));
+    exit;
+}
+
+/**
+ * 2) Cage : non-admin connecté ne voit que /app/ (et un tout petit
+ *    nombre de chemins critiques : login/logout, manifest PWA, RSVP
+ *    de la réunion).
+ */
+function lfi_nct_non_admin_allowed_path($path) {
+    $path = '/' . ltrim($path, '/');
+    $prefixes = [
+        '/app',                       // /app et /app/...
+        '/wp-login.php',              // pour la déconnexion / récup mdp
+        '/wp-admin/admin-ajax.php',   // AJAX standard si jamais
+        '/lfi-app-',                  // manifest, SW, icônes
+        '/reunion-26-juin-2026',      // la page RSVP critique
+    ];
+    foreach ($prefixes as $p) {
+        if ($path === $p || strpos($path, $p . '/') === 0) return true;
+        if ($p === '/lfi-app-' && strpos($path, $p) === 0) return true;
+    }
+    return false;
+}
+
+add_action('template_redirect', 'lfi_nct_cage_non_admin_in_app', 1);
+function lfi_nct_cage_non_admin_in_app() {
+    if (!is_user_logged_in()) return;
+    if (current_user_can('manage_options')) return; // toi : libre
+    $u = wp_get_current_user();
+    $roles = (array) $u->roles;
+    $is_caged = in_array(LFI_NCT_ROLE_GA, $roles, true) ||
+                in_array(LFI_NCT_ROLE_TENANT, $roles, true);
+    /* Par sécurité : tout utilisateur connecté sans capacité d'édition
+       et sans rôle métier est aussi cagé (s'il a un compte WP par défaut
+       il finit forcément dans l'app — jamais sur le front du thème). */
+    if (!$is_caged && !current_user_can('edit_posts')) $is_caged = true;
+    if (!$is_caged) return;
+
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
+    if (lfi_nct_non_admin_allowed_path($path)) return;
+
+    wp_safe_redirect(home_url('/app/'));
+    exit;
+}
+
+/**
+ * 3) API REST : retire l'endpoint /wp/v2/users pour les non-admins
+ *    (sinon n'importe qui peut énumérer les comptes existants).
+ */
+add_filter('rest_endpoints', 'lfi_nct_strip_rest_users_for_non_admins');
+function lfi_nct_strip_rest_users_for_non_admins($endpoints) {
+    if (current_user_can('list_users')) return $endpoints;
+    foreach (array_keys($endpoints) as $k) {
+        if (strpos($k, '/wp/v2/users') === 0) unset($endpoints[$k]);
+    }
+    return $endpoints;
+}
+
+/**
+ * 4) Bloque /?author=N et les archives auteur : énumération évitée.
+ */
+add_action('template_redirect', 'lfi_nct_block_author_enumeration', 2);
+function lfi_nct_block_author_enumeration() {
+    if (isset($_GET['author']) || is_author()) {
+        wp_safe_redirect(home_url('/'));
+        exit;
+    }
+}
+
+/**
+ * 5) Désactive xmlrpc.php (vecteur d'attaque, et aucune utilité ici).
+ */
+add_filter('xmlrpc_enabled', '__return_false');
+
+/**
+ * 6) Aucune barre d'admin WP, JAMAIS, sauf pour l'admin lui-même.
+ *    (déjà branché plus haut, on durcit ici)
+ */
+add_action('init', 'lfi_nct_force_hide_admin_bar', 99);
+function lfi_nct_force_hide_admin_bar() {
+    if (!is_user_logged_in()) return;
+    if (current_user_can('manage_options')) return;
+    show_admin_bar(false);
+    add_filter('show_admin_bar', '__return_false', 99);
+}
+
+/**
+ * 7) wp_loaded : si un non-admin tombe sur n'importe quelle requête
+ *    admin (admin.php, edit.php, post-new.php...), on l'éjecte avant
+ *    même que le tableau de bord ne tente de se rendre.
+ *    (Complète la redirection admin_init déjà en place.)
+ */
+add_action('wp_loaded', 'lfi_nct_eject_non_admin_from_admin', 1);
+function lfi_nct_eject_non_admin_from_admin() {
+    if (!is_admin()) return;
+    if (!is_user_logged_in()) return;
+    if (defined('DOING_AJAX') && DOING_AJAX) return;
+    if (current_user_can('manage_options')) return;
+    wp_safe_redirect(home_url('/app/'));
+    exit;
+}
+
+/* ============================================================== *
  *  Génération de mots de passe lisibles                            *
  *  - 10 caractères, sans 0/O/1/l/I pour SMS                       *
  * ============================================================== */
