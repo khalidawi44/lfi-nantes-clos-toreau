@@ -282,22 +282,7 @@ function lfi_nct_app_render_dashboard() {
 
     $user = wp_get_current_user();
     $stats = lfi_nct_app_quick_stats();
-
-    /* Définition des tuiles : [icône, titre, sous-titre, URL] */
-    $tiles = [
-        ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', admin_url('admin.php?page=lfi-nct-reunion-rsvp')],
-        ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     admin_url('admin.php?page=lfi-nct-responses')],
-        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   admin_url('admin.php?page=lfi-nct-event-rsvp')],
-        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    admin_url('admin.php?page=lfi-nct-membres')],
-        ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    admin_url('admin.php?page=lfi-nct-sms')],
-        ['✉️', 'Email blast',               'Campagne mail',                       admin_url('admin.php?page=lfi-nct-email')],
-        ['📊', 'Statistiques',              'Vue d\'ensemble',                     admin_url('admin.php?page=lfi-nct-stats')],
-        ['📰', 'Articles',                  'Actus du GA',                         admin_url('edit.php')],
-        ['📍', 'Carte / RDV',               'Demandes en cours',                   admin_url('admin.php?page=lfi-nct-rdv')],
-        ['🔥', 'Purger le cache',           'Forcer la maj',                       admin_url('admin.php?page=lfi-nct-maintenance')],
-        ['📝', 'Pages',                     'Édition rapide',                      admin_url('edit.php?post_type=page')],
-        ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/' . LFI_NCT_APP_SLUG . '/'))],
-    ];
+    $tiles = lfi_nct_admin_get_tiles($stats);
     ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
@@ -466,6 +451,153 @@ function lfi_nct_app_render_register_sw() {
         }
         /* Marqueur body pour le CSS standalone */
         document.body && document.body.classList.add('page-app');
+    })();
+    </script>
+    <?php
+}
+
+/* ============================================================== *
+ *  Tuiles d'admin partagées : utilisées par /app/ ET la barre     *
+ *  flottante en haut de la home pour les admins connectés.        *
+ * ============================================================== */
+function lfi_nct_admin_get_tiles($stats = null) {
+    if ($stats === null) $stats = lfi_nct_app_quick_stats();
+    return [
+        ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', admin_url('admin.php?page=lfi-nct-reunion-rsvp')],
+        ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     admin_url('admin.php?page=lfi-nct-responses')],
+        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   admin_url('admin.php?page=lfi-nct-event-rsvp')],
+        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    admin_url('admin.php?page=lfi-nct-membres')],
+        ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    admin_url('admin.php?page=lfi-nct-sms')],
+        ['✉️', 'Email blast',               'Campagne mail',                       admin_url('admin.php?page=lfi-nct-email')],
+        ['📊', 'Statistiques',              'Vue d\'ensemble',                     admin_url('admin.php?page=lfi-nct-stats')],
+        ['📰', 'Articles',                  'Actus du GA',                         admin_url('edit.php')],
+        ['📍', 'Carte / RDV',               'Demandes en cours',                   admin_url('admin.php?page=lfi-nct-rdv')],
+        ['🔥', 'Purger le cache',           'Forcer la maj',                       admin_url('admin.php?page=lfi-nct-maintenance')],
+        ['📝', 'Pages',                     'Édition rapide',                      admin_url('edit.php?post_type=page')],
+        ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/'))],
+    ];
+}
+
+/* ============================================================== *
+ *  Barre flottante en haut de la home pour admin connecté         *
+ *  - Visible uniquement pour les admins (front public = rien)     *
+ *  - Sur la page d'accueil + /app/ (qui a déjà son menu)          *
+ *  - Strip horizontal scrollable mobile, full grid desktop        *
+ *  - Repliable / dépliable (état mémorisé en localStorage)        *
+ * ============================================================== */
+add_action('wp_body_open', 'lfi_nct_admin_homepage_strip', 1);
+add_action('wp_footer',    'lfi_nct_admin_homepage_strip', 1);
+function lfi_nct_admin_homepage_strip() {
+    static $rendered = false;
+    if ($rendered) return;
+    if (!is_user_logged_in() || !current_user_can('manage_options')) return;
+    /* Affiché sur l'accueil (et pas dans wp-admin évidemment) */
+    if (is_admin()) return;
+    if (!is_front_page() && !is_home()) return;
+    $rendered = true;
+
+    $tiles = lfi_nct_admin_get_tiles();
+    $user  = wp_get_current_user();
+    ?>
+    <div id="lfi-quickbar" class="lfi-quickbar" role="region" aria-label="Outils GA">
+        <button class="lfi-qb-toggle" type="button" aria-label="Replier la barre" aria-expanded="true">
+            <span class="lfi-qb-brand">Φ <strong>GA LFI</strong><span class="lfi-qb-hi"> · <?php echo esc_html($user->display_name ?: $user->user_login); ?></span></span>
+            <span class="lfi-qb-caret">▾</span>
+        </button>
+        <div class="lfi-qb-scroll">
+            <?php foreach ($tiles as $t): ?>
+                <a class="lfi-qb-tile" href="<?php echo esc_url($t[3]); ?>" title="<?php echo esc_attr($t[1] . ' — ' . $t[2]); ?>">
+                    <span class="ico"><?php echo $t[0]; ?></span>
+                    <span class="lbl"><?php echo esc_html($t[1]); ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <style>
+    .lfi-quickbar {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 99998;
+        background: linear-gradient(180deg, #c8102e 0%, #a30b25 100%);
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        box-shadow: 0 2px 12px rgba(0,0,0,.25);
+        transition: transform .25s ease;
+    }
+    .lfi-quickbar.is-collapsed { transform: translateY(calc(-100% + 36px)); }
+    .lfi-quickbar.is-collapsed .lfi-qb-caret { transform: rotate(180deg); }
+
+    .lfi-qb-toggle {
+        width: 100%; display: flex; justify-content: space-between; align-items: center;
+        background: rgba(0,0,0,.18); color: #fff; border: 0;
+        padding: 8px 14px; font-size: .85em; cursor: pointer;
+        font-family: inherit;
+    }
+    .lfi-qb-brand strong { font-weight: 800; letter-spacing: .3px; margin-left: 4px; }
+    .lfi-qb-hi { opacity: .85; font-weight: 400; }
+    .lfi-qb-caret { font-size: 1.1em; display: inline-block; transition: transform .25s ease; }
+
+    .lfi-qb-scroll {
+        display: flex; gap: 8px; padding: 10px 10px 12px;
+        overflow-x: auto; overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+    .lfi-qb-scroll::-webkit-scrollbar { height: 6px; }
+    .lfi-qb-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.4); border-radius: 3px; }
+
+    .lfi-qb-tile {
+        flex: 0 0 auto;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-width: 78px; max-width: 100px; padding: 8px 10px;
+        background: rgba(255,255,255,.14);
+        border-radius: 10px; text-decoration: none; color: #fff;
+        font-size: .72em; line-height: 1.15; text-align: center;
+        transition: background .12s ease, transform .08s ease;
+    }
+    .lfi-qb-tile:hover, .lfi-qb-tile:focus { background: rgba(255,255,255,.26); color: #fff; }
+    .lfi-qb-tile:active { transform: scale(.95); }
+    .lfi-qb-tile .ico { font-size: 1.5em; margin-bottom: 3px; }
+    .lfi-qb-tile .lbl { font-weight: 600; }
+
+    /* Desktop : grille fluide qui passe à la ligne */
+    @media (min-width: 800px) {
+        .lfi-qb-scroll { flex-wrap: wrap; justify-content: center; overflow: visible; }
+        .lfi-qb-tile { min-width: 92px; }
+    }
+
+    /* Pousse le contenu vers le bas pour qu'il ne soit pas masqué */
+    body.lfi-has-quickbar { padding-top: 0 !important; }
+    body.lfi-has-quickbar.lfi-quickbar-open { margin-top: 132px; }
+    body.lfi-has-quickbar.lfi-quickbar-closed { margin-top: 36px; }
+    @media (min-width: 800px) {
+        body.lfi-has-quickbar.lfi-quickbar-open { margin-top: 160px; }
+    }
+    </style>
+    <script>
+    (function () {
+        var bar  = document.getElementById('lfi-quickbar');
+        var body = document.body;
+        if (!bar || !body) return;
+        body.classList.add('lfi-has-quickbar');
+
+        function apply(collapsed) {
+            bar.classList.toggle('is-collapsed', collapsed);
+            body.classList.toggle('lfi-quickbar-open',   !collapsed);
+            body.classList.toggle('lfi-quickbar-closed',  collapsed);
+            var btn = bar.querySelector('.lfi-qb-toggle');
+            if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        var saved = false;
+        try { saved = localStorage.getItem('lfi-quickbar-collapsed') === '1'; } catch (e) {}
+        apply(saved);
+
+        var toggle = bar.querySelector('.lfi-qb-toggle');
+        if (toggle) {
+            toggle.addEventListener('click', function () {
+                var willCollapse = !bar.classList.contains('is-collapsed');
+                apply(willCollapse);
+                try { localStorage.setItem('lfi-quickbar-collapsed', willCollapse ? '1' : '0'); } catch (e) {}
+            });
+        }
     })();
     </script>
     <?php
