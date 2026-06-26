@@ -925,52 +925,107 @@ function lfi_nct_app_view_comptes() {
     if (!current_user_can('manage_options')) return;
     global $wpdb;
 
-    $created = null;
+    $created     = null;
+    $created_err = null;   // message d'erreur à afficher en haut de page
+
+    /* Helper interne : prépare un email propre (vide si déjà utilisé) */
+    $clean_email_fn = function ($email) {
+        $email = trim((string) $email);
+        if (!is_email($email)) return '';
+        if (email_exists($email)) return ''; // pas une erreur fatale : on crée sans email
+        return $email;
+    };
+
+    /* --- CRÉER MEMBRE GA --- */
     if (!empty($_POST['lfi_app_create_ga']) && check_admin_referer('lfi_app_create_ga')) {
         $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
         $nom    = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
         $email  = sanitize_email(wp_unslash($_POST['email'] ?? ''));
         $tel    = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
-        $login  = lfi_nct_app_make_username($prenom, $nom);
-        $pwd    = lfi_nct_app_make_password();
-        $uid    = wp_insert_user([
-            'user_login'   => $login,
-            'user_pass'    => $pwd,
-            'user_email'   => $email ?: '',
-            'first_name'   => $prenom,
-            'last_name'    => $nom,
-            'display_name' => trim($prenom . ' ' . $nom) ?: $login,
-            'role'         => LFI_NCT_ROLE_GA,
-        ]);
-        if (!is_wp_error($uid)) {
-            if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
-            $created = ['type' => 'ga', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+        if ($prenom === '' && $nom === '') {
+            $created_err = "Indique au moins un prénom ou un nom.";
+        } else {
+            $login = lfi_nct_app_make_username($prenom, $nom);
+            $pwd   = lfi_nct_app_make_password();
+            $uid   = wp_insert_user([
+                'user_login'   => $login,
+                'user_pass'    => $pwd,
+                'user_email'   => $clean_email_fn($email),
+                'first_name'   => $prenom,
+                'last_name'    => $nom,
+                'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+                'role'         => LFI_NCT_ROLE_GA,
+            ]);
+            if (is_wp_error($uid)) {
+                $created_err = 'Erreur création compte GA : ' . $uid->get_error_message();
+            } else {
+                if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                $created = ['type' => 'ga', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+            }
         }
     }
 
+    /* --- CRÉER LOCATAIRE depuis une réponse d'enquête --- */
     if (!empty($_POST['lfi_app_create_tenant']) && check_admin_referer('lfi_app_create_tenant')) {
         $resp_id = (int) ($_POST['response_id'] ?? 0);
         $row = $resp_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $resp_id)) : null;
-        if ($row) {
-            $prenom = $row->contact_prenom ?: 'locataire';
+        if (!$row) {
+            $created_err = "Réponse d'enquête introuvable (#$resp_id).";
+        } else {
+            $prenom = $row->contact_prenom ?: '';
             $nom    = $row->contact_nom    ?: '';
             $email  = $row->contact_email  ?: '';
             $tel    = $row->contact_tel    ?: '';
-            $login  = lfi_nct_app_make_username($prenom, $nom);
-            $pwd    = lfi_nct_app_make_password();
-            $uid    = wp_insert_user([
+            if ($prenom === '' && $nom === '') {
+                $created_err = "Cette réponse d'enquête n'a pas de prénom/nom : impossible de créer un compte. Édite-la d'abord ou crée le compte manuellement.";
+            } else {
+                $login = lfi_nct_app_make_username($prenom, $nom);
+                $pwd   = lfi_nct_app_make_password();
+                $uid   = wp_insert_user([
+                    'user_login'   => $login,
+                    'user_pass'    => $pwd,
+                    'user_email'   => $clean_email_fn($email),
+                    'first_name'   => $prenom,
+                    'last_name'    => $nom,
+                    'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+                    'role'         => LFI_NCT_ROLE_TENANT,
+                ]);
+                if (is_wp_error($uid)) {
+                    $created_err = 'Erreur création compte locataire : ' . $uid->get_error_message();
+                } else {
+                    update_user_meta($uid, 'lfi_nct_response_id', $resp_id);
+                    if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                    $created = ['type' => 'tenant', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'response_id' => $resp_id];
+                }
+            }
+        }
+    }
+
+    /* --- CRÉER LOCATAIRE MANUELLEMENT (sans enquête) --- */
+    if (!empty($_POST['lfi_app_create_tenant_manual']) && check_admin_referer('lfi_app_create_tenant_manual')) {
+        $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
+        $nom    = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+        $email  = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+        $tel    = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
+        if ($prenom === '' && $nom === '') {
+            $created_err = "Indique au moins un prénom ou un nom.";
+        } else {
+            $login = lfi_nct_app_make_username($prenom, $nom);
+            $pwd   = lfi_nct_app_make_password();
+            $uid   = wp_insert_user([
                 'user_login'   => $login,
                 'user_pass'    => $pwd,
-                'user_email'   => $email ?: '',
+                'user_email'   => $clean_email_fn($email),
                 'first_name'   => $prenom,
                 'last_name'    => $nom,
                 'display_name' => trim($prenom . ' ' . $nom) ?: $login,
                 'role'         => LFI_NCT_ROLE_TENANT,
             ]);
-            if (!is_wp_error($uid)) {
-                update_user_meta($uid, 'lfi_nct_response_id', $resp_id);
+            if (is_wp_error($uid)) {
+                $created_err = 'Erreur création compte locataire : ' . $uid->get_error_message();
+            } else {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
-                $created = ['type' => 'tenant', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'response_id' => $resp_id];
+                $created = ['type' => 'tenant-manual', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel];
             }
         }
     }
@@ -990,7 +1045,9 @@ function lfi_nct_app_view_comptes() {
     if (!empty($_POST['lfi_app_import_membre']) && check_admin_referer('lfi_app_import_membre')) {
         $mid = (int) $_POST['membre_id'];
         $row = $mid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_membres WHERE id = %d", $mid)) : null;
-        if ($row) {
+        if (!$row) {
+            $created_err = "Adhérent introuvable (#$mid).";
+        } else {
             $prenom = (string) ($row->prenom ?: '');
             $nom    = (string) ($row->nom    ?: $row->pseudo ?: '');
             $email  = (string) ($row->email  ?: '');
@@ -1000,13 +1057,15 @@ function lfi_nct_app_view_comptes() {
             $uid    = wp_insert_user([
                 'user_login'   => $login,
                 'user_pass'    => $pwd,
-                'user_email'   => is_email($email) ? $email : '',
+                'user_email'   => $clean_email_fn($email),
                 'first_name'   => $prenom,
                 'last_name'    => $nom,
                 'display_name' => trim($prenom . ' ' . $nom) ?: $login,
                 'role'         => LFI_NCT_ROLE_GA,
             ]);
-            if (!is_wp_error($uid)) {
+            if (is_wp_error($uid)) {
+                $created_err = 'Erreur import : ' . $uid->get_error_message();
+            } else {
                 update_user_meta($uid, 'lfi_nct_membre_id', $mid);
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 $created = ['type' => 'ga-import', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel];
@@ -1089,18 +1148,19 @@ function lfi_nct_app_view_comptes() {
     $users_ga      = get_users(['role' => LFI_NCT_ROLE_GA,     'fields' => ['ID','user_login','display_name','user_email'], 'number' => $LIST_LIMIT, 'orderby' => 'registered', 'order' => 'DESC']);
     $users_tenant  = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID','user_login','display_name','user_email'], 'number' => $LIST_LIMIT, 'orderby' => 'registered', 'order' => 'DESC']);
 
-    /* Répondant·es non encore liés à un compte */
+    /* Répondant·es non encore liés à un compte — inclut ceux SANS recontact
+       (l'admin verra un avertissement) pour ne pas se retrouver bloqué. */
     $linked_ids = $wpdb->get_col(
         "SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_response_id'"
     ) ?: [];
     $linked_in = $linked_ids ? '(' . implode(',', array_map('intval', $linked_ids)) . ')' : '(0)';
     $unlinked_responses = $wpdb->get_results(
-        "SELECT id, contact_prenom, contact_nom, contact_email, contact_tel
+        "SELECT id, contact_prenom, contact_nom, contact_email, contact_tel, contact_recontact
          FROM {$wpdb->prefix}lfi_nct_responses
          WHERE deleted_at IS NULL
-               AND contact_recontact = 1
                AND id NOT IN $linked_in
-         ORDER BY submitted_at DESC LIMIT 50"
+               AND (contact_prenom <> '' OR contact_nom <> '')
+         ORDER BY contact_recontact DESC, submitted_at DESC LIMIT 100"
     ) ?: [];
 
     /* Adhérents existants sans compte WP encore créé — on affiche 30 max,
@@ -1119,6 +1179,11 @@ function lfi_nct_app_view_comptes() {
     ) ?: [];
 
     lfi_nct_app_screen_open('🪪 Comptes', (int) $users_ga_total_n . ' membre(s) GA · ' . (int) $users_tenant_total . ' locataire(s)');
+
+    /* Erreur de création / import */
+    if ($created_err) {
+        lfi_nct_app_flash('❌ ' . $created_err, 'err');
+    }
 
     /* Banner « il en reste à importer » */
     if (isset($_GET['remaining']) && (int) $_GET['remaining'] > 0) {
@@ -1233,27 +1298,53 @@ function lfi_nct_app_view_comptes() {
     echo '<button type="submit" class="btn-primary">✓ Créer le compte</button>';
     echo '</form></details>';
 
-    /* Form : Créer compte locataire à partir d'une réponse enquête */
+    /* Form : Créer compte locataire — version enquête (si dispo) */
     echo '<details class="lfi-app-collapse"><summary>+ Créer un compte « Locataire » (depuis une enquête)</summary>';
     if (empty($unlinked_responses)) {
-        echo '<div class="lfi-app-help">Aucune réponse en attente. Toutes les enquêtes consentantes sont déjà liées à un compte, ou aucune n\'a coché « recontact OK ».</div>';
+        echo '<div class="lfi-app-help" style="padding:14px 16px">Aucune réponse d\'enquête disponible. Soit toutes sont déjà liées à un compte, soit aucune n\'a renseigné prénom/nom. Tu peux créer un compte manuellement ci-dessous.</div>';
     } else {
         echo '<form method="post" class="lfi-app-form">';
         wp_nonce_field('lfi_app_create_tenant');
         echo '<input type="hidden" name="lfi_app_create_tenant" value="1">';
         echo '<label>Répondant·e à lier<select name="response_id" required>';
         echo '<option value="">— choisir —</option>';
+        $consent_group_open = false;
+        $non_consent_group_open = false;
         foreach ($unlinked_responses as $r) {
+            $consents = (int) ($r->contact_recontact ?? 0) === 1;
+            if ($consents && !$consent_group_open) {
+                echo '<optgroup label="✓ Consentent au recontact">';
+                $consent_group_open = true;
+            } elseif (!$consents && !$non_consent_group_open) {
+                if ($consent_group_open) { echo '</optgroup>'; $consent_group_open = false; }
+                echo '<optgroup label="⚠ Pas de consentement explicite — à confirmer verbalement">';
+                $non_consent_group_open = true;
+            }
             $lbl = trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')) ?: '#' . $r->id;
             $extras = array_filter([$r->contact_tel, $r->contact_email]);
             if ($extras) $lbl .= ' — ' . implode(' / ', $extras);
             echo '<option value="' . (int) $r->id . '">' . esc_html($lbl) . '</option>';
         }
+        if ($consent_group_open || $non_consent_group_open) echo '</optgroup>';
         echo '</select></label>';
+        echo '<div class="lfi-app-help"><small>Si l\'email du répondant·e est déjà utilisé par un autre compte WP, le compte sera créé sans email (login + mot de passe à transmettre via SMS).</small></div>';
         echo '<button type="submit" class="btn-primary">✓ Créer le compte locataire</button>';
         echo '</form>';
     }
     echo '</details>';
+
+    /* Form : Créer compte locataire MANUELLEMENT (sans enquête) */
+    echo '<details class="lfi-app-collapse"><summary>+ Créer un compte « Locataire » manuellement (sans enquête)</summary>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_create_tenant_manual');
+    echo '<input type="hidden" name="lfi_app_create_tenant_manual" value="1">';
+    echo '<div class="lfi-app-help">Pour les personnes que tu as rencontrées sans qu\'elles aient rempli l\'enquête. Si tu veux les lier à une enquête plus tard, fais-le via la base ou crée d\'abord le témoignage.</div>';
+    echo '<label>Prénom<input type="text" name="prenom" required></label>';
+    echo '<label>Nom<input type="text" name="nom"></label>';
+    echo '<label>Email<input type="email" name="email"></label>';
+    echo '<label>Téléphone (pour SMS auto)<input type="tel" name="tel" placeholder="06 12 34 56 78"></label>';
+    echo '<button type="submit" class="btn-primary">✓ Créer le compte locataire</button>';
+    echo '</form></details>';
 
     /* Liste des comptes GA */
     echo '<h3 style="margin-top:18px">👥 Membres du GA (' . count($users_ga) . ')</h3>';
