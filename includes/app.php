@@ -57,7 +57,7 @@ function lfi_nct_app_rewrites() {
         update_option('lfi_nct_app_rewrites_flushed', '2', false);
     }
 }
-add_filter('query_vars', function ($v) { $v[] = 'lfi_app'; $v[] = 'size'; return $v; });
+add_filter('query_vars', function ($v) { $v[] = 'lfi_app'; $v[] = 'size'; $v[] = 'mask'; return $v; });
 
 add_action('template_redirect', 'lfi_nct_app_serve_endpoints');
 function lfi_nct_app_serve_endpoints() {
@@ -67,6 +67,7 @@ function lfi_nct_app_serve_endpoints() {
     if ($ep === 'manifest') {
         nocache_headers();
         header('Content-Type: application/manifest+json; charset=utf-8');
+        $v = LFI_NCT_VERSION;
         echo wp_json_encode([
             'name'             => 'GA LFI Nantes Sud Clos Toreau',
             'short_name'       => 'GA LFI',
@@ -79,8 +80,13 @@ function lfi_nct_app_serve_endpoints() {
             'theme_color'      => '#c8102e',
             'lang'             => 'fr',
             'icons'            => [
-                ['src' => home_url('/lfi-app-icon-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any maskable'],
-                ['src' => home_url('/lfi-app-icon-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable'],
+                /* Maskable = Android adaptive, le motif doit rester dans le safe-zone central */
+                ['src' => lfi_nct_app_icon_url(192, 'maskable') . '&v=' . $v, 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'maskable'],
+                ['src' => lfi_nct_app_icon_url(512, 'maskable') . '&v=' . $v, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+                /* "any" = iOS/iPad/web — utilise tout l'espace, pas de marge interne */
+                ['src' => lfi_nct_app_icon_url(180) . '&v=' . $v, 'sizes' => '180x180', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => lfi_nct_app_icon_url(192) . '&v=' . $v, 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => lfi_nct_app_icon_url(512) . '&v=' . $v, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
             ],
             'shortcuts' => [
                 ['name' => 'Inscrits réunion', 'url' => admin_url('admin.php?page=lfi-nct-reunion-rsvp')],
@@ -140,50 +146,86 @@ self.addEventListener('fetch', e => {
 
     if ($ep === 'icon') {
         $size = max(48, min(1024, (int) get_query_var('size')));
+        $mask = get_query_var('mask') === 'maskable';
         nocache_headers();
         header('Content-Type: image/png');
         header('Cache-Control: public, max-age=86400');
-        lfi_nct_app_render_icon($size);
+        lfi_nct_app_render_icon($size, $mask);
         exit;
     }
 }
 
-function lfi_nct_app_render_icon($size) {
+/**
+ * URL d'une icône qui marche TOUJOURS (sans dépendre des rewrite rules).
+ * On passe par index.php?lfi_app=icon&size=N pour ne jamais être bloqué.
+ */
+function lfi_nct_app_icon_url($size, $variant = 'any') {
+    $url = home_url('/?lfi_app=icon&size=' . (int) $size);
+    if ($variant === 'maskable') $url .= '&mask=maskable';
+    return $url;
+}
+
+function lfi_nct_app_render_icon($size, $maskable = false) {
     if (!function_exists('imagecreatetruecolor')) {
-        /* PNG 1×1 rouge de secours */
         echo base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
         return;
     }
     $im = imagecreatetruecolor($size, $size);
-    $rouge = imagecolorallocate($im, 200, 16, 46);
-    $blanc = imagecolorallocate($im, 255, 255, 255);
-    imagefilledrectangle($im, 0, 0, $size, $size, $rouge);
+    imagealphablending($im, true);
+    imageantialias($im, true);
 
-    /* Texte "LFI" gros au centre */
-    $font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
-    if (function_exists('imagettftext') && file_exists($font_path)) {
-        $fs = (int) ($size * 0.42);
-        $bbox = imagettfbbox($fs, 0, $font_path, 'LFI');
+    $rouge       = imagecolorallocate($im, 200, 16, 46);   // #c8102e
+    $rouge_clair = imagecolorallocate($im, 232, 32, 60);   // un peu plus clair pour le dégradé
+    $rouge_fonce = imagecolorallocate($im, 154, 8,  34);   // ombre interne
+    $blanc       = imagecolorallocate($im, 255, 255, 255);
+    $jaune       = imagecolorallocate($im, 255, 212, 0);   // liseré
+
+    /* Dégradé radial maison : carré rouge avec un coeur plus clair */
+    imagefilledrectangle($im, 0, 0, $size, $size, $rouge);
+    for ($i = 0; $i < 6; $i++) {
+        $r = (int) ($size * (0.55 - $i * 0.07));
+        if ($r <= 0) break;
+        /* alpha doit rester entre 0 et 127 (transparent total = 127) */
+        $a = min(127, 60 + $i * 12);
+        $col = imagecolorallocatealpha($im, 232, 32, 60, $a);
+        imagefilledellipse($im, (int) ($size / 2), (int) ($size * 0.42), $r * 2, $r * 2, $col);
+    }
+
+    /* Zone utile : si maskable, le motif central tient dans 60% (safe zone Android) */
+    $scale = $maskable ? 0.60 : 0.78;
+
+    $font_bold = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+    if (function_exists('imagettftext') && file_exists($font_bold)) {
+        /* Φ (phi) majuscule, symbole reconnaissable LFI */
+        $glyph = 'Φ';
+        $fs = (int) ($size * $scale * 0.78);
+        $bbox = imagettfbbox($fs, 0, $font_bold, $glyph);
         $tw = $bbox[2] - $bbox[0];
         $th = $bbox[1] - $bbox[7];
         $x = (int) (($size - $tw) / 2) - $bbox[0];
-        $y = (int) (($size + $th) / 2) - 4;
-        imagettftext($im, $fs, 0, $x, $y, $blanc, $font_path, 'LFI');
+        $y = (int) (($size + $th) / 2) - (int) ($size * 0.04);
+        /* ombre légère pour la profondeur */
+        imagettftext($im, $fs, 0, $x + max(1, (int) ($size * 0.008)), $y + max(1, (int) ($size * 0.008)), $rouge_fonce, $font_bold, $glyph);
+        imagettftext($im, $fs, 0, $x, $y, $blanc, $font_bold, $glyph);
 
-        /* Sous-titre "GA" plus petit */
-        $fs2 = (int) ($size * 0.14);
-        $bbox2 = imagettfbbox($fs2, 0, $font_path, 'GA');
+        /* Bandeau « GA » en bas */
+        $fs2 = (int) ($size * $scale * 0.20);
+        $bbox2 = imagettfbbox($fs2, 0, $font_bold, 'GA');
         $tw2 = $bbox2[2] - $bbox2[0];
         $x2 = (int) (($size - $tw2) / 2) - $bbox2[0];
-        imagettftext($im, $fs2, 0, $x2, (int) ($size * 0.82), $blanc, $font_path, 'GA');
+        $y2 = (int) ($size * ($maskable ? 0.78 : 0.86));
+        imagettftext($im, $fs2, 0, $x2, $y2, $blanc, $font_bold, 'GA');
+
+        /* Liseré jaune en bas du badge */
+        if (!$maskable) {
+            $h = max(2, (int) ($size * 0.018));
+            imagefilledrectangle($im, 0, $size - $h, $size, $size, $jaune);
+        }
     } else {
-        /* fallback bitmap font */
-        $cw = imagefontwidth(5);
-        $ch = imagefontheight(5);
-        imagestring($im, 5, (int) (($size - $cw * 3) / 2), (int) (($size - $ch) / 2), 'LFI', $blanc);
+        imagestring($im, 5, (int) (($size - 24) / 2), (int) (($size - 16) / 2), 'LFI', $blanc);
     }
 
-    imagepng($im);
+    imagepng($im, null, 6);
     imagedestroy($im);
 }
 
@@ -203,8 +245,14 @@ add_action('wp_head', 'lfi_nct_app_head_meta', 1);
 function lfi_nct_app_head_meta() {
     global $post;
     if (!is_a($post, 'WP_Post') || $post->post_name !== LFI_NCT_APP_SLUG) return;
-    $manifest = esc_url(home_url('/lfi-app-manifest.json'));
-    $icon192  = esc_url(home_url('/lfi-app-icon-192.png'));
+    $manifest = esc_url(home_url('/?lfi_app=manifest&v=' . LFI_NCT_VERSION));
+    $v        = LFI_NCT_VERSION;
+    /* URLs d'icônes via query var = marchent même sans rewrite rules flushées */
+    $ic180 = esc_url(lfi_nct_app_icon_url(180) . '&v=' . $v);
+    $ic192 = esc_url(lfi_nct_app_icon_url(192) . '&v=' . $v);
+    $ic152 = esc_url(lfi_nct_app_icon_url(152) . '&v=' . $v);
+    $ic167 = esc_url(lfi_nct_app_icon_url(167) . '&v=' . $v);
+    $ic512 = esc_url(lfi_nct_app_icon_url(512) . '&v=' . $v);
     ?>
     <link rel="manifest" href="<?php echo $manifest; ?>">
     <meta name="theme-color" content="#c8102e">
@@ -213,8 +261,14 @@ function lfi_nct_app_head_meta() {
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="GA LFI">
-    <link rel="apple-touch-icon" sizes="192x192" href="<?php echo $icon192; ?>">
-    <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $icon192; ?>">
+    <!-- iOS : besoin de tailles précises sinon il prend une capture d'écran -->
+    <link rel="apple-touch-icon"               href="<?php echo $ic180; ?>">
+    <link rel="apple-touch-icon" sizes="152x152" href="<?php echo $ic152; ?>">
+    <link rel="apple-touch-icon" sizes="167x167" href="<?php echo $ic167; ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="<?php echo $ic180; ?>">
+    <link rel="icon" type="image/png" sizes="192x192" href="<?php echo $ic192; ?>">
+    <link rel="icon" type="image/png" sizes="512x512" href="<?php echo $ic512; ?>">
+    <link rel="shortcut icon" href="<?php echo $ic192; ?>">
     <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
     <?php
 }
@@ -439,7 +493,8 @@ function lfi_nct_app_render_styles() {
 }
 
 function lfi_nct_app_render_register_sw() {
-    $sw = esc_url(home_url('/lfi-app-sw.js'));
+    /* Query-var direct = marche même si les rewrite rules ne sont pas flushées */
+    $sw = esc_url(home_url('/?lfi_app=sw&v=' . LFI_NCT_VERSION));
     ?>
     <script>
     (function () {
