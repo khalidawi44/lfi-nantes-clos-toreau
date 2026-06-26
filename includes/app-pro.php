@@ -500,6 +500,247 @@ function lfi_nct_app_view_signatures() {
 }
 
 /* ============================================================== *
+ *  ADMIN : Carte interactive (Leaflet + OpenStreetMap)             *
+ * ============================================================== */
+
+function lfi_nct_app_view_carte() {
+    if (!current_user_can('manage_options')) return;
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+
+    /* Bouton « géocoder ce qui manque » */
+    if (!empty($_POST['lfi_app_geocode']) && check_admin_referer('lfi_app_geocode')) {
+        @set_time_limit(120);
+        $batch = 25;
+        if (function_exists('lfi_nct_geocode_pending')) {
+            $res = lfi_nct_geocode_pending($batch);
+            wp_safe_redirect(lfi_nct_app_url('carte', ['geo_traitees' => (int) $res['traitees'], 'geo_ok' => (int) $res['geocodees'], 'geo_remain' => (int) $res['restantes']]));
+        } else {
+            wp_safe_redirect(lfi_nct_app_url('carte', ['geo_err' => 1]));
+        }
+        exit;
+    }
+
+    $rows = $wpdb->get_results(
+        "SELECT id, adresse, etage, data, lat, lng, submitted_at
+         FROM $table
+         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL
+         ORDER BY submitted_at DESC LIMIT 500"
+    ) ?: [];
+    $pending = (int) $wpdb->get_var(
+        "SELECT COUNT(*) FROM $table
+         WHERE lat IS NULL AND adresse IS NOT NULL AND adresse != ''
+               AND deleted_at IS NULL"
+    );
+
+    /* Construit les markers JSON */
+    $markers = [];
+    foreach ($rows as $r) {
+        $data = json_decode((string) $r->data, true);
+        if (!is_array($data)) $data = [];
+        $types_raw = (array) ($data['problemes_types'] ?? []);
+        $gravite = (int) ($data['problemes_gravite'] ?? 0);
+
+        if      ($gravite >= 9) $color = '#a30b25';
+        elseif  ($gravite >= 7) $color = '#e8201e';
+        elseif  ($gravite >= 5) $color = '#ffa500';
+        elseif  ($gravite >= 3) $color = '#fdd835';
+        elseif  ($gravite >  0) $color = '#9ccc65';
+        else                    $color = '#90a4ae';
+
+        $markers[] = [
+            'id'    => (int) $r->id,
+            'lat'   => (float) $r->lat,
+            'lng'   => (float) $r->lng,
+            'adr'   => (string) $r->adresse,
+            'et'    => (string) $r->etage,
+            'g'     => $gravite,
+            'col'   => $color,
+            't'     => $types_raw,
+            'date'  => wp_date('j M Y', strtotime($r->submitted_at)),
+        ];
+    }
+
+    lfi_nct_app_screen_open('🗺 Carte des signalements', count($rows) . ' point(s) géolocalisé(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
+
+    if (isset($_GET['geo_traitees'])) {
+        lfi_nct_app_flash(sprintf('Géocodage : %d traité(s), %d réussi(s), %d restant(s).', (int) $_GET['geo_traitees'], (int) $_GET['geo_ok'], (int) $_GET['geo_remain']));
+    }
+    if (isset($_GET['geo_err'])) {
+        lfi_nct_app_flash('La fonction de géocodage n\'est pas disponible.', 'err');
+    }
+
+    if ($pending > 0) {
+        echo '<form method="post" style="margin:0 0 12px;text-align:center">';
+        wp_nonce_field('lfi_app_geocode');
+        echo '<input type="hidden" name="lfi_app_geocode" value="1">';
+        echo '<button type="submit" class="btn-ghost">📍 Géocoder ' . min(25, $pending) . ' adresse(s) en attente</button>';
+        echo '</form>';
+    }
+
+    /* Légende */
+    echo '<div class="lfi-map-legend">';
+    foreach ([
+        ['#a30b25', '9-10 critique'],
+        ['#e8201e', '7-8 grave'],
+        ['#ffa500', '5-6 moyen'],
+        ['#fdd835', '3-4 mineur'],
+        ['#9ccc65', '1-2 faible'],
+        ['#90a4ae', '— non renseigné'],
+    ] as $l) {
+        echo '<span><i style="background:' . esc_attr($l[0]) . '"></i> ' . esc_html($l[1]) . '</span>';
+    }
+    echo '</div>';
+
+    echo '<div id="lfi-map" style="height:60vh;min-height:380px;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)"></div>';
+
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    ?>
+    <script>
+    (function () {
+        var markers = <?php echo wp_json_encode($markers); ?>;
+        if (!window.L || !markers.length) {
+            document.getElementById('lfi-map').innerHTML = '<div style="padding:30px;text-align:center;color:#777">' + (markers.length ? 'Carte indisponible (Leaflet non chargé).' : 'Aucune adresse géocodée. Clique sur « Géocoder » au-dessus.') + '</div>';
+            return;
+        }
+        var map = L.map('lfi-map').setView([markers[0].lat, markers[0].lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 19
+        }).addTo(map);
+        var typeLabels = { degats_eaux:'💧 Dégâts eaux', humidite:'🌫 Humidité', insectes:'🐜 Nuisibles', chauffage:'🥶 Chauffage', electricite:'⚡ Électricité', ascenseur:'🛗 Ascenseur', parties_communes:'🚪 Parties communes', bruit:'🔊 Bruit', securite:'🚨 Insécurité' };
+        var group = L.featureGroup();
+        markers.forEach(function (m) {
+            var typeChips = (m.t || []).map(function (t) { return typeLabels[t] || t; }).join(' · ');
+            var pop = '<strong>' + (m.adr || '#' + m.id) + '</strong>' + (m.et ? ' · ét. ' + m.et : '');
+            pop += '<br><small>gravité ' + (m.g || '—') + '/10</small>';
+            if (typeChips) pop += '<br>' + typeChips;
+            pop += '<br><small>' + (m.date || '') + '</small>';
+            L.circleMarker([m.lat, m.lng], {
+                radius: 9, color: '#fff', weight: 2, fillColor: m.col, fillOpacity: .85
+            }).bindPopup(pop).addTo(group);
+        });
+        group.addTo(map);
+        try { map.fitBounds(group.getBounds().pad(0.15)); } catch (e) {}
+    })();
+    </script>
+    <?php
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  ADMIN : Stats de l'enquête (problèmes, adresses, gravité)       *
+ * ============================================================== */
+
+function lfi_nct_app_view_stats_enquete() {
+    if (!current_user_can('manage_options')) return;
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+
+    $rows = $wpdb->get_results(
+        "SELECT adresse, data FROM $table WHERE deleted_at IS NULL"
+    ) ?: [];
+    $total = count($rows);
+
+    /* Agrégats */
+    $problem_types  = [];   // slug => count
+    $address_count  = [];   // adresse => count
+    $gravity_bucket = [0,0,0,0,0]; // [1-2, 3-4, 5-6, 7-8, 9-10]
+    $with_recontact = 0;
+    foreach ($rows as $r) {
+        $data = json_decode((string) $r->data, true);
+        if (!is_array($data)) $data = [];
+        foreach ((array) ($data['problemes_types'] ?? []) as $t) {
+            $problem_types[$t] = ($problem_types[$t] ?? 0) + 1;
+        }
+        $adr = trim((string) $r->adresse);
+        /* Normalise au nom de rue (vire les numéros au début) */
+        $street = preg_replace('/^\s*\d+\s+/u', '', $adr) ?: $adr;
+        if ($street) $address_count[$street] = ($address_count[$street] ?? 0) + 1;
+        $g = (int) ($data['problemes_gravite'] ?? 0);
+        if      ($g >= 9) $gravity_bucket[4]++;
+        elseif  ($g >= 7) $gravity_bucket[3]++;
+        elseif  ($g >= 5) $gravity_bucket[2]++;
+        elseif  ($g >= 3) $gravity_bucket[1]++;
+        elseif  ($g >= 1) $gravity_bucket[0]++;
+    }
+    arsort($problem_types);
+    arsort($address_count);
+
+    $labels_base = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [];
+
+    lfi_nct_app_screen_open('📊 Stats enquête', $total . ' réponse(s) au total');
+
+    /* Bandeau résumé */
+    echo '<div class="lfi-app-stats-grid">';
+    echo '<div class="stat"><div class="ico">📋</div><div class="n">' . $total . '</div><div class="l">Réponses</div></div>';
+    echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . count($address_count) . '</div><div class="l">Immeubles touchés</div></div>';
+    echo '<div class="stat"><div class="ico">🚨</div><div class="n">' . ($gravity_bucket[3] + $gravity_bucket[4]) . '</div><div class="l">Cas graves (≥7)</div></div>';
+    echo '<div class="stat"><div class="ico">📝</div><div class="n">' . count($problem_types) . '</div><div class="l">Types de problèmes</div></div>';
+    echo '</div>';
+
+    /* Top des problèmes signalés */
+    echo '<h3 style="margin:18px 0 8px">🏠 Problèmes les plus signalés</h3>';
+    if (empty($problem_types)) {
+        echo '<div class="lfi-app-empty">Aucun problème encore signalé.</div>';
+    } else {
+        $max = max($problem_types);
+        echo '<div class="lfi-app-bars">';
+        foreach ($problem_types as $slug => $n) {
+            $label = $labels_base[$slug] ?? $slug;
+            $pct = $max ? round($n / $max * 100) : 0;
+            echo '<div class="bar-row"><div class="bar-label">' . $label . '</div>';
+            echo '<div class="bar-track"><div class="bar-fill" style="width:' . $pct . '%"></div><div class="bar-n">' . $n . '</div></div></div>';
+        }
+        echo '</div>';
+    }
+
+    /* Top des immeubles touchés */
+    echo '<h3 style="margin:18px 0 8px">📍 Adresses les plus représentées</h3>';
+    if (empty($address_count)) {
+        echo '<div class="lfi-app-empty">Aucune adresse renseignée.</div>';
+    } else {
+        $top_addresses = array_slice($address_count, 0, 12, true);
+        $max_a = max($top_addresses);
+        echo '<div class="lfi-app-bars">';
+        foreach ($top_addresses as $street => $n) {
+            $pct = $max_a ? round($n / $max_a * 100) : 0;
+            echo '<div class="bar-row"><div class="bar-label">' . esc_html($street) . '</div>';
+            echo '<div class="bar-track"><div class="bar-fill" style="width:' . $pct . '%;background:#3a3a3a"></div><div class="bar-n">' . $n . '</div></div></div>';
+        }
+        echo '</div>';
+    }
+
+    /* Histogramme de gravité */
+    echo '<h3 style="margin:18px 0 8px">⚖️ Gravité ressentie</h3>';
+    $buckets = [
+        ['1-2 faible',    '#9ccc65'],
+        ['3-4 mineur',    '#fdd835'],
+        ['5-6 moyen',     '#ffa500'],
+        ['7-8 grave',     '#e8201e'],
+        ['9-10 critique', '#a30b25'],
+    ];
+    $max_g = max($gravity_bucket) ?: 1;
+    echo '<div class="lfi-app-bars">';
+    foreach ($buckets as $i => $b) {
+        $n = (int) $gravity_bucket[$i];
+        $pct = round($n / $max_g * 100);
+        echo '<div class="bar-row"><div class="bar-label">' . esc_html($b[0]) . '</div>';
+        echo '<div class="bar-track"><div class="bar-fill" style="width:' . $pct . '%;background:' . esc_attr($b[1]) . '"></div><div class="bar-n">' . $n . '</div></div></div>';
+    }
+    echo '</div>';
+
+    /* Lien vers la carte */
+    echo '<div style="margin-top:18px">';
+    echo '<a class="btn-primary big" href="' . esc_url(lfi_nct_app_url('carte')) . '">🗺 Voir la carte des signalements</a>';
+    echo '</div>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
  *  CSS supplémentaires                                              *
  * ============================================================== */
 add_action('wp_footer', 'lfi_nct_app_pro_styles', 200);
@@ -530,6 +771,39 @@ function lfi_nct_app_pro_styles() {
     .lfi-app-form input[type=file] {
         padding: 10px; border: 2px dashed #ccc; border-radius: 10px;
         background: #fafafa; cursor: pointer;
+    }
+
+    /* Légende de la carte */
+    .lfi-map-legend {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        margin: 0 0 10px; font-size: .78em;
+    }
+    .lfi-map-legend span {
+        display: inline-flex; align-items: center; gap: 5px;
+        background: #fff; padding: 4px 10px; border-radius: 999px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    }
+    .lfi-map-legend i {
+        width: 12px; height: 12px; border-radius: 50%;
+        border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.1);
+    }
+
+    /* Barres horizontales des stats */
+    .lfi-app-bars { display: flex; flex-direction: column; gap: 6px; }
+    .lfi-app-bars .bar-row { background: #fff; padding: 8px 12px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .lfi-app-bars .bar-label { font-size: .85em; font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
+    .lfi-app-bars .bar-track {
+        position: relative; background: #f0f0f0; border-radius: 6px;
+        height: 22px; overflow: hidden;
+    }
+    .lfi-app-bars .bar-fill {
+        height: 100%; background: #c8102e; border-radius: 6px;
+        transition: width .4s ease;
+    }
+    .lfi-app-bars .bar-n {
+        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+        font-size: .8em; font-weight: 700; color: #1a1a1a;
+        background: rgba(255,255,255,.8); padding: 0 6px; border-radius: 4px;
     }
     </style>
     <?php

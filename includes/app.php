@@ -309,6 +309,8 @@ function lfi_nct_app_shortcode() {
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
+                    case 'carte':           lfi_nct_app_view_carte();           break;
+                    case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -409,7 +411,7 @@ function lfi_nct_app_render_dashboard() {
 
     $user = wp_get_current_user();
     $stats = lfi_nct_app_quick_stats();
-    $tiles = lfi_nct_admin_get_tiles($stats);
+    $sections = lfi_nct_admin_get_tiles_sections($stats);
     ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
@@ -426,15 +428,20 @@ function lfi_nct_app_render_dashboard() {
             <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Adhérents</span></div>
         </div>
 
-        <div class="lfi-app-grid">
-            <?php foreach ($tiles as $t): ?>
-                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
-                    <div class="ico"><?php echo $t[0]; ?></div>
-                    <div class="tit"><?php echo esc_html($t[1]); ?></div>
-                    <div class="sub"><?php echo esc_html($t[2]); ?></div>
-                </a>
-            <?php endforeach; ?>
-        </div>
+        <?php foreach ($sections as $section_title => $tiles): ?>
+            <div class="lfi-app-section">
+                <div class="lfi-app-section-title"><?php echo esc_html($section_title); ?></div>
+                <div class="lfi-app-grid">
+                    <?php foreach ($tiles as $t): ?>
+                        <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+                            <div class="ico"><?php echo $t[0]; ?></div>
+                            <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                            <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endforeach; ?>
 
         <div class="lfi-app-foot">
             <div>LFI Nantes Sud Clos Toreau · v<?php echo esc_html(LFI_NCT_VERSION); ?></div>
@@ -774,6 +781,13 @@ function lfi_nct_app_render_styles() {
     .lfi-tenant-tip .more { margin-top: 6px; font-size: .82em; }
     .lfi-tenant-tip .more a { color: #c8102e; font-weight: 600; text-decoration: none; }
 
+    /* Sections du dashboard admin */
+    .lfi-app-section { margin: 6px 0 18px; }
+    .lfi-app-section-title {
+        font-size: .72em; font-weight: 800; letter-spacing: 1px;
+        color: #888; margin: 16px 4px 6px; padding: 0 4px;
+    }
+
     /* Page Droits — sections juridiques */
     .lfi-droits section { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
     .lfi-droits section h3 { margin: 0 0 8px; font-size: 1em; color: #c8102e; }
@@ -828,20 +842,58 @@ function lfi_nct_admin_get_tiles($stats = null) {
     return [
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
+        ['📊', 'Stats enquête',             'Problèmes, adresses, gravité',        lfi_nct_app_url('stats-enquete')],
+        ['🗺️', 'Carte interactive',         'Géolocalisation des réponses',        lfi_nct_app_url('carte')],
         ['➕', '+ Saisir une réponse d\'enquête', 'Porte-à-porte / collecte papier', lfi_nct_app_url('temoignage-add')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['🗂', 'Dossiers locataires',        'Photos, enquête, historique',         lfi_nct_app_url('dossiers')],
-        ['✍️', 'Signatures email',           'Le Collectif, Fabrice, etc.',         lfi_nct_app_url('signatures')],
-        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    lfi_nct_app_url('sms')],
         ['✉️', 'Email blast',               'Campagne mail',                       lfi_nct_app_url('email')],
-        ['📊', 'Statistiques',              'Vue d\'ensemble',                     lfi_nct_app_url('stats')],
+        ['✍️', 'Signatures email',           'Le Collectif, Fabrice, etc.',         lfi_nct_app_url('signatures')],
+        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
+        ['📈', 'Stats globales',            'Compteurs du GA',                     lfi_nct_app_url('stats')],
         ['🔥', 'Purger le cache',           'Forcer la maj',                       lfi_nct_app_url('cache')],
         ['📰', 'Articles',                  'Édition WP',                          admin_url('edit.php')],
         ['📝', 'Pages',                     'Édition WP',                          admin_url('edit.php?post_type=page')],
-        ['📍', 'Carte / RDV',               'Demandes',                            admin_url('admin.php?page=lfi-nct-rdv')],
         ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/'))],
+    ];
+}
+
+/**
+ * Dashboard tiles organisées en sections pour ne plus avoir une bouillie
+ * de 17 tuiles. Renvoie un tableau de sections [titre => [tuiles...]].
+ */
+function lfi_nct_admin_get_tiles_sections($stats = null) {
+    if ($stats === null) $stats = lfi_nct_app_quick_stats();
+    return [
+        '🏠 ENQUÊTE LOGEMENT' => [
+            ['🏠', 'Réponses',              $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
+            ['📊', 'Stats enquête',          'Problèmes · adresses · gravité',     lfi_nct_app_url('stats-enquete')],
+            ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
+            ['➕', 'Saisir une réponse',     'Porte-à-porte / papier',             lfi_nct_app_url('temoignage-add')],
+        ],
+        '👥 PERSONNES & COMPTES' => [
+            ['📣', 'Inscrits 26 juin',       $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
+            ['🗂', 'Dossiers locataires',    'Photos · historique',                 lfi_nct_app_url('dossiers')],
+            ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+            ['🪪', 'Comptes GA + locataires','Créer · réinitialiser',               lfi_nct_app_url('comptes')],
+        ],
+        '📨 COMMUNICATION' => [
+            ['📱', 'Envoyer SMS',            'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+            ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
+            ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
+        ],
+        '📅 ÉVÉNEMENTS' => [
+            ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
+        ],
+        '⚙️ SYSTÈME' => [
+            ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],
+            ['🔥', 'Purger le cache',        'Forcer la maj',                       lfi_nct_app_url('cache')],
+            ['📰', 'Articles',               'Édition WP',                          admin_url('edit.php')],
+            ['📝', 'Pages',                  'Édition WP',                          admin_url('edit.php?post_type=page')],
+            ['🚪', 'Se déconnecter',         '',                                    wp_logout_url(home_url('/'))],
+        ],
     ];
 }
 
