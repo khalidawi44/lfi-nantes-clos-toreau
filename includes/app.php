@@ -825,7 +825,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
     return [
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
-        ['➕', '+ Ajouter un témoignage',    'Saisie manuelle',                     lfi_nct_app_url('temoignage-add')],
+        ['➕', '+ Saisir une réponse d\'enquête', 'Porte-à-porte / collecte papier', lfi_nct_app_url('temoignage-add')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],

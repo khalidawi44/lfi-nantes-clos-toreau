@@ -792,6 +792,75 @@ function lfi_nct_app_view_comptes() {
         }
     }
 
+    /* --- IMPORT MEMBRES → COMPTES GA --- */
+    if (!empty($_POST['lfi_app_import_membre']) && check_admin_referer('lfi_app_import_membre')) {
+        $mid = (int) $_POST['membre_id'];
+        $row = $mid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_membres WHERE id = %d", $mid)) : null;
+        if ($row) {
+            $prenom = (string) ($row->prenom ?: '');
+            $nom    = (string) ($row->nom    ?: $row->pseudo ?: '');
+            $email  = (string) ($row->email  ?: '');
+            $tel    = (string) ($row->tel    ?: '');
+            $login  = lfi_nct_app_make_username($prenom, $nom);
+            $pwd    = lfi_nct_app_make_password();
+            $uid    = wp_insert_user([
+                'user_login'   => $login,
+                'user_pass'    => $pwd,
+                'user_email'   => is_email($email) ? $email : '',
+                'first_name'   => $prenom,
+                'last_name'    => $nom,
+                'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+                'role'         => LFI_NCT_ROLE_GA,
+            ]);
+            if (!is_wp_error($uid)) {
+                update_user_meta($uid, 'lfi_nct_membre_id', $mid);
+                if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                $created = ['type' => 'ga-import', 'uid' => $uid, 'login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+            }
+        }
+    }
+
+    if (!empty($_POST['lfi_app_import_all_membres']) && check_admin_referer('lfi_app_import_all_membres')) {
+        $existing_mids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
+        $existing_in = $existing_mids ? '(' . implode(',', array_map('intval', $existing_mids)) . ')' : '(0)';
+        $to_import = $wpdb->get_results(
+            "SELECT * FROM {$wpdb->prefix}lfi_nct_membres
+             WHERE jetable = 0 AND id NOT IN $existing_in
+             ORDER BY prenom, nom LIMIT 200"
+        ) ?: [];
+        $batch = [];
+        foreach ($to_import as $row) {
+            $prenom = (string) ($row->prenom ?: '');
+            $nom    = (string) ($row->nom    ?: $row->pseudo ?: '');
+            $email  = (string) ($row->email  ?: '');
+            $tel    = (string) ($row->tel    ?: '');
+            $login  = lfi_nct_app_make_username($prenom, $nom);
+            $pwd    = lfi_nct_app_make_password();
+            $uid    = wp_insert_user([
+                'user_login'   => $login,
+                'user_pass'    => $pwd,
+                'user_email'   => is_email($email) ? $email : '',
+                'first_name'   => $prenom,
+                'last_name'    => $nom,
+                'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+                'role'         => LFI_NCT_ROLE_GA,
+            ]);
+            if (is_wp_error($uid)) continue;
+            update_user_meta($uid, 'lfi_nct_membre_id', $row->id);
+            if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+            $batch[] = [
+                'uid' => $uid, 'login' => $login, 'pwd' => $pwd,
+                'tel' => $tel,
+                'name' => trim($prenom . ' ' . $nom) ?: $login,
+            ];
+        }
+        if ($batch) {
+            set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 600);
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes', ['batched' => count($batch)]));
+        exit;
+    }
+
     /* Liste des comptes existants créés par cette voie */
     $users_ga      = get_users(['role' => LFI_NCT_ROLE_GA,     'fields' => ['ID','user_login','display_name','user_email']]);
     $users_tenant  = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID','user_login','display_name','user_email']]);
@@ -810,7 +879,45 @@ function lfi_nct_app_view_comptes() {
          ORDER BY submitted_at DESC LIMIT 50"
     ) ?: [];
 
-    lfi_nct_app_screen_open('🪪 Comptes', count($users_ga) . ' membre(s) GA · ' . count($users_tenant) . ' locataire(s)');
+    /* Adhérents existants sans compte WP encore créé */
+    $linked_membre_ids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
+    $linked_mem_in = $linked_membre_ids ? '(' . implode(',', array_map('intval', $linked_membre_ids)) . ')' : '(0)';
+    $unlinked_membres = $wpdb->get_results(
+        "SELECT id, prenom, nom, pseudo, email, tel, statut
+         FROM {$wpdb->prefix}lfi_nct_membres
+         WHERE jetable = 0 AND id NOT IN $linked_mem_in
+         ORDER BY prenom, nom LIMIT 200"
+    ) ?: [];
+
+    lfi_nct_app_screen_open('🪪 Comptes', count($users_ga) . ' membre(s) GA · ' . count($users_tenant) . ' locataire(s) · ' . count($unlinked_membres) . ' adhérent(s) à importer');
+
+    /* Batch d'identifiants à afficher après un import en masse */
+    $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
+    if (!empty($_GET['batched']) && is_array($batch)) {
+        delete_transient('lfi_nct_pwd_batch_' . get_current_user_id());
+        $site_app = home_url('/app/');
+        echo '<div class="lfi-app-flash ok">';
+        echo '<strong>✅ ' . count($batch) . ' compte(s) créé(s)</strong>. SMS les identifiants à chacun·e maintenant (le mot de passe ne sera plus affiché après).</div>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($batch as $b) {
+            $sms_body = "Salut ! Accès à l'app du GA LFI Nantes Sud Clos Toreau :\n$site_app\nIdentifiant : " . $b['login'] . "\nMot de passe : " . $b['pwd'];
+            $tel_clean = preg_replace('/[^\d+]/', '', (string) ($b['tel'] ?? ''));
+            $sms_url   = $tel_clean ? 'sms:' . $tel_clean . '?body=' . rawurlencode($sms_body) : '';
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($b['name']) . '</div><div class="badge">nouveau</div></div>';
+            echo '<div class="meta">';
+            echo '<span class="meta-chip">@' . esc_html($b['login']) . '</span>';
+            echo '<span class="meta-chip"><code>' . esc_html($b['pwd']) . '</code></span>';
+            if ($tel_clean) echo '<span class="meta-chip">📞 ' . esc_html($b['tel']) . '</span>';
+            echo '</div>';
+            echo '<div class="row-actions">';
+            if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 SMS</a>';
+            echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(' . wp_json_encode($sms_body) . ');this.textContent=\'✓ Copié\';">📋 Copier</button>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
 
     if ($created) {
         $login = $created['login']; $pwd = $created['pwd']; $tel = $created['tel'] ?? '';
@@ -833,8 +940,42 @@ function lfi_nct_app_view_comptes() {
         echo '</div>';
     }
 
+    /* Section : Importer les adhérents existants (depuis wp_lfi_nct_membres) */
+    if (!empty($unlinked_membres)) {
+        echo '<details class="lfi-app-collapse" open><summary>🔄 Importer les adhérents existants (' . count($unlinked_membres) . ' sans compte)</summary>';
+        echo '<div style="padding:14px 16px;background:#fff;border-top:1px solid #eee">';
+        echo '<div class="lfi-app-help" style="margin-bottom:12px">Ces personnes sont déjà dans ta liste d\'adhérents (Action Populaire) mais n\'ont pas encore d\'accès à l\'app. Crée-leur un compte « Membre du GA » et envoie-leur les identifiants par SMS.</div>';
+        /* Bulk import */
+        echo '<form method="post" style="margin:0 0 14px;text-align:center">';
+        wp_nonce_field('lfi_app_import_all_membres');
+        echo '<input type="hidden" name="lfi_app_import_all_membres" value="1">';
+        echo '<button type="submit" class="btn-primary big" onclick="return confirm(\'Créer ' . count($unlinked_membres) . ' compte(s) en une fois ? Les identifiants seront affichés ensuite à copier/SMSer.\');">⚡ Tout importer (' . count($unlinked_membres) . ')</button>';
+        echo '</form>';
+        echo '<div style="font-size:.85em;color:#777;margin-bottom:8px">Ou un par un :</div>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($unlinked_membres as $m) {
+            $name = trim($m->prenom . ' ' . $m->nom) ?: ($m->pseudo ?: '#' . $m->id);
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($name) . '</div>';
+            if ($m->statut) echo '<div class="badge">' . esc_html($m->statut) . '</div>';
+            echo '</div>';
+            echo '<div class="meta">';
+            if ($m->email) echo '<span class="meta-chip">✉️ ' . esc_html($m->email) . '</span>';
+            if ($m->tel)   echo '<span class="meta-chip">📞 ' . esc_html($m->tel)   . '</span>';
+            echo '</div>';
+            echo '<form method="post" class="row-actions">';
+            wp_nonce_field('lfi_app_import_membre');
+            echo '<input type="hidden" name="lfi_app_import_membre" value="1">';
+            echo '<input type="hidden" name="membre_id" value="' . (int) $m->id . '">';
+            echo '<button type="submit" class="btn-ghost">+ Créer compte</button>';
+            echo '</form>';
+            echo '</li>';
+        }
+        echo '</ul></div></details>';
+    }
+
     /* Form : Créer membre GA */
-    echo '<details class="lfi-app-collapse" open><summary>+ Créer un compte « Membre du GA »</summary>';
+    echo '<details class="lfi-app-collapse"><summary>+ Créer un compte « Membre du GA » manuellement</summary>';
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_create_ga');
     echo '<input type="hidden" name="lfi_app_create_ga" value="1">';
@@ -983,11 +1124,11 @@ function lfi_nct_app_view_temoignage_add() {
         }
     }
 
-    lfi_nct_app_screen_open('+ Ajouter un témoignage', 'Saisie manuelle pour les personnes rencontrées en porte-à-porte');
+    lfi_nct_app_screen_open('+ Saisir une réponse d\'enquête', 'Pour les personnes rencontrées en porte-à-porte (intégrée à l\'enquête)');
 
     if (!empty($_GET['added'])) {
         $id = (int) $_GET['added'];
-        lfi_nct_app_flash("✅ Témoignage #$id ajouté à l'enquête.");
+        lfi_nct_app_flash("✅ Réponse #$id ajoutée à l'enquête.");
     }
 
     echo '<form method="post" class="lfi-app-form">';
