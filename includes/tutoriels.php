@@ -751,29 +751,56 @@ function lfi_nct_app_view_tutoriel() {
     $tutos = lfi_nct_tutoriels_all();
     if (!isset($tutos[$slug])) {
         lfi_nct_app_screen_open('Tutoriel introuvable');
-        echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('tutoriels')) . '">← Retour à la liste</a></div>';
+        echo '<div style="background:#fff;color:#000;padding:20px;border-radius:8px"><p style="color:#000">Tutoriel « ' . esc_html($slug) . ' » introuvable.</p><a href="' . esc_url(lfi_nct_app_url('tutoriels')) . '" style="color:#c8102e;text-decoration:underline">← Retour à la liste</a></div>';
         lfi_nct_app_screen_close(false);
         return;
     }
     $t = $tutos[$slug];
 
-    lfi_nct_app_screen_open($t['icone'] . ' ' . $t['titre'], $t['sous']);
+    lfi_nct_app_screen_open($t['icone'] . ' ' . $t['titre'], $t['sous'] ?? '');
 
-    echo '<div class="lfi-tutoriel">';
+    /* Rendu TOUT inline-styled, ZÉRO dépendance CSS externe
+       (le thème AG Starter force color: blanc sur certains parents). */
+    echo '<div style="background:#fafafa;color:#1a1a1a;padding:8px 0">';
+
     foreach ($t['sections'] as $key => $sec) {
-        echo '<section><h3>' . esc_html($sec['titre']) . '</h3>';
+        echo '<div style="background:#ffffff;color:#1a1a1a;border-radius:12px;padding:18px 20px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid #eee;display:block">';
+        echo '<h3 style="margin:0 0 12px;font-size:1.1em;color:#c8102e !important;font-weight:800;line-height:1.3">' . esc_html($sec['titre']) . '</h3>';
+        echo '<div style="color:#1a1a1a !important;font-size:.95em;line-height:1.55">';
+        /* On force le rendu en wrappant tout le contenu HTML brut */
         echo $sec['contenu'];
-        echo '</section>';
+        echo '</div>';
+        echo '</div>';
     }
+
     echo '</div>';
 
-    echo '<div class="row-actions" style="margin-top:14px">';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('tutoriels')) . '">← Tous les tutoriels</a>';
-    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('intervention-add')) . '">+ Créer une intervention pour ce type</a>';
+    echo '<div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a style="background:#fff;color:#c8102e;border:1.5px solid #c8102e;padding:10px 14px;border-radius:10px;text-decoration:none;font-weight:700" href="' . esc_url(lfi_nct_app_url('tutoriels')) . '">← Tous les tutoriels</a>';
+    echo '<a style="background:#c8102e;color:#fff;padding:10px 14px;border-radius:10px;text-decoration:none;font-weight:700" href="' . esc_url(lfi_nct_app_url('intervention-add')) . '">+ Créer une intervention</a>';
     echo '</div>';
 
-    /* CSS déplacé dans la fonction globale lfi_nct_app_render_styles()
-       pour fiabilité (pas de duplication, pas de risque d'être stripé). */
+    /* Force le color: noir sur tous les éléments du tutoriel.
+       Style inline avec sélecteurs de descendant — bat la cascade du thème. */
+    ?>
+    <style>
+    .lfi-app-screen-body p,
+    .lfi-app-screen-body li,
+    .lfi-app-screen-body strong,
+    .lfi-app-screen-body em,
+    .lfi-app-screen-body td,
+    .lfi-app-screen-body h3,
+    .lfi-app-screen-body div { color: inherit; }
+    .lfi-app-screen-body table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: .9em; }
+    .lfi-app-screen-body table th { background: #c8102e !important; color: #fff !important; padding: 8px 6px; text-align: left; font-weight: 700; }
+    .lfi-app-screen-body table td { border-bottom: 1px solid #eee; padding: 8px 6px; color: #1a1a1a !important; vertical-align: top; }
+    .lfi-app-screen-body table tr:nth-child(even) td { background: #fafafa; }
+    .lfi-app-screen-body ul, .lfi-app-screen-body ol { margin: 8px 0; padding-left: 1.4em; }
+    .lfi-app-screen-body li { margin-bottom: 5px; color: #1a1a1a !important; }
+    .lfi-app-screen-body p { margin: 8px 0; color: #1a1a1a !important; }
+    .lfi-app-screen-body strong { color: #1a1a1a !important; font-weight: 700; }
+    </style>
+    <?php
 
     lfi_nct_app_screen_close(false);
 }
