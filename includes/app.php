@@ -280,13 +280,19 @@ add_shortcode('lfi_nct_app', 'lfi_nct_app_shortcode');
 function lfi_nct_app_shortcode() {
     ob_start();
 
-    /* Route accessible sans login : la page « Installer l'app » sert de
-       landing depuis les liens SMS/email reçus par les locataires. */
+    /* Routes accessibles sans login : installer + flow d'inscription */
     $vue_public = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-    if ($vue_public === 'installer') {
-        lfi_nct_app_view_installer();
+    $public_routes = [
+        'installer'              => 'lfi_nct_app_view_installer',
+        'inscription'            => 'lfi_nct_app_view_inscription',
+        'inscription-locataire'  => 'lfi_nct_app_view_inscription_locataire',
+        'inscription-ga'         => 'lfi_nct_app_view_inscription_ga',
+    ];
+    if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
+        call_user_func($public_routes[$vue_public]);
         lfi_nct_app_render_styles();
         lfi_nct_app_render_register_sw();
+        if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
         return ob_get_clean();
     }
 
@@ -370,6 +376,7 @@ function lfi_nct_app_shortcode() {
                     case 'outil-photo-preuve':    lfi_nct_app_view_outil_photo_preuve();     break;
                     case 'outil-humidite':        lfi_nct_app_view_outil_humidite();         break;
                     case 'outil-regle':           lfi_nct_app_view_outil_regle();            break;
+                    case 'ga-liste':              lfi_nct_app_view_ga_liste();               break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -457,6 +464,11 @@ function lfi_nct_app_render_login() {
                 <a href="<?php echo esc_url(wp_lostpassword_url($redirect)); ?>" style="color:#c8102e;font-size:.9em;text-decoration:none">🔓 Mot de passe oublié ?</a>
             </div>
         </form>
+
+        <div class="lfi-app-help" style="margin-top:18px;text-align:center;background:#fff3f5;border-left:4px solid #c8102e">
+            <strong>Pas encore de compte ?</strong><br>
+            <a href="<?php echo esc_url(lfi_nct_app_url('inscription')); ?>" style="display:inline-block;margin-top:8px;background:#c8102e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700">✍️ S'inscrire en quelques secondes</a>
+        </div>
 
         <div class="lfi-app-install-hint">
             <strong>📱 Installer l'app sur le téléphone</strong>
@@ -887,6 +899,21 @@ function lfi_nct_app_render_styles() {
     }
     .lfi-preview-banner .quit:hover { background: #000; color: #ffd400; }
 
+    /* Page Inscription — 2 gros choix */
+    .lfi-inscription-choices { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
+    .lfi-inscription-choice {
+        display: block; background: #fff; border-radius: 14px; padding: 22px 20px;
+        text-decoration: none; color: #1a1a1a;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        border: 2px solid transparent;
+        transition: border-color .15s ease, transform .08s ease;
+    }
+    .lfi-inscription-choice:active { transform: scale(.98); }
+    .lfi-inscription-choice:hover { border-color: #c8102e; color: #1a1a1a; }
+    .lfi-inscription-choice .ico { font-size: 2.4em; line-height: 1; margin-bottom: 8px; }
+    .lfi-inscription-choice .ti { font-size: 1.1em; font-weight: 800; color: #c8102e; margin-bottom: 6px; }
+    .lfi-inscription-choice .sub { font-size: .9em; color: #555; line-height: 1.4; }
+
     /* Page Tutoriels — guides brigade (CSS global pour fiabilité) */
     .lfi-tutoriel { display: block; color: #1a1a1a; }
     .lfi-tutoriel section {
@@ -975,6 +1002,52 @@ function lfi_nct_app_render_styles() {
     /* Grille de checkboxes (témoignage) */
     .lfi-checkbox-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
     @media (min-width: 600px) { .lfi-checkbox-grid { grid-template-columns: 1fr 1fr; } }
+    </style>
+    <?php
+}
+
+/* Bouton fixe « 📲 Télécharger l'app » sur TOUT le site public
+ * (pas dans l'app elle-même). Visible aux visiteur·euses pour qu'ils
+ * sachent qu'ils peuvent installer l'app et s'inscrire en un clic. */
+add_action('wp_body_open', 'lfi_nct_render_install_button_public', 5);
+add_action('wp_footer',    'lfi_nct_render_install_button_public', 5);
+function lfi_nct_render_install_button_public() {
+    static $rendered = false;
+    if ($rendered) return;
+    /* Ne rend PAS dans wp-admin */
+    if (is_admin()) return;
+    /* Ne rend PAS sur les pages de l'app (déjà dedans) */
+    if (is_singular()) {
+        $post = get_post();
+        if ($post && $post->post_name === LFI_NCT_APP_SLUG) return;
+    }
+    $rendered = true;
+    ?>
+    <a class="lfi-public-install" href="<?php echo esc_url(home_url('/app/')); ?>" aria-label="Télécharger l'application">
+        <span class="ico">📲</span>
+        <span class="lbl">Télécharger l'app</span>
+    </a>
+    <style>
+    .lfi-public-install {
+        position: fixed; bottom: 20px; left: 16px; z-index: 99990;
+        background: linear-gradient(135deg, #c8102e, #a30b25); color: #fff;
+        padding: 12px 18px; border-radius: 999px;
+        text-decoration: none;
+        box-shadow: 0 4px 14px rgba(200,16,46,.4);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-weight: 700; font-size: .92em;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: transform .12s ease;
+    }
+    .lfi-public-install:hover { color: #fff; transform: translateY(-2px); }
+    .lfi-public-install:active { background: #a30b25; transform: scale(.98); }
+    .lfi-public-install .ico { font-size: 1.2em; }
+    .lfi-public-install .lbl { white-space: nowrap; }
+    @media (max-width: 480px) {
+        .lfi-public-install { padding: 12px; bottom: 16px; left: 12px; }
+        .lfi-public-install .lbl { display: none; }
+    }
+    @media print { .lfi-public-install { display: none !important; } }
     </style>
     <?php
 }
