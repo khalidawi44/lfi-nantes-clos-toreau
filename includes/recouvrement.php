@@ -96,25 +96,9 @@ function lfi_nct_travaux_catalogue() {
             'couleur'     => '#186a3b',
             'fondement'   => 'Articles 1719 et 1724 du Code civil · Article 6 de la loi n° 89-462 · Décret n° 2002-120 (décence)',
             'types'       => [
-                'humidite_moisissures_struct' => 'Moisissures dues à défaut bâtiment / VMC HS',
-                'humidite_infiltration'       => 'Infiltration extérieure, fuite toiture',
-                'humidite_remontee'           => 'Humidité par remontée capillaire',
-                'vmc_moteur_hs'               => 'VMC : moteur HS, gaines bouchées',
-                'fenetres_etancheite'         => 'Fenêtres : étanchéité défaillante',
-                'fenetres_vitrage_vetuste'    => 'Vitrage cassé par vétusté',
-                'chauffage_radiateur_hs'      => 'Radiateur HS, chaudière (fournie bailleur)',
-                'plomberie_encastree'         => 'Plomberie encastrée (canalisations murales)',
-                'plomberie_colonne'           => 'Colonne montante / descendante',
-                'electricite_tableau'         => 'Tableau électrique, mise aux normes NF C 15-100',
-                'electricite_circuit_mural'   => 'Câblage encastré, circuit défaillant',
-                'porte_entree_securite'       => 'Porte d\'entrée : sécurité, serrure défaillante',
-                'volets_hs'                   => 'Volets cassés / HS (vétusté)',
-                'insalubrite_plomb_amiante'   => 'Insalubrité (plomb, amiante, saturnisme)',
+                'humidite_moisissures_struct' => 'Moisissures de surface (défaut bâtiment / VMC HS)',
                 'punaises_lit'                => 'Punaises de lit (loi ELAN 2018, L.302-16-1 CCH)',
                 'rats_parties_communes'       => 'Rats venant des parties communes',
-                'parties_communes'            => 'Parties communes (hall, escalier, ascenseur)',
-                'gros_oeuvre'                 => 'Gros œuvre, murs porteurs, planchers',
-                'facade_fissure_structurelle' => 'Façade : fissure structurelle traversante',
             ],
         ],
         'gris' => [
@@ -130,8 +114,6 @@ function lfi_nct_travaux_catalogue() {
                 'peinture_apres_degat'        => 'Peinture après dégât bailleur (suite fuite, etc.)',
                 'cafards_blattes_immeuble'    => 'Cafards (si infestation immeuble entier)',
                 'placo_petit_morceau_degat'   => 'Reprise placo après dégât eau bailleur',
-                'chaudiere_indiv_entretien'   => 'Entretien chaudière (selon contrat bail)',
-                'porte_palier_securite'       => 'Porte palière (selon nature du défaut)',
             ],
         ],
         'locataire' => [
@@ -177,146 +159,68 @@ function lfi_nct_travaux_catalogue() {
  * ============================================================== */
 function lfi_nct_tarif_taches_catalogue() {
     return [
-        /* --- Désinsectisation / dératisation : prix entreprises pro --- */
+        /* === DÉSINSECTISATION / DÉRATISATION (réalisable avec EPI + protocole) === */
         'punaises_lit' => [
             'bas' => 250, 'juste' => 350, 'haut' => 600,
-            'unite' => 'forfait T3',
-            'source' => 'Daleco Nantes 280€ · Solitec 320-450€ · Nuisibles Urgence 350€ · Rentokil 550€',
-            'detail' => 'Forfait 2 passages obligatoires (J0 + J+14), vapeur + Subito + Terre Diatomée + housse Allerzip',
+            'unite' => 'forfait logement',
+            'source' => 'Daleco Nantes 280€ · Solitec 320-450€ · Rentokil 550€',
+            'detail' => 'Protocole 2 passages (J0 + J+14) : vapeur + Subito + terre de Diatomée + housse Allerzip',
         ],
         'cafards_blattes_immeuble' => [
             'bas' => 150, 'juste' => 220, 'haut' => 380,
             'unite' => 'forfait appartement',
-            'source' => 'Daleco 180€ · Solitec 160-280€ · Hygiène 3D Nantes 200€ · Rentokil 350€',
+            'source' => 'Daleco 180€ · Solitec 160-280€ · Hygiène 3D 200€ · Rentokil 350€',
             'detail' => 'Gel Goliath + IGR Sinergel + suivi J+15 et J+30 (protocole IPM)',
         ],
         'rats_parties_communes' => [
             'bas' => 100, 'juste' => 160, 'haut' => 280,
             'unite' => 'forfait par appartement',
             'source' => 'Daleco 140€ · Solitec 130-220€ · Aprolyse 160€',
-            'detail' => 'Bouchage entrées + pose tapettes/raticide + vérif J+7',
+            'detail' => 'Bouchage entrées laine d\'acier + pose tapettes/raticide + vérification J+7',
         ],
 
-        /* --- Humidité / moisissures / placo : prix artisans plâtriers --- */
+        /* === HUMIDITÉ / MOISISSURES DE SURFACE (réalisable avec EPI) === */
         'humidite_moisissures_struct' => [
             'bas' => 220, 'juste' => 320, 'haut' => 550,
             'unite' => 'forfait 4 m²',
-            'source' => 'Devis Habitat Nantais 280-450€ · Plâtrerie Atlantique 320€ · UnArtisan.fr 350€',
-            'detail' => 'Démolition placo infesté + biocide + repose BA13 hydro + enduit + 2 couches peinture',
-        ],
-        'humidite_infiltration' => [
-            'bas' => 150, 'juste' => 220, 'haut' => 380,
-            'unite' => 'forfait diagnostic + colmatage',
-            'source' => 'Aquaprotect 200€ · Étanchéité Nantaise 250-400€',
-            'detail' => 'Repérage source + colmatage urgent (mastic, mousse expansive)',
-        ],
-        'humidite_remontee' => [
-            'bas' => 800, 'juste' => 1200, 'haut' => 2500,
-            'unite' => 'forfait injection 10 ml',
-            'source' => 'Murprotec 1200€/10 ml · Humitech 900€ · BG Travaux 1500€',
-            'detail' => 'Bailleur uniquement — injection résine hydrofuge en mur',
+            'source' => 'Habitat Nantais 280-450€ · Plâtrerie Atlantique 320€',
+            'detail' => 'Démolition placo infesté + biocide Algiclair + repose BA13 hydro + enduit + 2 couches peinture',
         ],
 
-        /* --- VMC / chauffage / fenêtres --- */
-        'vmc_moteur_hs' => [
-            'bas' => 180, 'juste' => 280, 'haut' => 450,
-            'unite' => 'forfait remplacement moteur',
-            'source' => 'Anjos Nantes 250€ · VMC Pro 220-380€',
-            'detail' => 'Démontage caisson + remplacement moteur + test débit + remise grilles',
-        ],
-        'fenetres_etancheite' => [
-            'bas' => 80, 'juste' => 130, 'haut' => 220,
-            'unite' => 'par fenêtre',
-            'source' => 'Menuiseries Nantaises 100-180€ · Lapeyre 150€',
-            'detail' => 'Remplacement joints EPDM + survitrage film Tesa + calfeutrage Sikaflex',
-        ],
-        'fenetres_vitrage_vetuste' => [
-            'bas' => 180, 'juste' => 280, 'haut' => 450,
-            'unite' => 'par vitre',
-            'source' => 'Saint-Gobain Glass 250€ · Vitrerie Express Nantes 220€',
-            'detail' => 'Démontage + verre + mastic + remontage',
-        ],
-        'chauffage_radiateur_hs' => [
-            'bas' => 150, 'juste' => 250, 'haut' => 450,
-            'unite' => 'par radiateur',
-            'source' => 'Plomberie Pro Nantes 200€ · Eldec 180-350€',
-            'detail' => 'Dépose + nouveau radiateur + raccordement + purge installation',
-        ],
-
-        /* --- Plomberie --- */
-        'plomberie_encastree' => [
-            'bas' => 200, 'juste' => 350, 'haut' => 600,
-            'unite' => 'forfait recherche fuite + réparation',
-            'source' => 'Bouygues Plomberie 320€ · APC Nantes 280-450€',
-            'detail' => 'Localisation fuite + percement mur + remplacement portion + rebouchage',
-        ],
-
-        /* --- Électricité --- */
-        'electricite_tableau' => [
-            'bas' => 350, 'juste' => 550, 'haut' => 950,
-            'unite' => 'forfait mise aux normes T3',
-            'source' => 'Eldec 480€ · Aprolec Nantes 400-750€',
-            'detail' => 'Remplacement disjoncteur différentiel + mise à la terre + test continuité',
-        ],
-        'electricite_circuit_mural' => [
-            'bas' => 120, 'juste' => 200, 'haut' => 350,
-            'unite' => 'par circuit',
-            'source' => 'Eldec 180€ · Aprolec 150-280€',
-            'detail' => 'Tirage câble + raccordement tableau + test',
-        ],
-
-        /* --- Porte d\'entrée / volets --- */
-        'porte_entree_securite' => [
-            'bas' => 180, 'juste' => 280, 'haut' => 450,
-            'unite' => 'forfait pose verrou A2P***',
-            'source' => 'Picard Serrures 250€ · Vachette Pro 200-380€',
-            'detail' => 'Pose verrou Picard ISEO 803 + cornière anti-effraction + œilleton',
-        ],
-        'volets_hs' => [
-            'bas' => 120, 'juste' => 200, 'haut' => 350,
-            'unite' => 'par volet',
-            'source' => 'Volets Nantes 180€ · Lapeyre Pro 150-280€',
-            'detail' => 'Démontage ancien + pose neuf + finition',
-        ],
-
-        /* --- Catégorie GRISE (à argumenter mais facturable) --- */
+        /* === CALFEUTRAGE / JOINTS (très accessible) === */
         'joints_fenetres_calfeutrage' => [
             'bas' => 80, 'juste' => 140, 'haut' => 220,
-            'unite' => 'forfait T3 complet',
+            'unite' => 'forfait logement complet',
             'source' => 'Calfeutrage Pro 100€ · Habitat Nantais 120-180€',
-            'detail' => 'Joints EPDM toutes fenêtres + survitrage + boudin porte d\'entrée',
+            'detail' => 'Joints EPDM Tesa Moll toutes fenêtres + film survitrage + boudin porte d\'entrée',
         ],
         'joints_silicone_sdb' => [
             'bas' => 60, 'juste' => 90, 'haut' => 140,
-            'unite' => 'par pièce',
+            'unite' => 'par pièce humide',
             'source' => 'SAV Habitat 70€ · Devispro 80-120€',
-            'detail' => 'Dépose ancien + dégraissage + Sikaflex sanitaire + lissage',
+            'detail' => 'Dépose ancien joint + dégraissage + Sikaflex sanitaire + lissage propre',
+        ],
+
+        /* === PETIT PLÂTRE / REPRISE PLACO (avec tuto) === */
+        'placo_petit_morceau_degat' => [
+            'bas' => 60, 'juste' => 100, 'haut' => 180,
+            'unite' => 'par zone < 50 cm',
+            'source' => 'Plâtrerie Atlantique 80€ · Habitat Nantais 100-150€',
+            'detail' => 'Tasseau + chute BA13 + bande à joint + enduit + ponçage + peinture',
         ],
         'reboucher_fissure_origine' => [
             'bas' => 80, 'juste' => 120, 'haut' => 200,
             'unite' => 'par fissure',
             'source' => 'Plâtrerie Atlantique 100€ · UnArtisan 90-150€',
-            'detail' => 'Ouverture en V + enduit souple + peinture raccord',
+            'detail' => 'Ouverture en V + enduit souple Toupret + peinture raccord',
         ],
+
+        /* === PEINTURE (accessible, gros impact visuel) === */
         'peinture_apres_degat' => [
             'bas' => 25, 'juste' => 35, 'haut' => 55,
             'unite' => 'par m² (2 couches)',
             'source' => 'Peinture Pro 30€/m² · IziBat 28-45€/m²',
-            'detail' => 'Sous-couche bloquante + 2 couches peinture qualité',
-        ],
-        'placo_petit_morceau_degat' => [
-            'bas' => 60, 'juste' => 100, 'haut' => 180,
-            'unite' => 'par trou < 50 cm',
-            'source' => 'Plâtrerie Atlantique 80€ · Habitat Nantais 100-150€',
-            'detail' => 'Tasseau + chute BA13 + bande à joint + enduit + ponçage + peinture',
-        ],
-
-        /* --- Insalubrité grave (bailleur lourdement responsable) --- */
-        'insalubrite_plomb_amiante' => [
-            'bas' => 1500, 'juste' => 3500, 'haut' => 8000,
-            'unite' => 'forfait diagnostic + traitement',
-            'source' => 'Cabinets agréés CSTB obligatoires — devis Diagamter, Allodiagnostic',
-            'detail' => 'BAILLEUR OBLIGATOIRE — opérateur certifié uniquement',
+            'detail' => 'Sous-couche bloquante Julien + 2 couches peinture qualité Dulux',
         ],
     ];
 }
@@ -361,58 +265,96 @@ function lfi_nct_rec_enquete_keyword_for($type_key) {
         'cafards_blattes_immeuble'     => 'insectes',
         'rats_parties_communes'        => 'insectes',
         'humidite_moisissures_struct'  => 'humidite',
-        'humidite_infiltration'        => 'humidite',
-        'humidite_remontee'            => 'humidite',
-        'vmc_moteur_hs'                => 'humidite',
-        'fenetres_etancheite'          => 'humidite',
-        'chauffage_radiateur_hs'       => 'chauffage',
-        'plomberie_encastree'          => 'degats_eaux',
-        'plomberie_colonne'            => 'degats_eaux',
-        'electricite_tableau'          => 'electricite',
-        'electricite_circuit_mural'    => 'electricite',
-        'parties_communes'             => 'parties_communes',
+        'joints_fenetres_calfeutrage'  => 'humidite',
+        'joints_silicone_sdb'          => 'humidite',
+        'placo_petit_morceau_degat'    => 'degats_eaux',
+        'peinture_apres_degat'         => 'degats_eaux',
     ];
     return $map[$type_key] ?? null;
 }
 
-/* Cherche les autres locataires de la même adresse touchés par le même
-   type de problème, sur la base des réponses d'enquête.
-   Retourne un tableau de stdClass {prenom, nom, etage, gravite}. */
-function lfi_nct_rec_other_tenants_same_problem($adresse, $type_key) {
-    if (!$adresse || !$type_key) return [];
+/* Extrait le numéro de bâtiment depuis une adresse, ou '' si absent.
+   « 12 rue d'Hendaye » → « 12 », « 14bis avenue de Provence » → « 14bis ». */
+function lfi_nct_rec_building_number($adresse) {
+    if (!$adresse) return '';
+    if (preg_match('/^\s*(\d+\s*(?:bis|ter|quater)?)/iu', (string) $adresse, $m)) {
+        return strtolower(preg_replace('/\s+/', '', $m[1]));
+    }
+    return '';
+}
+
+/* Scanne les réponses d'enquête pour la même rue (clé canonique) avec
+   le même type de problème, et ventile en :
+     - meme_immeuble : entrées au même numéro
+     - immeubles_voisins : autres numéros, mêmes rue
+   Données ANONYMES : on ne renvoie QUE étage + gravité, JAMAIS de nom
+   (RGPD : les noms ne doivent jamais apparaître dans les arguments
+   juridiques publiés à NMH / au tribunal). */
+function lfi_nct_rec_collective_signal($adresse, $type_key) {
+    $empty = [
+        'meme_immeuble'      => [],
+        'immeubles_voisins'  => [],
+        'numeros_voisins'    => [],   // ex: ['10', '14', '16']
+        'rue_label'          => '',   // libellé de rue affichable
+    ];
+    if (!$adresse || !$type_key) return $empty;
     $kw = lfi_nct_rec_enquete_keyword_for($type_key);
-    if (!$kw) return [];
+    if (!$kw) return $empty;
 
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_responses';
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT id, adresse, etage, contact_prenom, contact_nom, data
-         FROM $t WHERE deleted_at IS NULL AND adresse IS NOT NULL LIMIT 500"
+        "SELECT adresse, etage, data FROM $t
+         WHERE deleted_at IS NULL AND adresse IS NOT NULL LIMIT 800"
     ));
-    if (!$rows) return [];
+    if (!$rows) return $empty;
 
-    $target_key = function_exists('lfi_nct_address_canonical_key')
+    $target_street = function_exists('lfi_nct_address_canonical_key')
         ? lfi_nct_address_canonical_key($adresse)
         : strtolower(trim($adresse));
+    $target_num = lfi_nct_rec_building_number($adresse);
 
-    $out = [];
+    $rue_label = function_exists('lfi_nct_address_canonical_display')
+        ? trim(preg_replace('/^\s*\d+\s*(bis|ter|quater)?\s*/iu', '', (string) lfi_nct_address_canonical_display($adresse)))
+        : preg_replace('/^\s*\d+\s*(bis|ter|quater)?\s*/iu', '', (string) $adresse);
+
+    $meme = [];
+    $voisins = [];
+    $nums_voisins = [];
     foreach ($rows as $r) {
         $rk = function_exists('lfi_nct_address_canonical_key')
             ? lfi_nct_address_canonical_key($r->adresse)
             : strtolower(trim($r->adresse));
-        if ($rk !== $target_key) continue;
+        if ($rk !== $target_street) continue;
+
         $data = json_decode($r->data ?? '', true);
         if (!is_array($data)) continue;
         $types = (array) ($data['problemes_types'] ?? []);
         if (!in_array($kw, $types, true)) continue;
-        $out[] = (object) [
-            'prenom'  => (string) ($r->contact_prenom ?? ''),
-            'nom'     => (string) ($r->contact_nom ?? ''),
+
+        $rnum = lfi_nct_rec_building_number($r->adresse);
+        $entry = (object) [
             'etage'   => (string) ($r->etage ?? ''),
             'gravite' => (int) ($data['problemes_gravite'] ?? 0),
         ];
+
+        if ($target_num && $rnum === $target_num) {
+            $meme[] = $entry;
+        } elseif ($target_num && $rnum && $rnum !== $target_num) {
+            $voisins[] = $entry;
+            if (!in_array($rnum, $nums_voisins, true)) $nums_voisins[] = $rnum;
+        } else {
+            /* Pas de numéro identifié (rare) : on compte côté « voisins » */
+            $voisins[] = $entry;
+        }
     }
-    return $out;
+    sort($nums_voisins, SORT_NATURAL);
+    return [
+        'meme_immeuble'     => $meme,
+        'immeubles_voisins' => $voisins,
+        'numeros_voisins'   => $nums_voisins,
+        'rue_label'         => trim($rue_label),
+    ];
 }
 
 /* Calcule la catégorie majoritaire des interventions liées à une facture */

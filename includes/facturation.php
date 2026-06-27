@@ -638,32 +638,64 @@ function lfi_nct_app_intervention_form($row) {
     $preview_total = lfi_nct_fact_total_smart($current_mode, (float) $r->prix_tache, (float) $r->duree_heures, (float) $r->tarif_horaire, (float) $r->cout_materiaux);
     echo '<div class="lfi-app-help"><strong>Total HT : <span id="lfi-total-preview">' . lfi_nct_fact_format_eur($preview_total) . '</span></strong> <small>(TVA non applicable, art. 293 B du CGI)</small></div>';
 
-    /* === DÉTECTION PROBLÈME D'IMMEUBLE — argument juridique massif === */
-    $other_tenants = [];
-    if (!empty($r->tenant_adresse) && !empty($r->type_travaux_key) && function_exists('lfi_nct_rec_other_tenants_same_problem')) {
-        $other_tenants = lfi_nct_rec_other_tenants_same_problem($r->tenant_adresse, $r->type_travaux_key);
-        /* Exclut le locataire courant lui-même */
-        $cur_full = strtolower(trim($r->tenant_prenom . ' ' . $r->tenant_nom));
-        $other_tenants = array_filter($other_tenants, function ($o) use ($cur_full) {
-            return strtolower(trim($o->prenom . ' ' . $o->nom)) !== $cur_full;
-        });
-        $other_tenants = array_values($other_tenants);
+    /* === DÉTECTION PROBLÈME D'IMMEUBLE / DE RUE — argument juridique massif ===
+       Toutes les données affichées et injectées sont ANONYMES (étages +
+       gravités + comptes uniquement). Aucun nom de locataire n'apparaît
+       dans le bandeau, les notes ou les pièces juridiques (RGPD). */
+    $collectif = ['meme_immeuble' => [], 'immeubles_voisins' => [], 'numeros_voisins' => [], 'rue_label' => ''];
+    if (!empty($r->tenant_adresse) && !empty($r->type_travaux_key) && function_exists('lfi_nct_rec_collective_signal')) {
+        $collectif = lfi_nct_rec_collective_signal($r->tenant_adresse, $r->type_travaux_key);
     }
-    if (count($other_tenants) >= 1) {
+    $n_meme    = count($collectif['meme_immeuble']);
+    $n_voisin  = count($collectif['immeubles_voisins']);
+    $nums_v    = $collectif['numeros_voisins'];
+    $rue_label = (string) $collectif['rue_label'];
+    /* On retire 1 du même immeuble si la réponse du locataire courant a
+       été comptée elle-même (cas typique : on a déjà sa réponse en base) */
+    /* Heuristique : on n'a pas l'identité, on garde le count brut, on
+       laisse à l'utilisateur le soin d'interpréter "X dont moi inclus" */
+
+    if ($n_meme >= 1 || $n_voisin >= 1) {
         echo '<div style="background:#fff3f5;border:2px solid #c8102e;border-radius:10px;padding:14px 16px;margin:14px 0">';
-        echo '<div style="font-size:1.05em;font-weight:800;color:#c8102e;margin-bottom:8px">🎯 PROBLÈME D\'IMMEUBLE DÉTECTÉ — argument juridique massif</div>';
+        echo '<div style="font-size:1.05em;font-weight:800;color:#c8102e;margin-bottom:8px">🎯 PROBLÈME COLLECTIF DÉTECTÉ — argument juridique massif</div>';
         echo '<div style="font-size:.9em;color:#444;line-height:1.5;margin-bottom:8px">';
-        echo 'Selon l\'enquête, <strong>' . count($other_tenants) . ' autre(s) locataire(s)</strong> de la même adresse ont signalé le même type de problème. Ce n\'est <strong>plus du locataire isolé</strong> — c\'est un défaut structurel. NMH ne peut pas refuser : la responsabilité bailleur est manifeste (art. 6 loi 89-462, décret 2002-120).';
+        echo 'L\'enquête révèle que ce problème touche plusieurs logements. C\'est <strong>plus du cas isolé</strong> — c\'est un défaut structurel d\'ensemble immobilier. NMH ne peut pas refuser : responsabilité bailleur manifeste (art. 6 loi 89-462, décret 2002-120).';
         echo '</div>';
-        echo '<ul style="margin:6px 0 0;padding-left:18px;font-size:.9em">';
-        foreach ($other_tenants as $o) {
-            $name = trim($o->prenom . ' ' . $o->nom) ?: '(anonyme)';
-            $etage = $o->etage ? ' (étage ' . esc_html($o->etage) . ')' : '';
-            $g = $o->gravite ? ' — gravité ' . $o->gravite . '/10' : '';
-            echo '<li>' . esc_html($name) . esc_html($etage . $g) . '</li>';
+
+        echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0">';
+
+        /* Bloc immeuble */
+        echo '<div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #f3c4cc">';
+        echo '<div style="font-size:.8em;color:#c8102e;text-transform:uppercase;letter-spacing:.5px;font-weight:700">🏢 Même immeuble</div>';
+        echo '<div style="font-size:1.5em;font-weight:900;color:#c8102e;margin:4px 0">' . $n_meme . '</div>';
+        echo '<div style="font-size:.8em;color:#666">locataire(s) concerné(s)</div>';
+        if ($n_meme > 0) {
+            $etages = array_filter(array_map(function ($e) { return trim($e->etage); }, $collectif['meme_immeuble']));
+            if ($etages) {
+                $etages_uniq = array_values(array_unique($etages));
+                sort($etages_uniq, SORT_NATURAL);
+                echo '<div style="font-size:.8em;color:#666;margin-top:4px">Étages : ' . esc_html(implode(', ', $etages_uniq)) . '</div>';
+            }
         }
-        echo '</ul>';
-        echo '<div style="margin-top:10px"><button type="button" class="btn-ghost" onclick="lfi_inject_motif_immeuble(' . count($other_tenants) . ')">📋 Ajouter cet argument à la description</button></div>';
+        echo '</div>';
+
+        /* Bloc voisins */
+        echo '<div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #f3c4cc">';
+        echo '<div style="font-size:.8em;color:#c8102e;text-transform:uppercase;letter-spacing:.5px;font-weight:700">🏘 Immeubles voisins</div>';
+        echo '<div style="font-size:1.5em;font-weight:900;color:#c8102e;margin:4px 0">' . $n_voisin . '</div>';
+        echo '<div style="font-size:.8em;color:#666">locataire(s) concerné(s)';
+        if (!empty($nums_v)) echo '<br>n° ' . esc_html(implode(', ', $nums_v));
+        if ($rue_label) echo ' · ' . esc_html($rue_label);
+        echo '</div>';
+        echo '</div>';
+
+        echo '</div>';
+
+        echo '<div style="margin-top:10px">';
+        echo '<button type="button" class="btn-ghost" onclick="lfi_inject_motif_collectif(' . $n_meme . ',' . $n_voisin . ',' . wp_json_encode($nums_v) . ',' . wp_json_encode($rue_label) . ')">📋 Ajouter cet argument à la description</button>';
+        echo '</div>';
+
+        echo '<div style="font-size:.8em;color:#888;margin-top:10px;font-style:italic">🔒 Données affichées de façon anonyme (RGPD). Aucun nom de locataire n\'apparaît dans le texte injecté ni dans les pièces juridiques.</div>';
         echo '</div>';
     }
 
@@ -767,11 +799,33 @@ function lfi_nct_app_intervention_form($row) {
             '<div style="font-size:.8em;color:#888;margin-top:4px"><em>Sources : ' + (t.source || '') + '</em></div>';
     }
 
-    function lfi_inject_motif_immeuble(n) {
+    function lfi_inject_motif_collectif(nMeme, nVoisin, numsVoisins, rueLabel) {
         var d = document.querySelector('[name=description]');
         if (!d) return;
-        var phrase = 'IMPORTANT : ' + n + ' autre(s) locataire(s) de la même adresse, recensé(s) par l\'enquête du Groupe d\'Action, signalent le même type de problème. Il s\'agit donc d\'un défaut structurel d\'immeuble, à la charge exclusive du bailleur (article 6 loi 89-462, décret 2002-120, jurisprudence constante sur la décence).';
+        /* Texte STRICTEMENT anonyme : compteurs + numéros d'immeubles +
+           nom de rue, mais JAMAIS de nom de locataire (RGPD). */
+        var parts = [];
+        parts.push('IMPORTANT — défaut structurel d\'ensemble immobilier établi par enquête :');
+        if (nMeme > 0)   parts.push('• ' + nMeme + ' locataire(s) du même immeuble signalent le même type de problème ;');
+        if (nVoisin > 0) {
+            var loc = '• ' + nVoisin + ' locataire(s) des immeubles voisins';
+            if (numsVoisins && numsVoisins.length) {
+                loc += ' (n° ' + numsVoisins.join(', ');
+                if (rueLabel) loc += ' ' + rueLabel;
+                loc += ')';
+            } else if (rueLabel) {
+                loc += ' de la même rue (' + rueLabel + ')';
+            }
+            loc += ' signalent un problème similaire ;';
+            parts.push(loc);
+        }
+        parts.push('Le caractère répété et géographiquement groupé exclut la cause locataire isolée et établit un défaut à la charge exclusive du bailleur (art. 6 loi 89-462 ; art. 1719 et 1724 CC ; décret 2002-120 sur la décence). Données anonymisées, source : enquête du Groupe d\'Action LFI Nantes Sud Clos Toreau.');
+        var phrase = parts.join('\n');
         d.value = (d.value ? d.value + '\n\n' : '') + phrase;
+    }
+    /* Alias pour compat anciennes versions (anonyme, sans nom) */
+    function lfi_inject_motif_immeuble(n) {
+        lfi_inject_motif_collectif(n, 0, [], '');
     }
 
     (function () {
