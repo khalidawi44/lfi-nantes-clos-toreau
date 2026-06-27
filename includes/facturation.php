@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_FACT_DBVER_KEY = 'lfi_nct_fact_db_ver';
-const LFI_NCT_FACT_DBVER_VAL = '1';
+const LFI_NCT_FACT_DBVER_VAL = '2';
 
 /* ============================================================== *
  *  DB Setup + paramètres par défaut                                *
@@ -42,6 +42,8 @@ function lfi_nct_facturation_db_setup() {
         date_intervention DATE DEFAULT NULL,
         duree_heures DECIMAL(5,2) DEFAULT 0,
         type_travaux VARCHAR(120) DEFAULT '',
+        type_travaux_key VARCHAR(80) DEFAULT '',
+        categorie_travaux VARCHAR(20) DEFAULT '',
         description TEXT,
         tarif_horaire DECIMAL(8,2) DEFAULT 40.00,
         cout_materiaux DECIMAL(10,2) DEFAULT 0,
@@ -329,6 +331,7 @@ function lfi_nct_app_intervention_form($row) {
             'bailleur'          => sanitize_text_field(wp_unslash($_POST['bailleur'] ?? 'Nantes Métropole Habitat')),
             'date_intervention' => sanitize_text_field(wp_unslash($_POST['date_intervention'] ?? '')) ?: null,
             'duree_heures'      => (float) ($_POST['duree_heures'] ?? 0),
+            'type_travaux_key'  => sanitize_key($_POST['type_travaux_key'] ?? ''),
             'type_travaux'      => sanitize_text_field(wp_unslash($_POST['type_travaux'] ?? '')),
             'description'       => sanitize_textarea_field(wp_unslash($_POST['description'] ?? '')),
             'tarif_horaire'     => (float) ($_POST['tarif_horaire'] ?? lfi_nct_fact_tarif_defaut()),
@@ -337,6 +340,13 @@ function lfi_nct_app_intervention_form($row) {
             'notes'             => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
         $data['total_ht'] = lfi_nct_fact_recalc_total($data['duree_heures'], $data['tarif_horaire'], $data['cout_materiaux']);
+
+        /* Classification automatique de la catégorie à partir du type_key. */
+        if (function_exists('lfi_nct_travaux_classify')) {
+            $classif = lfi_nct_travaux_classify($data['type_travaux_key']);
+            $data['categorie_travaux'] = $classif ? $classif['cat_key'] : '';
+            if ($classif && empty($data['type_travaux'])) $data['type_travaux'] = $classif['type_label'];
+        }
 
         /* Si on a un user_id, récupère les infos de l'enquête pour pré-remplir l'adresse */
         if ($data['tenant_user_id'] && empty($data['tenant_adresse'])) {
@@ -436,19 +446,26 @@ function lfi_nct_app_intervention_form($row) {
     echo '<label>Bailleur à facturer<input type="text" name="bailleur" value="' . esc_attr($r->bailleur) . '" required></label>';
     echo '<label>Date d\'intervention<input type="date" name="date_intervention" value="' . esc_attr($r->date_intervention) . '" required></label>';
 
-    echo '<label>Type de travaux<select name="type_travaux">';
+    /* Catalogue classifié : bailleur / gris / locataire */
+    $current_key = (string) ($r->type_travaux_key ?? '');
     $current_type = (string) $r->type_travaux;
-    $types = [
-        'Plâtrerie / placo', 'Peinture', 'Étanchéité', 'Électricité',
-        'Plomberie', 'Menuiserie', 'Sol / revêtement',
-        'Désinsectisation / dératisation', 'Nettoyage / décapage',
-        'Démolition', 'Autre',
-    ];
-    if ($current_type && !in_array($current_type, $types, true)) array_unshift($types, $current_type);
-    foreach ($types as $tp) {
-        echo '<option value="' . esc_attr($tp) . '" ' . selected($current_type, $tp, false) . '>' . esc_html($tp) . '</option>';
+    if (function_exists('lfi_nct_travaux_catalogue')) {
+        echo '<label><strong>Nature des travaux (classifiés selon la loi)</strong><select name="type_travaux_key" id="lfi-type-key" required>';
+        echo '<option value="">— Choisir le type exact —</option>';
+        foreach (lfi_nct_travaux_catalogue() as $cat_key => $cat) {
+            echo '<optgroup label="' . esc_attr($cat['label']) . '">';
+            foreach ($cat['types'] as $tkey => $tlabel) {
+                echo '<option value="' . esc_attr($tkey) . '" data-cat="' . esc_attr($cat_key) . '" ' . selected($current_key, $tkey, false) . '>' . esc_html($tlabel) . '</option>';
+            }
+            echo '</optgroup>';
+        }
+        echo '</select></label>';
+
+        /* Bandeau d'alerte selon catégorie */
+        echo '<div id="lfi-cat-banner" style="display:none;padding:12px 14px;border-radius:8px;margin:8px 0;font-size:.9em;line-height:1.5"></div>';
     }
-    echo '</select></label>';
+    /* Champ libre conservé pour compatibilité (titre de la prestation sur facture) */
+    echo '<label>Libellé court pour la facture (auto-rempli)<input type="text" name="type_travaux" id="lfi-type-label" value="' . esc_attr($current_type) . '" placeholder="Ex : Moisissures + repose placo BA13 hydro"></label>';
 
     echo '<label>Description détaillée (ce qui sera repris dans la facture)<textarea name="description" rows="4" placeholder="Ex : Démontage et évacuation des plaques de plâtre infestées de moisissures sur 4 m² au mur de la cuisine, ponçage du support, rebouchage à l\'enduit, repose de placo BA13 hydro, enduit de finition.">' . esc_textarea($r->description) . '</textarea></label>';
 
@@ -472,7 +489,7 @@ function lfi_nct_app_intervention_form($row) {
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer l\'intervention') . '</button>';
     echo '</form>';
 
-    /* JS : recalcul live du total */
+    /* JS : recalcul live du total + alerte catégorie travaux */
     ?>
     <script>
     (function () {
@@ -491,6 +508,42 @@ function lfi_nct_app_intervention_form($row) {
             var el = document.querySelector('[name=' + n + ']');
             if (el) el.addEventListener('input', refresh);
         });
+
+        /* Alerte selon catégorie de travaux */
+        var BANNERS = {
+            bailleur:  { bg: '#e8f5ea', bd: '#186a3b', ico: '✅',
+                         msg: '<strong>OBLIGATION BAILLEUR — facturer NMH est légitime.</strong> Articles 1719 / 1724 CC, loi 89-462 art. 6, décret 2002-120 (décence). Lance le recouvrement sereinement.' },
+            gris:      { bg: '#fff8e6', bd: '#bd8600', ico: '⚠',
+                         msg: '<strong>ZONE GRISE — appréciation du juge.</strong> Soigne le motif d\'urgence : photos datées, copies des signalements préalables du locataire au bailleur. Sans ça, le tribunal peut te débouter.' },
+            locataire: { bg: '#fff3f5', bd: '#a30b25', ico: '🚫',
+                         msg: '<strong>RÉPARATION LOCATIVE (décret 87-712) — NE PAS facturer NMH.</strong> Ces travaux sont à la charge du locataire. Tu peux les facturer au locataire (qui est ton client), mais le recouvrement contre NMH sera REFUSÉ.' },
+        };
+        var sel = document.getElementById('lfi-type-key');
+        var lbl = document.getElementById('lfi-type-label');
+        var ban = document.getElementById('lfi-cat-banner');
+        function updateBanner() {
+            if (!sel) return;
+            var opt = sel.options[sel.selectedIndex];
+            var cat = opt ? opt.getAttribute('data-cat') : '';
+            if (lbl && opt && !lbl.value) lbl.value = opt.text;
+            if (!ban) return;
+            if (BANNERS[cat]) {
+                var b = BANNERS[cat];
+                ban.style.display = 'block';
+                ban.style.background = b.bg;
+                ban.style.borderLeft = '4px solid ' + b.bd;
+                ban.innerHTML = b.ico + ' ' + b.msg;
+            } else {
+                ban.style.display = 'none';
+            }
+        }
+        if (sel) {
+            sel.addEventListener('change', function () {
+                if (lbl) lbl.value = sel.options[sel.selectedIndex].text;
+                updateBanner();
+            });
+            updateBanner();
+        }
     })();
     </script>
     <?php

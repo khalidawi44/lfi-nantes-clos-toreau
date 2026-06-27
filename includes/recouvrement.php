@@ -64,6 +64,127 @@ function lfi_nct_recouvrement_db_setup() {
 }
 
 /* ============================================================== *
+ *  CATALOGUE DES TRAVAUX — qui paye selon la loi française         *
+ *                                                                   *
+ *  Trois catégories :                                               *
+ *   - bailleur  : obligation légale du bailleur, REMBOURSABLE       *
+ *                 (art. 1719 / 1724 CC, loi 89-462 art. 6, décret   *
+ *                 2002-120 décence)                                  *
+ *   - gris     : appréciation du juge selon la cause (usage normal  *
+ *                 vs défaut bâtiment). À argumenter.                 *
+ *   - locataire : décret 87-712 du 26/08/1987 (réparations          *
+ *                 locatives). NE JAMAIS facturer NMH.                *
+ *                                                                   *
+ *  La liste ci-dessous est issue de la jurisprudence et des textes  *
+ *  applicables au logement social. Source : Cour de cassation 3e    *
+ *  civ., ADIL 44, Code de la santé publique, loi ELAN 2018.         *
+ * ============================================================== */
+function lfi_nct_travaux_catalogue() {
+    return [
+        'bailleur' => [
+            'label'       => '🏛 OBLIGATION BAILLEUR — remboursable',
+            'remboursable'=> true,
+            'risque'      => 'faible',
+            'couleur'     => '#186a3b',
+            'fondement'   => 'Articles 1719 et 1724 du Code civil · Article 6 de la loi n° 89-462 · Décret n° 2002-120 (décence)',
+            'types'       => [
+                'humidite_moisissures_struct' => 'Moisissures dues à défaut bâtiment / VMC HS',
+                'humidite_infiltration'       => 'Infiltration extérieure, fuite toiture',
+                'humidite_remontee'           => 'Humidité par remontée capillaire',
+                'vmc_moteur_hs'               => 'VMC : moteur HS, gaines bouchées',
+                'fenetres_etancheite'         => 'Fenêtres : étanchéité défaillante',
+                'fenetres_vitrage_vetuste'    => 'Vitrage cassé par vétusté',
+                'chauffage_radiateur_hs'      => 'Radiateur HS, chaudière (fournie bailleur)',
+                'plomberie_encastree'         => 'Plomberie encastrée (canalisations murales)',
+                'plomberie_colonne'           => 'Colonne montante / descendante',
+                'electricite_tableau'         => 'Tableau électrique, mise aux normes NF C 15-100',
+                'electricite_circuit_mural'   => 'Câblage encastré, circuit défaillant',
+                'porte_entree_securite'       => 'Porte d\'entrée : sécurité, serrure défaillante',
+                'volets_hs'                   => 'Volets cassés / HS (vétusté)',
+                'insalubrite_plomb_amiante'   => 'Insalubrité (plomb, amiante, saturnisme)',
+                'punaises_lit'                => 'Punaises de lit (loi ELAN 2018, L.302-16-1 CCH)',
+                'rats_parties_communes'       => 'Rats venant des parties communes',
+                'parties_communes'            => 'Parties communes (hall, escalier, ascenseur)',
+                'gros_oeuvre'                 => 'Gros œuvre, murs porteurs, planchers',
+                'facade_fissure_structurelle' => 'Façade : fissure structurelle traversante',
+            ],
+        ],
+        'gris' => [
+            'label'       => '⚠ APPRÉCIATION DU JUGE — à argumenter',
+            'remboursable'=> null,
+            'risque'      => 'moyen',
+            'couleur'     => '#bd8600',
+            'fondement'   => 'À justifier au cas par cas : cause structurelle vs usage normal. La photo et la datation des signalements préalables sont décisives.',
+            'types'       => [
+                'joints_fenetres_calfeutrage' => 'Joints fenêtres / calfeutrage thermique',
+                'joints_silicone_sdb'         => 'Joint silicone SDB (si dû à humidité bailleur)',
+                'reboucher_fissure_origine'   => 'Rebouchage fissure d\'origine structurelle',
+                'peinture_apres_degat'        => 'Peinture après dégât bailleur (suite fuite, etc.)',
+                'cafards_blattes_immeuble'    => 'Cafards (si infestation immeuble entier)',
+                'placo_petit_morceau_degat'   => 'Reprise placo après dégât eau bailleur',
+                'chaudiere_indiv_entretien'   => 'Entretien chaudière (selon contrat bail)',
+                'porte_palier_securite'       => 'Porte palière (selon nature du défaut)',
+            ],
+        ],
+        'locataire' => [
+            'label'       => '🚫 RÉPARATIONS LOCATIVES — NE PAS facturer NMH',
+            'remboursable'=> false,
+            'risque'      => 'eleve',
+            'couleur'     => '#a30b25',
+            'fondement'   => 'Décret n° 87-712 du 26 août 1987 (réparations locatives à la charge du locataire)',
+            'types'       => [
+                'robinet_goutte_usure'        => 'Robinet qui goutte (usure normale)',
+                'chasse_eau_entretien'        => 'Chasse d\'eau (entretien courant)',
+                'plinthe_decoll_usage'        => 'Plinthe décollée par usage',
+                'porte_frotte_reglage'        => 'Porte qui frotte (réglage)',
+                'siphon_evier_deboucher'      => 'Déboucher siphon évier (entretien)',
+                'ampoules_fusibles'           => 'Ampoules, fusibles',
+                'papier_peint_deco'           => 'Papier peint décoratif (choix locataire)',
+                'peinture_deco_couleur'       => 'Peinture décorative (changement couleur)',
+                'vmc_grille_nettoyage'        => 'Nettoyage grille VMC',
+                'vitre_cassee_locataire'      => 'Vitre cassée par accident locataire',
+                'joints_silicone_usure'       => 'Joint silicone par usure normale (sans humidité)',
+                'trou_cheville_perso'         => 'Reboucher trou de cheville personnel',
+                'petit_platre_perso'          => 'Petit plâtre / rebouchage cosmétique',
+            ],
+        ],
+    ];
+}
+
+/* Trouve la catégorie d'un type donné. Retourne null si non classé. */
+function lfi_nct_travaux_classify($type_key) {
+    if (!$type_key) return null;
+    foreach (lfi_nct_travaux_catalogue() as $cat_key => $cat) {
+        if (isset($cat['types'][$type_key])) {
+            return [
+                'cat_key'      => $cat_key,
+                'cat_label'    => $cat['label'],
+                'remboursable' => $cat['remboursable'],
+                'risque'       => $cat['risque'],
+                'couleur'      => $cat['couleur'],
+                'fondement'    => $cat['fondement'],
+                'type_label'   => $cat['types'][$type_key],
+            ];
+        }
+    }
+    return null;
+}
+
+/* Calcule la catégorie majoritaire des interventions liées à une facture */
+function lfi_nct_rec_categorie_facture($numero) {
+    $interventions = lfi_nct_rec_interventions_by_facture($numero);
+    $counts = ['bailleur' => 0, 'gris' => 0, 'locataire' => 0, 'non_classe' => 0];
+    $total_eur = ['bailleur' => 0.0, 'gris' => 0.0, 'locataire' => 0.0, 'non_classe' => 0.0];
+    foreach ($interventions as $i) {
+        $cat = lfi_nct_travaux_classify($i->type_travaux_key ?? '');
+        $key = $cat ? $cat['cat_key'] : 'non_classe';
+        $counts[$key]++;
+        $total_eur[$key] += (float) $i->total_ht;
+    }
+    return ['counts' => $counts, 'eur' => $total_eur];
+}
+
+/* ============================================================== *
  *  Helpers                                                          *
  * ============================================================== */
 
@@ -151,23 +272,52 @@ function lfi_nct_app_view_recouvrements() {
         echo '<ul class="lfi-app-list">';
         foreach ($impayes as $imp) {
             $retard = (int) ((strtotime(current_time('Y-m-d')) - strtotime($imp->facture_date)) / 86400) - 30;
-            echo '<li class="lfi-app-card">';
+            $cat = lfi_nct_rec_categorie_facture($imp->facture_numero);
+            $n_locataire = $cat['counts']['locataire'];
+            $n_gris      = $cat['counts']['gris'];
+            $n_bailleur  = $cat['counts']['bailleur'];
+            $n_non_class = $cat['counts']['non_classe'];
+            $bloque      = ($n_locataire > 0 && $n_bailleur === 0 && $n_gris === 0);
+
+            $border = $bloque ? '#a30b25' : ($n_locataire > 0 || $n_non_class > 0 ? '#bd8600' : '#186a3b');
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . $border . '">';
             echo '<div class="head"><div class="who">🧾 ' . esc_html($imp->facture_numero) . '</div>';
             if ($retard > 0) echo '<div class="badge" style="background:#a30b25;color:#fff">⚠ ' . $retard . ' j de retard</div>';
             echo '</div>';
             echo '<div class="meta">';
-            echo '<span class="meta-chip">📅 Émise le ' . esc_html(wp_date('j M Y', strtotime($imp->facture_date))) . '</span>';
+            echo '<span class="meta-chip">📅 ' . esc_html(wp_date('j M Y', strtotime($imp->facture_date))) . '</span>';
             echo '<span class="meta-chip">👥 ' . esc_html($imp->noms) . '</span>';
             echo '<span class="meta-chip"><strong>' . lfi_nct_rec_format_eur($imp->total_ht) . '</strong></span>';
+            if ($n_bailleur)  echo '<span class="meta-chip" style="background:#e8f5ea;color:#186a3b">🏛 ' . $n_bailleur . ' bailleur</span>';
+            if ($n_gris)      echo '<span class="meta-chip" style="background:#fff8e6;color:#bd8600">⚠ ' . $n_gris . ' gris</span>';
+            if ($n_locataire) echo '<span class="meta-chip" style="background:#fff3f5;color:#a30b25">🚫 ' . $n_locataire . ' locataire</span>';
+            if ($n_non_class) echo '<span class="meta-chip" style="background:#eee;color:#666">? ' . $n_non_class . ' non classé</span>';
             echo '</div>';
+
+            if ($bloque) {
+                echo '<div style="background:#fff3f5;color:#a30b25;padding:10px 12px;border-radius:6px;margin-top:8px;font-size:.9em">';
+                echo '🚫 <strong>Recouvrement bloqué.</strong> Cette facture ne contient que des réparations à la charge du locataire (décret 87-712). NMH ne paiera pas, le tribunal vous déboutera. Facturez le locataire directement.';
+                echo '</div>';
+            } elseif ($n_locataire > 0) {
+                echo '<div style="background:#fff8e6;color:#bd8600;padding:10px 12px;border-radius:6px;margin-top:8px;font-size:.9em">';
+                echo '⚠ <strong>Attention :</strong> ' . $n_locataire . ' intervention(s) sont à la charge du locataire (décret 87-712). Le recouvrement ne portera que sur les travaux bailleur / gris. Édite l\'intervention « locataire » et facture-la séparément au locataire.';
+                echo '</div>';
+            } elseif ($n_non_class > 0) {
+                echo '<div style="background:#eee;color:#666;padding:10px 12px;border-radius:6px;margin-top:8px;font-size:.9em">';
+                echo '? <strong>' . $n_non_class . ' intervention(s) non classée(s)</strong> (anciennes données, type libre). Édite-les pour choisir le type exact dans le catalogue, sinon ton dossier sera fragile au tribunal.';
+                echo '</div>';
+            }
+
             echo '<div class="row-actions">';
-            echo '<form method="post" style="display:inline">';
-            wp_nonce_field('lfi_rec_open');
-            echo '<input type="hidden" name="lfi_rec_open" value="1">';
-            echo '<input type="hidden" name="facture_numero" value="' . esc_attr($imp->facture_numero) . '">';
-            echo '<input type="hidden" name="montant" value="' . esc_attr($imp->total_ht) . '">';
-            echo '<button type="submit" class="btn-primary">⚖️ Ouvrir un dossier de recouvrement</button>';
-            echo '</form>';
+            if (!$bloque) {
+                echo '<form method="post" style="display:inline">';
+                wp_nonce_field('lfi_rec_open');
+                echo '<input type="hidden" name="lfi_rec_open" value="1">';
+                echo '<input type="hidden" name="facture_numero" value="' . esc_attr($imp->facture_numero) . '">';
+                echo '<input type="hidden" name="montant" value="' . esc_attr($imp->total_ht) . '">';
+                echo '<button type="submit" class="btn-primary">⚖️ Ouvrir un dossier de recouvrement</button>';
+                echo '</form>';
+            }
             echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('facture', ['numero' => $imp->facture_numero])) . '">🧾 Voir facture</a>';
             echo '</div>';
             echo '</li>';
@@ -300,6 +450,33 @@ function lfi_nct_app_view_recouvrement_dossier() {
     echo '<div class="stat"><div class="ico">📈</div><div class="n">' . lfi_nct_rec_format_eur($penalites) . '</div><div class="l">Pénalités (' . $jours_retard . ' j)</div></div>';
     echo '<div class="stat"><div class="ico">💼</div><div class="n">40 €</div><div class="l">Indemnité forfaitaire</div></div>';
     echo '<div class="stat"><div class="ico">🎯</div><div class="n">' . lfi_nct_rec_format_eur($du_total) . '</div><div class="l">TOTAL DÛ</div></div>';
+    echo '</div>';
+
+    /* Classification juridique des travaux concernés */
+    $cat = lfi_nct_rec_categorie_facture($rec->facture_numero);
+    echo '<div style="margin-top:14px;background:#fff;border-radius:10px;padding:14px 16px;border:1px solid #eee">';
+    echo '<h4 style="margin:0 0 8px;color:#c8102e">🏛 Classification juridique des travaux de cette facture</h4>';
+    echo '<table style="width:100%;font-size:.9em;border-collapse:collapse">';
+    $catalogue = lfi_nct_travaux_catalogue();
+    foreach (['bailleur', 'gris', 'locataire'] as $k) {
+        if ($cat['counts'][$k] === 0) continue;
+        $c = $catalogue[$k];
+        echo '<tr><td style="padding:6px 0;border-bottom:1px solid #f0f0f0">';
+        echo '<strong style="color:' . esc_attr($c['couleur']) . '">' . esc_html($c['label']) . '</strong><br>';
+        echo '<small style="color:#666">' . esc_html($c['fondement']) . '</small>';
+        echo '</td>';
+        echo '<td style="text-align:right;padding:6px 0;border-bottom:1px solid #f0f0f0">';
+        echo $cat['counts'][$k] . ' interv. · <strong>' . lfi_nct_rec_format_eur($cat['eur'][$k]) . '</strong>';
+        echo '</td></tr>';
+    }
+    if ($cat['counts']['non_classe'] > 0) {
+        echo '<tr><td style="padding:6px 0;color:#666"><em>Non classé (anciennes données)</em></td>';
+        echo '<td style="text-align:right;color:#666">' . $cat['counts']['non_classe'] . ' interv. · ' . lfi_nct_rec_format_eur($cat['eur']['non_classe']) . '</td></tr>';
+    }
+    echo '</table>';
+    if ($cat['counts']['locataire'] > 0) {
+        echo '<div style="background:#fff3f5;color:#a30b25;padding:10px;border-radius:6px;margin-top:10px;font-size:.9em">⚠ <strong>' . lfi_nct_rec_format_eur($cat['eur']['locataire']) . '</strong> de cette facture sont des réparations locatives (décret 87-712). Le tribunal réduira ta demande d\'autant. Tu peux retirer ces lignes ou les facturer au locataire séparément.</div>';
+    }
     echo '</div>';
 
     /* Motif d'urgence (pour les documents juridiques) */
