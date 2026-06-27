@@ -77,9 +77,11 @@ function lfi_nct_inscription_add_ga_if_new($name) {
  * ============================================================== */
 
 function lfi_nct_app_view_inscription() {
+    /* Si déjà connecté, on affiche un lien (le redirect est géré par
+       template_redirect AVANT que les headers soient envoyés). */
     if (is_user_logged_in()) {
-        wp_safe_redirect(home_url('/app/'));
-        exit;
+        echo '<div class="lfi-app"><div class="lfi-app-flash ok">Vous êtes déjà connecté·e. <a href="' . esc_url(home_url('/app/')) . '">→ Aller à mon espace</a></div></div>';
+        return;
     }
 
     lfi_nct_app_screen_open('✍️ Créer un compte', 'Choisissez votre profil');
@@ -117,8 +119,8 @@ function lfi_nct_app_view_inscription() {
 
 function lfi_nct_app_view_inscription_locataire() {
     if (is_user_logged_in()) {
-        wp_safe_redirect(home_url('/app/'));
-        exit;
+        echo '<div class="lfi-app"><div class="lfi-app-flash ok">Vous êtes déjà connecté·e. <a href="' . esc_url(home_url('/app/')) . '">→ Aller à mon espace</a></div></div>';
+        return;
     }
     global $wpdb;
     $err = null; $credentials = null;
@@ -258,8 +260,8 @@ function lfi_nct_app_view_inscription_locataire() {
 
 function lfi_nct_app_view_inscription_ga() {
     if (is_user_logged_in()) {
-        wp_safe_redirect(home_url('/app/'));
-        exit;
+        echo '<div class="lfi-app"><div class="lfi-app-flash ok">Vous êtes déjà connecté·e. <a href="' . esc_url(home_url('/app/')) . '">→ Aller à mon espace</a></div></div>';
+        return;
     }
     $err = null; $credentials = null;
 

@@ -238,7 +238,64 @@ function lfi_nct_app_no_cache() {
     $post = get_post();
     if (!$post || $post->post_name !== LFI_NCT_APP_SLUG) return;
     if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+    if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
+    if (!defined('DONOTCACHEDB')) define('DONOTCACHEDB', true);
     do_action('litespeed_control_set_nocache', 'LFI App : page dynamique');
+    /* Envoie des headers no-cache aussi (au cas où LiteSpeed cache HTML
+       au niveau serveur sans respecter DONOTCACHEPAGE). */
+    nocache_headers();
+    if (!headers_sent()) {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        header('Vary: Cookie, Accept-Encoding');
+        /* X-LiteSpeed-Cache-Control : directive spécifique LSCWP */
+        header('X-LiteSpeed-Cache-Control: no-cache, no-vary');
+    }
+}
+
+/* Template_redirect : gère les redirections AVANT que les headers soient
+ * envoyés (les wp_safe_redirect depuis le shortcode échouent silencieusement
+ * une fois que le thème a commencé à rendre le HTML). */
+add_action('template_redirect', 'lfi_nct_app_handle_redirects', 1);
+function lfi_nct_app_handle_redirects() {
+    if (!is_singular()) return;
+    $post = get_post();
+    if (!$post || $post->post_name !== LFI_NCT_APP_SLUG) return;
+
+    $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+
+    /* Redirige les routes d'inscription vers /app/ si user déjà connecté */
+    if (is_user_logged_in() && in_array($vue, ['inscription', 'inscription-locataire', 'inscription-ga'], true)) {
+        wp_safe_redirect(home_url('/app/'));
+        exit;
+    }
+
+    /* Backward compat : /app/?vue=comptes pour admin */
+    if ($vue === 'comptes' && current_user_can('manage_options')) {
+        wp_safe_redirect(home_url('/app/?vue=comptes-ga'));
+        exit;
+    }
+
+    /* Preview set : poser cookie + redirect home */
+    if ($vue === 'preview-set' && current_user_can('manage_options')) {
+        $uid = isset($_GET['uid']) ? (int) $_GET['uid'] : 0;
+        if ($uid && get_userdata($uid)) {
+            $secure = is_ssl();
+            setcookie('lfi_app_preview_uid', (string) $uid, time() + 8 * HOUR_IN_SECONDS, COOKIEPATH ?: '/', COOKIE_DOMAIN, $secure, true);
+        }
+        wp_safe_redirect(home_url('/app/'));
+        exit;
+    }
+
+    /* Preview exit : retirer cookie + retour picker */
+    if ($vue === 'preview-exit') {
+        $secure = is_ssl();
+        setcookie('lfi_app_preview_uid', '', time() - 3600, COOKIEPATH ?: '/', COOKIE_DOMAIN, $secure, true);
+        unset($_COOKIE['lfi_app_preview_uid']);
+        wp_safe_redirect(home_url('/app/?vue=preview'));
+        exit;
+    }
 }
 
 add_action('wp_head', 'lfi_nct_app_head_meta', 1);
