@@ -247,10 +247,10 @@ function lfi_nct_app_view_envoyer_photo() {
  * ============================================================== */
 
 function lfi_nct_app_view_dossiers() {
-    /* Lecture autorisée aux admins ET aux membres du GA (les GA collectent
-       les enquêtes sur le terrain, ils ont besoin de voir les remontées).
-       Le détail individuel (modif, suppression) reste réservé aux admins. */
-    if (!current_user_can('manage_options') && !lfi_nct_user_role_ga()) return;
+    /* Admin EXCLUSIVEMENT — données nominatives sensibles (RGPD).
+       Les GA peuvent FAIRE PASSER une enquête (via le formulaire public)
+       mais n'ont JAMAIS accès aux résultats individuels. */
+    if (!current_user_can('manage_options')) return;
     global $wpdb;
 
     $tenants = get_users([
@@ -793,9 +793,8 @@ function lfi_nct_app_view_carte() {
 function lfi_nct_app_view_stats_enquete_helper_stub() {} /* no-op marker, kept for compat */
 
 function lfi_nct_app_view_stats_enquete() {
-    /* Stats accessibles aussi aux membres GA — ils ont besoin de voir ce
-       qu\'ils ont récolté pour piloter leur action politique. */
-    if (!current_user_can('manage_options') && !lfi_nct_user_role_ga()) return;
+    /* Admin EXCLUSIVEMENT — agrégats sur données RGPD. */
+    if (!current_user_can('manage_options')) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 

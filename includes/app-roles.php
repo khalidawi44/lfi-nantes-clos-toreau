@@ -623,10 +623,6 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
             case 'installer':       lfi_nct_app_view_installer();  break;
 
-            /* Lecture des enquêtes terrain (responsables GA) */
-            case 'dossiers':        lfi_nct_app_view_dossiers();        break;
-            case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
-
             /* Brigade travaux — chaque membre a ses propres interventions,
                factures, recouvrements (filtrage strict par owner_user_id). */
             case 'brigade-intro':           lfi_nct_app_view_brigade_intro_ga();             break;
@@ -682,16 +678,19 @@ function lfi_nct_app_view_ga_dashboard() {
     /* Premier accès à la brigade : afficher la tuile d'intro en évidence */
     $brigade_seen = (bool) get_user_meta($owner_id, 'lfi_nct_brigade_intro_seen', true);
 
+    /* URL du formulaire public d'enquête (les GA s'en servent pour faire
+       passer l'enquête en porte-à-porte). Les résultats restent admin only. */
+    $survey_url = home_url('/enquete-logement-clos-toreau/');
+
     $tiles = [
         ['📲', 'Installer l\'app',          'iPhone / Android · permissions',      lfi_nct_app_url('installer')],
+        ['📋', 'Faire passer une enquête',  'Formulaire pour les locataires',      $survey_url],
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS aux adhérents', 'Modèles + envoi',                     lfi_nct_app_url('sms')],
         ['✉️', 'Email aux adhérents',       'Diffusion ciblée',                    lfi_nct_app_url('email')],
-        ['🗂', 'Réponses enquêtes',         'Ce qu\'on a récolté sur le terrain',  lfi_nct_app_url('dossiers')],
-        ['📈', 'Stats enquêtes',            'Problèmes + cartes + adresses',       lfi_nct_app_url('stats-enquete')],
-        ['📊', 'Statistiques',              'Vue d\'ensemble',                     lfi_nct_app_url('stats')],
+        ['📊', 'Statistiques générales',    'Compteurs anonymes',                  lfi_nct_app_url('stats')],
     ];
 
     /* === Section BRIGADE TRAVAUX (per-user, jamais mélangée) === */
@@ -720,7 +719,7 @@ function lfi_nct_app_view_ga_dashboard() {
         </div>
 
         <div class="lfi-app-help" style="margin:0 0 14px">
-            👋 Tu es connecté·e comme membre du GA. Tu peux gérer les événements, écrire aux adhérents, et lancer tes propres interventions brigade. Les contacts des locataires détaillés restent réservés aux admins (RGPD).
+            👋 Tu es connecté·e comme membre du GA. Tu peux gérer les événements, écrire aux adhérents, faire passer l\'enquête logement, et lancer tes propres interventions brigade. <strong>Les réponses aux enquêtes et les contacts détaillés des locataires restent réservés à l\'admin</strong> (RGPD).
         </div>
 
         <?php if (!$brigade_seen): ?>
