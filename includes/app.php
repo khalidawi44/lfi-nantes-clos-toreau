@@ -280,6 +280,16 @@ add_shortcode('lfi_nct_app', 'lfi_nct_app_shortcode');
 function lfi_nct_app_shortcode() {
     ob_start();
 
+    /* Route accessible sans login : la page « Installer l'app » sert de
+       landing depuis les liens SMS/email reçus par les locataires. */
+    $vue_public = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+    if ($vue_public === 'installer') {
+        lfi_nct_app_view_installer();
+        lfi_nct_app_render_styles();
+        lfi_nct_app_render_register_sw();
+        return ob_get_clean();
+    }
+
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
     } else {
@@ -315,6 +325,7 @@ function lfi_nct_app_shortcode() {
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
                     case 'mon-profil':      lfi_nct_app_view_mon_profil();      break;
+                    case 'installer':       lfi_nct_app_view_installer();       break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }

@@ -63,13 +63,27 @@ function lfi_nct_render_signature_text($key) {
 
 /**
  * Enveloppe HTML standard d'un email du GA : en-tête rouge LFI +
- * salutation + corps + bloc événement optionnel + signature + footer RGPD.
+ * salutation + corps + bouton « Installer l'app » + bloc événement
+ * optionnel + signature + footer RGPD.
  */
 function lfi_nct_email_wrap_html($prenom, $body_html, $event_html = '', $signature_key = 'collectif', $rgpd_text = '') {
-    $sig_html = lfi_nct_render_signature_html($signature_key);
+    $sig_html  = lfi_nct_render_signature_html($signature_key);
+    $app_url   = esc_url(home_url('/app/'));
+    $install_url = esc_url(home_url('/app/?vue=installer'));
     if ($rgpd_text === '') {
         $rgpd_text = 'Vous recevez cet email du Groupe d\'Action LFI Nantes Sud Clos Toreau.';
     }
+
+    /* Bloc « Installer l'app » prêt à coller en tête d'email */
+    $install_block = ''
+        . '<table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;width:100%">'
+        . '<tr><td style="background:#fff8e6;border-left:4px solid #c8102e;border-radius:6px;padding:14px 18px">'
+        .   '<div style="font-weight:700;color:#c8102e;font-size:1em;margin-bottom:4px">📲 L\'app du GA sur votre téléphone</div>'
+        .   '<div style="font-size:.92em;color:#444;margin-bottom:10px">Modèles de lettre, vos droits, envoi de photos, conseils juridiques — tout est dans l\'app. Installez-la en un geste.</div>'
+        .   '<a href="' . $install_url . '" style="display:inline-block;background:#c8102e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;font-size:1em">📥 Installer l\'app sur mon téléphone</a>'
+        .   '<div style="font-size:.78em;color:#777;margin-top:8px">ou ouvrir directement : <a href="' . $app_url . '" style="color:#c8102e">' . esc_html($app_url) . '</a></div>'
+        . '</td></tr></table>';
+
     return ''
         . '<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#fff">'
         . '<div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;padding:18px 22px">'
@@ -79,6 +93,7 @@ function lfi_nct_email_wrap_html($prenom, $body_html, $event_html = '', $signatu
         . '<div style="padding:22px 22px 6px;color:#1a1a1a;line-height:1.5">'
         .   '<p style="margin:0 0 12px">Bonjour ' . esc_html($prenom ?: '') . ',</p>'
         .   $body_html
+        .   $install_block
         .   $event_html
         .   $sig_html
         . '</div>'
@@ -1175,6 +1190,190 @@ function lfi_nct_app_view_mon_profil() {
 }
 
 /* ============================================================== *
+ *  Page « Installer l'app » + demandes de permissions              *
+ *  Accessible à tout utilisateur connecté, et même non connecté    *
+ *  (sert de landing page depuis les liens SMS/email).              *
+ * ============================================================== */
+
+function lfi_nct_app_view_installer() {
+    /* Ne pas exiger une connexion : un email d'invitation peut amener
+       quelqu'un ici avant son premier login. */
+    lfi_nct_app_screen_open('📲 Installer l\'app', 'En un geste, sur votre téléphone');
+
+    echo '<div class="lfi-app-help" style="margin-bottom:14px"><strong>L\'app du GA fonctionne mieux installée sur votre téléphone</strong> : icône directe sur l\'écran d\'accueil, plein écran sans la barre du navigateur, accès rapide à la caméra et aux photos pour vos signalements.</div>';
+
+    /* Bouton d'install Android (s'active si beforeinstallprompt déclenché) */
+    echo '<div id="lfi-install-android" style="display:none">';
+    echo '<button type="button" id="lfi-install-android-btn" class="btn-primary big">📥 Installer l\'app maintenant (Android)</button>';
+    echo '<div class="lfi-app-help" style="margin-top:6px"><small>Chrome détecte que cette app est installable. Touchez ce bouton.</small></div>';
+    echo '</div>';
+
+    /* Instructions iOS */
+    echo '<details class="lfi-app-collapse" open><summary>📱 iPhone — installer en 30 secondes</summary>';
+    echo '<div style="padding:14px 16px;background:#fff;border-top:1px solid #eee">';
+    echo '<ol style="margin:0;padding-left:1.4em;line-height:1.7">';
+    echo '<li>Ouvrez cette page dans <strong>Safari</strong> (pas Chrome, pas un autre navigateur)</li>';
+    echo '<li>Touchez le bouton <strong>Partager</strong> en bas : <span style="display:inline-block;background:#007aff;color:#fff;padding:2px 8px;border-radius:4px">⬆</span></li>';
+    echo '<li>Faites défiler et touchez <strong>« Sur l\'écran d\'accueil »</strong></li>';
+    echo '<li>Touchez <strong>Ajouter</strong> en haut à droite</li>';
+    echo '</ol>';
+    echo '<div class="lfi-app-help" style="margin-top:10px"><small>L\'icône rouge « GA LFI » apparaît sur votre bureau. Touchez-la pour ouvrir l\'app, plein écran sans la barre Safari.</small></div>';
+    echo '</div></details>';
+
+    /* Instructions Android (générique) */
+    echo '<details class="lfi-app-collapse"><summary>🤖 Android — installer en 30 secondes</summary>';
+    echo '<div style="padding:14px 16px;background:#fff;border-top:1px solid #eee">';
+    echo '<ol style="margin:0;padding-left:1.4em;line-height:1.7">';
+    echo '<li>Ouvrez cette page dans <strong>Chrome</strong></li>';
+    echo '<li>Touchez le menu <strong>⋮</strong> en haut à droite</li>';
+    echo '<li>Touchez <strong>« Installer l\'application »</strong> (ou « Ajouter à l\'écran d\'accueil »)</li>';
+    echo '<li>Confirmez avec <strong>Installer</strong></li>';
+    echo '</ol>';
+    echo '<div class="lfi-app-help" style="margin-top:10px"><small>L\'icône apparaît sur votre écran d\'accueil et dans le tiroir d\'apps. Touchez-la pour ouvrir l\'app, plein écran.</small></div>';
+    echo '</div></details>';
+
+    /* Section autorisations */
+    echo '<h3 style="margin:24px 0 8px">🔐 Autoriser les fonctionnalités</h3>';
+    echo '<div class="lfi-app-help" style="margin-bottom:12px">Pour vos signalements et vos démarches, l\'app a besoin de votre accord pour utiliser certaines fonctions de votre téléphone. Vous restez maître·sse : vous pouvez accorder ou refuser chacune, et changer d\'avis plus tard dans les réglages.</div>';
+
+    echo '<div class="lfi-app-perms">';
+
+    /* Caméra */
+    echo '<div class="lfi-perm-card" id="perm-camera">';
+    echo '<div class="head"><span class="ico">📷</span><div><strong>Caméra</strong><br><small>Pour prendre directement une photo des dégradations</small></div></div>';
+    echo '<button type="button" class="btn-primary" data-perm="camera">Autoriser</button>';
+    echo '<div class="status" data-status="camera">Pas encore demandé</div>';
+    echo '</div>';
+
+    /* Photos / fichiers */
+    echo '<div class="lfi-perm-card" id="perm-files">';
+    echo '<div class="head"><span class="ico">🖼</span><div><strong>Photos &amp; fichiers</strong><br><small>Pour envoyer une photo déjà prise depuis votre galerie</small></div></div>';
+    echo '<button type="button" class="btn-primary" data-perm="files">Tester l\'accès</button>';
+    echo '<div class="status" data-status="files">Pas encore demandé</div>';
+    echo '</div>';
+
+    /* Notifications */
+    echo '<div class="lfi-perm-card" id="perm-notif">';
+    echo '<div class="head"><span class="ico">🔔</span><div><strong>Notifications</strong><br><small>Pour recevoir les conseils du jour et les rappels d\'événement</small></div></div>';
+    echo '<button type="button" class="btn-primary" data-perm="notif">Autoriser</button>';
+    echo '<div class="status" data-status="notif">Pas encore demandé</div>';
+    echo '</div>';
+
+    /* Géoloc */
+    echo '<div class="lfi-perm-card" id="perm-geo">';
+    echo '<div class="head"><span class="ico">📍</span><div><strong>Géolocalisation</strong><br><small>Pour vous situer automatiquement lors d\'un signalement</small></div></div>';
+    echo '<button type="button" class="btn-primary" data-perm="geo">Autoriser</button>';
+    echo '<div class="status" data-status="geo">Pas encore demandé</div>';
+    echo '</div>';
+
+    echo '</div>';
+
+    echo '<div class="lfi-app-help" style="margin-top:18px"><small>🔒 Aucune donnée n\'est collectée à votre insu. Toutes ces permissions sont gérées par le système de votre téléphone, jamais par nous. Vous pouvez les révoquer à tout moment dans les réglages de votre téléphone (Safari ou Chrome > Paramètres du site).</small></div>';
+
+    /* JS qui gère beforeinstallprompt et les demandes de permission */
+    ?>
+    <script>
+    (function () {
+        /* ----- Install Android via beforeinstallprompt ----- */
+        var deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            deferredPrompt = e;
+            var box = document.getElementById('lfi-install-android');
+            if (box) box.style.display = 'block';
+        });
+        var btnAndroid = document.getElementById('lfi-install-android-btn');
+        if (btnAndroid) {
+            btnAndroid.addEventListener('click', function () {
+                if (!deferredPrompt) return;
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then(function (choice) {
+                    var box = document.getElementById('lfi-install-android');
+                    if (box) {
+                        box.innerHTML = choice.outcome === 'accepted'
+                            ? '<div class="lfi-app-flash ok">✅ App installée. Touchez l\'icône sur votre écran d\'accueil.</div>'
+                            : '<div class="lfi-app-flash err">L\'installation a été annulée.</div>';
+                    }
+                    deferredPrompt = null;
+                });
+            });
+        }
+
+        /* ----- Permission helpers ----- */
+        function setStatus(key, msg, ok) {
+            var el = document.querySelector('[data-status="' + key + '"]');
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.remove('ok', 'err');
+            el.classList.add(ok ? 'ok' : 'err');
+        }
+        async function askCamera() {
+            try {
+                var stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(function (t) { t.stop(); });
+                setStatus('camera', '✅ Caméra autorisée', true);
+            } catch (err) {
+                setStatus('camera', '❌ Refusé ou indisponible : ' + (err && err.message ? err.message : 'erreur'), false);
+            }
+        }
+        function askFiles() {
+            var inp = document.createElement('input');
+            inp.type = 'file';
+            inp.accept = 'image/*';
+            inp.style.display = 'none';
+            document.body.appendChild(inp);
+            inp.addEventListener('change', function () {
+                setStatus('files', inp.files.length ? '✅ Accès photos OK (' + inp.files[0].name + ')' : '❌ Aucun fichier sélectionné', !!inp.files.length);
+                document.body.removeChild(inp);
+            }, { once: true });
+            inp.click();
+        }
+        async function askNotif() {
+            if (!('Notification' in window)) {
+                setStatus('notif', '❌ Non supporté par ce navigateur', false);
+                return;
+            }
+            try {
+                var perm = await Notification.requestPermission();
+                if (perm === 'granted') {
+                    setStatus('notif', '✅ Notifications autorisées', true);
+                    new Notification('GA LFI Clos Toreau', { body: 'Vos notifications sont actives.' });
+                } else {
+                    setStatus('notif', '❌ Refusé (' + perm + ')', false);
+                }
+            } catch (err) {
+                setStatus('notif', '❌ Erreur : ' + err.message, false);
+            }
+        }
+        function askGeo() {
+            if (!navigator.geolocation) {
+                setStatus('geo', '❌ Géolocalisation non supportée', false);
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    setStatus('geo', '✅ Position obtenue (' + pos.coords.latitude.toFixed(3) + ', ' + pos.coords.longitude.toFixed(3) + ')', true);
+                },
+                function (err) {
+                    setStatus('geo', '❌ Refusé ou indisponible (' + err.message + ')', false);
+                }
+            );
+        }
+        var handlers = { camera: askCamera, files: askFiles, notif: askNotif, geo: askGeo };
+        document.querySelectorAll('[data-perm]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var key = btn.dataset.perm;
+                if (handlers[key]) handlers[key]();
+            });
+        });
+    })();
+    </script>
+    <?php
+
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
  *  CSS supplémentaires                                              *
  * ============================================================== */
 add_action('wp_footer', 'lfi_nct_app_pro_styles', 200);
@@ -1206,6 +1405,21 @@ function lfi_nct_app_pro_styles() {
         padding: 10px; border: 2px dashed #ccc; border-radius: 10px;
         background: #fafafa; cursor: pointer;
     }
+
+    /* Cartes de permissions */
+    .lfi-app-perms { display: flex; flex-direction: column; gap: 10px; }
+    .lfi-perm-card { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .lfi-perm-card .head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+    .lfi-perm-card .head .ico { font-size: 1.8em; line-height: 1; flex-shrink: 0; }
+    .lfi-perm-card .head strong { font-size: 1em; color: #1a1a1a; }
+    .lfi-perm-card .head small { color: #666; font-size: .82em; line-height: 1.4; }
+    .lfi-perm-card .status {
+        margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+        font-size: .82em; color: #777; background: #f5f5f5;
+    }
+    .lfi-perm-card .status.ok  { background: #e7f5ee; color: #186a3b; }
+    .lfi-perm-card .status.err { background: #fff3f5; color: #a30b25; }
+    .lfi-perm-card button { width: 100%; }
 
     /* Légende de la carte */
     .lfi-map-legend {

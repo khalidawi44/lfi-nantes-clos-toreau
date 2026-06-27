@@ -566,6 +566,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'mon-enquete':  lfi_nct_app_view_tenant_enquete();  break;
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
+            case 'installer':    lfi_nct_app_view_installer();       break;
             default:             lfi_nct_app_view_tenant_dashboard();
         }
         $handled = true; return;
@@ -580,6 +581,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'email':           lfi_nct_app_view_email();      break;
             case 'stats':           lfi_nct_app_view_stats();      break;
             case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
+            case 'installer':       lfi_nct_app_view_installer();  break;
             default:                lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
@@ -595,6 +597,7 @@ function lfi_nct_app_view_ga_dashboard() {
     $user = wp_get_current_user();
     $stats = lfi_nct_app_quick_stats();
     $tiles = [
+        ['📲', 'Installer l\'app',          'iPhone / Android · permissions',      lfi_nct_app_url('installer')],
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
@@ -669,6 +672,7 @@ function lfi_nct_app_view_tenant_dashboard() {
     }
 
     $tiles = [
+        ['📲', 'Installer l\'app',  'iPhone / Android · permissions', lfi_nct_app_url('installer')],
         ['📷', 'Envoyer une photo', 'Documenter votre logement',      lfi_nct_app_url('envoyer-photo')],
         ['📝', 'Modèle de lettre',  'Pour Nantes Métropole Habitat',  lfi_nct_app_url('lettre')],
         ['⚖️', 'Mes droits',        'Lois et recours',                lfi_nct_app_url('droits')],
@@ -1056,7 +1060,10 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
     $site_app = home_url('/app/');
     $sms_body = "Bonjour,\n\n"
               . "Vos accès à l'app du GA LFI Nantes Sud Clos Toreau :\n\n"
-              . "🌐 Site : " . $site_app . "\n\n"
+              . "📲 Installez l'app en ouvrant ce lien :\n"
+              . $site_app . "\n\n"
+              . "→ iPhone : ouvrez dans Safari puis Partager > Sur l'écran d'accueil\n"
+              . "→ Android : ouvrez dans Chrome, un bouton « Installer » apparaît\n\n"
               . "🪪 Identifiant : " . $login . "\n\n"
               . "🔑 Mot de passe : " . $pwd . "\n\n"
               . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
