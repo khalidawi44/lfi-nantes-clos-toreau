@@ -19,128 +19,112 @@ function lfi_nct_tutoriels_all() {
             'titre' => 'Moisissures — démolition + repose plâtre',
             'sous'  => 'Le vrai protocole pro, biocide stable, BA13 hydro',
             'sections' => [
-                'diagnostic' => [
-                    'titre' => '🔬 1. Diagnostic (ne pas sauter cette étape)',
-                    'contenu' => '<p>Avant tout traitement, identifier la cause sinon ça revient en 6 mois.</p>'
-                        . '<ul>'
-                        . '<li><strong>Hygromètre digital LCD</strong> 8 € chez Brico Dépôt (rayon thermostats). RH > 70 % = condensation. RH normale + zone localisée mouillée = infiltration.</li>'
-                        . '<li><strong>Identification visuelle :</strong><ul>'
-                        . '<li>Taches <strong>noires épaisses, gluantes</strong> = <em>Stachybotrys chartarum</em> — toxique, EPI total obligatoire.</li>'
-                        . '<li>Vert/bleu poudreux = <em>Penicillium / Aspergillus</em> — moins dangereux.</li>'
-                        . '<li>Blanc duveteux = <em>Mucor</em> — superficiel, bénin.</li>'
-                        . '</ul></li>'
-                        . '<li><strong>Test au couteau :</strong> si la plaque s\'effrite ou que le couteau s\'enfonce, le plâtre est pourri à cœur, démolition obligatoire avec marge de 30 cm autour de la zone atteinte.</li>'
-                        . '<li><strong>Cause structurelle ou non ?</strong> Mettre un sac plastique scotché sur la zone 24 h. Si gouttes d\'eau dessus = condensation (problème VMC/isolation). Si gouttes dessous = infiltration extérieure → <strong>c\'est au bailleur, devis pas concerné</strong>.</li>'
-                        . '</ul>',
-                ],
                 'outils' => [
-                    'titre' => '🧰 2. Outils nécessaires (investissement brigade)',
-                    'contenu' => '<table style="width:100%;border-collapse:collapse;font-size:.9em">'
-                        . '<tr><th style="text-align:left;padding:6px;border-bottom:2px solid #c8102e">Outil</th><th style="padding:6px">Prix</th><th style="padding:6px">Où acheter</th></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Aspirateur HEPA H13 atelier (Karcher WD3 + filtre HEPA)</td><td style="text-align:center">85 €</td><td style="text-align:center"><strong>Brico Dépôt</strong></td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Pulvérisateur 5 L Hozelock</td><td style="text-align:center">12 €</td><td style="text-align:center"><strong>Brico Dépôt</strong></td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Couteaux à enduire 10 + 25 + 40 cm (lot pro)</td><td style="text-align:center">15 €</td><td style="text-align:center">ManoMano Pro</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Scie égoïne pour plaques de plâtre</td><td style="text-align:center">6 €</td><td style="text-align:center"><strong>Brico Dépôt</strong></td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Cale à poncer + abrasifs 80 / 120 / 240</td><td style="text-align:center">8 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Visseuse Bosch GSR 12V (entrée gamme pro)</td><td style="text-align:center">79 €</td><td style="text-align:center">Amazon</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Mètre laser Leica Disto D1</td><td style="text-align:center">59 €</td><td style="text-align:center">ManoMano Pro</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Hygromètre digital</td><td style="text-align:center">8 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px"><strong>EPI : masque FFP3 (lot 5), gants nitrile, lunettes, combinaison Tyvek jetable</strong></td><td style="text-align:center">25 €</td><td style="text-align:center">Amazon</td></tr>'
-                        . '</table>'
+                    'titre' => '🧰 1. Outils nécessaires',
+                    'contenu' => '<ul>'
+                        . '<li>Aspirateur HEPA H13 (Karcher WD3 + filtre) — 85 € Brico Dépôt</li>'
+                        . '<li>Pulvérisateur 5 L Hozelock — 12 € Brico Dépôt</li>'
+                        . '<li>Couteaux à enduire 10 + 25 + 40 cm — 15 € ManoMano Pro</li>'
+                        . '<li>Scie égoïne pour plaques de plâtre — 6 € Brico Dépôt</li>'
+                        . '<li>Cale à poncer + abrasifs 80 / 120 / 240 — 8 € Brico Dépôt</li>'
+                        . '<li>Visseuse Bosch GSR 12V — 79 € Amazon</li>'
+                        . '<li>Mètre laser Leica Disto D1 — 59 € ManoMano Pro</li>'
+                        . '<li>Hygromètre digital — 8 € Brico Dépôt</li>'
+                        . '<li>EPI : masque FFP3, gants nitrile, lunettes, combinaison Tyvek — 25 € Amazon</li>'
+                        . '</ul>'
                         . '<p style="margin-top:8px"><strong>Investissement initial brigade : ~ 300 €</strong>, amorti dès la 2e intervention facturée.</p>',
                 ],
                 'materiaux' => [
-                    'titre' => '🧪 3. Matériaux par intervention (pour 4 m²)',
+                    'titre' => '🧪 2. Matériaux par intervention (pour 4 m²)',
                     'contenu' => '<table style="width:100%;border-collapse:collapse;font-size:.9em">'
-                        . '<tr><th style="text-align:left;padding:6px;border-bottom:2px solid #c8102e">Produit</th><th style="padding:6px">Prix</th><th style="padding:6px">Source la moins chère</th></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee"><strong>Biocide pro Algiclair Pro</strong> (peroxyde stabilisé, sans javel — pas de chlore résiduel) 1 L</td><td style="text-align:center">14 €</td><td style="text-align:center"><strong>ManoMano Pro</strong></td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Plaque BA13 hydro (verte, anti-humidité) 1,20 × 2,50 m × 2</td><td style="text-align:center">17 €</td><td style="text-align:center"><strong>Brico Dépôt</strong> (le moins cher)</td></tr>'
+                        . '<tr><th style="text-align:left;padding:6px;border-bottom:2px solid #c8102e">Produit</th><th style="padding:6px">Prix</th><th style="padding:6px">Source</th></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee"><strong>Biocide pro Algiclair Pro</strong> 1 L (peroxyde stabilisé, sans javel)</td><td style="text-align:center">14 €</td><td style="text-align:center"><strong>ManoMano Pro</strong></td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Plaque BA13 hydro verte 1,20 × 2,50 m × 2</td><td style="text-align:center">17 €</td><td style="text-align:center"><strong>Brico Dépôt</strong></td></tr>'
                         . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Vis Spax TT 35 mm boîte 200</td><td style="text-align:center">6 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
                         . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Bande à joint papier 90 m (Knauf)</td><td style="text-align:center">5 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Enduit à joint Toupret 30 min (sac 5 kg)</td><td style="text-align:center">12 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Sous-couche bloquante <strong>Julien Stop Tâches</strong> 1 L (8 m²)</td><td style="text-align:center">8 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Peinture finition <strong>Dulux Valentine Cuisines & Bains</strong> 1 L (biocide intégré, 8 m²/L)</td><td style="text-align:center">18 €</td><td style="text-align:center">Castorama / promo Brico Privé</td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Enduit à joint Toupret 30 min (5 kg)</td><td style="text-align:center">12 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Sous-couche bloquante Julien Stop Tâches 1 L</td><td style="text-align:center">8 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Peinture Dulux Valentine Cuisines &amp; Bains 1 L</td><td style="text-align:center">18 €</td><td style="text-align:center">Castorama</td></tr>'
                         . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Joint silicone sanitaire Sikaflex 11FC</td><td style="text-align:center">6 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Bâche polyane 4 × 5 m épaisse + sacs gravats x 5</td><td style="text-align:center">15 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
-                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">EPI à usage unique pour ce chantier (1 combi, 2 masques)</td><td style="text-align:center">8 €</td><td style="text-align:center">Amazon</td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">Bâche polyane 4 × 5 m + sacs gravats x 5</td><td style="text-align:center">15 €</td><td style="text-align:center">Brico Dépôt</td></tr>'
+                        . '<tr><td style="padding:6px;border-bottom:1px solid #eee">EPI à usage unique pour ce chantier</td><td style="text-align:center">8 €</td><td style="text-align:center">Amazon</td></tr>'
                         . '<tr style="background:#fff3f5"><td style="padding:8px"><strong>TOTAL matériaux 4 m²</strong></td><td style="text-align:center"><strong>109 €</strong></td><td></td></tr>'
                         . '</table>'
-                        . '<p style="margin-top:8px"><strong>💰 Facturé NMH</strong> à Mme Fadiga : 4 h × 40 €/h + 109 € matériaux = <strong>269 € HT</strong>. Marge nette ≈ 160 €.</p>',
+                        . '<p style="margin-top:8px"><strong>💰 Facturé NMH :</strong> 4 h × 40 €/h + 109 € matériaux = <strong>269 € HT</strong>. Marge nette ≈ 160 €.</p>',
                 ],
                 'procedure' => [
-                    'titre' => '👷 4. Procédure pro complète (4 h sur place)',
+                    'titre' => '👷 3. Procédure pro complète (4 h sur place)',
                     'contenu' => '<p><strong>PHASE 1 — Préparation chantier (20 min)</strong></p>'
                         . '<ol>'
                         . '<li>Sortir le mobilier ou bâcher 3 m autour de la zone (polyane).</li>'
-                        . '<li>Mettre la VMC à l\'arrêt pendant l\'intervention (pour ne pas disperser les spores dans tout l\'immeuble).</li>'
+                        . '<li>Mettre la VMC à l\'arrêt pendant l\'intervention.</li>'
                         . '<li>EPI : combinaison Tyvek + masque FFP3 + gants + lunettes.</li>'
-                        . '<li>Aspirateur HEPA branché, embout fin prêt à côté de la zone.</li>'
-                        . '<li>Photos AVANT (preuve facture + dossier locataire dans l\'app).</li>'
+                        . '<li>Aspirateur HEPA branché, embout fin prêt.</li>'
+                        . '<li>Photos AVANT (preuve facture + dossier locataire).</li>'
                         . '</ol>'
                         . '<p><strong>PHASE 2 — Dépose propre (1 h pour 4 m²)</strong></p>'
                         . '<ol>'
-                        . '<li>Délimiter la zone à démolir : tracer un rectangle <strong>avec 30 cm de marge</strong> autour des taches visibles (le mycélium s\'étend toujours plus loin que le visible).</li>'
-                        . '<li>Couper au cutter le long du tracé sur 1 cm de profondeur, puis à la scie égoïne sur toute l\'épaisseur (13 mm).</li>'
-                        . '<li><strong>Démonter par plaques entières</strong> en travaillant vers le bas (gravité) — aspirateur HEPA en marche dans la main libre.</li>'
-                        . '<li>Sacs gravats à dévisser sur place, fermés au scotch armé. Sortir au plus vite par le palier (jamais dans la poubelle commune — c\'est de l\'amiante potentielle dans le vieux bâti, à porter à la déchetterie en sac fermé).</li>'
-                        . '<li>Brosser l\'ossature métallique (rails) restante au pulvérisateur d\'Algiclair Pro. Laisser ruisseler.</li>'
+                        . '<li>Délimiter la zone : tracer un rectangle <strong>avec 30 cm de marge</strong> autour des taches visibles.</li>'
+                        . '<li>Couper au cutter le long du tracé sur 1 cm, puis scie égoïne sur 13 mm.</li>'
+                        . '<li><strong>Démonter par plaques entières</strong>, aspirateur HEPA en marche.</li>'
+                        . '<li>Sacs gravats fermés au scotch armé. Sortir au plus vite par le palier.</li>'
+                        . '<li>Brosser l\'ossature métallique au pulvérisateur d\'Algiclair Pro.</li>'
                         . '</ol>'
                         . '<p><strong>PHASE 3 — Décontamination support (30 min + 4 h de pause)</strong></p>'
                         . '<ol>'
-                        . '<li>Pulvériser <strong>Algiclair Pro pur</strong> sur tout le support (mur béton ou ossature) ET sur 30 cm autour de la zone démolie.</li>'
-                        . '<li>Laisser agir 4 h — moment idéal pour aller chercher les plaques BA13 hydro ou pour passer à un autre chantier.</li>'
-                        . '<li>Pendant ce temps, <strong>vérifier la VMC :</strong> tester aspiration avec feuille de papier qui doit coller. Si VMC HS → mention sur le rapport, c\'est au bailleur de la remplacer (mais on facture quand même la pose du placo).</li>'
+                        . '<li>Pulvériser <strong>Algiclair Pro pur</strong> sur tout le support + 30 cm autour.</li>'
+                        . '<li>Laisser agir 4 h.</li>'
+                        . '<li>Pendant ce temps, vérifier la VMC : aspiration avec feuille de papier doit coller. Si HS, mention au rapport.</li>'
                         . '</ol>'
                         . '<p><strong>PHASE 4 — Pose plaque BA13 hydro (1 h pour 4 m²)</strong></p>'
                         . '<ol>'
-                        . '<li>Mesurer puis tracer au cordeau les dimensions.</li>'
-                        . '<li>Couper la plaque au cutter : trois passages côté carton → casser net → entaille du carton de l\'autre face. <strong>Pas besoin de scie pour les coupes droites.</strong></li>'
-                        . '<li>Visser sur ossature avec vis Spax TT 35 mm, <strong>1 vis tous les 25 cm</strong> sur les rails, sans dépasser ni creuser le carton.</li>'
-                        . '<li>Joints décalés entre plaques (jamais en croix).</li>'
-                        . '<li>Bande à joint papier humidifiée, posée sur enduit frais à la spatule. Lisser fort.</li>'
-                        . '<li>Enduit Toupret 30 min en 2 passes : <strong>1ère noyée</strong> dans la bande, 2ème <strong>lissée large</strong> (40 cm de chaque côté du joint).</li>'
-                        . '<li>Ponçage : grain 120 puis 240 quand sec. Aspirer la poussière.</li>'
+                        . '<li>Mesurer puis tracer au cordeau.</li>'
+                        . '<li>Couper la plaque au cutter : trois passages côté carton, casser net.</li>'
+                        . '<li>Visser sur ossature avec vis Spax TT 35 mm, <strong>1 vis tous les 25 cm</strong>.</li>'
+                        . '<li>Joints décalés entre plaques.</li>'
+                        . '<li>Bande à joint papier humidifiée, posée sur enduit frais.</li>'
+                        . '<li>Enduit Toupret 30 min en 2 passes : noyée puis lissée large.</li>'
+                        . '<li>Ponçage : grain 120 puis 240. Aspirer la poussière.</li>'
                         . '</ol>'
                         . '<p><strong>PHASE 5 — Finition (30 min + séchage 24 h, à reprendre J+1)</strong></p>'
                         . '<ol>'
                         . '<li>Sous-couche Julien Stop Tâches au rouleau, 1 couche.</li>'
-                        . '<li>Le lendemain : 2 couches de Dulux Valentine Cuisines & Bains espacées de 4 h.</li>'
+                        . '<li>Le lendemain : 2 couches de Dulux Valentine Cuisines &amp; Bains, espacées de 4 h.</li>'
                         . '<li>Joint silicone Sikaflex sur les raccords plinthe / plafond.</li>'
                         . '<li>Photos APRÈS (preuve facture).</li>'
                         . '</ol>',
                 ],
                 'securite' => [
-                    'titre' => '🦺 5. Sécurité (vraie, pas mesurette)',
+                    'titre' => '🦺 4. Sécurité',
                     'contenu' => '<ul>'
-                        . '<li><strong>Combinaison Tyvek + masque FFP3 obligatoires</strong> dès que le mycélium est visible. Le carton de plâtre infesté libère des millions de spores par geste.</li>'
-                        . '<li>Ne JAMAIS travailler à sec sur du mycélium <strong>noir épais</strong> (Stachybotrys) — il y a un risque de mycotoxine.</li>'
-                        . '<li><strong>Évacuer la pièce les locataires sensibles</strong> (enfants < 6 ans, asthmatiques, immunodéprimés) le temps de l\'intervention + 4 h après.</li>'
-                        . '<li><strong>Ne pas mélanger</strong> Algiclair Pro (peroxyde) et eau de Javel. La réaction libère du chlore gazeux toxique. Toujours travailler avec un seul biocide.</li>'
-                        . '<li>VMC arrêtée pendant l\'intervention, redémarrée 1 h après — sinon les spores se baladent dans tout l\'immeuble.</li>'
-                        . '<li>EPI pas réutilisable pour ce type de chantier : à jeter en sac fermé.</li>'
+                        . '<li><strong>Combinaison Tyvek + masque FFP3 obligatoires</strong> dès que le mycélium est visible.</li>'
+                        . '<li>Ne JAMAIS travailler à sec sur du mycélium noir épais (Stachybotrys) — risque de mycotoxine.</li>'
+                        . '<li><strong>Évacuer les locataires sensibles</strong> (enfants, asthmatiques, immunodéprimés) le temps de l\'intervention + 4 h après.</li>'
+                        . '<li><strong>Ne pas mélanger</strong> Algiclair Pro (peroxyde) et eau de Javel : libère du chlore gazeux toxique.</li>'
+                        . '<li>VMC arrêtée pendant l\'intervention, redémarrée 1 h après.</li>'
+                        . '<li>EPI à jeter en sac fermé après le chantier.</li>'
                         . '</ul>',
                 ],
                 'cause' => [
-                    'titre' => '🔍 6. Traiter la CAUSE (sinon retour en 6 mois)',
+                    'titre' => '🔍 5. Traiter la CAUSE',
                     'contenu' => '<ul>'
-                        . '<li><strong>VMC bouchée / HS</strong> (90 % des cas en HLM Clos Toreau) : le démontage et nettoyage de la grille intérieure (gants, brosse à dents, vinaigre blanc) est <strong>locatif</strong> et peut se facturer en supplément 50 €. Remplacement complet du moteur = bailleur.</li>'
+                        . '<li><strong>VMC bouchée / HS</strong> (90 % des cas en HLM) : nettoyage de la grille au vinaigre blanc, facturable 50 €. Remplacement moteur = bailleur.</li>'
                         . '<li><strong>Grille d\'aération bouchée</strong> dans les pièces humides : nettoyage idem.</li>'
-                        . '<li><strong>Infiltration extérieure</strong> : pas dans ton scope, mention dans le rapport pour LRAR au bailleur (lettre déjà dans l\'app).</li>'
-                        . '<li><strong>Remontée capillaire</strong> (bas de mur humide en permanence) : traitement injection — bailleur uniquement (3 000-5 000 €).</li>'
-                        . '<li><strong>Pont thermique</strong> : doublage liège ou polystyrène extrudé XPS — peut être facturé en supplément 80 €/m² posé.</li>'
+                        . '<li><strong>Infiltration extérieure</strong> : mention dans le rapport pour LRAR au bailleur.</li>'
+                        . '<li><strong>Remontée capillaire</strong> : traitement injection — bailleur uniquement (3 000-5 000 €).</li>'
+                        . '<li><strong>Pont thermique</strong> : doublage liège ou polystyrène — facturable 80 €/m² posé.</li>'
                         . '</ul>',
                 ],
                 'sources' => [
-                    'titre' => '🛒 7. Où acheter au moins cher (récap)',
+                    'titre' => '🛒 6. Où acheter au moins cher',
                     'contenu' => '<ul>'
-                        . '<li><strong>Brico Dépôt</strong> Saint-Herblain : plaques de plâtre, visserie, enduits, peintures de base — 30 % moins cher que Castorama.</li>'
-                        . '<li><strong>ManoMano Pro</strong> (compte gratuit, pas besoin de SIRET) : Algiclair, outils pro, livraison.</li>'
-                        . '<li><strong>Amazon</strong> : EPI, petits outils ponctuels (visseuse, lasermètre).</li>'
-                        . '<li><strong>Brico Privé</strong> : ventes flash sur peintures pro (jusqu\'à -50 %).</li>'
-                        . '<li><strong>Pestclic.com</strong> : biocides pro accessibles aux particuliers.</li>'
-                        . '<li><strong>Leboncoin</strong> : matériel d\'occasion (compresseur, gros outil) si tu en achètes un.</li>'
-                        . '<li><strong>Eurometal Nantes</strong> (zone industrielle) : visserie en gros, tarifs pro même sans SIRET.</li>'
-                        . '<li><strong>Déchetterie de Saint-Aignan-de-Grand-Lieu</strong> : dépôt gratuit des plaques infestées (présenter justificatif de domicile à Nantes Métropole).</li>'
+                        . '<li><strong>Brico Dépôt</strong> Saint-Herblain : plaques de plâtre, visserie, enduits, peintures — 30 % moins cher que Castorama.</li>'
+                        . '<li><strong>ManoMano Pro</strong> (compte gratuit) : Algiclair, outils pro, livraison.</li>'
+                        . '<li><strong>Amazon</strong> : EPI, petits outils ponctuels.</li>'
+                        . '<li><strong>Brico Privé</strong> : ventes flash sur peintures pro jusqu\'à -50 %.</li>'
+                        . '<li><strong>Leboncoin</strong> : matériel d\'occasion.</li>'
+                        . '<li><strong>Eurometal Nantes</strong> : visserie en gros, tarifs pro sans SIRET.</li>'
+                        . '<li><strong>Déchetterie de Saint-Aignan-de-Grand-Lieu</strong> : dépôt gratuit des plaques infestées.</li>'
                         . '</ul>',
                 ],
             ],
