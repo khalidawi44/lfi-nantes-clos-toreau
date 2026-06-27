@@ -567,6 +567,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             case 'installer':    lfi_nct_app_view_installer();       break;
+            case 'tutoriels':    lfi_nct_app_view_tutoriels();       break;
+            case 'tutoriel':     lfi_nct_app_view_tutoriel();        break;
             default:             lfi_nct_app_view_tenant_dashboard();
         }
         $handled = true; return;
@@ -582,6 +584,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'stats':           lfi_nct_app_view_stats();      break;
             case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
             case 'installer':       lfi_nct_app_view_installer();  break;
+            case 'tutoriels':       lfi_nct_app_view_tutoriels();  break;
+            case 'tutoriel':        lfi_nct_app_view_tutoriel();   break;
             default:                lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
@@ -676,6 +680,7 @@ function lfi_nct_app_view_tenant_dashboard() {
         ['📷', 'Envoyer une photo', 'Documenter votre logement',      lfi_nct_app_url('envoyer-photo')],
         ['📝', 'Modèle de lettre',  'Pour Nantes Métropole Habitat',  lfi_nct_app_url('lettre')],
         ['⚖️', 'Mes droits',        'Lois et recours',                lfi_nct_app_url('droits')],
+        ['🛠', 'Tutoriels DIY',     'Moisissures, fuites, nuisibles', lfi_nct_app_url('tutoriels')],
         ['🔔', 'Conseils du jour',  'Rappels quotidiens / hebdo',     lfi_nct_app_url('notifs')],
         ['🏠', 'Ma situation',      'Ma réponse à l\'enquête',        lfi_nct_app_url('mon-enquete')],
         ['✏️', 'Mon profil',        'Email · mot de passe',           lfi_nct_app_url('mon-profil')],

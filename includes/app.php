@@ -352,6 +352,13 @@ function lfi_nct_app_shortcode() {
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
                     case 'mon-profil':      lfi_nct_app_view_mon_profil();      break;
                     case 'installer':       lfi_nct_app_view_installer();       break;
+                    case 'interventions':         lfi_nct_app_view_interventions();          break;
+                    case 'intervention-add':      lfi_nct_app_view_intervention_add();       break;
+                    case 'intervention-edit':     lfi_nct_app_view_intervention_edit();      break;
+                    case 'facture':               lfi_nct_app_view_facture();                break;
+                    case 'facturation-params':    lfi_nct_app_view_facturation_params();     break;
+                    case 'tutoriels':             lfi_nct_app_view_tutoriels();              break;
+                    case 'tutoriel':              lfi_nct_app_view_tutoriel();               break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -1012,6 +1019,11 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '📅 ÉVÉNEMENTS' => [
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
+        ],
+        '🔧 BRIGADE TRAVAUX' => [
+            ['🔧', 'Interventions',          'Suivi & facturation NMH',             lfi_nct_app_url('interventions')],
+            ['🛠', 'Tutoriels DIY',          'Guides pratiques par problème',       lfi_nct_app_url('tutoriels')],
+            ['⚙️', 'Paramètres facturation', 'Prestataire · bailleur · tarif',      lfi_nct_app_url('facturation-params')],
         ],
         '⚙️ SYSTÈME' => [
             ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
