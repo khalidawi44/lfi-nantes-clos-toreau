@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_FACT_DBVER_KEY = 'lfi_nct_fact_db_ver';
-const LFI_NCT_FACT_DBVER_VAL = '3';
+const LFI_NCT_FACT_DBVER_VAL = '4';
 
 /* ============================================================== *
  *  DB Setup + paramètres par défaut                                *
@@ -46,6 +46,8 @@ function lfi_nct_facturation_db_setup() {
         type_travaux_key VARCHAR(80) DEFAULT '',
         categorie_travaux VARCHAR(20) DEFAULT '',
         description TEXT,
+        tarif_mode VARCHAR(10) DEFAULT 'tache',
+        prix_tache DECIMAL(10,2) DEFAULT 0,
         tarif_horaire DECIMAL(8,2) DEFAULT 40.00,
         cout_materiaux DECIMAL(10,2) DEFAULT 0,
         total_ht DECIMAL(10,2) DEFAULT 0,
@@ -182,6 +184,16 @@ function lfi_nct_fact_format_eur($n) {
 
 function lfi_nct_fact_recalc_total($duree, $tarif, $materiaux) {
     return round(((float) $duree * (float) $tarif) + (float) $materiaux, 2);
+}
+
+/* Total selon le mode choisi : tâche (prix forfaitaire + matériaux) OU
+   horaire (durée × tarif + matériaux). Le mode tâche est privilégié car
+   c'est un prix de marché objectivement défendable. */
+function lfi_nct_fact_total_smart($mode, $prix_tache, $duree, $tarif, $materiaux) {
+    if ($mode === 'horaire') {
+        return round(((float) $duree * (float) $tarif) + (float) $materiaux, 2);
+    }
+    return round(((float) $prix_tache) + (float) $materiaux, 2);
 }
 
 /* ============================================================== *
@@ -395,12 +407,17 @@ function lfi_nct_app_intervention_form($row) {
             'type_travaux_key'  => sanitize_key($_POST['type_travaux_key'] ?? ''),
             'type_travaux'      => sanitize_text_field(wp_unslash($_POST['type_travaux'] ?? '')),
             'description'       => sanitize_textarea_field(wp_unslash($_POST['description'] ?? '')),
+            'tarif_mode'        => (in_array(($_POST['tarif_mode'] ?? 'tache'), ['tache', 'horaire'], true) ? $_POST['tarif_mode'] : 'tache'),
+            'prix_tache'        => (float) ($_POST['prix_tache'] ?? 0),
             'tarif_horaire'     => (float) ($_POST['tarif_horaire'] ?? lfi_nct_fact_tarif_defaut()),
             'cout_materiaux'    => (float) ($_POST['cout_materiaux'] ?? 0),
             'statut'            => sanitize_key($_POST['statut'] ?? 'planifie'),
             'notes'             => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
-        $data['total_ht'] = lfi_nct_fact_recalc_total($data['duree_heures'], $data['tarif_horaire'], $data['cout_materiaux']);
+        $data['total_ht'] = lfi_nct_fact_total_smart(
+            $data['tarif_mode'], $data['prix_tache'],
+            $data['duree_heures'], $data['tarif_horaire'], $data['cout_materiaux']
+        );
 
         /* Classification automatique de la catégorie à partir du type_key. */
         if (function_exists('lfi_nct_travaux_classify')) {
@@ -435,23 +452,37 @@ function lfi_nct_app_intervention_form($row) {
         exit;
     }
 
-    /* Préselection depuis ?tenant_uid=X */
+    /* Préselection depuis ?tenant_uid=X — auto-fill agressif depuis l'enquête */
     if (!$is_edit && !empty($_GET['tenant_uid'])) {
-        $uid = (int) $_GET['tenant_uid'];
-        $u = get_userdata($uid);
+        $tuid = (int) $_GET['tenant_uid'];
+        $u = get_userdata($tuid);
         if ($u) {
             $row = (object) [
-                'tenant_user_id' => $uid,
+                'tenant_user_id' => $tuid,
                 'tenant_prenom'  => $u->first_name ?: $u->display_name,
                 'tenant_nom'     => $u->last_name,
-                'tenant_tel'     => (string) get_user_meta($uid, 'lfi_nct_tel', true),
+                'tenant_tel'     => (string) get_user_meta($tuid, 'lfi_nct_tel', true),
             ];
-            $resp_id = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+            $resp_id = (int) get_user_meta($tuid, 'lfi_nct_response_id', true);
             if ($resp_id) {
-                $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $resp_id));
+                $resp = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $resp_id));
                 if ($resp) {
                     $row->tenant_adresse = $resp->adresse;
                     $row->tenant_etage   = $resp->etage;
+                    /* Auto-construction d'une description depuis l'enquête */
+                    $data_resp = json_decode($resp->data ?? '', true);
+                    if (is_array($data_resp)) {
+                        $types = (array) ($data_resp['problemes_types'] ?? []);
+                        $autre = trim((string) ($data_resp['problemes_types_autre'] ?? ''));
+                        $duree = trim((string) ($data_resp['problemes_duree'] ?? ''));
+                        $gravite = (int) ($data_resp['problemes_gravite'] ?? 0);
+                        $parts = [];
+                        if ($types)   $parts[] = 'Problèmes déclarés dans l\'enquête : ' . implode(', ', $types) . '.';
+                        if ($autre)   $parts[] = 'Précisions : ' . $autre . '.';
+                        if ($duree)   $parts[] = 'Durée du problème : ' . $duree . '.';
+                        if ($gravite) $parts[] = 'Gravité signalée : ' . $gravite . '/10.';
+                        if ($parts)   $row->description = implode(' ', $parts);
+                    }
                 }
             }
         }
@@ -470,6 +501,8 @@ function lfi_nct_app_intervention_form($row) {
         'date_intervention' => current_time('Y-m-d'),
         'duree_heures'      => '',
         'type_travaux'      => '',
+        'tarif_mode'        => 'tache',
+        'prix_tache'        => '',
         'description'       => '',
         'tarif_horaire'     => lfi_nct_fact_tarif_defaut(),
         'cout_materiaux'    => '',
@@ -533,14 +566,75 @@ function lfi_nct_app_intervention_form($row) {
 
     echo '<label>Description détaillée (ce qui sera repris dans la facture)<textarea name="description" rows="4" placeholder="Ex : Démontage et évacuation des plaques de plâtre infestées de moisissures sur 4 m² au mur de la cuisine, ponçage du support, rebouchage à l\'enduit, repose de placo BA13 hydro, enduit de finition.">' . esc_textarea($r->description) . '</textarea></label>';
 
-    echo '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
-    echo '<label>Durée (heures)<input type="number" name="duree_heures" value="' . esc_attr($r->duree_heures) . '" step="0.25" min="0" required></label>';
-    echo '<label>Tarif horaire (€)<input type="number" name="tarif_horaire" value="' . esc_attr($r->tarif_horaire) . '" step="0.50" min="0" required></label>';
-    echo '<label>Matériaux (€)<input type="number" name="cout_materiaux" value="' . esc_attr($r->cout_materiaux) . '" step="0.01" min="0"></label>';
+    /* === MODE DE FACTURATION === */
+    $current_mode = (string) ($r->tarif_mode ?? 'tache');
+    echo '<h3 style="margin:18px 0 0">💶 Facturation</h3>';
+
+    echo '<div style="background:#e8f5ea;border-left:4px solid #186a3b;padding:10px 14px;border-radius:6px;margin:6px 0;font-size:.9em">';
+    echo '✅ <strong>Tarif à la tâche (recommandé).</strong> Plus défendable au tribunal qu\'un tarif horaire — c\'est un prix de marché objectif, basé sur ce que facturent les entreprises pro (Daleco, Solitec, Rentokil…). Le juge ne peut pas le contester.';
     echo '</div>';
 
-    $preview_total = lfi_nct_fact_recalc_total((float) $r->duree_heures, (float) $r->tarif_horaire, (float) $r->cout_materiaux);
+    echo '<div style="display:flex;gap:14px;margin:8px 0">';
+    echo '<label style="flex:1;background:#fff;padding:12px;border-radius:8px;border:2px solid ' . ($current_mode === 'tache' ? '#c8102e' : '#ddd') . ';cursor:pointer">';
+    echo '<input type="radio" name="tarif_mode" value="tache" ' . checked($current_mode, 'tache', false) . ' onchange="lfi_toggle_tarif_mode()"> <strong>📦 À la tâche (forfait)</strong>';
+    echo '<div style="font-size:.85em;color:#666;margin-top:4px">Prix marché — recommandé</div>';
+    echo '</label>';
+    echo '<label style="flex:1;background:#fff;padding:12px;border-radius:8px;border:2px solid ' . ($current_mode === 'horaire' ? '#c8102e' : '#ddd') . ';cursor:pointer">';
+    echo '<input type="radio" name="tarif_mode" value="horaire" ' . checked($current_mode, 'horaire', false) . ' onchange="lfi_toggle_tarif_mode()"> <strong>⏱ À l\'heure</strong>';
+    echo '<div style="font-size:.85em;color:#666;margin-top:4px">Pour les cas inhabituels</div>';
+    echo '</label>';
+    echo '</div>';
+
+    /* Bloc TÂCHE : prix forfaitaire + zone suggestion marché auto-rendue par JS */
+    echo '<div id="lfi-bloc-tache" style="display:' . ($current_mode === 'tache' ? 'block' : 'none') . '">';
+    echo '<div id="lfi-suggestion-marche" style="display:none;background:#fff8e6;border-left:4px solid #bd8600;padding:12px 14px;border-radius:6px;margin:8px 0;font-size:.9em;line-height:1.5"></div>';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label>Prix forfait HT (€)<input type="number" name="prix_tache" id="lfi-prix-tache" value="' . esc_attr($r->prix_tache) . '" step="1" min="0" placeholder="ex: 220"></label>';
+    echo '<label>Matériaux séparés (€)<input type="number" name="cout_materiaux" id="lfi-cout-mat" value="' . esc_attr($r->cout_materiaux) . '" step="0.01" min="0" placeholder="0"></label>';
+    echo '</div>';
+    echo '<div class="lfi-app-help"><small>Le forfait inclut généralement la main d\'œuvre. Ne re-déclare des matériaux séparés que s\'ils ne sont pas inclus dans le forfait.</small></div>';
+    echo '</div>';
+
+    /* Bloc HORAIRE — affiché si mode horaire */
+    echo '<div id="lfi-bloc-horaire" style="display:' . ($current_mode === 'horaire' ? 'block' : 'none') . '">';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+    echo '<label>Durée (h)<input type="number" name="duree_heures" id="lfi-duree" value="' . esc_attr($r->duree_heures) . '" step="0.25" min="0"></label>';
+    echo '<label>Tarif horaire (€)<input type="number" name="tarif_horaire" id="lfi-tarif-h" value="' . esc_attr($r->tarif_horaire) . '" step="0.50" min="0"></label>';
+    echo '<label>Matériaux (€)<input type="number" name="cout_materiaux" id="lfi-cout-mat-h" value="' . esc_attr($r->cout_materiaux) . '" step="0.01" min="0"></label>';
+    echo '</div>';
+    echo '</div>';
+
+    $preview_total = lfi_nct_fact_total_smart($current_mode, (float) $r->prix_tache, (float) $r->duree_heures, (float) $r->tarif_horaire, (float) $r->cout_materiaux);
     echo '<div class="lfi-app-help"><strong>Total HT : <span id="lfi-total-preview">' . lfi_nct_fact_format_eur($preview_total) . '</span></strong> <small>(TVA non applicable, art. 293 B du CGI)</small></div>';
+
+    /* === DÉTECTION PROBLÈME D'IMMEUBLE — argument juridique massif === */
+    $other_tenants = [];
+    if (!empty($r->tenant_adresse) && !empty($r->type_travaux_key) && function_exists('lfi_nct_rec_other_tenants_same_problem')) {
+        $other_tenants = lfi_nct_rec_other_tenants_same_problem($r->tenant_adresse, $r->type_travaux_key);
+        /* Exclut le locataire courant lui-même */
+        $cur_full = strtolower(trim($r->tenant_prenom . ' ' . $r->tenant_nom));
+        $other_tenants = array_filter($other_tenants, function ($o) use ($cur_full) {
+            return strtolower(trim($o->prenom . ' ' . $o->nom)) !== $cur_full;
+        });
+        $other_tenants = array_values($other_tenants);
+    }
+    if (count($other_tenants) >= 1) {
+        echo '<div style="background:#fff3f5;border:2px solid #c8102e;border-radius:10px;padding:14px 16px;margin:14px 0">';
+        echo '<div style="font-size:1.05em;font-weight:800;color:#c8102e;margin-bottom:8px">🎯 PROBLÈME D\'IMMEUBLE DÉTECTÉ — argument juridique massif</div>';
+        echo '<div style="font-size:.9em;color:#444;line-height:1.5;margin-bottom:8px">';
+        echo 'Selon l\'enquête, <strong>' . count($other_tenants) . ' autre(s) locataire(s)</strong> de la même adresse ont signalé le même type de problème. Ce n\'est <strong>plus du locataire isolé</strong> — c\'est un défaut structurel. NMH ne peut pas refuser : la responsabilité bailleur est manifeste (art. 6 loi 89-462, décret 2002-120).';
+        echo '</div>';
+        echo '<ul style="margin:6px 0 0;padding-left:18px;font-size:.9em">';
+        foreach ($other_tenants as $o) {
+            $name = trim($o->prenom . ' ' . $o->nom) ?: '(anonyme)';
+            $etage = $o->etage ? ' (étage ' . esc_html($o->etage) . ')' : '';
+            $g = $o->gravite ? ' — gravité ' . $o->gravite . '/10' : '';
+            echo '<li>' . esc_html($name) . esc_html($etage . $g) . '</li>';
+        }
+        echo '</ul>';
+        echo '<div style="margin-top:10px"><button type="button" class="btn-ghost" onclick="lfi_inject_motif_immeuble(' . count($other_tenants) . ')">📋 Ajouter cet argument à la description</button></div>';
+        echo '</div>';
+    }
 
     echo '<label>Statut<select name="statut">';
     foreach (['planifie' => '📅 Planifié', 'realise' => '✓ Réalisé', 'annule' => '✕ Annulé'] as $k => $lbl) {
@@ -553,27 +647,80 @@ function lfi_nct_app_intervention_form($row) {
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer l\'intervention') . '</button>';
     echo '</form>';
 
-    /* JS : recalcul live du total + alerte catégorie travaux */
+    /* Catalogue des tarifs marché (JSON injecté pour le JS) */
+    $tarifs_json = function_exists('lfi_nct_tarif_taches_catalogue')
+        ? wp_json_encode(lfi_nct_tarif_taches_catalogue())
+        : '{}';
     ?>
     <script>
+    var LFI_TARIFS = <?php echo $tarifs_json; ?>;
+
+    function lfi_eur(n) {
+        return (Number(n) || 0).toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+,)/g, '$1 ') + ' €';
+    }
+
+    function lfi_refresh_total() {
+        var mode = (document.querySelector('input[name=tarif_mode]:checked') || {value: 'tache'}).value;
+        var m, total;
+        if (mode === 'horaire') {
+            var d = parseFloat(document.getElementById('lfi-duree')?.value) || 0;
+            var t = parseFloat(document.getElementById('lfi-tarif-h')?.value) || 0;
+            m = parseFloat(document.getElementById('lfi-cout-mat-h')?.value) || 0;
+            total = (d * t) + m;
+        } else {
+            var p = parseFloat(document.getElementById('lfi-prix-tache')?.value) || 0;
+            m = parseFloat(document.getElementById('lfi-cout-mat')?.value) || 0;
+            total = p + m;
+        }
+        var el = document.getElementById('lfi-total-preview');
+        if (el) el.textContent = lfi_eur(total);
+    }
+
+    function lfi_toggle_tarif_mode() {
+        var mode = (document.querySelector('input[name=tarif_mode]:checked') || {value: 'tache'}).value;
+        document.getElementById('lfi-bloc-tache').style.display    = (mode === 'tache') ? 'block' : 'none';
+        document.getElementById('lfi-bloc-horaire').style.display  = (mode === 'horaire') ? 'block' : 'none';
+        document.querySelectorAll('input[name=tarif_mode]').forEach(function (r) {
+            r.closest('label').style.borderColor = r.checked ? '#c8102e' : '#ddd';
+        });
+        lfi_refresh_total();
+    }
+
+    function lfi_apply_suggestion(prix) {
+        var el = document.getElementById('lfi-prix-tache');
+        if (el) { el.value = prix; lfi_refresh_total(); }
+    }
+
+    function lfi_render_suggestion(typeKey) {
+        var box = document.getElementById('lfi-suggestion-marche');
+        if (!box) return;
+        var t = LFI_TARIFS[typeKey];
+        if (!t) { box.style.display = 'none'; return; }
+        box.style.display = 'block';
+        box.innerHTML =
+            '<div style="font-weight:800;color:#bd8600;margin-bottom:6px">💰 Prix marché 2026 — ' + (t.unite || '') + '</div>' +
+            '<div style="margin:6px 0">' +
+                '<button type="button" onclick="lfi_apply_suggestion(' + t.bas + ')" style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px 10px;margin-right:6px;cursor:pointer">Bas : <strong>' + t.bas + ' €</strong></button>' +
+                '<button type="button" onclick="lfi_apply_suggestion(' + t.juste + ')" style="background:#186a3b;color:#fff;border:0;border-radius:6px;padding:6px 12px;margin-right:6px;cursor:pointer;font-weight:700">✓ Juste : ' + t.juste + ' €</button>' +
+                '<button type="button" onclick="lfi_apply_suggestion(' + t.haut + ')" style="background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px 10px;cursor:pointer">Haut : <strong>' + t.haut + ' €</strong></button>' +
+            '</div>' +
+            '<div style="font-size:.85em;color:#666;line-height:1.4">' + (t.detail || '') + '</div>' +
+            '<div style="font-size:.8em;color:#888;margin-top:4px"><em>Sources : ' + (t.source || '') + '</em></div>';
+    }
+
+    function lfi_inject_motif_immeuble(n) {
+        var d = document.querySelector('[name=description]');
+        if (!d) return;
+        var phrase = 'IMPORTANT : ' + n + ' autre(s) locataire(s) de la même adresse, recensé(s) par l\'enquête du Groupe d\'Action, signalent le même type de problème. Il s\'agit donc d\'un défaut structurel d\'immeuble, à la charge exclusive du bailleur (article 6 loi 89-462, décret 2002-120, jurisprudence constante sur la décence).';
+        d.value = (d.value ? d.value + '\n\n' : '') + phrase;
+    }
+
     (function () {
-        function eur(n) {
-            return (Number(n) || 0).toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+,)/g, '$1 ') + ' €';
-        }
-        function refresh() {
-            var d = parseFloat(document.querySelector('[name=duree_heures]').value) || 0;
-            var t = parseFloat(document.querySelector('[name=tarif_horaire]').value) || 0;
-            var m = parseFloat(document.querySelector('[name=cout_materiaux]').value) || 0;
-            var total = (d * t) + m;
-            var el = document.getElementById('lfi-total-preview');
-            if (el) el.textContent = eur(total);
-        }
-        ['duree_heures', 'tarif_horaire', 'cout_materiaux'].forEach(function (n) {
-            var el = document.querySelector('[name=' + n + ']');
-            if (el) el.addEventListener('input', refresh);
+        ['lfi-duree', 'lfi-tarif-h', 'lfi-cout-mat-h', 'lfi-prix-tache', 'lfi-cout-mat'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('input', lfi_refresh_total);
         });
 
-        /* Alerte selon catégorie de travaux */
         var BANNERS = {
             bailleur:  { bg: '#e8f5ea', bd: '#186a3b', ico: '✅',
                          msg: '<strong>OBLIGATION BAILLEUR — facturer NMH est légitime.</strong> Articles 1719 / 1724 CC, loi 89-462 art. 6, décret 2002-120 (décence). Lance le recouvrement sereinement.' },
@@ -585,28 +732,30 @@ function lfi_nct_app_intervention_form($row) {
         var sel = document.getElementById('lfi-type-key');
         var lbl = document.getElementById('lfi-type-label');
         var ban = document.getElementById('lfi-cat-banner');
-        function updateBanner() {
+        function updateAll() {
             if (!sel) return;
             var opt = sel.options[sel.selectedIndex];
             var cat = opt ? opt.getAttribute('data-cat') : '';
             if (lbl && opt && !lbl.value) lbl.value = opt.text;
-            if (!ban) return;
-            if (BANNERS[cat]) {
-                var b = BANNERS[cat];
-                ban.style.display = 'block';
-                ban.style.background = b.bg;
-                ban.style.borderLeft = '4px solid ' + b.bd;
-                ban.innerHTML = b.ico + ' ' + b.msg;
-            } else {
-                ban.style.display = 'none';
+            if (ban) {
+                if (BANNERS[cat]) {
+                    var b = BANNERS[cat];
+                    ban.style.display = 'block';
+                    ban.style.background = b.bg;
+                    ban.style.borderLeft = '4px solid ' + b.bd;
+                    ban.innerHTML = b.ico + ' ' + b.msg;
+                } else {
+                    ban.style.display = 'none';
+                }
             }
+            lfi_render_suggestion(sel.value);
         }
         if (sel) {
             sel.addEventListener('change', function () {
                 if (lbl) lbl.value = sel.options[sel.selectedIndex].text;
-                updateBanner();
+                updateAll();
             });
-            updateBanner();
+            updateAll();
         }
     })();
     </script>
@@ -697,16 +846,28 @@ function lfi_nct_app_view_facture() {
         if ($r->tenant_adresse) $logement .= "\n" . $r->tenant_adresse;
         if ($r->tenant_etage)    $logement .= ' · ét. ' . $r->tenant_etage;
         if ($r->tenant_appartement) $logement .= ' · appt ' . $r->tenant_appartement;
-        $main_ht = (float) $r->duree_heures * (float) $r->tarif_horaire;
+
+        /* Affichage selon mode : tâche (forfait) ou horaire */
+        $is_horaire = (($r->tarif_mode ?? 'tache') === 'horaire');
+        if ($is_horaire) {
+            $qte_str  = number_format($r->duree_heures, 2, ',', ' ') . ' h';
+            $pu_str   = lfi_nct_fact_format_eur($r->tarif_horaire);
+            $main_ht  = (float) $r->duree_heures * (float) $r->tarif_horaire;
+        } else {
+            $qte_str  = '1';
+            $pu_str   = lfi_nct_fact_format_eur($r->prix_tache);
+            $main_ht  = (float) $r->prix_tache;
+        }
 
         echo '<tr>';
         echo '<td>' . esc_html(wp_date('d/m/Y', strtotime($r->date_intervention))) . '</td>';
         echo '<td>' . nl2br(esc_html($logement)) . '</td>';
         echo '<td><strong>' . esc_html($r->type_travaux) . '</strong>';
         if ($r->description) echo '<br><small>' . nl2br(esc_html($r->description)) . '</small>';
+        if (!$is_horaire) echo '<br><small style="color:#666"><em>Prestation forfaitaire — prix marché 2026</em></small>';
         echo '</td>';
-        echo '<td class="num">' . number_format($r->duree_heures, 2, ',', ' ') . ' h</td>';
-        echo '<td class="num">' . lfi_nct_fact_format_eur($r->tarif_horaire) . '</td>';
+        echo '<td class="num">' . esc_html($qte_str) . '</td>';
+        echo '<td class="num">' . $pu_str . '</td>';
         echo '<td class="num">' . lfi_nct_fact_format_eur($main_ht) . '</td>';
         echo '</tr>';
         if ((float) $r->cout_materiaux > 0) {

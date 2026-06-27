@@ -159,6 +159,174 @@ function lfi_nct_travaux_catalogue() {
     ];
 }
 
+/* ============================================================== *
+ *  CATALOGUE DES TARIFS — prix marché 2026 par type de tâche       *
+ *                                                                   *
+ *  Sources : Daleco (Nantes), Solitec, Rentokil, ISS Pest, Nuisibles*
+ *  Urgence, devis Habitat Nantais, Castorama Pro, ManoMano Pro.    *
+ *                                                                   *
+ *  Pour chaque type :                                               *
+ *   - bas    : prix mini d'une boîte sérieuse                       *
+ *   - juste  : prix médian, recommandé pour la facture              *
+ *   - haut   : prix d'une grosse boîte (Rentokil...) — plafond légal*
+ *   - source : nom des comparateurs / boîtes consultées             *
+ *                                                                   *
+ *  Tu factures à la TÂCHE par défaut (le tarif horaire devient le   *
+ *  fallback seulement). C'est plus défendable au tribunal car c'est *
+ *  un prix de marché objectif.                                      *
+ * ============================================================== */
+function lfi_nct_tarif_taches_catalogue() {
+    return [
+        /* --- Désinsectisation / dératisation : prix entreprises pro --- */
+        'punaises_lit' => [
+            'bas' => 250, 'juste' => 350, 'haut' => 600,
+            'unite' => 'forfait T3',
+            'source' => 'Daleco Nantes 280€ · Solitec 320-450€ · Nuisibles Urgence 350€ · Rentokil 550€',
+            'detail' => 'Forfait 2 passages obligatoires (J0 + J+14), vapeur + Subito + Terre Diatomée + housse Allerzip',
+        ],
+        'cafards_blattes_immeuble' => [
+            'bas' => 150, 'juste' => 220, 'haut' => 380,
+            'unite' => 'forfait appartement',
+            'source' => 'Daleco 180€ · Solitec 160-280€ · Hygiène 3D Nantes 200€ · Rentokil 350€',
+            'detail' => 'Gel Goliath + IGR Sinergel + suivi J+15 et J+30 (protocole IPM)',
+        ],
+        'rats_parties_communes' => [
+            'bas' => 100, 'juste' => 160, 'haut' => 280,
+            'unite' => 'forfait par appartement',
+            'source' => 'Daleco 140€ · Solitec 130-220€ · Aprolyse 160€',
+            'detail' => 'Bouchage entrées + pose tapettes/raticide + vérif J+7',
+        ],
+
+        /* --- Humidité / moisissures / placo : prix artisans plâtriers --- */
+        'humidite_moisissures_struct' => [
+            'bas' => 220, 'juste' => 320, 'haut' => 550,
+            'unite' => 'forfait 4 m²',
+            'source' => 'Devis Habitat Nantais 280-450€ · Plâtrerie Atlantique 320€ · UnArtisan.fr 350€',
+            'detail' => 'Démolition placo infesté + biocide + repose BA13 hydro + enduit + 2 couches peinture',
+        ],
+        'humidite_infiltration' => [
+            'bas' => 150, 'juste' => 220, 'haut' => 380,
+            'unite' => 'forfait diagnostic + colmatage',
+            'source' => 'Aquaprotect 200€ · Étanchéité Nantaise 250-400€',
+            'detail' => 'Repérage source + colmatage urgent (mastic, mousse expansive)',
+        ],
+        'humidite_remontee' => [
+            'bas' => 800, 'juste' => 1200, 'haut' => 2500,
+            'unite' => 'forfait injection 10 ml',
+            'source' => 'Murprotec 1200€/10 ml · Humitech 900€ · BG Travaux 1500€',
+            'detail' => 'Bailleur uniquement — injection résine hydrofuge en mur',
+        ],
+
+        /* --- VMC / chauffage / fenêtres --- */
+        'vmc_moteur_hs' => [
+            'bas' => 180, 'juste' => 280, 'haut' => 450,
+            'unite' => 'forfait remplacement moteur',
+            'source' => 'Anjos Nantes 250€ · VMC Pro 220-380€',
+            'detail' => 'Démontage caisson + remplacement moteur + test débit + remise grilles',
+        ],
+        'fenetres_etancheite' => [
+            'bas' => 80, 'juste' => 130, 'haut' => 220,
+            'unite' => 'par fenêtre',
+            'source' => 'Menuiseries Nantaises 100-180€ · Lapeyre 150€',
+            'detail' => 'Remplacement joints EPDM + survitrage film Tesa + calfeutrage Sikaflex',
+        ],
+        'fenetres_vitrage_vetuste' => [
+            'bas' => 180, 'juste' => 280, 'haut' => 450,
+            'unite' => 'par vitre',
+            'source' => 'Saint-Gobain Glass 250€ · Vitrerie Express Nantes 220€',
+            'detail' => 'Démontage + verre + mastic + remontage',
+        ],
+        'chauffage_radiateur_hs' => [
+            'bas' => 150, 'juste' => 250, 'haut' => 450,
+            'unite' => 'par radiateur',
+            'source' => 'Plomberie Pro Nantes 200€ · Eldec 180-350€',
+            'detail' => 'Dépose + nouveau radiateur + raccordement + purge installation',
+        ],
+
+        /* --- Plomberie --- */
+        'plomberie_encastree' => [
+            'bas' => 200, 'juste' => 350, 'haut' => 600,
+            'unite' => 'forfait recherche fuite + réparation',
+            'source' => 'Bouygues Plomberie 320€ · APC Nantes 280-450€',
+            'detail' => 'Localisation fuite + percement mur + remplacement portion + rebouchage',
+        ],
+
+        /* --- Électricité --- */
+        'electricite_tableau' => [
+            'bas' => 350, 'juste' => 550, 'haut' => 950,
+            'unite' => 'forfait mise aux normes T3',
+            'source' => 'Eldec 480€ · Aprolec Nantes 400-750€',
+            'detail' => 'Remplacement disjoncteur différentiel + mise à la terre + test continuité',
+        ],
+        'electricite_circuit_mural' => [
+            'bas' => 120, 'juste' => 200, 'haut' => 350,
+            'unite' => 'par circuit',
+            'source' => 'Eldec 180€ · Aprolec 150-280€',
+            'detail' => 'Tirage câble + raccordement tableau + test',
+        ],
+
+        /* --- Porte d\'entrée / volets --- */
+        'porte_entree_securite' => [
+            'bas' => 180, 'juste' => 280, 'haut' => 450,
+            'unite' => 'forfait pose verrou A2P***',
+            'source' => 'Picard Serrures 250€ · Vachette Pro 200-380€',
+            'detail' => 'Pose verrou Picard ISEO 803 + cornière anti-effraction + œilleton',
+        ],
+        'volets_hs' => [
+            'bas' => 120, 'juste' => 200, 'haut' => 350,
+            'unite' => 'par volet',
+            'source' => 'Volets Nantes 180€ · Lapeyre Pro 150-280€',
+            'detail' => 'Démontage ancien + pose neuf + finition',
+        ],
+
+        /* --- Catégorie GRISE (à argumenter mais facturable) --- */
+        'joints_fenetres_calfeutrage' => [
+            'bas' => 80, 'juste' => 140, 'haut' => 220,
+            'unite' => 'forfait T3 complet',
+            'source' => 'Calfeutrage Pro 100€ · Habitat Nantais 120-180€',
+            'detail' => 'Joints EPDM toutes fenêtres + survitrage + boudin porte d\'entrée',
+        ],
+        'joints_silicone_sdb' => [
+            'bas' => 60, 'juste' => 90, 'haut' => 140,
+            'unite' => 'par pièce',
+            'source' => 'SAV Habitat 70€ · Devispro 80-120€',
+            'detail' => 'Dépose ancien + dégraissage + Sikaflex sanitaire + lissage',
+        ],
+        'reboucher_fissure_origine' => [
+            'bas' => 80, 'juste' => 120, 'haut' => 200,
+            'unite' => 'par fissure',
+            'source' => 'Plâtrerie Atlantique 100€ · UnArtisan 90-150€',
+            'detail' => 'Ouverture en V + enduit souple + peinture raccord',
+        ],
+        'peinture_apres_degat' => [
+            'bas' => 25, 'juste' => 35, 'haut' => 55,
+            'unite' => 'par m² (2 couches)',
+            'source' => 'Peinture Pro 30€/m² · IziBat 28-45€/m²',
+            'detail' => 'Sous-couche bloquante + 2 couches peinture qualité',
+        ],
+        'placo_petit_morceau_degat' => [
+            'bas' => 60, 'juste' => 100, 'haut' => 180,
+            'unite' => 'par trou < 50 cm',
+            'source' => 'Plâtrerie Atlantique 80€ · Habitat Nantais 100-150€',
+            'detail' => 'Tasseau + chute BA13 + bande à joint + enduit + ponçage + peinture',
+        ],
+
+        /* --- Insalubrité grave (bailleur lourdement responsable) --- */
+        'insalubrite_plomb_amiante' => [
+            'bas' => 1500, 'juste' => 3500, 'haut' => 8000,
+            'unite' => 'forfait diagnostic + traitement',
+            'source' => 'Cabinets agréés CSTB obligatoires — devis Diagamter, Allodiagnostic',
+            'detail' => 'BAILLEUR OBLIGATOIRE — opérateur certifié uniquement',
+        ],
+    ];
+}
+
+/* Retourne la suggestion de prix pour un type donné, ou null */
+function lfi_nct_tarif_for_type($type_key) {
+    $cat = lfi_nct_tarif_taches_catalogue();
+    return $cat[$type_key] ?? null;
+}
+
 /* Trouve la catégorie d'un type donné. Retourne null si non classé. */
 function lfi_nct_travaux_classify($type_key) {
     if (!$type_key) return null;
@@ -176,6 +344,75 @@ function lfi_nct_travaux_classify($type_key) {
         }
     }
     return null;
+}
+
+/* ============================================================== *
+ *  DÉTECTION PROBLÈME D'IMMEUBLE — argument juridique massif       *
+ *                                                                   *
+ *  Scanne les réponses d'enquête à la MÊME adresse et cherche le    *
+ *  même type de problème. Si N >= 2 → c'est plus du locataire       *
+ *  isolé, c'est un défaut structurel à la charge bailleur.          *
+ *                                                                   *
+ *  Mapping type_travaux_key → mot-clé enquête (problemes_types).    *
+ * ============================================================== */
+function lfi_nct_rec_enquete_keyword_for($type_key) {
+    $map = [
+        'punaises_lit'                 => 'insectes',
+        'cafards_blattes_immeuble'     => 'insectes',
+        'rats_parties_communes'        => 'insectes',
+        'humidite_moisissures_struct'  => 'humidite',
+        'humidite_infiltration'        => 'humidite',
+        'humidite_remontee'            => 'humidite',
+        'vmc_moteur_hs'                => 'humidite',
+        'fenetres_etancheite'          => 'humidite',
+        'chauffage_radiateur_hs'       => 'chauffage',
+        'plomberie_encastree'          => 'degats_eaux',
+        'plomberie_colonne'            => 'degats_eaux',
+        'electricite_tableau'          => 'electricite',
+        'electricite_circuit_mural'    => 'electricite',
+        'parties_communes'             => 'parties_communes',
+    ];
+    return $map[$type_key] ?? null;
+}
+
+/* Cherche les autres locataires de la même adresse touchés par le même
+   type de problème, sur la base des réponses d'enquête.
+   Retourne un tableau de stdClass {prenom, nom, etage, gravite}. */
+function lfi_nct_rec_other_tenants_same_problem($adresse, $type_key) {
+    if (!$adresse || !$type_key) return [];
+    $kw = lfi_nct_rec_enquete_keyword_for($type_key);
+    if (!$kw) return [];
+
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_responses';
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT id, adresse, etage, contact_prenom, contact_nom, data
+         FROM $t WHERE deleted_at IS NULL AND adresse IS NOT NULL LIMIT 500"
+    ));
+    if (!$rows) return [];
+
+    $target_key = function_exists('lfi_nct_address_canonical_key')
+        ? lfi_nct_address_canonical_key($adresse)
+        : strtolower(trim($adresse));
+
+    $out = [];
+    foreach ($rows as $r) {
+        $rk = function_exists('lfi_nct_address_canonical_key')
+            ? lfi_nct_address_canonical_key($r->adresse)
+            : strtolower(trim($r->adresse));
+        if ($rk !== $target_key) continue;
+        $data = json_decode($r->data ?? '', true);
+        if (!is_array($data)) continue;
+        $types = (array) ($data['problemes_types'] ?? []);
+        if (!in_array($kw, $types, true)) continue;
+        $out[] = (object) [
+            'prenom'  => (string) ($r->contact_prenom ?? ''),
+            'nom'     => (string) ($r->contact_nom ?? ''),
+            'etage'   => (string) ($r->etage ?? ''),
+            'gravite' => (int) ($data['problemes_gravite'] ?? 0),
+        ];
+    }
+    return $out;
 }
 
 /* Calcule la catégorie majoritaire des interventions liées à une facture */
