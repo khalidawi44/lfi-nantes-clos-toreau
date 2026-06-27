@@ -273,6 +273,66 @@ function lfi_nct_rec_enquete_keyword_for($type_key) {
     return $map[$type_key] ?? null;
 }
 
+/* Parse un libellé d'étage (« 3 », « RDC », « rez », « R+2 »…) en
+   nombre. Retourne null si non parsable. RDC = 0. */
+function lfi_nct_rec_etage_to_num($etage) {
+    $e = strtolower(trim((string) $etage));
+    if ($e === '') return null;
+    if (preg_match('/^(rdc|rez)/', $e)) return 0;
+    if (preg_match('/r\s*\+\s*(\d+)/', $e, $m)) return (int) $m[1];
+    if (preg_match('/(\d+)/', $e, $m)) return (int) $m[1];
+    return null;
+}
+
+/* Cherche la plus longue suite d'étages consécutifs dans une liste.
+   Ex: [1, 2, 3, 5, 7, 8] → [1, 2, 3]. Minimum 2 pour retourner. */
+function lfi_nct_rec_find_consecutive_floors($floors_num) {
+    $sorted = array_values(array_filter($floors_num, function ($x) { return $x !== null; }));
+    $sorted = array_values(array_unique($sorted));
+    sort($sorted, SORT_NUMERIC);
+    if (count($sorted) < 2) return [];
+
+    $best = [];
+    $cur  = [$sorted[0]];
+    for ($i = 1; $i < count($sorted); $i++) {
+        if ($sorted[$i] === $sorted[$i - 1] + 1) {
+            $cur[] = $sorted[$i];
+        } else {
+            if (count($cur) > count($best)) $best = $cur;
+            $cur = [$sorted[$i]];
+        }
+    }
+    if (count($cur) > count($best)) $best = $cur;
+    return count($best) >= 2 ? $best : [];
+}
+
+/* Convertit un nombre exact en formule approximative pour le tribunal.
+   La consigne RGPD + sécurité juridique : ne JAMAIS dire un compte exact. */
+function lfi_nct_rec_approx_count($n) {
+    if ($n <= 1)  return 'un locataire';
+    if ($n <= 4)  return 'plusieurs locataires';
+    if ($n <= 7)  return 'au moins une demi-douzaine de locataires';
+    if ($n <= 12) return 'près d\'une dizaine de locataires';
+    return 'plus d\'une dizaine de locataires';
+}
+
+/* Libellé d'un cluster d'étages consécutifs : [2,3] → "étages 2 et 3" ;
+   [2,3,4] → "étages 2 à 4" ; [0,1,2] → "du RDC au 2e étage". */
+function lfi_nct_rec_format_consec_etages($floors) {
+    if (empty($floors)) return '';
+    sort($floors, SORT_NUMERIC);
+    $first = $floors[0];
+    $last  = end($floors);
+    $fl = ($first === 0) ? 'RDC' : (string) $first . 'e';
+    $ll = ($last === 0)  ? 'RDC' : (string) $last . 'e';
+    if (count($floors) === 2) {
+        if ($first === 0) return 'du RDC au ' . $ll . ' étage';
+        return 'étages ' . $first . ' et ' . $last;
+    }
+    if ($first === 0) return 'du RDC au ' . $ll . ' étage (consécutifs)';
+    return 'étages ' . $first . ' à ' . $last . ' (consécutifs)';
+}
+
 /* Extrait le numéro de bâtiment depuis une adresse, ou '' si absent.
    « 12 rue d'Hendaye » → « 12 », « 14bis avenue de Provence » → « 14bis ». */
 function lfi_nct_rec_building_number($adresse) {
@@ -349,11 +409,32 @@ function lfi_nct_rec_collective_signal($adresse, $type_key) {
         }
     }
     sort($nums_voisins, SORT_NATURAL);
+
+    /* Cluster d'étages consécutifs sur le MÊME immeuble — c'est la
+       cartouche tribunal la plus forte (défaut vertical d'aération, de
+       canalisation, etc.). */
+    $etages_nums_meme = array_map(function ($e) { return lfi_nct_rec_etage_to_num($e->etage); }, $meme);
+    $cluster_meme = lfi_nct_rec_find_consecutive_floors($etages_nums_meme);
+
+    /* Cluster sur le total (même + voisins) — argument plus large */
+    $etages_nums_all = array_merge(
+        array_map(function ($e) { return lfi_nct_rec_etage_to_num($e->etage); }, $meme),
+        array_map(function ($e) { return lfi_nct_rec_etage_to_num($e->etage); }, $voisins)
+    );
+    $cluster_all = lfi_nct_rec_find_consecutive_floors($etages_nums_all);
+
     return [
         'meme_immeuble'     => $meme,
         'immeubles_voisins' => $voisins,
         'numeros_voisins'   => $nums_voisins,
         'rue_label'         => trim($rue_label),
+        'cluster_meme'      => $cluster_meme,
+        'cluster_all'       => $cluster_all,
+        'approx_meme'       => lfi_nct_rec_approx_count(count($meme)),
+        'approx_voisins'    => lfi_nct_rec_approx_count(count($voisins)),
+        'approx_total'      => lfi_nct_rec_approx_count(count($meme) + count($voisins)),
+        'cluster_meme_lbl'  => lfi_nct_rec_format_consec_etages($cluster_meme),
+        'cluster_all_lbl'   => lfi_nct_rec_format_consec_etages($cluster_all),
     ];
 }
 

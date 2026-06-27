@@ -638,53 +638,65 @@ function lfi_nct_app_intervention_form($row) {
     $preview_total = lfi_nct_fact_total_smart($current_mode, (float) $r->prix_tache, (float) $r->duree_heures, (float) $r->tarif_horaire, (float) $r->cout_materiaux);
     echo '<div class="lfi-app-help"><strong>Total HT : <span id="lfi-total-preview">' . lfi_nct_fact_format_eur($preview_total) . '</span></strong> <small>(TVA non applicable, art. 293 B du CGI)</small></div>';
 
-    /* === DÉTECTION PROBLÈME D'IMMEUBLE / DE RUE — argument juridique massif ===
-       Toutes les données affichées et injectées sont ANONYMES (étages +
-       gravités + comptes uniquement). Aucun nom de locataire n'apparaît
-       dans le bandeau, les notes ou les pièces juridiques (RGPD). */
-    $collectif = ['meme_immeuble' => [], 'immeubles_voisins' => [], 'numeros_voisins' => [], 'rue_label' => ''];
+    /* === DÉTECTION PROBLÈME D'IMMEUBLE / DE RUE — cartouche tribunal ===
+       Affichage et injection 100 % anonymes (RGPD). Comptes exprimés en
+       formule approximative ("plusieurs", "au moins une demi-douzaine")
+       et mise en avant du cluster d'étages CONSÉCUTIFS (argument le plus
+       fort : ça prouve un défaut vertical d'immeuble — colonne d'aération,
+       canalisation, etc.). Seuil mini : 2 locataires concernés. */
+    $collectif = [
+        'meme_immeuble' => [], 'immeubles_voisins' => [], 'numeros_voisins' => [],
+        'rue_label' => '', 'cluster_meme' => [], 'cluster_all' => [],
+        'approx_meme' => '', 'approx_voisins' => '', 'approx_total' => '',
+        'cluster_meme_lbl' => '', 'cluster_all_lbl' => '',
+    ];
     if (!empty($r->tenant_adresse) && !empty($r->type_travaux_key) && function_exists('lfi_nct_rec_collective_signal')) {
         $collectif = lfi_nct_rec_collective_signal($r->tenant_adresse, $r->type_travaux_key);
     }
     $n_meme    = count($collectif['meme_immeuble']);
     $n_voisin  = count($collectif['immeubles_voisins']);
+    $n_total   = $n_meme + $n_voisin;
     $nums_v    = $collectif['numeros_voisins'];
     $rue_label = (string) $collectif['rue_label'];
-    /* On retire 1 du même immeuble si la réponse du locataire courant a
-       été comptée elle-même (cas typique : on a déjà sa réponse en base) */
-    /* Heuristique : on n'a pas l'identité, on garde le count brut, on
-       laisse à l'utilisateur le soin d'interpréter "X dont moi inclus" */
+    $cluster_meme_lbl = (string) $collectif['cluster_meme_lbl'];
+    $cluster_all_lbl  = (string) $collectif['cluster_all_lbl'];
 
-    if ($n_meme >= 1 || $n_voisin >= 1) {
+    if ($n_total >= 2) {
         echo '<div style="background:#fff3f5;border:2px solid #c8102e;border-radius:10px;padding:14px 16px;margin:14px 0">';
-        echo '<div style="font-size:1.05em;font-weight:800;color:#c8102e;margin-bottom:8px">🎯 PROBLÈME COLLECTIF DÉTECTÉ — argument juridique massif</div>';
+        echo '<div style="font-size:1.05em;font-weight:800;color:#c8102e;margin-bottom:8px">🎯 CARTOUCHE TRIBUNAL — défaut structurel détecté</div>';
         echo '<div style="font-size:.9em;color:#444;line-height:1.5;margin-bottom:8px">';
-        echo 'L\'enquête révèle que ce problème touche plusieurs logements. C\'est <strong>plus du cas isolé</strong> — c\'est un défaut structurel d\'ensemble immobilier. NMH ne peut pas refuser : responsabilité bailleur manifeste (art. 6 loi 89-462, décret 2002-120).';
+        echo 'L\'enquête révèle plusieurs logements touchés par le même type de problème. Argument juridique massif : ce n\'est plus du cas isolé, c\'est un défaut structurel à la charge exclusive du bailleur (art. 6 loi 89-462, décret 2002-120).';
         echo '</div>';
+
+        /* Mise en avant : cluster d'étages consécutifs (LE plus fort) */
+        if (!empty($cluster_meme_lbl)) {
+            echo '<div style="background:#c8102e;color:#fff;border-radius:8px;padding:10px 14px;margin:8px 0">';
+            echo '<div style="font-size:.8em;text-transform:uppercase;letter-spacing:.5px;font-weight:700;opacity:.9">⚡ Cluster vertical détecté — preuve la plus forte</div>';
+            echo '<div style="font-size:1.05em;margin-top:4px"><strong>Plusieurs locataires sur ' . esc_html($cluster_meme_lbl) . '</strong> du même immeuble signalent ce problème.</div>';
+            echo '<div style="font-size:.85em;opacity:.9;margin-top:4px">Étages contigus → défaut vertical (colonne d\'aération, canalisation, infiltration de toiture descendante). Très difficile à contester par le bailleur.</div>';
+            echo '</div>';
+        } elseif (!empty($cluster_all_lbl)) {
+            echo '<div style="background:#fff8e6;border-left:4px solid #bd8600;border-radius:8px;padding:10px 14px;margin:8px 0">';
+            echo '<div style="font-size:.8em;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:#bd8600">⚡ Étages contigus (immeubles confondus)</div>';
+            echo '<div style="font-size:1em;margin-top:4px">Plusieurs locataires sur ' . esc_html($cluster_all_lbl) . ' signalent le même problème — défaut d\'ensemble immobilier.</div>';
+            echo '</div>';
+        }
 
         echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0">';
 
-        /* Bloc immeuble */
+        /* Bloc immeuble — count approximatif */
         echo '<div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #f3c4cc">';
         echo '<div style="font-size:.8em;color:#c8102e;text-transform:uppercase;letter-spacing:.5px;font-weight:700">🏢 Même immeuble</div>';
-        echo '<div style="font-size:1.5em;font-weight:900;color:#c8102e;margin:4px 0">' . $n_meme . '</div>';
-        echo '<div style="font-size:.8em;color:#666">locataire(s) concerné(s)</div>';
-        if ($n_meme > 0) {
-            $etages = array_filter(array_map(function ($e) { return trim($e->etage); }, $collectif['meme_immeuble']));
-            if ($etages) {
-                $etages_uniq = array_values(array_unique($etages));
-                sort($etages_uniq, SORT_NATURAL);
-                echo '<div style="font-size:.8em;color:#666;margin-top:4px">Étages : ' . esc_html(implode(', ', $etages_uniq)) . '</div>';
-            }
-        }
+        echo '<div style="font-size:1em;color:#c8102e;margin:4px 0;font-weight:700">' . esc_html(ucfirst((string) $collectif['approx_meme'])) . '</div>';
+        echo '<div style="font-size:.8em;color:#666">concernés</div>';
         echo '</div>';
 
-        /* Bloc voisins */
+        /* Bloc voisins — count approximatif + numéros d'immeubles */
         echo '<div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #f3c4cc">';
         echo '<div style="font-size:.8em;color:#c8102e;text-transform:uppercase;letter-spacing:.5px;font-weight:700">🏘 Immeubles voisins</div>';
-        echo '<div style="font-size:1.5em;font-weight:900;color:#c8102e;margin:4px 0">' . $n_voisin . '</div>';
-        echo '<div style="font-size:.8em;color:#666">locataire(s) concerné(s)';
-        if (!empty($nums_v)) echo '<br>n° ' . esc_html(implode(', ', $nums_v));
+        echo '<div style="font-size:1em;color:#c8102e;margin:4px 0;font-weight:700">' . esc_html(ucfirst((string) $collectif['approx_voisins'])) . '</div>';
+        echo '<div style="font-size:.8em;color:#666">';
+        if (!empty($nums_v)) echo 'n° ' . esc_html(implode(', ', $nums_v));
         if ($rue_label) echo ' · ' . esc_html($rue_label);
         echo '</div>';
         echo '</div>';
@@ -692,10 +704,21 @@ function lfi_nct_app_intervention_form($row) {
         echo '</div>';
 
         echo '<div style="margin-top:10px">';
-        echo '<button type="button" class="btn-ghost" onclick="lfi_inject_motif_collectif(' . $n_meme . ',' . $n_voisin . ',' . wp_json_encode($nums_v) . ',' . wp_json_encode($rue_label) . ')">📋 Ajouter cet argument à la description</button>';
+        $args_json = wp_json_encode([
+            'approx_meme'      => $collectif['approx_meme'],
+            'approx_voisins'   => $collectif['approx_voisins'],
+            'approx_total'     => $collectif['approx_total'],
+            'cluster_meme_lbl' => $cluster_meme_lbl,
+            'cluster_all_lbl'  => $cluster_all_lbl,
+            'has_meme'         => $n_meme >= 1,
+            'has_voisin'       => $n_voisin >= 1,
+            'nums_voisins'     => $nums_v,
+            'rue_label'        => $rue_label,
+        ]);
+        echo '<button type="button" class="btn-ghost" onclick=\'lfi_inject_motif_collectif(' . $args_json . ')\'>📋 Ajouter cet argument à la description</button>';
         echo '</div>';
 
-        echo '<div style="font-size:.8em;color:#888;margin-top:10px;font-style:italic">🔒 Données affichées de façon anonyme (RGPD). Aucun nom de locataire n\'apparaît dans le texte injecté ni dans les pièces juridiques.</div>';
+        echo '<div style="font-size:.8em;color:#888;margin-top:10px;font-style:italic">🔒 Tout est anonyme : pas de noms, pas de chiffres exacts, formules approximatives uniquement (RGPD + sécurité juridique).</div>';
         echo '</div>';
     }
 
@@ -799,33 +822,44 @@ function lfi_nct_app_intervention_form($row) {
             '<div style="font-size:.8em;color:#888;margin-top:4px"><em>Sources : ' + (t.source || '') + '</em></div>';
     }
 
-    function lfi_inject_motif_collectif(nMeme, nVoisin, numsVoisins, rueLabel) {
+    function lfi_inject_motif_collectif(args) {
         var d = document.querySelector('[name=description]');
-        if (!d) return;
-        /* Texte STRICTEMENT anonyme : compteurs + numéros d'immeubles +
-           nom de rue, mais JAMAIS de nom de locataire (RGPD). */
+        if (!d || !args) return;
+        /* Texte STRICTEMENT anonyme et APPROXIMATIF :
+            - aucun nom de locataire (RGPD)
+            - aucun chiffre exact (formule type "plusieurs", "au moins X")
+            - mise en avant du cluster d'étages consécutifs si présent
+              (= la cartouche tribunal la plus solide). */
         var parts = [];
-        parts.push('IMPORTANT — défaut structurel d\'ensemble immobilier établi par enquête :');
-        if (nMeme > 0)   parts.push('• ' + nMeme + ' locataire(s) du même immeuble signalent le même type de problème ;');
-        if (nVoisin > 0) {
-            var loc = '• ' + nVoisin + ' locataire(s) des immeubles voisins';
-            if (numsVoisins && numsVoisins.length) {
-                loc += ' (n° ' + numsVoisins.join(', ');
-                if (rueLabel) loc += ' ' + rueLabel;
+        parts.push('IMPORTANT — défaut structurel d\'ensemble immobilier établi par l\'enquête de terrain du Groupe d\'Action :');
+
+        if (args.cluster_meme_lbl) {
+            parts.push('• Cluster vertical avéré : plusieurs locataires sur ' + args.cluster_meme_lbl + ' du même immeuble signalent le même type de problème. La contiguïté des étages atteints établit l\'existence d\'un défaut vertical (colonne d\'aération, canalisation, infiltration descendante, etc.) qui ne peut relever que du bâti.');
+        } else if (args.has_meme) {
+            parts.push('• Au sein du même immeuble : ' + args.approx_meme + ' signalent le même type de problème.');
+        }
+
+        if (args.has_voisin) {
+            var loc = '• Dans les immeubles voisins';
+            if (args.nums_voisins && args.nums_voisins.length) {
+                loc += ' (n° ' + args.nums_voisins.join(', ');
+                if (args.rue_label) loc += ' ' + args.rue_label;
                 loc += ')';
-            } else if (rueLabel) {
-                loc += ' de la même rue (' + rueLabel + ')';
+            } else if (args.rue_label) {
+                loc += ' de la même rue (' + args.rue_label + ')';
             }
-            loc += ' signalent un problème similaire ;';
+            loc += ' : ' + args.approx_voisins + ' signalent un problème similaire.';
             parts.push(loc);
         }
-        parts.push('Le caractère répété et géographiquement groupé exclut la cause locataire isolée et établit un défaut à la charge exclusive du bailleur (art. 6 loi 89-462 ; art. 1719 et 1724 CC ; décret 2002-120 sur la décence). Données anonymisées, source : enquête du Groupe d\'Action LFI Nantes Sud Clos Toreau.');
+
+        if (args.cluster_all_lbl && !args.cluster_meme_lbl) {
+            parts.push('• L\'ensemble forme un cluster cohérent (' + args.cluster_all_lbl + ') indiquant un défaut d\'ensemble immobilier et non un cas isolé.');
+        }
+
+        parts.push('Le caractère répété et géographiquement groupé des signalements exclut la cause locataire isolée et établit un manquement du bailleur à son obligation de délivrer et d\'entretenir un logement décent (art. 6 loi 89-462 ; art. 1719 et 1724 CC ; décret n° 2002-120 du 30 janvier 2002). Données anonymisées en compteurs approximatifs ; détails individuels disponibles sur réquisition judiciaire (article 145 CPC).');
+
         var phrase = parts.join('\n');
         d.value = (d.value ? d.value + '\n\n' : '') + phrase;
-    }
-    /* Alias pour compat anciennes versions (anonyme, sans nom) */
-    function lfi_inject_motif_immeuble(n) {
-        lfi_inject_motif_collectif(n, 0, [], '');
     }
 
     (function () {
