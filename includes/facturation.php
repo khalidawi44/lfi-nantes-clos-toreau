@@ -258,7 +258,9 @@ function lfi_nct_app_view_interventions() {
 
     lfi_nct_app_screen_open('🔧 Brigade travaux', count($rows) . ' intervention(s) · CA ' . lfi_nct_fact_format_eur($totals->ca_total ?? 0));
 
-    if (!empty($_GET['paye'])) lfi_nct_app_flash('💰 Facture marquée comme payée.');
+    if (!empty($_GET['paye']))     lfi_nct_app_flash('💰 Facture marquée comme payée.');
+    if (!empty($_GET['annule']))   lfi_nct_app_flash('✕ Intervention annulée. Tu peux maintenant en créer une nouvelle avec le bon prix.');
+    if (!empty($_GET['supprime'])) lfi_nct_app_flash('🗑 Intervention supprimée.');
 
     /* Bandeau résumé */
     echo '<div class="lfi-app-stats-grid">';
@@ -390,6 +392,35 @@ function lfi_nct_app_intervention_form($row) {
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     $is_edit = !empty($row);
     $err = null;
+
+    /* Handler ANNULATION rapide : 1 clic, sans repasser par le formulaire */
+    if ($is_edit && !empty($_POST['lfi_app_intervention_cancel']) && check_admin_referer('lfi_app_intervention_cancel')) {
+        $owner = (int) lfi_nct_fact_owner_id();
+        $update = ['statut' => 'annule'];
+        /* Si une facture avait été générée, on libère le numéro pour que le
+           recouvrement éventuellement ouvert sur cette facture ne pollue
+           plus le dashboard. */
+        if (!empty($row->facture_numero)) {
+            /* Supprime aussi un éventuel recouvrement ouvert sur cette facture */
+            $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
+            $wpdb->delete($tr, ['facture_numero' => $row->facture_numero, 'owner_user_id' => $owner]);
+        }
+        $wpdb->update($t, $update, ['id' => $row->id, 'owner_user_id' => $owner]);
+        wp_safe_redirect(lfi_nct_app_url('interventions', ['annule' => 1]));
+        exit;
+    }
+
+    /* Handler SUPPRESSION définitive */
+    if ($is_edit && !empty($_POST['lfi_app_intervention_delete']) && check_admin_referer('lfi_app_intervention_delete')) {
+        $owner = (int) lfi_nct_fact_owner_id();
+        if (!empty($row->facture_numero)) {
+            $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
+            $wpdb->delete($tr, ['facture_numero' => $row->facture_numero, 'owner_user_id' => $owner]);
+        }
+        $wpdb->delete($t, ['id' => $row->id, 'owner_user_id' => $owner]);
+        wp_safe_redirect(lfi_nct_app_url('interventions', ['supprime' => 1]));
+        exit;
+    }
 
     /* POST handler */
     if (!empty($_POST['lfi_app_intervention_save']) && check_admin_referer('lfi_app_intervention_save')) {
@@ -646,6 +677,34 @@ function lfi_nct_app_intervention_form($row) {
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer l\'intervention') . '</button>';
     echo '</form>';
+
+    /* Boutons rapides : annuler / supprimer — disponibles uniquement en édition */
+    if ($is_edit) {
+        $facture_warn = !empty($row->facture_numero)
+            ? ' Cette intervention a une facture (' . esc_html($row->facture_numero) . '). L\'annulation supprime aussi le recouvrement éventuellement ouvert.'
+            : '';
+        echo '<div style="margin-top:24px;padding-top:18px;border-top:2px dashed #eee">';
+        echo '<h3 style="margin:0 0 8px;color:#a30b25">⚠ Annuler ou supprimer</h3>';
+        echo '<div class="lfi-app-help" style="background:#fff3f5;border-left:4px solid #a30b25">';
+        echo 'Tu peux annuler cette intervention (elle reste en historique avec le statut « ✕ Annulé ») ou la supprimer définitivement.' . $facture_warn;
+        echo '</div>';
+        echo '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">';
+
+        echo '<form method="post" style="margin:0" onsubmit="return confirm(\'Annuler cette intervention ? Elle restera visible avec le statut « Annulé ».\')">';
+        wp_nonce_field('lfi_app_intervention_cancel');
+        echo '<input type="hidden" name="lfi_app_intervention_cancel" value="1">';
+        echo '<button type="submit" style="background:#fff;color:#a30b25;border:2px solid #a30b25;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer">✕ Annuler l\'intervention</button>';
+        echo '</form>';
+
+        echo '<form method="post" style="margin:0" onsubmit="return confirm(\'SUPPRIMER DÉFINITIVEMENT cette intervention ? Cette action est irréversible.\')">';
+        wp_nonce_field('lfi_app_intervention_delete');
+        echo '<input type="hidden" name="lfi_app_intervention_delete" value="1">';
+        echo '<button type="submit" style="background:#a30b25;color:#fff;border:0;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer">🗑 Supprimer définitivement</button>';
+        echo '</form>';
+
+        echo '</div>';
+        echo '</div>';
+    }
 
     /* Catalogue des tarifs marché (JSON injecté pour le JS) */
     $tarifs_json = function_exists('lfi_nct_tarif_taches_catalogue')
