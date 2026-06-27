@@ -313,6 +313,8 @@ function lfi_nct_app_shortcode() {
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
                     case 'carte':           lfi_nct_app_view_carte();           break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
+                    case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
+                    case 'mon-profil':      lfi_nct_app_view_mon_profil();      break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -394,6 +396,9 @@ function lfi_nct_app_render_login() {
             </label>
             <input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect); ?>">
             <button type="submit">Se connecter</button>
+            <div style="text-align:center;margin-top:8px">
+                <a href="<?php echo esc_url(wp_lostpassword_url($redirect)); ?>" style="color:#c8102e;font-size:.9em;text-decoration:none">🔓 Mot de passe oublié ?</a>
+            </div>
         </form>
 
         <div class="lfi-app-install-hint">
@@ -883,7 +888,8 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏠', 'Comptes Locataires',     'Créer · reset mot de passe',          lfi_nct_app_url('comptes-locataires')],
         ],
         '📨 COMMUNICATION' => [
-            ['📱', 'Envoyer SMS',            'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+            ['📱', 'SMS aux adhérents',      'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+            ['📲', 'SMS aux locataires',     'Vouvoiement · 7 modèles',             lfi_nct_app_url('sms-locataires')],
             ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
             ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
         ],

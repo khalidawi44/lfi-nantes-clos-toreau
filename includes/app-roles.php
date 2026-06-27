@@ -447,6 +447,84 @@ function lfi_nct_eject_non_admin_from_admin() {
     exit;
 }
 
+/**
+ * 8) Rebranding du formulaire wp-login.php (mot de passe oublié,
+ *    récupération de compte) aux couleurs LFI Clos Toreau, pour que
+ *    les non-admins ne voient jamais le « WordPress » d'origine.
+ */
+add_filter('login_headerurl',  function() { return home_url('/app/'); });
+add_filter('login_headertext', function() { return 'GA LFI Nantes Sud Clos Toreau'; });
+add_action('login_enqueue_scripts', 'lfi_nct_skin_wp_login');
+function lfi_nct_skin_wp_login() {
+    $manifest = esc_url(home_url('/?lfi_app=manifest&v=' . LFI_NCT_VERSION));
+    ?>
+    <link rel="manifest" href="<?php echo $manifest; ?>">
+    <meta name="theme-color" content="#c8102e">
+    <style>
+    body.login { background: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body.login #login { padding: 30px 14px; max-width: 420px; }
+    body.login h1 a {
+        background: none !important;
+        background-image: none !important;
+        width: 100% !important; height: auto !important;
+        text-indent: 0 !important; color: #c8102e !important;
+        font-size: 1.6em; font-weight: 800; letter-spacing: .5px;
+        line-height: 1.2; text-decoration: none !important;
+        padding: 0 0 14px;
+    }
+    body.login h1 a::before {
+        content: "Φ"; display: block;
+        font-size: 2.2em; line-height: 1; color: #c8102e;
+        margin-bottom: 8px;
+    }
+    body.login form {
+        background: #fff; border: 0; padding: 22px;
+        border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    }
+    body.login label { color: #555; font-size: .9em; }
+    body.login input[type=text], body.login input[type=password], body.login input[type=email] {
+        font-size: 1.05em; padding: 12px 14px; border: 1.5px solid #ddd;
+        border-radius: 10px; background: #fafafa; box-shadow: none;
+    }
+    body.login input:focus { border-color: #c8102e; background: #fff; box-shadow: none; outline: none; }
+    .wp-core-ui .button-primary, body.login .button-primary, body.login #wp-submit {
+        background: #c8102e !important; border-color: #a30b25 !important;
+        color: #fff !important; text-shadow: none !important; box-shadow: none !important;
+        padding: 12px 18px !important; height: auto !important; line-height: 1 !important;
+        border-radius: 12px !important; font-weight: 700 !important; font-size: 1.05em !important;
+    }
+    .wp-core-ui .button-primary:hover { background: #a30b25 !important; }
+    body.login #nav, body.login #backtoblog { text-align: center; padding: 14px 0 0; }
+    body.login #nav a, body.login #backtoblog a { color: #c8102e !important; text-decoration: none; font-size: .92em; }
+    /* Cache la mention "Powered by WordPress" / le logo en bas */
+    body.login .privacy-policy-page-link, body.login #language-switcher { display: none !important; }
+    </style>
+    <?php
+}
+
+/**
+ * 9) Force le message de réinitialisation mail à parler en vouvoiement
+ *    et au nom du GA, pas de « WordPress ».
+ */
+add_filter('retrieve_password_message', 'lfi_nct_skin_password_reset_email', 10, 4);
+function lfi_nct_skin_password_reset_email($message, $key, $user_login, $user_data) {
+    $reset_url = network_site_url("wp-login.php?action=rp&key=$key&login=" . rawurlencode($user_login), 'login');
+    return "Bonjour,\n\n"
+         . "Vous avez demandé une réinitialisation de votre mot de passe sur l'app du GA LFI Nantes Sud Clos Toreau.\n\n"
+         . "Pour définir un nouveau mot de passe, cliquez sur ce lien (valable 24h) :\n\n"
+         . $reset_url . "\n\n"
+         . "Si vous n'êtes pas à l'origine de cette demande, ignorez simplement ce message — votre mot de passe actuel restera inchangé.\n\n"
+         . "Identifiant concerné : " . $user_login . "\n\n"
+         . "— Groupe d'Action LFI Nantes Sud Clos Toreau\n"
+         . home_url('/app/');
+}
+add_filter('retrieve_password_title', function() { return '🔑 Réinitialisation de votre mot de passe — GA LFI Clos Toreau'; });
+add_filter('wp_mail_from_name', function($name) {
+    /* Pour les emails wp_lostpassword : signe « GA LFI » au lieu de l'URL du site */
+    if (did_action('retrieve_password')) return 'GA LFI Nantes Sud Clos Toreau';
+    return $name;
+});
+
 /* ============================================================== *
  *  Génération de mots de passe lisibles                            *
  *  - 10 caractères, sans 0/O/1/l/I pour SMS                       *
@@ -487,6 +565,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'notifs':       lfi_nct_app_view_tenant_notifs();   break;
             case 'mon-enquete':  lfi_nct_app_view_tenant_enquete();  break;
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
+            case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             default:             lfi_nct_app_view_tenant_dashboard();
         }
         $handled = true; return;
@@ -500,6 +579,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'sms':             lfi_nct_app_view_sms();        break;
             case 'email':           lfi_nct_app_view_email();      break;
             case 'stats':           lfi_nct_app_view_stats();      break;
+            case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
             default:                lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
@@ -521,6 +601,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['📱', 'Envoyer SMS aux adhérents', 'Modèles + envoi',                     lfi_nct_app_url('sms')],
         ['✉️', 'Email aux adhérents',       'Diffusion ciblée',                    lfi_nct_app_url('email')],
         ['📊', 'Statistiques',              'Vue d\'ensemble',                     lfi_nct_app_url('stats')],
+        ['✏️', 'Mon profil',                'Email · mot de passe',                lfi_nct_app_url('mon-profil')],
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
     ?>
@@ -593,6 +674,7 @@ function lfi_nct_app_view_tenant_dashboard() {
         ['⚖️', 'Mes droits',        'Lois et recours',                lfi_nct_app_url('droits')],
         ['🔔', 'Conseils du jour',  'Rappels quotidiens / hebdo',     lfi_nct_app_url('notifs')],
         ['🏠', 'Ma situation',      'Ma réponse à l\'enquête',        lfi_nct_app_url('mon-enquete')],
+        ['✏️', 'Mon profil',        'Email · mot de passe',           lfi_nct_app_url('mon-profil')],
         ['🚪', 'Se déconnecter',    '',                                wp_logout_url(home_url('/'))],
     ];
     ?>
@@ -966,24 +1048,31 @@ function lfi_nct_app_clean_email($email) {
     return $email;
 }
 
-/* Helper : affichage des credentials créés + bouton SMS */
+/* Helper : affichage des credentials créés + bouton SMS
+ * - Vouvoiement systématique pour tous les destinataires
+ * - Grandes respirations entre login et mot de passe pour la lisibilité */
 function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte créé') {
     $login = $created['login']; $pwd = $created['pwd']; $tel = $created['tel'] ?? '';
     $site_app = home_url('/app/');
-    $sms_body = "Salut ! Voici tes accès à l'app du GA LFI Nantes Sud Clos Toreau :\n$site_app\nIdentifiant : $login\nMot de passe : $pwd\nGarde-les bien.";
+    $sms_body = "Bonjour,\n\n"
+              . "Vos accès à l'app du GA LFI Nantes Sud Clos Toreau :\n\n"
+              . "🌐 Site : " . $site_app . "\n\n"
+              . "🪪 Identifiant : " . $login . "\n\n"
+              . "🔑 Mot de passe : " . $pwd . "\n\n"
+              . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
     $sms_url = $tel ? 'sms:' . preg_replace('/[^\d+]/', '', $tel) . '?body=' . rawurlencode($sms_body) : '';
     echo '<div class="lfi-app-flash ok">';
     echo '<strong>✅ ' . esc_html($screen_label) . '</strong><br>';
-    echo '<table style="margin:8px 0;border-collapse:collapse">';
-    echo '<tr><td style="padding:4px 8px"><small>URL</small></td><td><code>' . esc_html($site_app) . '</code></td></tr>';
-    echo '<tr><td style="padding:4px 8px"><small>Identifiant</small></td><td><code>' . esc_html($login) . '</code></td></tr>';
-    echo '<tr><td style="padding:4px 8px"><small>Mot de passe</small></td><td><code>' . esc_html($pwd) . '</code></td></tr>';
+    echo '<table style="margin:10px 0;border-collapse:collapse;width:100%">';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🌐 URL</small></td><td style="padding:6px 8px"><code>' . esc_html($site_app) . '</code></td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.05em;background:#fff;padding:2px 6px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code></td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🔑 Mot de passe</small></td><td style="padding:6px 8px"><code style="font-size:1.05em;background:#fff;padding:2px 6px;border-radius:4px;border:1px solid #ddd;letter-spacing:.05em">' . esc_html($pwd) . '</code></td></tr>';
     echo '</table>';
     echo '<div class="row-actions">';
     if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 SMS les identifiants</a>';
     echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(' . wp_json_encode($sms_body) . ');this.textContent=\'✓ Copié\';">📋 Copier le message</button>';
     echo '</div>';
-    echo '<div style="margin-top:6px"><small>⚠️ Ce mot de passe ne sera plus affiché. Note-le ou envoie-le maintenant.</small></div>';
+    echo '<div style="margin-top:8px"><small>⚠️ Ce mot de passe ne sera plus affiché. Notez-le ou envoyez-le maintenant.</small></div>';
     echo '</div>';
 }
 

@@ -889,6 +889,292 @@ function lfi_nct_app_view_stats_enquete() {
 }
 
 /* ============================================================== *
+ *  SMS aux LOCATAIRES — 7 modèles en VOUVOIEMENT                  *
+ * ============================================================== */
+
+function lfi_nct_tenant_sms_templates() {
+    return [
+        'rdv' => [
+            'nom'  => '📞 Convenir d\'un rendez-vous',
+            'body' => "Bonjour {{prenom}},\n\nLe Groupe d'Action LFI Nantes Sud Clos Toreau souhaiterait vous rencontrer pour faire le point sur votre situation logement. Quel jour vous arrangerait dans les prochaines semaines ?\n\nVous pouvez nous répondre directement par SMS.\n\nCordialement.",
+        ],
+        'invitation_reunion' => [
+            'nom'  => '📣 Inviter à une réunion publique',
+            'body' => "Bonjour {{prenom}},\n\nLe GA LFI Clos Toreau organise une réunion publique : {{event_titre}} — {{event_jour}} {{event_date}} à {{event_heure}}, à {{event_lieu}}.\n\nVotre présence serait précieuse. Toutes les infos : {{event_url_short}}",
+        ],
+        'invitation_evenement' => [
+            'nom'  => '📅 Inviter à un événement',
+            'body' => "Bonjour {{prenom}},\n\nNous organisons {{event_titre}} le {{event_date}} à {{event_lieu}}. Vous y êtes le·la bienvenu·e.\n\nDétails et inscription : {{event_url_short}}\n\nÀ très vite !",
+        ],
+        'suivi_lettre' => [
+            'nom'  => '✉️ Suivi d\'une démarche / lettre',
+            'body' => "Bonjour {{prenom}},\n\nSuite à notre échange concernant votre logement, vous trouverez dans l'app du GA un modèle de lettre pré-rempli à envoyer à votre bailleur.\n\nLien direct : https://lfi-nantes-clostoreau.fr/app/?vue=lettre\n\nN'hésitez pas à nous solliciter en cas de besoin.",
+        ],
+        'rappel_droits' => [
+            'nom'  => '⚖️ Rappel sur vos droits',
+            'body' => "Bonjour {{prenom}},\n\nPetit rappel : les problèmes de logement que vous nous avez signalés relèvent d'obligations légales du bailleur (loi du 6 juillet 1989, décret 2002-120).\n\nConsultez la fiche complète de vos droits dans l'app : https://lfi-nantes-clostoreau.fr/app/?vue=droits",
+        ],
+        'photo_request' => [
+            'nom'  => '📷 Demander des photos du logement',
+            'body' => "Bonjour {{prenom}},\n\nPour faire avancer votre dossier, pourriez-vous nous envoyer quelques photos des dégradations (moisissures, fuites, etc.) ?\n\nVous pouvez les déposer directement dans l'app, elles resteront privées : https://lfi-nantes-clostoreau.fr/app/?vue=envoyer-photo\n\nMerci.",
+        ],
+        'libre' => [
+            'nom'  => '✍️ Texte libre',
+            'body' => "Bonjour {{prenom}},\n\n",
+        ],
+    ];
+}
+
+function lfi_nct_app_view_sms_locataires() {
+    if (!current_user_can('manage_options')) return;
+    global $wpdb;
+    $logt = $wpdb->prefix . 'lfi_nct_sms_log';
+
+    if (!empty($_POST['lfi_app_sms_log']) && check_admin_referer('lfi_app_sms_log')) {
+        $wpdb->insert($logt, [
+            'template_id' => null,
+            'membre_id'   => ((int) ($_POST['uid'] ?? 0)) ?: null,
+            'tel'         => sanitize_text_field(wp_unslash($_POST['tel'] ?? '')),
+            'body_sent'   => sanitize_textarea_field(wp_unslash($_POST['body'] ?? '')),
+            'sent_by'     => get_current_user_id(),
+        ]);
+        wp_safe_redirect(lfi_nct_app_url('sms-locataires', ['logged' => 1, 'uid' => (int) $_POST['uid'], 'mode' => sanitize_key($_POST['mode'] ?? 'libre')]));
+        exit;
+    }
+
+    /* Liste des locataires avec un tel */
+    $tenants = get_users([
+        'role'    => LFI_NCT_ROLE_TENANT,
+        'fields'  => ['ID', 'user_login', 'display_name'],
+        'number'  => 200,
+        'orderby' => 'display_name', 'order' => 'ASC',
+    ]);
+    $tenants_with_tel = [];
+    foreach ($tenants as $u) {
+        $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
+        if ($tel) $tenants_with_tel[] = ['uid' => $u->ID, 'name' => $u->display_name, 'tel' => $tel];
+    }
+
+    $uid  = isset($_GET['uid'])  ? (int) $_GET['uid']  : 0;
+    $mode = isset($_GET['mode']) ? sanitize_key($_GET['mode']) : 'libre';
+
+    $user      = $uid ? get_userdata($uid) : null;
+    $is_tenant = $user && in_array(LFI_NCT_ROLE_TENANT, (array) $user->roles, true);
+    if (!$is_tenant) { $user = null; $uid = 0; }
+    $user_tel  = $user ? (string) get_user_meta($user->ID, 'lfi_nct_tel', true) : '';
+
+    /* Prochain événement pour les variables {{event_*}} */
+    $event_id = isset($_GET['event']) ? (int) $_GET['event'] : 0;
+    if (!$event_id && function_exists('lfi_nct_sms_upcoming_events')) {
+        $upc = lfi_nct_sms_upcoming_events(1);
+        if ($upc) $event_id = $upc[0]->ID;
+    }
+    $event_post = $event_id ? get_post($event_id) : null;
+    $event_vars = function_exists('lfi_nct_sms_event_vars') ? lfi_nct_sms_event_vars($event_post) : [];
+
+    /* Rendu du body avec variables */
+    $templates = lfi_nct_tenant_sms_templates();
+    $template  = $templates[$mode] ?? $templates['libre'];
+    $body = $template['body'];
+    if ($user && function_exists('lfi_nct_sms_render')) {
+        $fake_membre = (object) [
+            'id'     => $user->ID,
+            'prenom' => $user->first_name ?: $user->display_name,
+            'nom'    => $user->last_name,
+            'pseudo' => '',
+            'tel'    => $user_tel,
+        ];
+        $body = lfi_nct_sms_render($body, $fake_membre, $event_vars);
+    }
+
+    lfi_nct_app_screen_open('📱 SMS aux locataires', count($tenants_with_tel) . ' locataire(s) avec téléphone');
+
+    if (!empty($_GET['logged'])) lfi_nct_app_flash('✅ SMS noté comme envoyé.');
+
+    if (empty($tenants_with_tel)) {
+        echo '<div class="lfi-app-empty">Aucun locataire avec téléphone enregistré. Crée des comptes via 🏠 Comptes Locataires.</div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    /* Sélecteur destinataire + modèle */
+    echo '<form method="get" class="lfi-app-form">';
+    echo '<input type="hidden" name="vue" value="sms-locataires">';
+    echo '<label>👤 Destinataire<select name="uid" required onchange="this.form.submit()">';
+    echo '<option value="">— choisir un·e locataire —</option>';
+    foreach ($tenants_with_tel as $t) {
+        echo '<option value="' . (int) $t['uid'] . '" ' . selected($uid, $t['uid'], false) . '>' . esc_html($t['name'] . ' — ' . $t['tel']) . '</option>';
+    }
+    echo '</select></label>';
+    if ($event_post) {
+        echo '<div class="lfi-app-help">📅 Événement lié pour les variables <code>{{event_*}}</code> : <strong>' . esc_html(get_the_title($event_post)) . '</strong></div>';
+    }
+    echo '</form>';
+
+    /* Onglets de mode */
+    echo '<div class="lfi-app-modes" style="grid-template-columns:repeat(2,1fr)">';
+    foreach ($templates as $k => $t) {
+        $cls = $mode === $k ? 'on' : '';
+        echo '<a class="md ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('sms-locataires', ['uid' => $uid, 'mode' => $k])) . '">' . esc_html($t['nom']) . '</a>';
+    }
+    echo '</div>';
+
+    if (!$user) {
+        echo '<div class="lfi-app-help">Choisis un·e destinataire au-dessus pour voir le message rendu.</div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    /* Aperçu + textarea modifiable + lien sms: live */
+    $tel_clean = preg_replace('/[^\d+]/', '', $user_tel);
+    echo '<div class="lfi-app-card sms-preview">';
+    echo '<div class="head">';
+    echo '<div class="who">' . esc_html($user->display_name) . '</div>';
+    echo '<div class="badge">' . esc_html($user_tel) . '</div>';
+    echo '</div>';
+
+    echo '<label for="ten-sms-body" style="display:block;margin-top:8px;font-size:.85em;color:#555">Texte du SMS — modifiable (vouvoiement par défaut)</label>';
+    echo '<textarea id="ten-sms-body" rows="8" class="sms-body" data-tel="' . esc_attr($tel_clean) . '">' . esc_textarea($body) . '</textarea>';
+    echo '<div class="lfi-app-help"><small><span id="ten-sms-count">' . mb_strlen($body) . '</span> caractère(s)</small></div>';
+
+    echo '<div class="row-actions">';
+    echo '<a id="ten-sms-link" class="btn-primary big" href="sms:' . esc_attr($tel_clean) . '">📲 Ouvrir mon SMS</a>';
+    echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'ten-sms-body\').value);this.textContent=\'✓ Copié\';">📋 Copier</button>';
+    echo '</div>';
+
+    echo '<form method="post" class="row-actions">';
+    wp_nonce_field('lfi_app_sms_log');
+    echo '<input type="hidden" name="lfi_app_sms_log" value="1">';
+    echo '<input type="hidden" name="uid"  value="' . (int) $uid . '">';
+    echo '<input type="hidden" name="tel"  value="' . esc_attr($user_tel) . '">';
+    echo '<input type="hidden" name="body" id="ten-sms-body-h" value="' . esc_attr($body) . '">';
+    echo '<input type="hidden" name="mode" value="' . esc_attr($mode) . '">';
+    echo '<button type="submit" class="btn-ghost">✅ Marquer comme envoyé</button>';
+    echo '</form>';
+    echo '</div>';
+
+    ?>
+    <script>
+    (function () {
+        var ta = document.getElementById('ten-sms-body');
+        var lnk = document.getElementById('ten-sms-link');
+        var cnt = document.getElementById('ten-sms-count');
+        var hid = document.getElementById('ten-sms-body-h');
+        if (!ta || !lnk) return;
+        var tel = ta.dataset.tel || '';
+        function refresh() {
+            var b = ta.value || '';
+            lnk.href = 'sms:' + tel + '?body=' + encodeURIComponent(b);
+            if (cnt) cnt.textContent = b.length;
+            if (hid) hid.value = b;
+        }
+        ta.addEventListener('input', refresh);
+        refresh();
+    })();
+    </script>
+    <?php
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  Page « Mon profil » — locataire OU membre GA                   *
+ *  Change email + change mot de passe, login en lecture seule     *
+ * ============================================================== */
+
+function lfi_nct_app_view_mon_profil() {
+    if (!is_user_logged_in()) return;
+    $user = wp_get_current_user();
+    /* Réservée aux non-admins : un admin a wp-admin pour ça */
+    if (current_user_can('manage_options')) {
+        wp_safe_redirect(admin_url('profile.php'));
+        exit;
+    }
+
+    $err = null; $ok = null;
+
+    /* Changer le mot de passe */
+    if (!empty($_POST['lfi_app_change_pwd']) && check_admin_referer('lfi_app_change_pwd')) {
+        $current = (string) ($_POST['current_pwd'] ?? '');
+        $new1    = (string) ($_POST['new_pwd']     ?? '');
+        $new2    = (string) ($_POST['new_pwd_2']   ?? '');
+        if (!wp_check_password($current, $user->user_pass, $user->ID)) {
+            $err = 'Mot de passe actuel incorrect.';
+        } elseif ($new1 !== $new2) {
+            $err = 'Les deux nouveaux mots de passe ne correspondent pas.';
+        } elseif (strlen($new1) < 8) {
+            $err = 'Le nouveau mot de passe doit faire au moins 8 caractères.';
+        } else {
+            wp_set_password($new1, $user->ID);
+            /* Re-loggue immédiatement pour ne pas se faire déconnecter */
+            wp_clear_auth_cookie();
+            wp_set_auth_cookie($user->ID, true);
+            wp_safe_redirect(lfi_nct_app_url('mon-profil', ['pwd' => 1]));
+            exit;
+        }
+    }
+
+    /* Changer l'email */
+    if (!empty($_POST['lfi_app_change_email']) && check_admin_referer('lfi_app_change_email')) {
+        $email = sanitize_email(wp_unslash($_POST['new_email'] ?? ''));
+        if (!is_email($email)) {
+            $err = 'Adresse email invalide.';
+        } elseif ($email === $user->user_email) {
+            $err = 'Cette adresse est déjà la vôtre.';
+        } elseif (email_exists($email)) {
+            $err = 'Cette adresse est déjà utilisée par un autre compte.';
+        } else {
+            wp_update_user(['ID' => $user->ID, 'user_email' => $email]);
+            wp_safe_redirect(lfi_nct_app_url('mon-profil', ['email' => 1]));
+            exit;
+        }
+    }
+
+    lfi_nct_app_screen_open('✏️ Mon profil', 'Modifier vos informations');
+
+    if ($err) lfi_nct_app_flash('❌ ' . $err, 'err');
+    if (!empty($_GET['pwd']))   lfi_nct_app_flash('🔑 Mot de passe modifié.');
+    if (!empty($_GET['email'])) lfi_nct_app_flash('✉️ Email modifié.');
+
+    echo '<div class="lfi-app-card">';
+    echo '<div class="head"><div class="who">👤 Vos informations</div></div>';
+    echo '<div class="meta">';
+    echo '<span class="meta-chip">🪪 ' . esc_html($user->user_login) . '</span>';
+    if ($user->user_email) echo '<span class="meta-chip">✉️ ' . esc_html($user->user_email) . '</span>';
+    echo '</div>';
+    echo '<div class="lfi-app-help"><small>L\'identifiant de connexion ne peut pas être modifié. Pour le changer, contactez le GA.</small></div>';
+    echo '</div>';
+
+    /* Form changer email */
+    echo '<details class="lfi-app-collapse" style="margin-top:14px"><summary>✉️ Changer mon adresse email</summary>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_change_email');
+    echo '<input type="hidden" name="lfi_app_change_email" value="1">';
+    echo '<label>Nouvelle adresse email<input type="email" name="new_email" required></label>';
+    echo '<button type="submit" class="btn-primary">✓ Enregistrer</button>';
+    echo '</form></details>';
+
+    /* Form changer mot de passe */
+    echo '<details class="lfi-app-collapse" open><summary>🔑 Changer mon mot de passe</summary>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_app_change_pwd');
+    echo '<input type="hidden" name="lfi_app_change_pwd" value="1">';
+    echo '<label>Mot de passe actuel<input type="password" name="current_pwd" autocomplete="current-password" required></label>';
+    echo '<label>Nouveau mot de passe (8 caractères min.)<input type="password" name="new_pwd" autocomplete="new-password" required minlength="8"></label>';
+    echo '<label>Confirmer le nouveau mot de passe<input type="password" name="new_pwd_2" autocomplete="new-password" required minlength="8"></label>';
+    echo '<button type="submit" class="btn-primary">✓ Enregistrer</button>';
+    echo '</form></details>';
+
+    /* Bloc « mot de passe oublié » */
+    echo '<div class="lfi-app-help" style="margin-top:18px">';
+    echo '🔓 <strong>Mot de passe oublié ?</strong><br>';
+    echo 'Si vous perdez votre mot de passe, vous pouvez en demander un nouveau en cliquant sur « Mot de passe oublié » depuis l\'écran de connexion. Un email de réinitialisation vous sera envoyé automatiquement. Aucune validation manuelle n\'est nécessaire.';
+    echo '</div>';
+
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
  *  CSS supplémentaires                                              *
  * ============================================================== */
 add_action('wp_footer', 'lfi_nct_app_pro_styles', 200);
