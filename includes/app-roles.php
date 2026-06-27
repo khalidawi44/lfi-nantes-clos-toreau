@@ -567,6 +567,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             case 'installer':    lfi_nct_app_view_installer();       break;
+            case 'mes-rdv':      lfi_nct_app_view_mes_rdv();         break;
             default:             lfi_nct_app_view_tenant_dashboard();
         }
         $handled = true; return;
@@ -654,25 +655,33 @@ function lfi_nct_app_view_tenant_dashboard() {
     /* Bandeau notif quotidien/hebdo selon préférence */
     $tip_html = lfi_nct_app_tenant_maybe_tip_banner($user->ID);
 
-    /* Prochain événement public */
-    $next_event_html = '';
-    if (function_exists('lfi_nct_sms_upcoming_events')) {
-        $upc = lfi_nct_sms_upcoming_events(1);
-        if ($upc) {
-            $ep = $upc[0];
-            $date  = get_post_meta($ep->ID, '_ag_event_date',  true);
-            $place = get_post_meta($ep->ID, '_ag_event_place', true);
-            $next_event_html = '<a class="lfi-app-card lfi-tenant-event" href="' . esc_url(get_permalink($ep)) . '">';
-            $next_event_html .= '<div class="lab">📅 PROCHAIN ÉVÉNEMENT PUBLIC</div>';
-            $next_event_html .= '<div class="ti">' . esc_html(get_the_title($ep)) . '</div>';
-            $next_event_html .= '<div class="me">' . esc_html(trim($date . ' · ' . $place)) . '</div>';
-            $next_event_html .= '<div class="cta">✓ Je participe →</div>';
-            $next_event_html .= '</a>';
+    /* Mes prochains RDV (PERSONNELS — pas les événements publics du GA) */
+    $next_rdv_html = '';
+    if (function_exists('lfi_nct_agenda_rdvs_tenant')) {
+        $rdvs = lfi_nct_agenda_rdvs_tenant($user->ID, 1);
+        if (!empty($rdvs)) {
+            $rdv = $rdvs[0];
+            $types = function_exists('lfi_nct_agenda_types') ? lfi_nct_agenda_types() : [];
+            $type_lbl = $types[$rdv->type] ?? $rdv->type;
+            $when = wp_date('l j F', strtotime($rdv->date));
+            if (!empty($rdv->heure)) $when .= ' à ' . substr($rdv->heure, 0, 5);
+            $next_rdv_html  = '<a class="lfi-app-card lfi-tenant-event" href="' . esc_url(lfi_nct_app_url('mes-rdv')) . '">';
+            $next_rdv_html .= '<div class="lab">📅 VOTRE PROCHAIN RENDEZ-VOUS</div>';
+            $next_rdv_html .= '<div class="ti">' . esc_html(ucfirst($when)) . '</div>';
+            $next_rdv_html .= '<div class="me">' . esc_html($type_lbl);
+            if (!empty($rdv->lieu)) $next_rdv_html .= ' · ' . esc_html($rdv->lieu);
+            $next_rdv_html .= '</div>';
+            if (!empty($rdv->description)) {
+                $next_rdv_html .= '<div class="me" style="margin-top:4px;font-size:.85em;opacity:.9">' . esc_html(mb_substr($rdv->description, 0, 80)) . '</div>';
+            }
+            $next_rdv_html .= '<div class="cta">Voir mon agenda →</div>';
+            $next_rdv_html .= '</a>';
         }
     }
 
     $tiles = [
         ['📲', 'Installer l\'app',  'iPhone / Android · permissions', lfi_nct_app_url('installer')],
+        ['📅', 'Mes rendez-vous',   'Agenda avec le GA',              lfi_nct_app_url('mes-rdv')],
         ['📷', 'Envoyer une photo', 'Documenter votre logement',      lfi_nct_app_url('envoyer-photo')],
         ['📝', 'Modèle de lettre',  'Pour Nantes Métropole Habitat',  lfi_nct_app_url('lettre')],
         ['⚖️', 'Mes droits',        'Lois et recours',                lfi_nct_app_url('droits')],
@@ -706,7 +715,7 @@ function lfi_nct_app_view_tenant_dashboard() {
             </div>
         <?php endif; ?>
 
-        <?php echo $next_event_html; ?>
+        <?php echo $next_rdv_html; ?>
 
         <div class="lfi-app-grid" style="margin-top:14px">
             <?php foreach ($tiles as $t): ?>
@@ -1198,12 +1207,13 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
 }
 
 /* ============================================================== *
- *  Backward compat : /app/?vue=comptes redirige vers comptes-ga    *
+ *  Backward compat : /app/?vue=comptes affiche la page GA          *
+ *  (wp_safe_redirect ne marche pas depuis le shortcode car les     *
+ *  headers sont déjà envoyés — on appelle directement la vue)      *
  * ============================================================== */
 function lfi_nct_app_view_comptes() {
     if (!current_user_can('manage_options')) return;
-    wp_safe_redirect(lfi_nct_app_url('comptes-ga'));
-    exit;
+    lfi_nct_app_view_comptes_ga();
 }
 
 /* ============================================================== *

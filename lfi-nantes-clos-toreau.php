@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 0.37.1
+ * Version: 0.38.0
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '0.37.1');
+define('LFI_NCT_VERSION', '0.38.0');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -39,6 +39,8 @@ require_once LFI_NCT_PATH . 'includes/app-roles.php';
 require_once LFI_NCT_PATH . 'includes/app-pro.php';
 require_once LFI_NCT_PATH . 'includes/facturation.php';
 require_once LFI_NCT_PATH . 'includes/tutoriels.php';
+require_once LFI_NCT_PATH . 'includes/agenda.php';
+require_once LFI_NCT_PATH . 'includes/outils-scientifiques.php';
 
 register_activation_hook(__FILE__, 'lfi_nct_activate');
 function lfi_nct_activate() {

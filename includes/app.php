@@ -359,6 +359,17 @@ function lfi_nct_app_shortcode() {
                     case 'facturation-params':    lfi_nct_app_view_facturation_params();     break;
                     case 'tutoriels':             lfi_nct_app_view_tutoriels();              break;
                     case 'tutoriel':              lfi_nct_app_view_tutoriel();               break;
+                    case 'agenda':                lfi_nct_app_view_agenda();                 break;
+                    case 'rdv-add':               lfi_nct_app_view_rdv_add();                break;
+                    case 'rdv-edit':              lfi_nct_app_view_rdv_edit();               break;
+                    case 'outils':                lfi_nct_app_view_outils();                 break;
+                    case 'outil-sonometre':       lfi_nct_app_view_outil_sonometre();        break;
+                    case 'outil-niveau':          lfi_nct_app_view_outil_niveau();           break;
+                    case 'outil-boussole':        lfi_nct_app_view_outil_boussole();         break;
+                    case 'outil-gps':             lfi_nct_app_view_outil_gps();              break;
+                    case 'outil-photo-preuve':    lfi_nct_app_view_outil_photo_preuve();     break;
+                    case 'outil-humidite':        lfi_nct_app_view_outil_humidite();         break;
+                    case 'outil-regle':           lfi_nct_app_view_outil_regle();            break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -367,6 +378,8 @@ function lfi_nct_app_shortcode() {
 
     lfi_nct_app_render_styles();
     lfi_nct_app_render_register_sw();
+    /* Bouton d'urgence flottant — visible partout sauf sur l'écran de login */
+    if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
 
     return ob_get_clean();
 }
@@ -945,6 +958,45 @@ function lfi_nct_app_render_styles() {
     <?php
 }
 
+/* Bouton fixe « Appel d'urgence » sur toutes les pages de l'app.
+ * Numéro de Fabrice : 06 23 52 60 74.
+ * FAB en bas à droite, semi-transparent, ne masque pas le contenu. */
+function lfi_nct_app_render_emergency_button() {
+    ?>
+    <a class="lfi-app-emergency" href="tel:+33623526074" aria-label="Appel d'urgence Fabrice">
+        <span class="ico">🆘</span>
+        <span class="lbl">Urgence</span>
+    </a>
+    <style>
+    .lfi-app-emergency {
+        position: fixed; bottom: 20px; right: 16px;
+        z-index: 99990;
+        background: #c8102e; color: #fff;
+        padding: 14px 18px; border-radius: 999px;
+        text-decoration: none;
+        box-shadow: 0 4px 14px rgba(200,16,46,.4);
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-weight: 700; font-size: .92em;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: transform .12s ease;
+    }
+    .lfi-app-emergency:hover, .lfi-app-emergency:focus {
+        color: #fff; transform: scale(1.05);
+    }
+    .lfi-app-emergency:active { background: #a30b25; transform: scale(.98); }
+    .lfi-app-emergency .ico { font-size: 1.2em; }
+    .lfi-app-emergency .lbl { white-space: nowrap; }
+    @media (max-width: 480px) {
+        .lfi-app-emergency .lbl { display: none; }
+        .lfi-app-emergency { padding: 14px; }
+    }
+    @media print {
+        .lfi-app-emergency { display: none !important; }
+    }
+    </style>
+    <?php
+}
+
 function lfi_nct_app_render_register_sw() {
     /* Query-var direct = marche même si les rewrite rules ne sont pas flushées */
     $sw = esc_url(home_url('/?lfi_app=sw&v=' . LFI_NCT_VERSION));
@@ -1021,8 +1073,10 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
         ],
         '🔧 BRIGADE TRAVAUX' => [
+            ['📅', 'Agenda',                 'Tous mes RDV et interventions',       lfi_nct_app_url('agenda')],
             ['🔧', 'Interventions',          'Suivi & facturation NMH',             lfi_nct_app_url('interventions')],
-            ['🛠', 'Tutoriels DIY',          'Guides pratiques par problème',       lfi_nct_app_url('tutoriels')],
+            ['🛠', 'Tutoriels',              'Guides pros par problème',            lfi_nct_app_url('tutoriels')],
+            ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
             ['⚙️', 'Paramètres facturation', 'Prestataire · bailleur · tarif',      lfi_nct_app_url('facturation-params')],
         ],
         '⚙️ SYSTÈME' => [
