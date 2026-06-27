@@ -557,6 +557,23 @@ function lfi_nct_app_make_username($prenom, $nom, $base = '') {
  *  (appelé par lfi_nct_app_shortcode avant le switch de vues)    *
  * ============================================================== */
 function lfi_nct_app_role_dispatch(&$handled) {
+    /* PRIORITÉ ADMIN : si l'utilisateur a manage_options et n'est PAS en mode
+       aperçu (pas de cookie de preview), il garde le contrôle de l'admin
+       switch même s'il a aussi un rôle lfi_nct_ga_member ou lfi_nct_tenant
+       (cas typique : tu t'es importé toi-même comme adhérent depuis la
+       page Comptes GA, du coup tu as 2 rôles).
+       Sans cette priorité, role_dispatch te basculait dans la branche GA et
+       toutes les routes admin (tutoriel, dossiers, agenda, etc.) tombaient
+       sur le default = ga_dashboard → l'utilisateur voyait le dashboard GA
+       au lieu de la page demandée → impression de « page ne s'affiche pas ». */
+    if (current_user_can('manage_options')) {
+        $preview_uid = function_exists('lfi_nct_app_preview_uid_from_cookie') ? lfi_nct_app_preview_uid_from_cookie() : 0;
+        if (!$preview_uid) {
+            $handled = false;
+            return;
+        }
+    }
+
     if (lfi_nct_user_role_tenant()) {
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
