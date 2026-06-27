@@ -772,19 +772,8 @@ function lfi_nct_app_view_tutoriel() {
     echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('intervention-add')) . '">+ Créer une intervention pour ce type</a>';
     echo '</div>';
 
-    ?>
-    <style>
-    .lfi-tutoriel section { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-    .lfi-tutoriel section h3 { margin: 0 0 10px; font-size: 1em; color: #c8102e; }
-    .lfi-tutoriel section p { margin: 6px 0; line-height: 1.5; font-size: .92em; }
-    .lfi-tutoriel section ul, .lfi-tutoriel section ol { margin: 6px 0; padding-left: 1.4em; line-height: 1.6; font-size: .92em; }
-    .lfi-tutoriel section li { margin-bottom: 4px; }
-    .lfi-tutoriel section strong { color: #1a1a1a; }
-    .lfi-tutoriel section table { font-size: .85em; }
-    .lfi-tutoriel section table th { background: #c8102e; color: #fff; padding: 6px 8px; font-weight: 700; }
-    .lfi-tutoriel section table td { border-bottom: 1px solid #eee; }
-    </style>
-    <?php
+    /* CSS déplacé dans la fonction globale lfi_nct_app_render_styles()
+       pour fiabilité (pas de duplication, pas de risque d'être stripé). */
 
     lfi_nct_app_screen_close(false);
 }

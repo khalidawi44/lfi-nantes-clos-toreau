@@ -887,6 +887,27 @@ function lfi_nct_app_render_styles() {
     }
     .lfi-preview-banner .quit:hover { background: #000; color: #ffd400; }
 
+    /* Page Tutoriels — guides brigade (CSS global pour fiabilité) */
+    .lfi-tutoriel { display: block; color: #1a1a1a; }
+    .lfi-tutoriel section {
+        display: block; background: #fff; color: #1a1a1a;
+        border-radius: 12px; padding: 16px 18px; margin: 0 0 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .lfi-tutoriel section h3 { margin: 0 0 10px; font-size: 1.05em; color: #c8102e; font-weight: 700; }
+    .lfi-tutoriel section p { margin: 8px 0; line-height: 1.5; font-size: .95em; color: #1a1a1a; }
+    .lfi-tutoriel section ul, .lfi-tutoriel section ol { margin: 8px 0; padding-left: 1.4em; line-height: 1.6; font-size: .92em; color: #1a1a1a; }
+    .lfi-tutoriel section li { margin-bottom: 6px; color: #1a1a1a; }
+    .lfi-tutoriel section strong { color: #1a1a1a; font-weight: 700; }
+    .lfi-tutoriel section em { color: #555; }
+    .lfi-tutoriel section table {
+        font-size: .85em; border-collapse: collapse;
+        width: 100%; margin: 10px 0;
+    }
+    .lfi-tutoriel section table th { background: #c8102e; color: #fff; padding: 8px 6px; font-weight: 700; text-align: left; }
+    .lfi-tutoriel section table td { border-bottom: 1px solid #eee; padding: 8px 6px; color: #1a1a1a; vertical-align: top; }
+    .lfi-tutoriel section table tr:nth-child(even) td { background: #fafafa; }
+
     /* Page Droits — sections juridiques */
     .lfi-droits section { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
     .lfi-droits section h3 { margin: 0 0 8px; font-size: 1em; color: #c8102e; }
