@@ -247,7 +247,10 @@ function lfi_nct_app_view_envoyer_photo() {
  * ============================================================== */
 
 function lfi_nct_app_view_dossiers() {
-    if (!current_user_can('manage_options')) return;
+    /* Lecture autorisée aux admins ET aux membres du GA (les GA collectent
+       les enquêtes sur le terrain, ils ont besoin de voir les remontées).
+       Le détail individuel (modif, suppression) reste réservé aux admins. */
+    if (!current_user_can('manage_options') && !lfi_nct_user_role_ga()) return;
     global $wpdb;
 
     $tenants = get_users([
@@ -787,8 +790,12 @@ function lfi_nct_app_view_carte() {
  *  ADMIN : Stats de l'enquête (problèmes, adresses, gravité)       *
  * ============================================================== */
 
+function lfi_nct_app_view_stats_enquete_helper_stub() {} /* no-op marker, kept for compat */
+
 function lfi_nct_app_view_stats_enquete() {
-    if (!current_user_can('manage_options')) return;
+    /* Stats accessibles aussi aux membres GA — ils ont besoin de voir ce
+       qu\'ils ont récolté pour piloter leur action politique. */
+    if (!current_user_can('manage_options') && !lfi_nct_user_role_ga()) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 

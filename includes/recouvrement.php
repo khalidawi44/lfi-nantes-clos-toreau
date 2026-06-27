@@ -26,7 +26,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_REC_DBVER_KEY = 'lfi_nct_rec_db_ver';
-const LFI_NCT_REC_DBVER_VAL = '1';
+const LFI_NCT_REC_DBVER_VAL = '2';
 
 /* ============================================================== *
  *  DB Setup                                                        *
@@ -41,6 +41,7 @@ function lfi_nct_recouvrement_db_setup() {
     $t = $wpdb->prefix . 'lfi_nct_recouvrements';
     dbDelta("CREATE TABLE $t (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        owner_user_id BIGINT UNSIGNED DEFAULT NULL,
         facture_numero VARCHAR(40) DEFAULT '',
         intervention_id BIGINT UNSIGNED DEFAULT NULL,
         statut VARCHAR(20) DEFAULT 'nouveau',
@@ -57,8 +58,15 @@ function lfi_nct_recouvrement_db_setup() {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         UNIQUE KEY facture_numero (facture_numero),
+        KEY owner_user_id (owner_user_id),
         KEY statut (statut)
     ) $charset;");
+
+    /* Migration : attribue les anciens recouvrements au premier admin */
+    $admins = get_users(['role' => 'administrator', 'fields' => ['ID'], 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC']);
+    if (!empty($admins)) {
+        $wpdb->query("UPDATE $t SET owner_user_id = " . (int) $admins[0]->ID . " WHERE owner_user_id IS NULL");
+    }
 
     update_option(LFI_NCT_REC_DBVER_KEY, LFI_NCT_REC_DBVER_VAL, false);
 }
@@ -219,42 +227,46 @@ function lfi_nct_rec_format_date($d) {
     return wp_date('j F Y', strtotime($d));
 }
 
-/* Retourne le recouvrement associé à une facture, ou null */
+/* Retourne le recouvrement associé à une facture du user courant, ou null */
 function lfi_nct_rec_get_by_facture($numero) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_recouvrements';
-    return $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s", $numero));
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
+    return $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s AND owner_user_id = %d", $numero, $owner));
 }
 
-/* Retourne toutes les interventions liées à une facture */
+/* Retourne les interventions liées à une facture du user courant */
 function lfi_nct_rec_interventions_by_facture($numero) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
-    return $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s ORDER BY date_intervention", $numero)) ?: [];
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
+    return $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s AND owner_user_id = %d ORDER BY date_intervention", $numero, $owner)) ?: [];
 }
 
 /* ============================================================== *
  *  VUE : Tableau de bord recouvrements                              *
  * ============================================================== */
 function lfi_nct_app_view_recouvrements() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
 
-    $rows = $wpdb->get_results("SELECT * FROM $tr ORDER BY updated_at DESC LIMIT 200") ?: [];
+    $owner = (int) lfi_nct_fact_owner_id();
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE owner_user_id = %d ORDER BY updated_at DESC LIMIT 200", $owner)) ?: [];
 
-    /* Factures impayées sans recouvrement encore ouvert */
-    $impayes = $wpdb->get_results("
+    /* Factures impayées sans recouvrement encore ouvert — bornées au user */
+    $impayes = $wpdb->get_results($wpdb->prepare("
         SELECT facture_numero, MIN(facture_date) AS facture_date, SUM(total_ht) AS total_ht,
                GROUP_CONCAT(DISTINCT tenant_nom SEPARATOR ', ') AS noms
         FROM $ti
-        WHERE statut = 'facture'
+        WHERE owner_user_id = %d
+          AND statut = 'facture'
           AND facture_numero IS NOT NULL
-          AND facture_numero NOT IN (SELECT facture_numero FROM $tr WHERE statut != 'paye')
+          AND facture_numero NOT IN (SELECT facture_numero FROM $tr WHERE owner_user_id = %d AND statut != 'paye')
         GROUP BY facture_numero
         ORDER BY facture_date
-    ") ?: [];
+    ", $owner, $owner)) ?: [];
 
     lfi_nct_app_screen_open('⚖️ Recouvrement NMH', 'Forcer le bailleur à payer — chaîne juridique automatisée');
 
@@ -331,6 +343,7 @@ function lfi_nct_app_view_recouvrements() {
         $montant = (float) ($_POST['montant'] ?? 0);
         if ($num && !lfi_nct_rec_get_by_facture($num)) {
             $wpdb->insert($tr, [
+                'owner_user_id'  => $owner,
                 'facture_numero' => $num,
                 'statut'         => 'nouveau',
                 'montant_initial'=> $montant,
@@ -387,11 +400,13 @@ function lfi_nct_app_view_recouvrements() {
  *  VUE : Dossier d'un recouvrement (timeline + actions)             *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_dossier() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
+    $owner = (int) lfi_nct_fact_owner_id();
     $id = (int) ($_GET['id'] ?? 0);
-    $rec = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d", $id)) : null;
+    /* Borne owner — un GA ne peut PAS voir le dossier d'un autre */
+    $rec = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d AND owner_user_id = %d", $id, $owner)) : null;
     if (!$rec) {
         lfi_nct_app_screen_open('Dossier introuvable');
         echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('recouvrements')) . '">← Retour</a></div>';
@@ -405,17 +420,17 @@ function lfi_nct_app_view_recouvrement_dossier() {
             $wpdb->update($tr, [
                 $etape . '_date' => current_time('Y-m-d'),
                 'statut' => $etape,
-            ], ['id' => $rec->id]);
+            ], ['id' => $rec->id, 'owner_user_id' => $owner]);
             wp_safe_redirect(lfi_nct_app_url('recouvrement-dossier', ['id' => $rec->id, 'step' => $etape]));
             exit;
         }
     }
     if (!empty($_POST['lfi_rec_paye']) && check_admin_referer('lfi_rec_paye')) {
-        $wpdb->update($tr, ['statut' => 'paye', 'paye_date' => current_time('Y-m-d')], ['id' => $rec->id]);
-        /* Met aussi la facture en payée dans le tableau interventions */
+        $wpdb->update($tr, ['statut' => 'paye', 'paye_date' => current_time('Y-m-d')], ['id' => $rec->id, 'owner_user_id' => $owner]);
+        /* Met aussi la facture en payée — borné owner */
         $wpdb->update($wpdb->prefix . 'lfi_nct_interventions',
             ['statut' => 'paye', 'paye_date' => current_time('Y-m-d')],
-            ['facture_numero' => $rec->facture_numero]
+            ['facture_numero' => $rec->facture_numero, 'owner_user_id' => $owner]
         );
         wp_safe_redirect(lfi_nct_app_url('recouvrement-dossier', ['id' => $rec->id, 'paid' => 1]));
         exit;
@@ -426,11 +441,11 @@ function lfi_nct_app_view_recouvrement_dossier() {
         $wpdb->update($tr, [
             'motif_urgence' => sanitize_textarea_field(wp_unslash($_POST['motif_urgence'] ?? '')),
             'notes'         => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
-        ], ['id' => $rec->id]);
+        ], ['id' => $rec->id, 'owner_user_id' => $owner]);
         wp_safe_redirect(lfi_nct_app_url('recouvrement-dossier', ['id' => $rec->id, 'saved' => 1]));
         exit;
     }
-    $rec = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d", $id)); // refresh
+    $rec = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d AND owner_user_id = %d", $id, $owner)); // refresh
 
     $interventions = lfi_nct_rec_interventions_by_facture($rec->facture_numero);
     $facture_date = !empty($interventions) ? $interventions[0]->facture_date : null;
@@ -585,7 +600,8 @@ function lfi_nct_rec_doc_open($titre_doc) {
     $rid = (int) ($_GET['id'] ?? 0);
     if (!$rid) wp_die('Dossier manquant');
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
-    $rec = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d", $rid));
+    $owner = (int) lfi_nct_fact_owner_id();
+    $rec = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tr WHERE id = %d AND owner_user_id = %d", $rid, $owner));
     if (!$rec) wp_die('Dossier introuvable');
 
     $presta = lfi_nct_fact_prestataire();
@@ -685,7 +701,7 @@ function lfi_nct_rec_doc_header($presta, $bailleur, $lrar = true) {
  *  Fabrice peut réclamer remboursement à NMH au nom du locataire.   *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_mandat() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('✍️ Mandat du locataire');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -807,7 +823,7 @@ function lfi_nct_app_view_recouvrement_doc_mandat() {
  *  DOC 1 : Mise en demeure initiale (15 jours)                      *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_med1() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('📨 Mise en demeure');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -877,7 +893,7 @@ function lfi_nct_app_view_recouvrement_doc_med1() {
  *  DOC 2 : Mise en demeure de relance (avec pénalités calculées)    *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_med2() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('📨 Mise en demeure — Relance');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -932,7 +948,7 @@ function lfi_nct_app_view_recouvrement_doc_med2() {
  *  DOC 3 : Saisine CDC (Commission Départementale de Conciliation) *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_cdc() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('⚖️ Saisine Commission de Conciliation');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1056,7 +1072,7 @@ function lfi_nct_app_view_recouvrement_doc_cdc() {
  *  DOC 4 : Assignation Tribunal Judiciaire                          *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_tj() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('🏛 Requête Tribunal Judiciaire');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1166,7 +1182,7 @@ function lfi_nct_app_view_recouvrement_doc_tj() {
  *  DOC 5 : Plainte SCHS / ARS pour insalubrité                      *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_schs() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('🏥 Plainte SCHS / ARS');
     extract($ctx);
     lfi_nct_rec_doc_styles();

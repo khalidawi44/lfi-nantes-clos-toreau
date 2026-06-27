@@ -282,6 +282,28 @@ function lfi_nct_user_tenant_response_id($user_id = 0) {
 }
 
 /* ============================================================== *
+ *  Brigade travaux : autorisée pour Admin + Membres GA            *
+ *                                                                  *
+ *  Chaque utilisateur a SES PROPRES factures, son IBAN, son        *
+ *  compteur, ses clients. Aucun mélange entre comptes. Toutes les  *
+ *  données sont rattachées à owner_user_id en base et stockées en  *
+ *  user_meta côté paramètres.                                       *
+ * ============================================================== */
+function lfi_nct_can_use_brigade() {
+    return current_user_can('manage_options') || lfi_nct_user_role_ga();
+}
+
+/* Owner ID effectif pour les requêtes brigade.
+   En mode aperçu admin (cookie de preview), respecte le user prévisualisé. */
+function lfi_nct_brigade_owner_id() {
+    if (current_user_can('manage_options')) {
+        $puid = function_exists('lfi_nct_app_preview_uid_from_cookie') ? lfi_nct_app_preview_uid_from_cookie() : 0;
+        if ($puid) return (int) $puid;
+    }
+    return (int) get_current_user_id();
+}
+
+/* ============================================================== *
  *  Bloque wp-admin pour les non-admins : redirection vers /app/   *
  * ============================================================== */
 add_action('admin_init', 'lfi_nct_block_admin_for_non_admins', 1);
@@ -600,6 +622,41 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'stats':           lfi_nct_app_view_stats();      break;
             case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
             case 'installer':       lfi_nct_app_view_installer();  break;
+
+            /* Lecture des enquêtes terrain (responsables GA) */
+            case 'dossiers':        lfi_nct_app_view_dossiers();        break;
+            case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
+
+            /* Brigade travaux — chaque membre a ses propres interventions,
+               factures, recouvrements (filtrage strict par owner_user_id). */
+            case 'brigade-intro':           lfi_nct_app_view_brigade_intro_ga();             break;
+            case 'interventions':           lfi_nct_app_view_interventions();                break;
+            case 'intervention-add':        lfi_nct_app_view_intervention_add();             break;
+            case 'intervention-edit':       lfi_nct_app_view_intervention_edit();            break;
+            case 'facture':                 lfi_nct_app_view_facture();                      break;
+            case 'facturation-params':      lfi_nct_app_view_facturation_params();           break;
+            case 'recouvrements':           lfi_nct_app_view_recouvrements();                break;
+            case 'recouvrement-dossier':    lfi_nct_app_view_recouvrement_dossier();         break;
+            case 'recouvrement-doc-mandat': lfi_nct_app_view_recouvrement_doc_mandat();      break;
+            case 'recouvrement-doc-med1':   lfi_nct_app_view_recouvrement_doc_med1();        break;
+            case 'recouvrement-doc-med2':   lfi_nct_app_view_recouvrement_doc_med2();        break;
+            case 'recouvrement-doc-cdc':    lfi_nct_app_view_recouvrement_doc_cdc();         break;
+            case 'recouvrement-doc-tj':     lfi_nct_app_view_recouvrement_doc_tj();          break;
+            case 'recouvrement-doc-schs':   lfi_nct_app_view_recouvrement_doc_schs();        break;
+            case 'tutoriels':               lfi_nct_app_view_tutoriels();                    break;
+            case 'tutoriel':                lfi_nct_app_view_tutoriel();                     break;
+            case 'agenda':                  lfi_nct_app_view_agenda();                       break;
+            case 'rdv-add':                 lfi_nct_app_view_rdv_add();                      break;
+            case 'rdv-edit':                lfi_nct_app_view_rdv_edit();                     break;
+            case 'outils':                  lfi_nct_app_view_outils();                       break;
+            case 'outil-sonometre':         lfi_nct_app_view_outil_sonometre();              break;
+            case 'outil-niveau':            lfi_nct_app_view_outil_niveau();                 break;
+            case 'outil-boussole':          lfi_nct_app_view_outil_boussole();               break;
+            case 'outil-gps':               lfi_nct_app_view_outil_gps();                    break;
+            case 'outil-photo-preuve':     lfi_nct_app_view_outil_photo_preuve();           break;
+            case 'outil-humidite':          lfi_nct_app_view_outil_humidite();               break;
+            case 'outil-regle':             lfi_nct_app_view_outil_regle();                  break;
+
             default:                lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
@@ -612,8 +669,19 @@ function lfi_nct_app_role_dispatch(&$handled) {
  *  Dashboard Membre du GA (rôle restreint)                         *
  * ============================================================== */
 function lfi_nct_app_view_ga_dashboard() {
+    global $wpdb;
     $user = wp_get_current_user();
     $stats = lfi_nct_app_quick_stats();
+
+    /* Compte des interventions et factures impayées pour CE membre */
+    $owner_id = (int) get_current_user_id();
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $my_interv = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $ti WHERE owner_user_id = %d", $owner_id));
+    $my_facture = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(DISTINCT facture_numero) FROM $ti WHERE owner_user_id = %d AND statut = 'facture'", $owner_id));
+
+    /* Premier accès à la brigade : afficher la tuile d'intro en évidence */
+    $brigade_seen = (bool) get_user_meta($owner_id, 'lfi_nct_brigade_intro_seen', true);
+
     $tiles = [
         ['📲', 'Installer l\'app',          'iPhone / Android · permissions',      lfi_nct_app_url('installer')],
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
@@ -621,7 +689,23 @@ function lfi_nct_app_view_ga_dashboard() {
         ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS aux adhérents', 'Modèles + envoi',                     lfi_nct_app_url('sms')],
         ['✉️', 'Email aux adhérents',       'Diffusion ciblée',                    lfi_nct_app_url('email')],
+        ['🗂', 'Réponses enquêtes',         'Ce qu\'on a récolté sur le terrain',  lfi_nct_app_url('dossiers')],
+        ['📈', 'Stats enquêtes',            'Problèmes + cartes + adresses',       lfi_nct_app_url('stats-enquete')],
         ['📊', 'Statistiques',              'Vue d\'ensemble',                     lfi_nct_app_url('stats')],
+    ];
+
+    /* === Section BRIGADE TRAVAUX (per-user, jamais mélangée) === */
+    $brigade_tiles = [
+        ['🚀', 'Comment ça marche',         'Guide en 1 minute · à lire en 1er',   lfi_nct_app_url('brigade-intro')],
+        ['🔧', 'Mes interventions',         $my_interv . ' interv. · ' . $my_facture . ' facturée(s)', lfi_nct_app_url('interventions')],
+        ['⚖️', 'Mes recouvrements NMH',     'Mandat, mise en demeure, tribunal',   lfi_nct_app_url('recouvrements')],
+        ['🛠', 'Tutoriels brigade',         'Plâtre, peinture, plomberie…',        lfi_nct_app_url('tutoriels')],
+        ['🔬', 'Outils scientifiques',      'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
+        ['📅', 'Mon agenda perso',          'RDV, interventions, perso',           lfi_nct_app_url('agenda')],
+        ['⚙️', 'Mes paramètres facture',    'Mon IBAN, mon SIRET, mon tarif',      lfi_nct_app_url('facturation-params')],
+    ];
+
+    $bottom_tiles = [
         ['✏️', 'Mon profil',                'Email · mot de passe',                lfi_nct_app_url('mon-profil')],
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
@@ -636,9 +720,18 @@ function lfi_nct_app_view_ga_dashboard() {
         </div>
 
         <div class="lfi-app-help" style="margin:0 0 14px">
-            👋 Tu es connecté·e comme membre du GA. Tu peux gérer les événements et écrire aux adhérents, mais pas accéder aux contacts des locataires (réservés aux admins, RGPD).
+            👋 Tu es connecté·e comme membre du GA. Tu peux gérer les événements, écrire aux adhérents, et lancer tes propres interventions brigade. Les contacts des locataires détaillés restent réservés aux admins (RGPD).
         </div>
 
+        <?php if (!$brigade_seen): ?>
+        <div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;padding:14px 18px;border-radius:12px;margin:0 0 16px;box-shadow:0 2px 6px rgba(0,0,0,.1)">
+            <div style="font-size:1.1em;font-weight:800;margin-bottom:4px">🚀 Nouveau : tu peux faire de la brigade travaux comme Fabrice</div>
+            <div style="font-size:.9em;opacity:.9;margin-bottom:10px">Intervenir chez les locataires, facturer, te faire rembourser par NMH. Lis le guide d'1 minute pour démarrer.</div>
+            <a href="<?php echo esc_url(lfi_nct_app_url('brigade-intro')); ?>" style="background:#fff;color:#c8102e;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">👉 Lire le guide (1 min)</a>
+        </div>
+        <?php endif; ?>
+
+        <h3 style="margin:18px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📣 Action politique</h3>
         <div class="lfi-app-grid">
             <?php foreach ($tiles as $t): ?>
                 <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
@@ -648,8 +741,81 @@ function lfi_nct_app_view_ga_dashboard() {
                 </a>
             <?php endforeach; ?>
         </div>
+
+        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">🔧 Ma brigade travaux <span style="background:#186a3b;color:#fff;font-size:.7em;padding:2px 6px;border-radius:4px;margin-left:6px">PRIVÉ — non partagé</span></h3>
+        <div class="lfi-app-grid">
+            <?php foreach ($brigade_tiles as $t): ?>
+                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+                    <div class="ico"><?php echo $t[0]; ?></div>
+                    <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                    <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
+
+        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>
+        <div class="lfi-app-grid">
+            <?php foreach ($bottom_tiles as $t): ?>
+                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+                    <div class="ico"><?php echo $t[0]; ?></div>
+                    <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                    <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
     </div>
     <?php
+}
+
+/* ============================================================== *
+ *  ÉCRAN ONBOARDING — comment utiliser la brigade (membres GA)    *
+ * ============================================================== */
+function lfi_nct_app_view_brigade_intro_ga() {
+    if (!lfi_nct_can_use_brigade()) return;
+
+    /* Marque l'intro comme vue pour ne plus afficher le bandeau d'accueil */
+    update_user_meta((int) get_current_user_id(), 'lfi_nct_brigade_intro_seen', 1);
+
+    lfi_nct_app_screen_open('🚀 Brigade travaux — comment ça marche', 'Le guide d\'1 minute pour bien démarrer');
+
+    echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b;font-size:.95em;line-height:1.5">';
+    echo '🔒 <strong>Ton activité brigade est strictement privée.</strong> Tes interventions, tes clients, ton IBAN, ton tarif, ton compteur de facture — personne d\'autre dans le GA n\'y a accès. Tes factures sont numérotées dans TA série (avec tes initiales).';
+    echo '</div>';
+
+    $steps = [
+        ['1', '⚙️ Configurer tes paramètres', 'Avant tout : renseigne ton nom, ton IBAN, ton tarif horaire. Le SIRET est facultatif si tu n\'es pas encore déclaré·e auto-entrepreneur — tu peux compléter plus tard.', 'facturation-params', 'Configurer mes paramètres'],
+        ['2', '🛠 Apprendre les gestes',     'Plus de 20 tutos pratiques : faire son plâtre, reboucher un trou, refaire un joint silicone, déboucher un évier, peindre un mur… Plus les guides pro pour moisissures, punaises, etc.', 'tutoriels', 'Voir les tutoriels'],
+        ['3', '🔧 Créer une intervention',   'Quand un locataire t\'appelle pour un truc urgent : crée la fiche d\'intervention. Choisis le TYPE EXACT dans la liste classifiée (bailleur / locataire). L\'app te dit en direct si c\'est facturable à NMH ou pas.', 'intervention-add', 'Nouvelle intervention'],
+        ['4', '🧾 Émettre la facture',      'Quand l\'intervention est faite : passe-la en « réalisée » et coche-la pour générer une facture. Numérotation auto dans TA série. Imprimable / PDF en 1 clic.', 'interventions', 'Mes interventions'],
+        ['5', '⚖️ Recouvrement si NMH refuse', 'Si NMH ne paye pas : ouvre un dossier de recouvrement. L\'app génère pour toi mandat du locataire, mise en demeure, saisine CDC, requête au Tribunal Judiciaire — daté et signé.', 'recouvrements', 'Voir les recouvrements'],
+    ];
+
+    echo '<ol style="list-style:none;padding:0;margin:18px 0">';
+    foreach ($steps as $s) {
+        echo '<li style="background:#fff;border-radius:12px;padding:18px;margin:0 0 12px;border-left:4px solid #c8102e;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;gap:14px;align-items:flex-start">';
+        echo '<div style="background:#c8102e;color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1em;flex-shrink:0">' . esc_html($s[0]) . '</div>';
+        echo '<div style="flex:1">';
+        echo '<div style="font-size:1.05em;font-weight:700;color:#1a1a1a;margin-bottom:4px">' . esc_html($s[1]) . '</div>';
+        echo '<div style="font-size:.92em;color:#444;line-height:1.5;margin-bottom:10px">' . esc_html($s[2]) . '</div>';
+        echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url($s[3])) . '">👉 ' . esc_html($s[4]) . '</a>';
+        echo '</div>';
+        echo '</li>';
+    }
+    echo '</ol>';
+
+    echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600;margin-top:18px">';
+    echo '<strong>⚠ Règle d\'or — ne te plante pas.</strong><br><br>';
+    echo 'Quand tu crées une intervention, l\'app affiche un bandeau coloré selon ce que tu fais :<br><br>';
+    echo '<div style="background:#e8f5ea;border-left:4px solid #186a3b;padding:8px 12px;margin:6px 0;border-radius:4px">✅ <strong>VERT</strong> : travaux à la charge bailleur (moisissures structurelles, VMC HS, plomberie encastrée, etc.). Tu peux facturer NMH les yeux fermés.</div>';
+    echo '<div style="background:#fff8e6;border-left:4px solid #bd8600;padding:8px 12px;margin:6px 0;border-radius:4px">⚠ <strong>JAUNE</strong> : appréciation du juge. Tu peux essayer mais documente bien (photos, signalements préalables du locataire à NMH).</div>';
+    echo '<div style="background:#fff3f5;border-left:4px solid #a30b25;padding:8px 12px;margin:6px 0;border-radius:4px">🚫 <strong>ROUGE</strong> : réparation locative (décret 87-712). NE PAS facturer NMH, ils refuseront. Tu peux facturer au locataire directement.</div>';
+    echo '</div>';
+
+    echo '<div style="margin-top:20px;text-align:center">';
+    echo '<a class="btn-primary big" href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">🚀 Je commence par mes paramètres</a>';
+    echo '</div>';
+
+    lfi_nct_app_screen_close();
 }
 
 /* ============================================================== *

@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_FACT_DBVER_KEY = 'lfi_nct_fact_db_ver';
-const LFI_NCT_FACT_DBVER_VAL = '2';
+const LFI_NCT_FACT_DBVER_VAL = '3';
 
 /* ============================================================== *
  *  DB Setup + paramètres par défaut                                *
@@ -31,6 +31,7 @@ function lfi_nct_facturation_db_setup() {
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     dbDelta("CREATE TABLE $t (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        owner_user_id BIGINT UNSIGNED DEFAULT NULL,
         tenant_user_id BIGINT UNSIGNED DEFAULT NULL,
         tenant_prenom VARCHAR(120) DEFAULT '',
         tenant_nom VARCHAR(120) DEFAULT '',
@@ -56,71 +57,122 @@ function lfi_nct_facturation_db_setup() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
+        KEY owner_user_id (owner_user_id),
         KEY tenant_user_id (tenant_user_id),
         KEY statut (statut),
         KEY date_intervention (date_intervention),
         KEY facture_numero (facture_numero)
     ) $charset;");
 
-    /* Paramètres par défaut (à compléter par l'admin) */
-    if (!get_option('lfi_nct_fact_prestataire')) {
-        update_option('lfi_nct_fact_prestataire', [
-            'nom'         => 'Fabrice Doucet',
-            'adresse'     => '',
-            'cp_ville'    => '',
-            'siret'       => '',
-            'ape'         => '',
-            'email'       => '',
-            'tel'         => '',
-            'iban'        => '',
-            'bic'         => '',
-            'mention_tva' => 'TVA non applicable, art. 293 B du CGI',
-        ], false);
-    }
-    if (!get_option('lfi_nct_fact_bailleur')) {
-        update_option('lfi_nct_fact_bailleur', [
-            'nom'      => 'Nantes Métropole Habitat',
-            'adresse'  => '',
-            'cp_ville' => '',
-            'siret'    => '',
-            'email'    => '',
-        ], false);
-    }
-    if (!get_option('lfi_nct_fact_tarif_defaut')) {
-        update_option('lfi_nct_fact_tarif_defaut', 40.00, false);
-    }
-    if (!get_option('lfi_nct_fact_invoice_prefix')) {
-        update_option('lfi_nct_fact_invoice_prefix', 'FA-' . date('Y') . '-', false);
-    }
-    if (get_option('lfi_nct_fact_invoice_counter') === false) {
-        update_option('lfi_nct_fact_invoice_counter', 0, false);
-    }
-    if (!get_option('lfi_nct_fact_delai_paiement')) {
-        update_option('lfi_nct_fact_delai_paiement', 30, false); // jours
+    /* Migration : les interventions existantes sans owner sont attribuées
+       au premier admin (compte historique de Fabrice). */
+    $admins = get_users(['role' => 'administrator', 'fields' => ['ID'], 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC']);
+    if (!empty($admins)) {
+        $admin_id = (int) $admins[0]->ID;
+        $wpdb->query("UPDATE $t SET owner_user_id = $admin_id WHERE owner_user_id IS NULL");
+
+        /* Migration : si des paramètres globaux existaient (v1/v2), on les
+           bascule vers les user_meta du premier admin pour ne rien perdre. */
+        $g_presta = get_option('lfi_nct_fact_prestataire');
+        if (is_array($g_presta) && !empty($g_presta['nom']) && !get_user_meta($admin_id, 'lfi_nct_fact_prestataire', true)) {
+            update_user_meta($admin_id, 'lfi_nct_fact_prestataire', $g_presta);
+        }
+        $g_bailleur = get_option('lfi_nct_fact_bailleur');
+        if (is_array($g_bailleur) && !get_user_meta($admin_id, 'lfi_nct_fact_bailleur', true)) {
+            update_user_meta($admin_id, 'lfi_nct_fact_bailleur', $g_bailleur);
+        }
+        foreach (['tarif_defaut', 'invoice_prefix', 'invoice_counter', 'delai_paiement'] as $k) {
+            $val = get_option('lfi_nct_fact_' . $k);
+            if ($val !== false && get_user_meta($admin_id, 'lfi_nct_fact_' . $k, true) === '') {
+                update_user_meta($admin_id, 'lfi_nct_fact_' . $k, $val);
+            }
+        }
     }
 
     update_option(LFI_NCT_FACT_DBVER_KEY, LFI_NCT_FACT_DBVER_VAL, false);
 }
 
 /* ============================================================== *
- *  Helpers                                                          *
+ *  Helpers PER-USER — chaque membre a SES propres paramètres        *
+ *                                                                   *
+ *  Stockage en user_meta, jamais en options globales. Aucun         *
+ *  mélange possible entre Fabrice, les membres du GA, etc.          *
  * ============================================================== */
-function lfi_nct_fact_prestataire() { return (array) get_option('lfi_nct_fact_prestataire', []); }
-function lfi_nct_fact_bailleur()    { return (array) get_option('lfi_nct_fact_bailleur', []); }
-function lfi_nct_fact_tarif_defaut(){ return (float) get_option('lfi_nct_fact_tarif_defaut', 40.00); }
-function lfi_nct_fact_delai()       { return (int)   get_option('lfi_nct_fact_delai_paiement', 30); }
+function lfi_nct_fact_owner_id($uid = null) {
+    if ($uid) return (int) $uid;
+    return function_exists('lfi_nct_brigade_owner_id') ? lfi_nct_brigade_owner_id() : (int) get_current_user_id();
+}
 
-function lfi_nct_fact_next_invoice_number() {
-    /* Compteur inviolable + préfixe annuel.
-       Reset auto au passage d'année (si l'utilisateur a configuré FA-AAAA-). */
-    $prefix = (string) get_option('lfi_nct_fact_invoice_prefix', 'FA-' . date('Y') . '-');
-    if (preg_match('/^(FA-)(\d{4})-$/', $prefix, $m) && (int) $m[2] !== (int) date('Y')) {
-        $prefix = 'FA-' . date('Y') . '-';
-        update_option('lfi_nct_fact_invoice_prefix', $prefix, false);
-        update_option('lfi_nct_fact_invoice_counter', 0, false);
+function lfi_nct_fact_prestataire($uid = null) {
+    $uid = lfi_nct_fact_owner_id($uid);
+    $data = $uid ? get_user_meta($uid, 'lfi_nct_fact_prestataire', true) : '';
+    if (is_array($data) && !empty($data)) return $data;
+    $u = $uid ? get_userdata($uid) : null;
+    return [
+        'nom'         => $u ? trim($u->first_name . ' ' . $u->last_name) ?: $u->display_name : '',
+        'adresse'     => '',
+        'cp_ville'    => '',
+        'siret'       => '',
+        'ape'         => '',
+        'email'       => $u ? $u->user_email : '',
+        'tel'         => '',
+        'iban'        => '',
+        'bic'         => '',
+        'mention_tva' => 'TVA non applicable, art. 293 B du CGI',
+    ];
+}
+
+function lfi_nct_fact_bailleur($uid = null) {
+    $uid = lfi_nct_fact_owner_id($uid);
+    $data = $uid ? get_user_meta($uid, 'lfi_nct_fact_bailleur', true) : '';
+    if (is_array($data) && !empty($data)) return $data;
+    return [
+        'nom'      => 'Nantes Métropole Habitat',
+        'adresse'  => '8 rue de la Tour d\'Auvergne',
+        'cp_ville' => '44000 Nantes',
+        'siret'    => '',
+        'email'    => '',
+    ];
+}
+
+function lfi_nct_fact_tarif_defaut($uid = null) {
+    $uid = lfi_nct_fact_owner_id($uid);
+    $val = $uid ? get_user_meta($uid, 'lfi_nct_fact_tarif_defaut', true) : '';
+    return (float) ($val !== '' ? $val : 40.00);
+}
+
+function lfi_nct_fact_delai($uid = null) {
+    $uid = lfi_nct_fact_owner_id($uid);
+    $val = $uid ? get_user_meta($uid, 'lfi_nct_fact_delai_paiement', true) : '';
+    return (int) ($val !== '' ? $val : 30);
+}
+
+function lfi_nct_fact_invoice_prefix_default($uid) {
+    $u = $uid ? get_userdata($uid) : null;
+    $initials = '';
+    if ($u) {
+        $initials = strtoupper(substr($u->first_name ?: $u->display_name, 0, 1) . substr($u->last_name, 0, 1));
+        if (strlen($initials) < 2) $initials = strtoupper(substr($u->user_login, 0, 2));
     }
-    $counter = (int) get_option('lfi_nct_fact_invoice_counter', 0) + 1;
-    update_option('lfi_nct_fact_invoice_counter', $counter, false);
+    return 'FA-' . ($initials ?: 'XX') . '-' . date('Y') . '-';
+}
+
+function lfi_nct_fact_next_invoice_number($uid = null) {
+    $uid = lfi_nct_fact_owner_id($uid);
+    if (!$uid) return 'FA-' . date('Y') . '-' . str_pad('1', 4, '0', STR_PAD_LEFT);
+
+    $prefix = (string) get_user_meta($uid, 'lfi_nct_fact_invoice_prefix', true);
+    if (!$prefix) $prefix = lfi_nct_fact_invoice_prefix_default($uid);
+
+    /* Reset annuel automatique sur tout préfixe contenant -AAAA- */
+    if (preg_match('/^(.+?-)(\d{4})(-)$/', $prefix, $m) && (int) $m[2] !== (int) date('Y')) {
+        $prefix = $m[1] . date('Y') . '-';
+        update_user_meta($uid, 'lfi_nct_fact_invoice_prefix', $prefix);
+        update_user_meta($uid, 'lfi_nct_fact_invoice_counter', 0);
+    }
+
+    $counter = (int) get_user_meta($uid, 'lfi_nct_fact_invoice_counter', true) + 1;
+    update_user_meta($uid, 'lfi_nct_fact_invoice_counter', $counter);
     return $prefix . str_pad((string) $counter, 4, '0', STR_PAD_LEFT);
 }
 
@@ -136,25 +188,33 @@ function lfi_nct_fact_recalc_total($duree, $tarif, $materiaux) {
  *  VUE : Liste des interventions                                   *
  * ============================================================== */
 function lfi_nct_app_view_interventions() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
+    $owner = (int) lfi_nct_fact_owner_id();
+    $owner_clause = $wpdb->prepare('owner_user_id = %d', $owner);
 
     /* Action : génération de facture pour une intervention */
     if (!empty($_POST['lfi_app_fact_create']) && check_admin_referer('lfi_app_fact_create')) {
         $ids = array_filter(array_map('intval', (array) ($_POST['ids'] ?? [])));
         if ($ids) {
-            $num = lfi_nct_fact_next_invoice_number();
-            $today = current_time('Y-m-d');
-            foreach ($ids as $id) {
-                $wpdb->update($t, [
-                    'statut'         => 'facture',
-                    'facture_numero' => $num,
-                    'facture_date'   => $today,
-                ], ['id' => $id]);
+            /* Sécurité : on ne facture QUE ses propres interventions */
+            $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+            $args = array_merge($ids, [$owner]);
+            $own_ids = $wpdb->get_col($wpdb->prepare("SELECT id FROM $t WHERE id IN ($placeholders) AND owner_user_id = %d", ...$args));
+            if (!empty($own_ids)) {
+                $num = lfi_nct_fact_next_invoice_number();
+                $today = current_time('Y-m-d');
+                foreach ($own_ids as $id) {
+                    $wpdb->update($t, [
+                        'statut'         => 'facture',
+                        'facture_numero' => $num,
+                        'facture_date'   => $today,
+                    ], ['id' => (int) $id, 'owner_user_id' => $owner]);
+                }
+                wp_safe_redirect(lfi_nct_app_url('facture', ['numero' => $num]));
+                exit;
             }
-            wp_safe_redirect(lfi_nct_app_url('facture', ['numero' => $num]));
-            exit;
         }
     }
 
@@ -162,27 +222,27 @@ function lfi_nct_app_view_interventions() {
     if (!empty($_POST['lfi_app_fact_paye']) && check_admin_referer('lfi_app_fact_paye')) {
         $num = sanitize_text_field(wp_unslash($_POST['numero'] ?? ''));
         if ($num) {
-            $wpdb->update($t, ['statut' => 'paye', 'paye_date' => current_time('Y-m-d')], ['facture_numero' => $num]);
+            $wpdb->update($t, ['statut' => 'paye', 'paye_date' => current_time('Y-m-d')], ['facture_numero' => $num, 'owner_user_id' => $owner]);
             wp_safe_redirect(lfi_nct_app_url('interventions', ['paye' => 1]));
             exit;
         }
     }
 
-    /* Filtre statut */
+    /* Filtre statut — TOUJOURS borné à owner_user_id */
     $f = isset($_GET['f']) ? sanitize_key($_GET['f']) : 'all';
-    $where = $f === 'all' ? '1=1' : $wpdb->prepare('statut = %s', $f);
-    $rows = $wpdb->get_results("SELECT * FROM $t WHERE $where ORDER BY date_intervention DESC, id DESC LIMIT 200") ?: [];
+    $statut_clause = $f === 'all' ? '1=1' : $wpdb->prepare('statut = %s', $f);
+    $rows = $wpdb->get_results("SELECT * FROM $t WHERE $owner_clause AND $statut_clause ORDER BY date_intervention DESC, id DESC LIMIT 200") ?: [];
 
-    /* Compteurs par statut */
+    /* Compteurs par statut (owner uniquement) */
     $counts = [];
-    foreach ($wpdb->get_results("SELECT statut, COUNT(*) AS n FROM $t GROUP BY statut") ?: [] as $r) {
+    foreach ($wpdb->get_results("SELECT statut, COUNT(*) AS n FROM $t WHERE $owner_clause GROUP BY statut") ?: [] as $r) {
         $counts[$r->statut] = (int) $r->n;
     }
     $totals = $wpdb->get_row("SELECT
         COALESCE(SUM(CASE WHEN statut='facture' THEN total_ht ELSE 0 END), 0) AS a_recouvrer,
         COALESCE(SUM(CASE WHEN statut='paye' THEN total_ht ELSE 0 END), 0) AS encaisse,
         COALESCE(SUM(CASE WHEN statut IN ('realise', 'facture', 'paye') THEN total_ht ELSE 0 END), 0) AS ca_total
-    FROM $t");
+    FROM $t WHERE $owner_clause");
 
     lfi_nct_app_screen_open('🔧 Brigade travaux', count($rows) . ' intervention(s) · CA ' . lfi_nct_fact_format_eur($totals->ca_total ?? 0));
 
@@ -294,15 +354,16 @@ function lfi_nct_app_view_interventions() {
  *  VUE : Ajout / édition d'intervention                            *
  * ============================================================== */
 function lfi_nct_app_view_intervention_add() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_intervention_form(null);
 }
 function lfi_nct_app_view_intervention_edit() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $t = $wpdb->prefix . 'lfi_nct_interventions';
-    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id)) : null;
+    $owner = (int) lfi_nct_fact_owner_id();
+    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d AND owner_user_id = %d", $id, $owner)) : null;
     if (!$row) {
         lfi_nct_app_screen_open('Intervention introuvable');
         echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour à la liste</a></div>';
@@ -361,9 +422,12 @@ function lfi_nct_app_intervention_form($row) {
         }
 
         if ($is_edit) {
-            $wpdb->update($t, $data, ['id' => $row->id]);
+            $owner = (int) lfi_nct_fact_owner_id();
+            $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
             wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $row->id, 'saved' => 1]));
         } else {
+            /* Estampille du créateur = owner immuable */
+            $data['owner_user_id'] = (int) lfi_nct_fact_owner_id();
             $wpdb->insert($t, $data);
             $new_id = (int) $wpdb->insert_id;
             wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $new_id, 'created' => 1]));
@@ -555,7 +619,7 @@ function lfi_nct_app_intervention_form($row) {
  *  VUE : Facture (imprimable / PDF via print)                      *
  * ============================================================== */
 function lfi_nct_app_view_facture() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
 
@@ -567,7 +631,8 @@ function lfi_nct_app_view_facture() {
         return;
     }
 
-    $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s ORDER BY date_intervention ASC", $num)) ?: [];
+    $owner = (int) lfi_nct_fact_owner_id();
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s AND owner_user_id = %d ORDER BY date_intervention ASC", $num, $owner)) ?: [];
     if (empty($rows)) {
         lfi_nct_app_screen_open('Facture ' . $num . ' introuvable');
         echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour</a></div>';
@@ -721,39 +786,47 @@ function lfi_nct_app_view_facture() {
  *  VUE : Paramètres facturation (prestataire + bailleur + tarif)   *
  * ============================================================== */
 function lfi_nct_app_view_facturation_params() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
+
+    $uid = (int) lfi_nct_fact_owner_id();
 
     if (!empty($_POST['lfi_app_fact_params']) && check_admin_referer('lfi_app_fact_params')) {
-        $presta = lfi_nct_fact_prestataire();
+        $presta = lfi_nct_fact_prestataire($uid);
         foreach (['nom', 'adresse', 'cp_ville', 'siret', 'ape', 'email', 'tel', 'iban', 'bic', 'mention_tva'] as $k) {
             $presta[$k] = sanitize_text_field(wp_unslash($_POST['presta_' . $k] ?? ''));
         }
-        update_option('lfi_nct_fact_prestataire', $presta, false);
+        update_user_meta($uid, 'lfi_nct_fact_prestataire', $presta);
 
-        $bailleur = lfi_nct_fact_bailleur();
+        $bailleur = lfi_nct_fact_bailleur($uid);
         foreach (['nom', 'adresse', 'cp_ville', 'siret', 'email'] as $k) {
             $bailleur[$k] = sanitize_text_field(wp_unslash($_POST['bailleur_' . $k] ?? ''));
         }
-        update_option('lfi_nct_fact_bailleur', $bailleur, false);
+        update_user_meta($uid, 'lfi_nct_fact_bailleur', $bailleur);
 
-        update_option('lfi_nct_fact_tarif_defaut', (float) ($_POST['tarif_defaut'] ?? 40.00), false);
-        update_option('lfi_nct_fact_delai_paiement', max(1, (int) ($_POST['delai_paiement'] ?? 30)), false);
-        update_option('lfi_nct_fact_invoice_prefix', sanitize_text_field(wp_unslash($_POST['invoice_prefix'] ?? '')), false);
+        update_user_meta($uid, 'lfi_nct_fact_tarif_defaut', (float) ($_POST['tarif_defaut'] ?? 40.00));
+        update_user_meta($uid, 'lfi_nct_fact_delai_paiement', max(1, (int) ($_POST['delai_paiement'] ?? 30)));
+        $prefix_in = sanitize_text_field(wp_unslash($_POST['invoice_prefix'] ?? ''));
+        if ($prefix_in !== '') update_user_meta($uid, 'lfi_nct_fact_invoice_prefix', $prefix_in);
 
         wp_safe_redirect(lfi_nct_app_url('facturation-params', ['saved' => 1]));
         exit;
     }
 
-    $presta = lfi_nct_fact_prestataire();
-    $bailleur = lfi_nct_fact_bailleur();
-    $tarif = lfi_nct_fact_tarif_defaut();
-    $delai = lfi_nct_fact_delai();
-    $prefix = (string) get_option('lfi_nct_fact_invoice_prefix', 'FA-' . date('Y') . '-');
-    $counter = (int) get_option('lfi_nct_fact_invoice_counter', 0);
+    $presta = lfi_nct_fact_prestataire($uid);
+    $bailleur = lfi_nct_fact_bailleur($uid);
+    $tarif = lfi_nct_fact_tarif_defaut($uid);
+    $delai = lfi_nct_fact_delai($uid);
+    $prefix = (string) get_user_meta($uid, 'lfi_nct_fact_invoice_prefix', true);
+    if (!$prefix) $prefix = lfi_nct_fact_invoice_prefix_default($uid);
+    $counter = (int) get_user_meta($uid, 'lfi_nct_fact_invoice_counter', true);
 
-    lfi_nct_app_screen_open('⚙️ Paramètres facturation', 'Prestataire · bailleur · tarif horaire');
+    lfi_nct_app_screen_open('⚙️ Paramètres facturation', 'TES paramètres — privés, jamais partagés');
 
     if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Paramètres enregistrés.');
+
+    echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">';
+    echo '🔒 <strong>Ces données ne sont visibles QUE par toi.</strong> Ton IBAN, ton SIRET, ton tarif, ton compteur de facture — chacun a les siens. Quand tu crées une facture, elle est numérotée dans TA série (avec tes initiales) et ne se mélange jamais avec celles des autres membres de la brigade.';
+    echo '</div>';
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_fact_params');

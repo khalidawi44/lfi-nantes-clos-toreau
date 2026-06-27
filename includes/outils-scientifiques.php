@@ -26,7 +26,7 @@ if (!defined('ABSPATH')) exit;
  *  Page liste des outils                                            *
  * ============================================================== */
 function lfi_nct_app_view_outils() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
 
     lfi_nct_app_screen_open('🔬 Outils scientifiques', 'Relevés sur le terrain pour les preuves');
 
@@ -60,7 +60,7 @@ function lfi_nct_app_view_outils() {
  *  Sonomètre — Web Audio API, microphone, dB SPL approx            *
  * ============================================================== */
 function lfi_nct_app_view_outil_sonometre() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('🔊 Sonomètre dB', 'Niveau sonore en temps réel');
     echo '<div class="lfi-app-help">Mesure approximative basée sur le microphone. <strong>Précision : ±5 dB</strong>. Pour un constat officiel utiliser un sonomètre classe 1 (300-500 €) ou faire venir un huissier.</div>';
     ?>
@@ -170,7 +170,7 @@ function lfi_nct_app_view_outil_sonometre() {
  *  Niveau / inclinomètre                                            *
  * ============================================================== */
 function lfi_nct_app_view_outil_niveau() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('📐 Niveau & inclinomètre', 'Affaissements, planchers, murs déformés');
     echo '<div class="lfi-app-help">Précision ±0.5°. Pose le téléphone bien à plat ou contre la surface à mesurer.</div>';
     ?>
@@ -224,7 +224,7 @@ function lfi_nct_app_view_outil_niveau() {
  *  Boussole                                                         *
  * ============================================================== */
 function lfi_nct_app_view_outil_boussole() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('🧭 Boussole', 'Orientation logement, exposition');
     ?>
     <div class="lfi-tool-card">
@@ -267,7 +267,7 @@ function lfi_nct_app_view_outil_boussole() {
  *  GPS précis                                                       *
  * ============================================================== */
 function lfi_nct_app_view_outil_gps() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('📍 GPS précis', 'Coordonnées exactes du logement');
     ?>
     <div class="lfi-tool-card">
@@ -317,7 +317,7 @@ function lfi_nct_app_view_outil_gps() {
  *  Photo de preuve (timestamp + GPS overlay)                        *
  * ============================================================== */
 function lfi_nct_app_view_outil_photo_preuve() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('📸 Photo de preuve', 'Horodatée + GPS, prête pour dossier');
     echo '<div class="lfi-app-help">Prends une photo, l\'app y ajoute date + heure + GPS en bandeau pour qu\'elle serve de preuve.</div>';
     ?>
@@ -378,7 +378,7 @@ function lfi_nct_app_view_outil_photo_preuve() {
  *  Carnet humidité (saisie manuelle, log et stat)                  *
  * ============================================================== */
 function lfi_nct_app_view_outil_humidite() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'options';
 
@@ -459,7 +459,7 @@ function lfi_nct_app_view_outil_humidite() {
  *  Règle calibrée (mesure fissures à l'écran)                       *
  * ============================================================== */
 function lfi_nct_app_view_outil_regle() {
-    if (!current_user_can('manage_options')) return;
+    if (!lfi_nct_can_use_brigade()) return;
     lfi_nct_app_screen_open('📏 Règle calibrée', 'Mesure fissures avec carte de crédit comme étalon');
     ?>
     <div class="lfi-tool-card">
