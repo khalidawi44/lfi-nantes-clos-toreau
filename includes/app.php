@@ -290,6 +290,32 @@ function lfi_nct_app_shortcode() {
         return ob_get_clean();
     }
 
+    /* Routes admin du mode aperçu : poser ou retirer le cookie */
+    if ($vue_public === 'preview-set' && function_exists('lfi_nct_app_view_preview_set')) {
+        lfi_nct_app_view_preview_set();
+        return ob_get_clean();
+    }
+    if ($vue_public === 'preview-exit' && function_exists('lfi_nct_app_view_preview_exit')) {
+        lfi_nct_app_view_preview_exit();
+        return ob_get_clean();
+    }
+
+    /* Picker du mode aperçu (admin seulement, sans cookie posé) */
+    if ($vue_public === 'preview' && function_exists('lfi_nct_app_view_preview_picker')) {
+        if (current_user_can('manage_options') && !lfi_nct_app_preview_uid_from_cookie()) {
+            lfi_nct_app_view_preview_picker();
+            lfi_nct_app_render_styles();
+            lfi_nct_app_render_register_sw();
+            return ob_get_clean();
+        }
+    }
+
+    /* Si le cookie de preview est posé et l'admin réel existe, on bascule */
+    $previewed_user = function_exists('lfi_nct_app_preview_apply') ? lfi_nct_app_preview_apply() : null;
+    if ($previewed_user) {
+        lfi_nct_app_render_preview_banner($previewed_user);
+    }
+
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
     } else {
@@ -470,6 +496,10 @@ function lfi_nct_app_render_dashboard() {
 }
 
 function lfi_nct_app_quick_stats() {
+    /* Cache transient 60s : les 4 COUNT(*) tournaient à chaque page load
+       du dashboard, de la barre flottante home, et des deux pages comptes. */
+    $cached = get_transient('lfi_nct_app_quick_stats');
+    if (is_array($cached)) return $cached;
     global $wpdb;
     $reunion = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_reunion_rsvp");
     $surveys = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses");
@@ -478,12 +508,23 @@ function lfi_nct_app_quick_stats() {
         "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN (%s, %s)",
         'ag_evenement', 'lfi_evenement'
     ));
-    return [
+    $stats = [
         'reunion' => max(0, $reunion),
         'surveys' => max(0, $surveys),
         'membres' => max(0, $membres),
         'events'  => max(0, $events),
     ];
+    set_transient('lfi_nct_app_quick_stats', $stats, 60);
+    return $stats;
+}
+
+/* Cache 60s pour count_users() — appel super lourd sur grosses installs */
+function lfi_nct_app_count_users_cached() {
+    $cached = get_transient('lfi_nct_app_count_users');
+    if (is_array($cached)) return $cached;
+    $count = count_users();
+    set_transient('lfi_nct_app_count_users', $count, 60);
+    return $count;
 }
 
 function lfi_nct_app_render_styles() {
@@ -806,12 +847,77 @@ function lfi_nct_app_render_styles() {
         color: #888; margin: 16px 4px 6px; padding: 0 4px;
     }
 
+    /* Bandeau « Aperçu en tant que » (mode preview) */
+    .lfi-preview-banner {
+        position: sticky; top: 0; z-index: 99997;
+        background: linear-gradient(180deg, #ffd400, #f7c000);
+        color: #1a1a1a;
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 10px; padding: 10px 14px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        box-shadow: 0 2px 8px rgba(0,0,0,.15);
+        font-size: .88em; line-height: 1.3;
+        margin: -14px -14px 14px;
+    }
+    .lfi-preview-banner .lab { flex: 1; min-width: 0; }
+    .lfi-preview-banner .quit {
+        background: #1a1a1a; color: #ffd400;
+        padding: 6px 12px; border-radius: 8px; text-decoration: none;
+        font-weight: 700; flex-shrink: 0;
+    }
+    .lfi-preview-banner .quit:hover { background: #000; color: #ffd400; }
+
     /* Page Droits — sections juridiques */
     .lfi-droits section { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
     .lfi-droits section h3 { margin: 0 0 8px; font-size: 1em; color: #c8102e; }
     .lfi-droits section p { margin: 0 0 6px; line-height: 1.45; font-size: .92em; }
     .lfi-droits section ol { margin: 6px 0 0 18px; padding: 0; }
     .lfi-droits section ol li { margin-bottom: 4px; font-size: .92em; line-height: 1.4; }
+
+    /* Sommaire de la page droits */
+    .lfi-droits-toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+    .lfi-droits-toc a {
+        background: #fff; padding: 8px 12px; border-radius: 999px;
+        text-decoration: none; font-size: .82em; font-weight: 600; color: #c8102e;
+        border: 1px solid #ffd4dc;
+    }
+    .lfi-droits-toc a:active { background: #fff3f5; }
+
+    /* Tableau qui paie quoi */
+    .lfi-droits-table { width: 100%; border-collapse: collapse; margin: 6px 0 0; font-size: .85em; }
+    .lfi-droits-table th { background: #c8102e; color: #fff; padding: 6px 8px; text-align: left; font-weight: 700; }
+    .lfi-droits-table th:nth-child(2), .lfi-droits-table th:nth-child(3) { text-align: center; width: 60px; }
+    .lfi-droits-table td { padding: 8px 10px; border-bottom: 1px solid #eee; line-height: 1.35; }
+    .lfi-droits-table td.c { text-align: center; font-size: 1.2em; }
+    .lfi-droits-table tr:nth-child(even) td { background: #fafafa; }
+
+    /* Rôles : 2 cartes */
+    .lfi-droits-roles { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 600px) { .lfi-droits-roles { grid-template-columns: 1fr 1fr; } }
+    .lfi-droits-roles .rcard { background: #f8f8f8; border-radius: 10px; padding: 12px 14px; }
+    .lfi-droits-roles .rh { font-weight: 800; color: #c8102e; margin-bottom: 8px; font-size: .95em; }
+    .lfi-droits-roles ul { margin: 0; padding-left: 1.2em; font-size: .88em; line-height: 1.5; }
+
+    /* Lois numérotées */
+    .lfi-droits-textes { margin: 0; padding-left: 1.4em; }
+    .lfi-droits-textes li { margin-bottom: 8px; font-size: .9em; line-height: 1.45; }
+
+    /* FAQ : accordéon */
+    .lfi-droits-faq details {
+        background: #fff; border: 1px solid #eee; border-radius: 8px;
+        padding: 10px 12px; margin-bottom: 6px;
+    }
+    .lfi-droits-faq summary {
+        font-weight: 600; cursor: pointer; color: #1a1a1a; font-size: .92em; list-style: none;
+    }
+    .lfi-droits-faq summary::-webkit-details-marker { display: none; }
+    .lfi-droits-faq summary::before { content: "▸ "; color: #c8102e; font-weight: 800; }
+    .lfi-droits-faq details[open] summary::before { content: "▾ "; }
+    .lfi-droits-faq .ans { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f0f0f0; font-size: .88em; line-height: 1.5; color: #444; }
+
+    /* Recours numérotés gros */
+    .lfi-droits-recours { margin: 0; padding-left: 1.4em; }
+    .lfi-droits-recours li { margin-bottom: 8px; font-size: .92em; line-height: 1.45; }
 
     /* Lettre area */
     .lfi-lettre-area {
@@ -908,6 +1014,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
         ],
         '⚙️ SYSTÈME' => [
+            ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
             ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],
             ['🔥', 'Purger le cache',        'Forcer la maj',                       lfi_nct_app_url('cache')],
             ['📰', 'Articles',               'Édition WP',                          admin_url('edit.php')],

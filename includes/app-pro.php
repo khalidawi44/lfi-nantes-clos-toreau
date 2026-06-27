@@ -1190,6 +1190,135 @@ function lfi_nct_app_view_mon_profil() {
 }
 
 /* ============================================================== *
+ *  MODE APERÇU : admin voit l'app comme un·e locataire ou GA       *
+ *  - Cookie lfi_app_preview_uid posé par le picker                 *
+ *  - Le shortcode l'applique via wp_set_current_user au début      *
+ *  - Bannière rouge en haut avec bouton « Sortir »                 *
+ * ============================================================== */
+
+function lfi_nct_app_preview_uid_from_cookie() {
+    return (int) ($_COOKIE['lfi_app_preview_uid'] ?? 0);
+}
+
+/**
+ * Applique le mode aperçu : si l'utilisateur actuel est admin ET
+ * un cookie lfi_app_preview_uid est posé, override $current_user
+ * pour la durée du rendu de l'app. Renvoie l'user prévisualisé.
+ */
+function lfi_nct_app_preview_apply() {
+    if (!is_user_logged_in()) return null;
+    if (!user_can(get_current_user_id(), 'manage_options')) return null;
+    $puid = lfi_nct_app_preview_uid_from_cookie();
+    if ($puid <= 0) return null;
+    $u = get_userdata($puid);
+    if (!$u) return null;
+    $roles = (array) $u->roles;
+    if (!in_array(LFI_NCT_ROLE_TENANT, $roles, true) && !in_array(LFI_NCT_ROLE_GA, $roles, true)) {
+        return null;
+    }
+    wp_set_current_user($puid);
+    return $u;
+}
+
+function lfi_nct_app_render_preview_banner($previewed_user) {
+    $exit_url = esc_url(lfi_nct_app_url('preview-exit'));
+    echo '<div class="lfi-preview-banner">';
+    echo '<div class="lab">👁 Aperçu en tant que <strong>' . esc_html($previewed_user->display_name) . '</strong> (' . esc_html($previewed_user->user_login) . ')</div>';
+    echo '<a href="' . $exit_url . '" class="quit">✕ Sortir</a>';
+    echo '</div>';
+}
+
+function lfi_nct_app_view_preview_picker() {
+    if (!user_can(get_current_user_id(), 'manage_options') && !user_can(lfi_nct_app_preview_uid_from_cookie() ?: 0, 'manage_options')) {
+        /* Si on est déjà en aperçu, l'admin réel l'est. Le cookie n'est posé
+           que par lui. On accepte donc le rendu. */
+    }
+    /* On vérifie via le cookie ou l'user connecté réel */
+    $real_admin_id = 0;
+    if (is_user_logged_in()) {
+        $u = wp_get_current_user();
+        if (user_can($u->ID, 'manage_options')) $real_admin_id = $u->ID;
+    }
+    if (!$real_admin_id) return;
+
+    $tenants = get_users([
+        'role' => LFI_NCT_ROLE_TENANT,
+        'fields' => ['ID', 'display_name', 'user_login'],
+        'number' => 200,
+        'orderby' => 'display_name', 'order' => 'ASC',
+    ]);
+    $gas = get_users([
+        'role' => LFI_NCT_ROLE_GA,
+        'fields' => ['ID', 'display_name', 'user_login'],
+        'number' => 200,
+        'orderby' => 'display_name', 'order' => 'ASC',
+    ]);
+
+    lfi_nct_app_screen_open('👁 Aperçu de l\'app', 'Voir ce que voient les autres utilisateurs');
+
+    echo '<div class="lfi-app-help">Choisis un·e locataire ou un membre du GA pour visualiser exactement ce qu\'il·elle voit dans l\'app. Tu pourras cliquer dans l\'interface comme eux. Un bandeau rouge en haut te rappelle que tu es en mode aperçu. Touche « Sortir » pour revenir à la vue admin.</div>';
+
+    echo '<h3 style="margin:18px 0 8px">🏠 Locataires (' . count($tenants) . ')</h3>';
+    if (empty($tenants)) {
+        echo '<div class="lfi-app-empty">Aucun compte locataire créé.</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($tenants as $u) {
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">Locataire</div></div>';
+            echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span></div>';
+            echo '<div class="row-actions">';
+            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir comme ' . esc_html($u->display_name) . '</a>';
+            echo '</div></li>';
+        }
+        echo '</ul>';
+    }
+
+    echo '<h3 style="margin:18px 0 8px">👥 Membres du GA (' . count($gas) . ')</h3>';
+    if (empty($gas)) {
+        echo '<div class="lfi-app-empty">Aucun compte GA créé.</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($gas as $u) {
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">GA</div></div>';
+            echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span></div>';
+            echo '<div class="row-actions">';
+            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir comme ' . esc_html($u->display_name) . '</a>';
+            echo '</div></li>';
+        }
+        echo '</ul>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+function lfi_nct_app_view_preview_set() {
+    if (!current_user_can('manage_options')) {
+        wp_safe_redirect(lfi_nct_app_url());
+        exit;
+    }
+    $uid = isset($_GET['uid']) ? (int) $_GET['uid'] : 0;
+    $u = $uid ? get_userdata($uid) : null;
+    if (!$u) {
+        wp_safe_redirect(lfi_nct_app_url('preview'));
+        exit;
+    }
+    $secure = is_ssl();
+    setcookie('lfi_app_preview_uid', (string) $uid, time() + 8 * HOUR_IN_SECONDS, COOKIEPATH ?: '/', COOKIE_DOMAIN, $secure, true);
+    wp_safe_redirect(home_url('/app/'));
+    exit;
+}
+
+function lfi_nct_app_view_preview_exit() {
+    $secure = is_ssl();
+    setcookie('lfi_app_preview_uid', '', time() - 3600, COOKIEPATH ?: '/', COOKIE_DOMAIN, $secure, true);
+    unset($_COOKIE['lfi_app_preview_uid']);
+    wp_safe_redirect(lfi_nct_app_url('preview'));
+    exit;
+}
+
+/* ============================================================== *
  *  Page « Installer l'app » + demandes de permissions              *
  *  Accessible à tout utilisateur connecté, et même non connecté    *
  *  (sert de landing page depuis les liens SMS/email).              *

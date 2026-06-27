@@ -776,56 +776,170 @@ function lfi_nct_app_view_tenant_droits() {
         if (is_array($data)) $main_keys = (array) ($data['problemes_types'] ?? []);
     }
 
-    lfi_nct_app_screen_open('⚖️ Mes droits', 'Lois applicables et recours possibles');
+    lfi_nct_app_screen_open('⚖️ Mes droits', 'Qui paie quoi · rôles · loi · FAQ · recours');
 
-    echo '<div class="lfi-app-help">⚠️ <strong>Information juridique générale, pas conseil personnalisé.</strong> Pour un conseil sur votre cas, contactez l\'ADIL Loire-Atlantique (conseil gratuit) ou un·e avocat·e en droit du logement.</div>';
+    echo '<div class="lfi-app-help">⚠️ <strong>Information juridique générale, pas conseil personnalisé.</strong> Pour un conseil sur votre cas, contactez l\'ADIL Loire-Atlantique (gratuit) ou un·e avocat·e en droit du logement.</div>';
+
+    /* Sommaire ancré */
+    echo '<div class="lfi-droits-toc">';
+    echo '<a href="#droits-qui-paie">💰 Qui paie quoi ?</a>';
+    echo '<a href="#droits-roles">🔁 Rôles</a>';
+    echo '<a href="#droits-textes">📜 Les 5 lois</a>';
+    echo '<a href="#droits-faq">❓ FAQ</a>';
+    echo '<a href="#droits-recours">📞 Recours</a>';
+    echo '</div>';
 
     echo '<div class="lfi-droits">';
 
-    echo '<section><h3>📜 La base : le logement décent</h3>';
-    echo '<p>L\'article 6 de la <strong>loi n° 89-462 du 6 juillet 1989</strong> impose au bailleur de remettre au locataire un logement décent. Le <strong>décret n° 2002-120 du 30 janvier 2002</strong> définit les critères de cette décence.</p></section>';
+    /* === Qui paie quoi === */
+    echo '<section id="droits-qui-paie"><h3>💰 Qui paie quoi ?</h3>';
+    echo '<p>Référence : <strong>loi du 6 juillet 1989</strong> + <strong>décret n° 87-712 du 26 août 1987</strong> (liste des réparations à la charge du locataire).</p>';
+    echo '<table class="lfi-droits-table"><thead><tr><th></th><th>Bailleur</th><th>Locataire</th></tr></thead><tbody>';
+    foreach ([
+        ['Gros entretien (toiture, ravalement, chaudière collective, ascenseur)', '✅', '—'],
+        ['Mise aux normes (électricité, gaz, plomb, amiante)',                    '✅', '—'],
+        ['Remplacement éléments vétustes (volets, robinets en fin de vie)',       '✅', '—'],
+        ['Étanchéité, infiltrations',                                             '✅', '—'],
+        ['Désinsectisation logement social (cafards, punaises, rats)',            '✅', '—'],
+        ['Entretien courant (peinture, joints, ampoules)',                          '—', '✅'],
+        ['Petites réparations (robinet flexible, débouchage évier)',                '—', '✅'],
+        ['Entretien chaudière individuelle (révision annuelle)',                    '—', '✅'],
+        ['Taxe foncière',                                                          '✅', '—'],
+        ['Charges récupérables (chauffage collectif, eau, ascenseur)',              '—', '✅'],
+        ['Assurance du bâti',                                                      '✅', '—'],
+        ['Assurance habitation (responsabilité civile, dégâts des eaux)',           '—', '✅'],
+    ] as $r) {
+        echo '<tr><td>' . esc_html($r[0]) . '</td><td class="c">' . $r[1] . '</td><td class="c">' . $r[2] . '</td></tr>';
+    }
+    echo '</tbody></table>';
+    echo '</section>';
 
-    if (in_array('humidite', $main_keys, true)) {
-        echo '<section><h3>🌫 Humidité, moisissures</h3>';
-        echo '<p>Article 2 du décret 2002-120 : le logement doit assurer <em>« le clos et le couvert »</em> et être <em>« étanche à l\'air et à l\'eau, et exempt de toute infiltration ou remontée d\'humidité »</em>.</p>';
-        echo '<p>Démarches : courrier recommandé au bailleur le mettant en demeure d\'effectuer les travaux (étanchéité, ventilation). Sans réponse sous 2 mois, saisir la <strong>commission départementale de conciliation</strong> puis le <strong>tribunal judiciaire</strong>.</p></section>';
-    }
-    if (in_array('chauffage', $main_keys, true)) {
-        echo '<section><h3>🥶 Chauffage</h3>';
-        echo '<p>Article 3 du décret 2002-120 : le logement doit comporter <em>« un dispositif de chauffage normal, en bon état, permettant un fonctionnement normal et adapté aux caractéristiques du logement »</em>. La température minimale exigible en pièce principale est de <strong>18 °C</strong>.</p>';
-        echo '<p>Démarches : signalement écrit au bailleur avec relevés de température horodatés.</p></section>';
-    }
-    if (in_array('degats_eaux', $main_keys, true)) {
-        echo '<section><h3>💧 Dégâts des eaux, fuites</h3>';
-        echo '<p>Les fuites et infiltrations relèvent de l\'obligation d\'entretien (article 6 loi 1989, c). Le bailleur doit remettre en état dans un délai raisonnable.</p>';
-        echo '<p>Démarches : déclaration assurance + LRAR au bailleur. Documentez avec photos datées.</p></section>';
-    }
-    if (in_array('insectes', $main_keys, true)) {
-        echo '<section><h3>🐜 Nuisibles (cafards, punaises, rats)</h3>';
-        echo '<p>Selon le Règlement Sanitaire Départemental (RSD), le bailleur a obligation de procéder à la désinsectisation et dératisation des parties communes ET du logement en logement social.</p>';
-        echo '<p>Démarches : LRAR au bailleur, puis signalement au Service Communal d\'Hygiène et de Santé (mairie de Nantes) si pas d\'action.</p></section>';
-    }
-    /* Eau chaude : on l'affiche pour tout le monde puisque c'est endémique au quartier */
-    echo '<section><h3>🚿 Eau chaude sanitaire</h3>';
-    echo '<p>La fourniture d\'eau chaude est un service essentiel attaché à la décence. Des coupures répétées et prolongées peuvent constituer un manquement et justifier une réduction de loyer ainsi que des dommages-intérêts.</p>';
-    echo '<p>Démarches : tenir un journal précis (dates, durées) + LRAR systématique à chaque coupure prolongée. C\'est ce travail collectif que mène le GA au Clos Toreau.</p></section>';
+    /* === Rôles === */
+    echo '<section id="droits-roles"><h3>🔁 Le rôle du locataire et du bailleur</h3>';
+    echo '<div class="lfi-droits-roles">';
+    echo '<div class="rcard"><div class="rh">🏠 Le locataire doit</div><ul>';
+    echo '<li>Payer le loyer et les charges aux dates prévues</li>';
+    echo '<li>User du logement en « bon père de famille » (entretien courant, ne pas dégrader)</li>';
+    echo '<li>Souscrire une <strong>assurance habitation</strong> (obligation légale)</li>';
+    echo '<li>Respecter le voisinage (bruit, parties communes)</li>';
+    echo '<li>Permettre l\'accès au logement pour les travaux nécessaires (avec préavis raisonnable)</li>';
+    echo '<li>Signaler rapidement les problèmes au bailleur (LRAR si grave)</li>';
+    echo '<li>Restituer le logement en bon état (état des lieux de sortie)</li>';
+    echo '</ul></div>';
+    echo '<div class="rcard"><div class="rh">🔑 Le bailleur doit</div><ul>';
+    echo '<li>Délivrer un logement <strong>décent</strong> (loi 1989 art. 6, décret 2002-120)</li>';
+    echo '<li>Assurer la <strong>jouissance paisible</strong> du logement</li>';
+    echo '<li>Entretenir le logement (gros entretien, travaux structurels)</li>';
+    echo '<li>Effectuer les réparations non locatives</li>';
+    echo '<li>Garantir la santé et la sécurité (insalubrité, électricité)</li>';
+    echo '<li>Respecter les délais de préavis pour entrer (sauf urgence)</li>';
+    echo '<li>Ne pas augmenter le loyer hors cadre légal (encadrement Nantes 2024)</li>';
+    echo '<li>Rendre le dépôt de garantie sous 1 ou 2 mois selon état des lieux</li>';
+    echo '</ul></div>';
+    echo '</div></section>';
 
-    if (in_array('parties_communes', $main_keys, true)) {
-        echo '<section><h3>🚪 Parties communes dégradées</h3>';
-        echo '<p>Les parties communes sont à la charge exclusive du bailleur (entretien, propreté, sécurité). Vous pouvez exiger leur remise en état par courrier collectif des locataires.</p></section>';
-    }
-
-    echo '<section><h3>📞 Vos recours</h3>';
-    echo '<ol>';
-    echo '<li><strong>Mise en demeure</strong> du bailleur en lettre recommandée avec accusé de réception. Délai : 1 à 2 mois selon l\'urgence.</li>';
-    echo '<li><strong>Commission départementale de conciliation (CDC)</strong> du logement — gratuite, à saisir avant le tribunal.</li>';
-    echo '<li><strong>Tribunal judiciaire</strong> de Nantes — exécution forcée, dommages-intérêts, réduction de loyer.</li>';
-    echo '<li><strong>ARS Pays-de-la-Loire</strong> et <strong>SCHS de la mairie</strong> — en cas d\'insalubrité (Code de la santé publique, articles L. 1331-22 et suivants).</li>';
-    echo '<li><strong>ADIL Loire-Atlantique</strong> — conseil juridique gratuit. Recherchez « ADIL 44 » pour les coordonnées à jour.</li>';
+    /* === Que dit la loi === */
+    echo '<section id="droits-textes"><h3>📜 Les 5 textes à connaître</h3>';
+    echo '<ol class="lfi-droits-textes">';
+    echo '<li><strong>Loi n° 89-462 du 6 juillet 1989</strong> — la base : rapports locatifs, obligations du bailleur (art. 6 : logement décent), recours du locataire (art. 20-1).</li>';
+    echo '<li><strong>Décret n° 2002-120 du 30 janvier 2002</strong> — critères techniques de la décence : étanchéité (art. 2), chauffage 18 °C (art. 3), surface minimale, hauteur sous plafond ≥ 2,20 m.</li>';
+    echo '<li><strong>Décret n° 87-712 du 26 août 1987</strong> — liste exhaustive des réparations à la charge du locataire (tout le reste = bailleur).</li>';
+    echo '<li><strong>Code de la santé publique, art. L. 1331-22 et suivants</strong> — insalubrité, pouvoirs de l\'ARS et du préfet, arrêté d\'insalubrité.</li>';
+    echo '<li><strong>Loi ELAN 2018 + arrêté local Nantes 2024</strong> — encadrement des loyers : indexation IRL plafonnée, traitement des punaises de lit à la charge du bailleur HLM.</li>';
     echo '</ol></section>';
 
-    echo '<section><h3>👥 Le collectif est votre meilleure protection</h3>';
-    echo '<p>Vous n\'êtes pas seul·e. Le Groupe d\'Action LFI Nantes Sud Clos Toreau organise un suivi commun des problèmes de logement HLM dans le quartier, et accompagne les locataires dans leurs démarches.</p>';
+    /* === FAQ === */
+    echo '<section id="droits-faq"><h3>❓ FAQ — 10 questions fréquentes</h3>';
+    $faqs = [
+        [
+            'q' => 'Mon bailleur ne fait pas les travaux promis. Que faire ?',
+            'r' => 'Étape 1 : LRAR de mise en demeure avec liste précise des travaux + délai de 2 mois. Étape 2 : sans réponse, saisir la <strong>Commission départementale de conciliation (CDC)</strong> du logement (gratuit). Étape 3 : tribunal judiciaire de Nantes pour exécution forcée + dommages-intérêts.',
+        ],
+        [
+            'q' => 'Le bailleur peut-il entrer chez moi sans prévenir ?',
+            'r' => '<strong>Non.</strong> Sauf urgence (fuite d\'eau, incendie), il doit donner un <strong>préavis raisonnable</strong> (généralement 7 jours) et passer à une heure convenue. Vous pouvez refuser une visite mal planifiée.',
+        ],
+        [
+            'q' => 'Peut-on m\'expulser pour impayés ?',
+            'r' => 'Procédure très encadrée : 1) commandement de payer par huissier, 2) délai de 2 mois pour régulariser, 3) assignation tribunal, 4) jugement. Et surtout : <strong>trêve hivernale du 1er novembre au 31 mars</strong> — pas d\'expulsion possible pendant cette période.',
+        ],
+        [
+            'q' => 'Mon loyer a augmenté de façon abusive, c\'est légal ?',
+            'r' => 'À Nantes, l\'encadrement des loyers est en vigueur depuis 2024. Le bailleur ne peut indexer que sur l\'<strong>IRL (Indice de référence des loyers)</strong>, dans la limite du plafond légal. Une hausse hors cadre est <strong>nulle</strong> : LRAR de contestation + remboursement des trop-perçus.',
+        ],
+        [
+            'q' => 'Mes voisins font du bruit, à qui s\'adresser ?',
+            'r' => 'D\'abord essayer la médiation directe (un mot, un échange courtois). Sinon : signaler au bailleur (responsable de la jouissance paisible des locataires). En cas de <strong>tapage nocturne</strong> (22h-7h) : police (17 ou 112) — c\'est une contravention.',
+        ],
+        [
+            'q' => 'La chaudière collective est en panne, qui doit la réparer ?',
+            'r' => 'Le bailleur. C\'est de l\'entretien à sa charge. Délai raisonnable. Si la coupure dure plus de quelques jours, vous pouvez demander un <strong>remboursement du chauffage d\'appoint</strong> que vous avez dû acheter.',
+        ],
+        [
+            'q' => 'Punaises de lit ou cafards, qui paie le traitement ?',
+            'r' => '<strong>En logement social (HLM), c\'est le bailleur</strong> qui doit traiter, y compris à l\'intérieur du logement (loi ELAN 2018 + Règlement Sanitaire Départemental). En privé, c\'est plus discuté : la date d\'infestation est déterminante.',
+        ],
+        [
+            'q' => 'Mon logement a 1m70 de hauteur sous plafond, c\'est légal ?',
+            'r' => '<strong>Non.</strong> Le décret 2002-120 exige une hauteur sous plafond <strong>≥ 2,20 m</strong> OU un volume habitable <strong>≥ 20 m³</strong>. Si ce n\'est pas le cas, le logement n\'est pas décent : action en réduction de loyer voire en résolution du bail.',
+        ],
+        [
+            'q' => 'Puis-je peindre les murs sans demander ?',
+            'r' => 'Oui, dans des <strong>couleurs courantes</strong> (claires, neutres). Le bailleur peut exiger une remise en état lors de votre départ si vous avez choisi une couleur très marquée (rouge, noir, etc.). Conservez les pots de peinture pour les retouches.',
+        ],
+        [
+            'q' => 'Le bailleur refuse de rendre le dépôt de garantie. Que faire ?',
+            'r' => '<strong>Délai légal : 1 mois</strong> (sans dégradation) ou <strong>2 mois</strong> (avec dégradations à déduire). Au-delà, <strong>intérêts de retard de 10 % du loyer mensuel</strong> par mois. Étapes : LRAR avec calcul des sommes dues → commission de conciliation → tribunal judiciaire.',
+        ],
+    ];
+    echo '<div class="lfi-droits-faq">';
+    foreach ($faqs as $f) {
+        echo '<details><summary>' . esc_html($f['q']) . '</summary><div class="ans">' . $f['r'] . '</div></details>';
+    }
+    echo '</div></section>';
+
+    /* === Spécifique au signalement === */
+    if ($main_keys) {
+        echo '<section><h3>🏠 Spécifique à votre signalement</h3>';
+        if (in_array('humidite', $main_keys, true)) {
+            echo '<details open><summary>🌫 Humidité, moisissures</summary><div class="ans">';
+            echo '<p>Article 2 du décret 2002-120 : <em>« étanche à l\'air et à l\'eau, et exempt de toute infiltration ou remontée d\'humidité »</em>. Démarches : LRAR + photos datées → 2 mois → CDC → tribunal judiciaire.</p>';
+            echo '</div></details>';
+        }
+        if (in_array('chauffage', $main_keys, true)) {
+            echo '<details open><summary>🥶 Chauffage</summary><div class="ans">';
+            echo '<p>Article 3 du décret 2002-120 : 18 °C minimum en pièce principale en hiver. Démarches : relevés horodatés (photo du thermomètre avec date), LRAR au bailleur.</p>';
+            echo '</div></details>';
+        }
+        if (in_array('degats_eaux', $main_keys, true)) {
+            echo '<details open><summary>💧 Dégâts des eaux</summary><div class="ans">';
+            echo '<p>Loi 1989 art. 6, c : obligation d\'entretien. Démarches : déclaration assurance habitation + LRAR au bailleur avec photos.</p>';
+            echo '</div></details>';
+        }
+        if (in_array('insectes', $main_keys, true)) {
+            echo '<details open><summary>🐜 Nuisibles</summary><div class="ans">';
+            echo '<p>Loi ELAN 2018 + RSD : le bailleur HLM doit traiter. Démarches : LRAR au bailleur, puis SCHS mairie de Nantes si pas d\'action sous 1 mois.</p>';
+            echo '</div></details>';
+        }
+        echo '<details open><summary>🚿 Eau chaude sanitaire (sujet du quartier)</summary><div class="ans">';
+        echo '<p>La fourniture continue d\'eau chaude relève de la décence. Coupures répétées = manquement = réduction de loyer + dommages-intérêts. Le GA centralise les preuves pour une action collective.</p>';
+        echo '</div></details>';
+        echo '</section>';
+    }
+
+    /* === Recours === */
+    echo '<section id="droits-recours"><h3>📞 Vos recours, dans l\'ordre</h3>';
+    echo '<ol class="lfi-droits-recours">';
+    echo '<li><strong>Mise en demeure</strong> du bailleur en LRAR. Délai 1 à 2 mois.</li>';
+    echo '<li><strong>Commission départementale de conciliation (CDC)</strong> — gratuite, à saisir avant le tribunal.</li>';
+    echo '<li><strong>Tribunal judiciaire de Nantes</strong> — exécution forcée, dommages-intérêts, réduction de loyer, voire résolution du bail.</li>';
+    echo '<li><strong>ARS Pays-de-la-Loire</strong> et <strong>SCHS de la mairie</strong> — pour les cas d\'insalubrité (CSP art. L. 1331-22 et suivants).</li>';
+    echo '<li><strong>ADIL Loire-Atlantique</strong> — conseil juridique <strong>gratuit</strong>. Cherchez « ADIL 44 » sur Internet pour les coordonnées à jour.</li>';
+    echo '</ol></section>';
+
+    /* === Collectif === */
+    echo '<section><h3>👥 Vous n\'êtes pas seul·e</h3>';
+    echo '<p>Le Groupe d\'Action LFI Nantes Sud Clos Toreau organise un suivi collectif des problèmes de logement HLM dans le quartier, et accompagne les locataires dans leurs démarches.</p>';
     if (function_exists('lfi_nct_sms_upcoming_events')) {
         $upc = lfi_nct_sms_upcoming_events(1);
         if ($upc) {
@@ -1220,7 +1334,7 @@ function lfi_nct_app_view_comptes_ga() {
     }
 
     /* Compteur */
-    $count = count_users();
+    $count = lfi_nct_app_count_users_cached();
     $n_ga  = $count['avail_roles'][LFI_NCT_ROLE_GA] ?? 0;
 
     /* Adhérents non encore importés */
@@ -1448,7 +1562,7 @@ function lfi_nct_app_view_comptes_locataires() {
     }
 
     /* Compteur */
-    $count = count_users();
+    $count = lfi_nct_app_count_users_cached();
     $n_tenant = $count['avail_roles'][LFI_NCT_ROLE_TENANT] ?? 0;
 
     /* Répondant·es non liés */
