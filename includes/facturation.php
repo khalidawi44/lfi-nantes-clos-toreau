@@ -127,14 +127,27 @@ function lfi_nct_fact_prestataire($uid = null) {
 function lfi_nct_fact_bailleur($uid = null) {
     $uid = lfi_nct_fact_owner_id($uid);
     $data = $uid ? get_user_meta($uid, 'lfi_nct_fact_bailleur', true) : '';
-    if (is_array($data) && !empty($data)) return $data;
-    return [
-        'nom'      => 'Nantes Métropole Habitat',
-        'adresse'  => '8 rue de la Tour d\'Auvergne',
-        'cp_ville' => '44000 Nantes',
-        'siret'    => '',
-        'email'    => '',
+    /* Défauts incluant l'agence sectorielle Clos Toreau / Nantes Sud */
+    $defaults = [
+        'nom'                  => 'Nantes Métropole Habitat',
+        'adresse'              => '8 rue de la Tour d\'Auvergne',
+        'cp_ville'             => '44000 Nantes',
+        'siret'                => '',
+        'email'                => '',
+        'agence_nom'           => 'Agence Goudy',
+        'agence_secteur'       => 'Clos Toreau / Nantes Sud',
+        'agence_contact'       => 'M. Yvonnic Morineau',
+        'agence_email'         => 'yvonnic.morineau@nmh.fr',
+        'agence_adresse'       => '',
+        'agence_tel'           => '',
     ];
+    if (is_array($data) && !empty($data)) {
+        /* Fusion : on garde ce que l'utilisateur a renseigné, on complète
+           le reste avec les défauts (notamment la fiche agence Goudy
+           si l'utilisateur n'avait pas encore les champs). */
+        return array_merge($defaults, $data);
+    }
+    return $defaults;
 }
 
 function lfi_nct_fact_tarif_defaut($uid = null) {
@@ -1106,7 +1119,9 @@ function lfi_nct_app_view_facturation_params() {
         update_user_meta($uid, 'lfi_nct_fact_prestataire', $presta);
 
         $bailleur = lfi_nct_fact_bailleur($uid);
-        foreach (['nom', 'adresse', 'cp_ville', 'siret', 'email'] as $k) {
+        foreach (['nom', 'adresse', 'cp_ville', 'siret', 'email',
+                  'agence_nom', 'agence_secteur', 'agence_contact',
+                  'agence_email', 'agence_adresse', 'agence_tel'] as $k) {
             $bailleur[$k] = sanitize_text_field(wp_unslash($_POST['bailleur_' . $k] ?? ''));
         }
         update_user_meta($uid, 'lfi_nct_fact_bailleur', $bailleur);
@@ -1153,12 +1168,22 @@ function lfi_nct_app_view_facturation_params() {
     echo '<label>BIC<input type="text" name="presta_bic" value="' . esc_attr($presta['bic'] ?? '') . '"></label>';
     echo '<label>Mention TVA<input type="text" name="presta_mention_tva" value="' . esc_attr($presta['mention_tva'] ?? 'TVA non applicable, art. 293 B du CGI') . '"></label>';
 
-    echo '<h3 style="margin:18px 0 0">🏢 Bailleur (client)</h3>';
+    echo '<h3 style="margin:18px 0 0">🏢 Bailleur — direction générale</h3>';
     echo '<label>Nom du bailleur<input type="text" name="bailleur_nom" value="' . esc_attr($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '" required></label>';
-    echo '<label>Adresse<input type="text" name="bailleur_adresse" value="' . esc_attr($bailleur['adresse'] ?? '') . '"></label>';
+    echo '<label>Adresse siège<input type="text" name="bailleur_adresse" value="' . esc_attr($bailleur['adresse'] ?? '') . '"></label>';
     echo '<label>Code postal et ville<input type="text" name="bailleur_cp_ville" value="' . esc_attr($bailleur['cp_ville'] ?? '') . '"></label>';
     echo '<label>N° SIRET<input type="text" name="bailleur_siret" value="' . esc_attr($bailleur['siret'] ?? '') . '"></label>';
-    echo '<label>Email contact<input type="email" name="bailleur_email" value="' . esc_attr($bailleur['email'] ?? '') . '"></label>';
+    echo '<label>Email contact général<input type="email" name="bailleur_email" value="' . esc_attr($bailleur['email'] ?? '') . '"></label>';
+
+    /* === Agence locale Clos Toreau / Nantes Sud === */
+    echo '<h3 style="margin:18px 0 0">🏘 Agence locale (responsable de secteur)</h3>';
+    echo '<div class="lfi-app-help"><small>Pour le Clos Toreau / Nantes Sud, c\'est l\'<strong>Agence Goudy</strong>. Le responsable est <strong>M. Yvonnic Morineau</strong> (<code>yvonnic.morineau@nmh.fr</code>). Ces infos seront automatiquement reprises en « copie pour information » sur toutes les lettres LRAR pour que le bon interlocuteur soit averti en temps réel.</small></div>';
+    echo '<label>Nom de l\'agence<input type="text" name="bailleur_agence_nom" value="' . esc_attr($bailleur['agence_nom'] ?? 'Agence Goudy') . '" placeholder="Agence Goudy"></label>';
+    echo '<label>Secteur géré<input type="text" name="bailleur_agence_secteur" value="' . esc_attr($bailleur['agence_secteur'] ?? '') . '" placeholder="Clos Toreau / Nantes Sud"></label>';
+    echo '<label>Responsable<input type="text" name="bailleur_agence_contact" value="' . esc_attr($bailleur['agence_contact'] ?? '') . '" placeholder="M. Yvonnic Morineau"></label>';
+    echo '<label>Email du responsable<input type="email" name="bailleur_agence_email" value="' . esc_attr($bailleur['agence_email'] ?? '') . '" placeholder="yvonnic.morineau@nmh.fr"></label>';
+    echo '<label>Adresse agence<input type="text" name="bailleur_agence_adresse" value="' . esc_attr($bailleur['agence_adresse'] ?? '') . '" placeholder="ex: 6 rue Goudy, 44200 Nantes"></label>';
+    echo '<label>Téléphone agence<input type="tel" name="bailleur_agence_tel" value="' . esc_attr($bailleur['agence_tel'] ?? '') . '"></label>';
 
     echo '<h3 style="margin:18px 0 0">💶 Tarification</h3>';
     echo '<label>Tarif horaire par défaut (€ HT)<input type="number" name="tarif_defaut" value="' . esc_attr($tarif) . '" step="0.50" min="0" required></label>';

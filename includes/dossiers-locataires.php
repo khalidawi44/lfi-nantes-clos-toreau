@@ -424,6 +424,19 @@ function lfi_nct_dossier_header_destinataire_nmh($bailleur) {
     if (!empty($bailleur['adresse']))  echo esc_html($bailleur['adresse']) . '<br>';
     if (!empty($bailleur['cp_ville'])) echo esc_html($bailleur['cp_ville']);
     echo '</div>';
+
+    /* Bloc copie à l'agence sectorielle si configurée */
+    if (!empty($bailleur['agence_nom']) || !empty($bailleur['agence_email'])) {
+        echo '<div style="background:#f8f8f8;padding:10px 14px;border-left:3px solid #c8102e;margin:10px 0;font-size:.92em">';
+        echo '<strong>Copie pour information :</strong><br>';
+        if (!empty($bailleur['agence_contact'])) echo esc_html($bailleur['agence_contact']) . ', ';
+        if (!empty($bailleur['agence_nom']))     echo esc_html($bailleur['agence_nom']);
+        if (!empty($bailleur['agence_secteur'])) echo ' — responsable de secteur ' . esc_html($bailleur['agence_secteur']);
+        if (!empty($bailleur['agence_email']))   echo '<br>Mél. : ' . esc_html($bailleur['agence_email']);
+        if (!empty($bailleur['agence_adresse'])) echo ' · ' . esc_html($bailleur['agence_adresse']);
+        if (!empty($bailleur['agence_tel']))     echo ' · Tél. ' . esc_html($bailleur['agence_tel']);
+        echo '</div>';
+    }
 }
 
 /* ============================================================== *
