@@ -236,6 +236,15 @@ function lfi_nct_app_dossier_juridique_form($row) {
         }
     }
 
+    /* Pré-remplissage depuis paramètres URL (raccourci depuis autre fiche) */
+    if (!$is_edit && !$row) {
+        $row = (object) [];
+        foreach (['tenant_prenom', 'tenant_nom', 'tenant_adresse', 'tenant_etage', 'tenant_appartement', 'tenant_tel'] as $f) {
+            if (!empty($_GET[$f])) $row->$f = sanitize_text_field(wp_unslash($_GET[$f]));
+        }
+        if (empty((array) $row)) $row = null;
+    }
+
     /* Pré-remplissage si nouveau + tenant_uid */
     if (!$is_edit && !empty($_GET['tenant_uid'])) {
         $tuid = (int) $_GET['tenant_uid'];
@@ -282,14 +291,29 @@ function lfi_nct_app_dossier_juridique_form($row) {
     echo '<input type="hidden" name="lfi_dossier_save" value="1">';
 
     /* === LOCATAIRE === */
-    echo '<h3 style="margin:0">👤 Locataire</h3>';
-    echo '<label>Prénom<input type="text" name="tenant_prenom" value="' . esc_attr($r->tenant_prenom) . '" required></label>';
-    echo '<label>Nom<input type="text" name="tenant_nom" value="' . esc_attr($r->tenant_nom) . '"></label>';
-    echo '<label>Adresse complète<input type="text" name="tenant_adresse" value="' . esc_attr($r->tenant_adresse) . '" placeholder="8 rue de Saint-Jean-de-Luz, 44200 Nantes" required></label>';
-    echo '<label>Étage<input type="text" name="tenant_etage" value="' . esc_attr($r->tenant_etage) . '"></label>';
-    echo '<label>N° appartement<input type="text" name="tenant_appartement" value="' . esc_attr($r->tenant_appartement) . '"></label>';
+    echo '<h3 style="margin:0">👤 Locataire <small style="color:#666;font-weight:400">(modifiable à tout moment)</small></h3>';
+    echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b"><small>💡 Tu peux compléter ces infos plus tard (étage, N° de porte, téléphone, etc.) au fur et à mesure que tu les découvres. Seul le <strong>nom OU prénom</strong> et l\'<strong>adresse</strong> sont obligatoires.</small></div>';
+
+    /* Datalists pour autocomplétion */
+    if (function_exists('lfi_nct_streets_datalist')) echo lfi_nct_streets_datalist('lfi-streets-dossier');
+    echo '<datalist id="lfi-etages"><option value="RDC"><option value="1"><option value="2"><option value="3"><option value="4"><option value="5"><option value="6"><option value="7"><option value="8"><option value="9"><option value="10"><option value="11"><option value="12"></datalist>';
+
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label>Prénom OU civilité <small style="color:#888">(facultatif)</small><input type="text" name="tenant_prenom" value="' . esc_attr($r->tenant_prenom) . '" placeholder="ex: Mme"></label>';
+    echo '<label>Nom<input type="text" name="tenant_nom" value="' . esc_attr($r->tenant_nom) . '" placeholder="ex: Fadila"></label>';
+    echo '</div>';
+
+    echo '<label>Adresse complète <span style="color:#c8102e">*</span><input type="text" name="tenant_adresse" id="lfi-adr-dossier" list="lfi-streets-dossier" value="' . esc_attr($r->tenant_adresse) . '" placeholder="8 rue de Saint-Jean-de-Luz, 44200 Nantes" required></label>';
+
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label>Étage<input type="text" name="tenant_etage" list="lfi-etages" value="' . esc_attr($r->tenant_etage) . '" placeholder="ex: 8"></label>';
+    echo '<label>N° porte / appartement<input type="text" name="tenant_appartement" value="' . esc_attr($r->tenant_appartement) . '" placeholder="ex: 130"></label>';
+    echo '</div>';
+
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
     echo '<label>Téléphone<input type="tel" name="tenant_tel" value="' . esc_attr($r->tenant_tel) . '"></label>';
     echo '<label>Email<input type="email" name="tenant_email" value="' . esc_attr($r->tenant_email) . '"></label>';
+    echo '</div>';
 
     /* === VISITE / CONSTATATIONS === */
     echo '<h3 style="margin:18px 0 0">🔍 Constatations de visite</h3>';
@@ -297,13 +321,15 @@ function lfi_nct_app_dossier_juridique_form($row) {
     echo '<label>Date de visite<input type="date" name="visite_date" value="' . esc_attr($r->visite_date) . '"></label>';
     echo '<label>Durée<input type="text" name="visite_duree" value="' . esc_attr($r->visite_duree) . '" placeholder="ex: 4 heures"></label>';
     echo '</div>';
-    echo '<label>Description détaillée des désordres observés<textarea name="constatations" rows="8" placeholder="Décris pièce par pièce : moisissures (couleur, surface, emplacement précis), fuites, infiltrations d\'air, humidité au toucher, taux ressenti, odeurs… Sois factuel et précis : ces constatations seront citées dans toutes les lettres.">' . esc_textarea($r->constatations) . '</textarea></label>';
+    echo '<label>Description détaillée des désordres observés<textarea name="constatations" id="lfi-constatations" rows="8" placeholder="Décris pièce par pièce : moisissures (couleur, surface, emplacement précis), fuites, infiltrations d\'air, humidité au toucher, taux ressenti, odeurs… Sois factuel et précis : ces constatations seront citées dans toutes les lettres.">' . esc_textarea($r->constatations) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-constatations" data-label="Dicter mes constats sur place"></div>';
 
     /* === CERTIFICAT MÉDICAL === */
     echo '<h3 style="margin:18px 0 0">🏥 Certificat médical (si demande de relogement)</h3>';
     echo '<label>Médecin (titre + nom)<input type="text" name="certificat_medecin" value="' . esc_attr($r->certificat_medecin) . '" placeholder="Dr Aubeau, médecin généraliste, Nantes"></label>';
     echo '<label>Date du certificat<input type="date" name="certificat_date" value="' . esc_attr($r->certificat_date) . '"></label>';
-    echo '<label>Pathologie constatée + lien avec l\'humidité<textarea name="certificat_pathologie" rows="4" placeholder="Ex: Asthme sévère de la fille mineure (X ans), aggravation des crises depuis l\'emménagement. Le médecin certifie que la pathologie est probablement liée à l\'exposition prolongée à l\'humidité et aux moisissures, et préconise un relogement immédiat dans un logement sain.">' . esc_textarea($r->certificat_pathologie) . '</textarea></label>';
+    echo '<label>Pathologie constatée + lien avec l\'humidité<textarea name="certificat_pathologie" id="lfi-pathologie" rows="4" placeholder="Ex: Asthme sévère de la fille mineure (X ans), aggravation des crises depuis l\'emménagement. Le médecin certifie que la pathologie est probablement liée à l\'exposition prolongée à l\'humidité et aux moisissures, et préconise un relogement immédiat dans un logement sain.">' . esc_textarea($r->certificat_pathologie) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-pathologie" data-label="Dicter la pathologie"></div>';
     echo '<div class="lfi-app-help"><small>📎 Pense à <strong>scanner le certificat</strong> et à le joindre aux LRAR. Ce champ ne sert qu\'à reprendre le contenu dans les lettres ; le certificat lui-même est ta pièce maîtresse.</small></div>';
 
     /* === DEMANDES === */
@@ -325,10 +351,87 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<option value="' . esc_attr($k) . '" ' . selected($r->statut, $k, false) . '>' . esc_html($lbl) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>Notes internes (non publiées)<textarea name="notes" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
+    echo '<label>Notes internes (non publiées)<textarea name="notes" id="lfi-notes-dossier" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-notes-dossier" data-label="Dicter mes notes"></div>';
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer le dossier') . '</button>';
     echo '</form>';
+
+    /* === REGROUPEMENT PAR LOCATAIRE — interventions + autres dossiers === */
+    if ($is_edit && (!empty($r->tenant_nom) || !empty($r->tenant_adresse))) {
+        global $wpdb;
+        $owner = (int) lfi_nct_dossier_owner_id();
+        $ti = $wpdb->prefix . 'lfi_nct_interventions';
+        $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        /* Match large : même nom OU même adresse (clé canonique) */
+        $name_clause = $r->tenant_nom ? $wpdb->prepare('LOWER(tenant_nom) = LOWER(%s)', $r->tenant_nom) : '0';
+        $adr_clause  = $r->tenant_adresse ? $wpdb->prepare('LOWER(tenant_adresse) = LOWER(%s)', $r->tenant_adresse) : '0';
+
+        $other_interv = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, date_intervention, type_travaux, total_ht, statut FROM $ti
+             WHERE owner_user_id = %d AND ($name_clause OR $adr_clause)
+             ORDER BY date_intervention DESC LIMIT 20",
+            $owner
+        )) ?: [];
+
+        $other_dossiers = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, visite_date, statut FROM $td
+             WHERE owner_user_id = %d AND id != %d AND ($name_clause OR $adr_clause)
+             ORDER BY updated_at DESC LIMIT 20",
+            $owner, (int) $row->id
+        )) ?: [];
+
+        if ($other_interv || $other_dossiers) {
+            echo '<h3 style="margin:24px 0 8px;color:#c8102e">🔗 Tout ce qui concerne ce locataire</h3>';
+            echo '<div class="lfi-app-help">Toutes les interventions et autres dossiers que tu as déjà ouverts pour cette personne / cette adresse.</div>';
+
+            if ($other_dossiers) {
+                echo '<h4 style="margin:10px 0 4px">📁 Autres dossiers juridiques</h4>';
+                echo '<ul class="lfi-app-list">';
+                foreach ($other_dossiers as $d) {
+                    echo '<li class="lfi-app-card">';
+                    echo '<div class="head"><div class="who">📁 Dossier #' . (int) $d->id . '</div>';
+                    echo '<div class="badge">' . esc_html($d->statut) . '</div></div>';
+                    if ($d->visite_date) echo '<div class="meta"><span class="meta-chip">🗓 Visite ' . esc_html(wp_date('j M Y', strtotime($d->visite_date))) . '</span></div>';
+                    echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $d->id])) . '">Ouvrir →</a></div>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+            }
+
+            if ($other_interv) {
+                echo '<h4 style="margin:10px 0 4px">🔧 Interventions brigade</h4>';
+                echo '<ul class="lfi-app-list">';
+                foreach ($other_interv as $i) {
+                    echo '<li class="lfi-app-card">';
+                    echo '<div class="head"><div class="who">🔧 ' . esc_html($i->type_travaux ?: '(sans type)') . '</div>';
+                    echo '<div class="badge">' . esc_html($i->statut) . '</div></div>';
+                    echo '<div class="meta">';
+                    if ($i->date_intervention) echo '<span class="meta-chip">🗓 ' . esc_html(wp_date('j M Y', strtotime($i->date_intervention))) . '</span>';
+                    if ($i->total_ht > 0) echo '<span class="meta-chip">' . esc_html(number_format($i->total_ht, 2, ',', ' ')) . ' €</span>';
+                    echo '</div>';
+                    echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-edit', ['id' => $i->id])) . '">Ouvrir →</a></div>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+            }
+        }
+
+        /* Raccourcis création */
+        echo '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
+        $shortcut_args = [
+            'tenant_prenom' => $r->tenant_prenom,
+            'tenant_nom'    => $r->tenant_nom,
+            'tenant_adresse'=> $r->tenant_adresse,
+            'tenant_etage'  => $r->tenant_etage,
+            'tenant_appartement' => $r->tenant_appartement,
+            'tenant_tel'    => $r->tenant_tel,
+        ];
+        if ($r->tenant_user_id) $shortcut_args['tenant_uid'] = $r->tenant_user_id;
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-add', $shortcut_args)) . '">+ Nouvelle intervention pour ce locataire</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Nouveau dossier pour ce locataire</a>';
+        echo '</div>';
+    }
 
     /* === GÉNÉRATION DES LETTRES (uniquement après création) === */
     if ($is_edit) {
@@ -381,7 +484,124 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</form>';
     }
 
+    /* Helper voice — injecté ici, partagé avec l'intervention */
+    lfi_nct_render_voice_helper();
+
     lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  Helper voice partagé — boutons 🎤 sur champs texte             *
+ *                                                                  *
+ *  Utilise l'API Web Speech Recognition (Chrome, Edge, Safari iOS).*
+ *  Cherche tous les éléments <div class="lfi-voice-zone"           *
+ *  data-target="ID" data-label="..."> et y injecte un bouton.      *
+ * ============================================================== */
+function lfi_nct_render_voice_helper() {
+    static $rendered = false;
+    if ($rendered) return;
+    $rendered = true;
+    ?>
+    <style>
+    .lfi-voice-btn {
+        background: #fff; color: #c8102e; border: 1.5px solid #c8102e;
+        padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer;
+        margin-top: 6px; font-size: .92em; display: inline-flex; align-items: center;
+        gap: 6px; transition: all .15s;
+    }
+    .lfi-voice-btn.listening { background: #c8102e; color: #fff; animation: lfi-pulse 1.2s infinite; }
+    @keyframes lfi-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(200,16,46,.6); } 50% { box-shadow: 0 0 0 8px rgba(200,16,46,0); } }
+    .lfi-voice-unavailable { font-size: .85em; color: #888; font-style: italic; margin-top: 4px; }
+    .lfi-voice-status { font-size: .85em; color: #666; margin-top: 4px; min-height: 18px; }
+    </style>
+    <script>
+    (function () {
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        document.querySelectorAll('.lfi-voice-zone').forEach(function (zone) {
+            var fieldId = zone.getAttribute('data-target');
+            var label = zone.getAttribute('data-label') || 'Dicter';
+            var field = document.getElementById(fieldId);
+            if (!field) return;
+
+            if (!SR) {
+                zone.innerHTML = '<div class="lfi-voice-unavailable">🎤 Dictée vocale indisponible sur ce navigateur (utilise Chrome, Edge ou Safari iOS).</div>';
+                return;
+            }
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'lfi-voice-btn';
+            btn.innerHTML = '🎤 ' + label;
+            zone.appendChild(btn);
+
+            var status = document.createElement('div');
+            status.className = 'lfi-voice-status';
+            zone.appendChild(status);
+
+            var recognition = null;
+            var listening = false;
+            var anchor = '';
+
+            btn.addEventListener('click', function () {
+                if (listening) {
+                    if (recognition) recognition.stop();
+                    return;
+                }
+                try {
+                    recognition = new SR();
+                } catch (e) {
+                    status.textContent = 'Erreur micro : ' + e.message;
+                    return;
+                }
+                recognition.lang = 'fr-FR';
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                anchor = field.value || '';
+                if (anchor && !/[\s\.\!\?]$/.test(anchor)) anchor += ' ';
+
+                recognition.onresult = function (event) {
+                    var fin = '', interim = '';
+                    for (var i = 0; i < event.results.length; i++) {
+                        var t = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) fin += t + ' ';
+                        else interim += t;
+                    }
+                    field.value = anchor + fin + interim;
+                    status.textContent = interim ? '… ' + interim : '✓ ' + (fin ? fin.slice(0, 50) + '…' : '');
+                };
+                recognition.onend = function () {
+                    listening = false;
+                    btn.classList.remove('listening');
+                    btn.innerHTML = '🎤 ' + label;
+                    status.textContent = field.value !== anchor ? '✅ Enregistré dans le champ.' : '';
+                };
+                recognition.onerror = function (e) {
+                    listening = false;
+                    btn.classList.remove('listening');
+                    btn.innerHTML = '🎤 ' + label;
+                    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                        status.textContent = '🔒 Autorise l\'accès au micro pour le site.';
+                    } else if (e.error === 'no-speech') {
+                        status.textContent = '🤫 Pas de voix détectée, réessaie.';
+                    } else {
+                        status.textContent = 'Erreur : ' + e.error;
+                    }
+                };
+
+                try {
+                    recognition.start();
+                    listening = true;
+                    btn.classList.add('listening');
+                    btn.innerHTML = '⏹ Arrêter la dictée';
+                    status.textContent = '🎙 J\'écoute… parle naturellement.';
+                } catch (e) {
+                    status.textContent = 'Impossible de démarrer : ' + e.message;
+                }
+            });
+        });
+    })();
+    </script>
+    <?php
 }
 
 /* ============================================================== *

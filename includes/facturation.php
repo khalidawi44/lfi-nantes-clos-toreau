@@ -496,6 +496,15 @@ function lfi_nct_app_intervention_form($row) {
         exit;
     }
 
+    /* Préselection depuis paramètres URL bruts (raccourci depuis dossier juridique) */
+    if (!$is_edit && !$row) {
+        $row = (object) [];
+        foreach (['tenant_prenom', 'tenant_nom', 'tenant_adresse', 'tenant_etage', 'tenant_appartement', 'tenant_tel'] as $f) {
+            if (!empty($_GET[$f])) $row->$f = sanitize_text_field(wp_unslash($_GET[$f]));
+        }
+        if (empty((array) $row)) $row = null;
+    }
+
     /* Préselection depuis ?tenant_uid=X — auto-fill agressif depuis l'enquête */
     if (!$is_edit && !empty($_GET['tenant_uid'])) {
         $tuid = (int) $_GET['tenant_uid'];
@@ -608,7 +617,8 @@ function lfi_nct_app_intervention_form($row) {
     /* Champ libre conservé pour compatibilité (titre de la prestation sur facture) */
     echo '<label>Libellé court pour la facture (auto-rempli)<input type="text" name="type_travaux" id="lfi-type-label" value="' . esc_attr($current_type) . '" placeholder="Ex : Moisissures + repose placo BA13 hydro"></label>';
 
-    echo '<label>Description détaillée (ce qui sera repris dans la facture)<textarea name="description" rows="4" placeholder="Ex : Démontage et évacuation des plaques de plâtre infestées de moisissures sur 4 m² au mur de la cuisine, ponçage du support, rebouchage à l\'enduit, repose de placo BA13 hydro, enduit de finition.">' . esc_textarea($r->description) . '</textarea></label>';
+    echo '<label>Description détaillée (ce qui sera repris dans la facture)<textarea name="description" id="lfi-desc-interv" rows="4" placeholder="Ex : Démontage et évacuation des plaques de plâtre infestées de moisissures sur 4 m² au mur de la cuisine, ponçage du support, rebouchage à l\'enduit, repose de placo BA13 hydro, enduit de finition.">' . esc_textarea($r->description) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-desc-interv" data-label="Dicter la description"></div>';
 
     /* === MODE DE FACTURATION === */
     $current_mode = (string) ($r->tarif_mode ?? 'tache');
@@ -741,7 +751,8 @@ function lfi_nct_app_intervention_form($row) {
     }
     echo '</select></label>';
 
-    echo '<label>Notes privées (ne figure pas sur la facture)<textarea name="notes" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
+    echo '<label>Notes privées (ne figure pas sur la facture)<textarea name="notes" id="lfi-notes-interv" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-notes-interv" data-label="Dicter mes notes"></div>';
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer l\'intervention') . '</button>';
     echo '</form>';
@@ -920,6 +931,67 @@ function lfi_nct_app_intervention_form($row) {
     })();
     </script>
     <?php
+
+    /* === REGROUPEMENT PAR LOCATAIRE — autres interventions + dossiers === */
+    if ($is_edit && (!empty($r->tenant_nom) || !empty($r->tenant_adresse))) {
+        $owner = (int) lfi_nct_fact_owner_id();
+        $ti = $wpdb->prefix . 'lfi_nct_interventions';
+        $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $name_clause = $r->tenant_nom ? $wpdb->prepare('LOWER(tenant_nom) = LOWER(%s)', $r->tenant_nom) : '0';
+        $adr_clause  = $r->tenant_adresse ? $wpdb->prepare('LOWER(tenant_adresse) = LOWER(%s)', $r->tenant_adresse) : '0';
+
+        $other_interv = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, date_intervention, type_travaux, total_ht, statut FROM $ti
+             WHERE owner_user_id = %d AND id != %d AND ($name_clause OR $adr_clause)
+             ORDER BY date_intervention DESC LIMIT 20",
+            $owner, (int) $row->id
+        )) ?: [];
+
+        $other_dossiers = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, visite_date, statut FROM $td
+             WHERE owner_user_id = %d AND ($name_clause OR $adr_clause)
+             ORDER BY updated_at DESC LIMIT 20",
+            $owner
+        )) ?: [];
+
+        if ($other_interv || $other_dossiers) {
+            echo '<h3 style="margin:24px 0 8px;color:#c8102e">🔗 Tout ce qui concerne ce locataire</h3>';
+            if ($other_dossiers) {
+                echo '<h4 style="margin:10px 0 4px">📁 Dossiers juridiques</h4><ul class="lfi-app-list">';
+                foreach ($other_dossiers as $d) {
+                    echo '<li class="lfi-app-card">';
+                    echo '<div class="head"><div class="who">📁 Dossier #' . (int) $d->id . '</div>';
+                    echo '<div class="badge">' . esc_html($d->statut) . '</div></div>';
+                    echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $d->id])) . '">Ouvrir →</a></div>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+            }
+            if ($other_interv) {
+                echo '<h4 style="margin:10px 0 4px">🔧 Autres interventions</h4><ul class="lfi-app-list">';
+                foreach ($other_interv as $i) {
+                    echo '<li class="lfi-app-card">';
+                    echo '<div class="head"><div class="who">🔧 ' . esc_html($i->type_travaux ?: '(sans type)') . '</div>';
+                    echo '<div class="badge">' . esc_html($i->statut) . '</div></div>';
+                    echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-edit', ['id' => $i->id])) . '">Ouvrir →</a></div>';
+                    echo '</li>';
+                }
+                echo '</ul>';
+            }
+        }
+
+        $shortcut_args = [
+            'tenant_prenom' => $r->tenant_prenom, 'tenant_nom' => $r->tenant_nom,
+            'tenant_adresse'=> $r->tenant_adresse, 'tenant_etage' => $r->tenant_etage,
+            'tenant_appartement' => $r->tenant_appartement, 'tenant_tel' => $r->tenant_tel,
+        ];
+        echo '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Ouvrir un dossier juridique pour ce locataire</a>';
+        echo '</div>';
+    }
+
+    /* Bouton voice helper partagé */
+    if (function_exists('lfi_nct_render_voice_helper')) lfi_nct_render_voice_helper();
 
     lfi_nct_app_screen_close();
 }
