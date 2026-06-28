@@ -428,6 +428,13 @@ function lfi_nct_app_shortcode() {
                     case 'recouvrement-doc-cdc':       lfi_nct_app_view_recouvrement_doc_cdc();         break;
                     case 'recouvrement-doc-tj':        lfi_nct_app_view_recouvrement_doc_tj();          break;
                     case 'recouvrement-doc-schs':      lfi_nct_app_view_recouvrement_doc_schs();        break;
+                    case 'dossiers-juridiques':        lfi_nct_app_view_dossiers_juridiques();          break;
+                    case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
+                    case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
+                    case 'dossier-doc-lrar-travaux':   lfi_nct_app_view_dossier_doc_lrar_travaux();     break;
+                    case 'dossier-doc-lrar-relogement':lfi_nct_app_view_dossier_doc_lrar_relogement();  break;
+                    case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
+                    case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
                     case 'tutoriels':             lfi_nct_app_view_tutoriels();              break;
                     case 'tutoriel':              lfi_nct_app_view_tutoriel();               break;
                     case 'agenda':                lfi_nct_app_view_agenda();                 break;
@@ -1235,6 +1242,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📅', 'Agenda',                 'Tous mes RDV et interventions',       lfi_nct_app_url('agenda')],
             ['🔧', 'Interventions',          'Suivi & facturation NMH',             lfi_nct_app_url('interventions')],
             ['⚖️', 'Recouvrement NMH',       'Mandat, mise en demeure, tribunal',    lfi_nct_app_url('recouvrements')],
+            ['📁', 'Dossiers juridiques',    'LRAR travaux + relogement + SCHS/ARS', lfi_nct_app_url('dossiers-juridiques')],
             ['🛠', 'Tutoriels',              'Guides pros par problème',            lfi_nct_app_url('tutoriels')],
             ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
             ['⚙️', 'Paramètres facturation', 'Prestataire · bailleur · tarif',      lfi_nct_app_url('facturation-params')],

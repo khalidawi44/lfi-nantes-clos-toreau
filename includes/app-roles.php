@@ -639,6 +639,13 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'recouvrement-doc-cdc':    lfi_nct_app_view_recouvrement_doc_cdc();         break;
             case 'recouvrement-doc-tj':     lfi_nct_app_view_recouvrement_doc_tj();          break;
             case 'recouvrement-doc-schs':   lfi_nct_app_view_recouvrement_doc_schs();        break;
+            case 'dossiers-juridiques':        lfi_nct_app_view_dossiers_juridiques();          break;
+            case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
+            case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
+            case 'dossier-doc-lrar-travaux':   lfi_nct_app_view_dossier_doc_lrar_travaux();     break;
+            case 'dossier-doc-lrar-relogement':lfi_nct_app_view_dossier_doc_lrar_relogement();  break;
+            case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
+            case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
             case 'tutoriels':               lfi_nct_app_view_tutoriels();                    break;
             case 'tutoriel':                lfi_nct_app_view_tutoriel();                     break;
             case 'agenda':                  lfi_nct_app_view_agenda();                       break;
@@ -698,6 +705,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['🚀', 'Comment ça marche',         'Guide en 1 minute · à lire en 1er',   lfi_nct_app_url('brigade-intro')],
         ['🔧', 'Mes interventions',         $my_interv . ' interv. · ' . $my_facture . ' facturée(s)', lfi_nct_app_url('interventions')],
         ['⚖️', 'Mes recouvrements NMH',     'Mandat, mise en demeure, tribunal',   lfi_nct_app_url('recouvrements')],
+        ['📁', 'Dossiers juridiques',       'Travaux urgents, relogement médical', lfi_nct_app_url('dossiers-juridiques')],
         ['🛠', 'Tutoriels brigade',         'Plâtre, peinture, plomberie…',        lfi_nct_app_url('tutoriels')],
         ['🔬', 'Outils scientifiques',      'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
         ['📅', 'Mon agenda perso',          'RDV, interventions, perso',           lfi_nct_app_url('agenda')],
