@@ -425,8 +425,18 @@ function lfi_nct_app_view_dossier() {
     echo '<div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;border-radius:12px;padding:16px;margin:16px 0">';
     echo '<div style="font-weight:800;font-size:1.05em;margin-bottom:10px">⚡ Actions pour ce locataire</div>';
     echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+    /* Dossier juridique : OUVRE le dossier existant s'il y en a un,
+       sinon ouvre le formulaire de création pré-rempli. */
+    $dossier_existant = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+    if ($dossier_existant) {
+        $dossier_url = lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $dossier_existant->id]);
+        $dossier_lbl = 'Ouvrir le dossier';
+    } else {
+        $dossier_url = lfi_nct_app_url('dossier-juridique-add', $shortcut);
+        $dossier_lbl = 'Dossier juridique';
+    }
     $actions = [
-        ['📁', 'Dossier juridique', lfi_nct_app_url('dossier-juridique-add', $shortcut)],
+        ['📁', $dossier_lbl,        $dossier_url],
         ['🔧', 'Intervention',      lfi_nct_app_url('intervention-add', $shortcut)],
         ['☎️', 'Appeler NMH',       lfi_nct_app_url('appel-nmh-add', ['tenant_uid' => $u->ID])],
         ['📅', 'RDV / agenda',      lfi_nct_app_url('rdv-add', ['tenant_uid' => $u->ID])],

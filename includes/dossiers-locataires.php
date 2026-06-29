@@ -187,6 +187,76 @@ function lfi_nct_dossier_get($id) {
     return $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d AND owner_user_id = %d", (int) $id, $owner));
 }
 
+/* ============================================================== *
+ *  Trouve le dossier juridique EXISTANT d'un locataire             *
+ *                                                                  *
+ *  Matching robuste (identique au suivi) : tenant_user_id OU nom   *
+ *  OU adresse canonique. Renvoie la ligne la plus récente, ou null *
+ *  si aucun dossier n'existe encore pour ce locataire.             *
+ * ============================================================== */
+function lfi_nct_dossier_find_for_tenant($uid) {
+    global $wpdb;
+    $uid = (int) $uid;
+    if (!$uid) return null;
+    $u = get_userdata($uid);
+    if (!$u) return null;
+
+    $owner = (int) lfi_nct_dossier_owner_id();
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+
+    /* 1) Cas le plus simple et le plus fiable : lien direct par compte. */
+    $row = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $t WHERE owner_user_id = %d AND tenant_user_id = %d ORDER BY updated_at DESC LIMIT 1",
+        $owner, $uid
+    ));
+    if ($row) return $row;
+
+    /* 2) Fallback : dossier saisi à la main (pas encore lié au compte).
+          On matche par nom OU adresse canonique, comme le suivi. */
+    $nom = trim($u->last_name . ' ' . $u->first_name);
+    if ($nom === '') $nom = (string) $u->display_name;
+    $adr = '';
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    if ($rid) {
+        $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+        if ($resp) $adr = (string) $resp->adresse;
+    }
+    $adr_key = ($adr && function_exists('lfi_nct_address_canonical_key')) ? lfi_nct_address_canonical_key($adr) : '';
+
+    $all = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $t WHERE owner_user_id = %d ORDER BY updated_at DESC LIMIT 300", $owner
+    )) ?: [];
+    $na = strtolower(trim(preg_replace('/\s+/', ' ', $nom)));
+    foreach ($all as $d) {
+        $d_nom = trim($d->tenant_prenom . ' ' . $d->tenant_nom);
+        $nb = strtolower(trim(preg_replace('/\s+/', ' ', $d_nom)));
+        if ($na !== '' && $nb !== '') {
+            if ($na === $nb) return $d;
+            if (strlen($na) >= 4 && (strpos($nb, $na) !== false || strpos($na, $nb) !== false)) return $d;
+        }
+        if ($adr_key && function_exists('lfi_nct_address_canonical_key')) {
+            if (lfi_nct_address_canonical_key($d->tenant_adresse) === $adr_key) return $d;
+        }
+    }
+    return null;
+}
+
+/* URL « intelligente » du dossier juridique d'un locataire :
+   - si un dossier existe déjà → on l'OUVRE (édition / lettres) ;
+   - sinon → on ouvre le formulaire de création pré-rempli.
+   C'est cette URL qu'il faut utiliser sur tous les boutons « Dossier
+   juridique » des fiches locataires, pour ne plus jamais recréer un
+   dossier en double ni tomber sur une page vide. */
+function lfi_nct_dossier_url_for_tenant($uid, $extra = []) {
+    $uid = (int) $uid;
+    $existing = $uid ? lfi_nct_dossier_find_for_tenant($uid) : null;
+    if ($existing) {
+        return lfi_nct_app_url('dossier-juridique-edit', array_merge(['id' => (int) $existing->id], $extra));
+    }
+    $args = $uid ? array_merge(['tenant_uid' => $uid], $extra) : $extra;
+    return lfi_nct_app_url('dossier-juridique-add', $args);
+}
+
 /* Tarif horaire pour une visite/constat (= tarif brigade par défaut) */
 function lfi_nct_visite_tarif_horaire() {
     return function_exists('lfi_nct_fact_tarif_defaut') ? lfi_nct_fact_tarif_defaut() : 40.00;
@@ -301,7 +371,51 @@ function lfi_nct_app_view_dossiers_juridiques() {
     }
     echo '</ul>';
 
+    /* === ANNUAIRE : accès direct au dossier de CHAQUE locataire enregistré === */
+    lfi_nct_dossiers_render_tenant_directory();
+
     lfi_nct_app_screen_close();
+}
+
+/* Liste tous les locataires enregistrés avec un accès direct à leur dossier
+   juridique (ouvre l'existant ou en démarre un). Permet de retrouver le
+   dossier de n'importe quel locataire — Mme Fadiga comprise — en un clic. */
+function lfi_nct_dossiers_render_tenant_directory() {
+    if (!defined('LFI_NCT_ROLE_TENANT')) return;
+    $tenants = get_users([
+        'role'    => LFI_NCT_ROLE_TENANT,
+        'fields'  => ['ID', 'display_name', 'user_login', 'user_email'],
+        'number'  => 500,
+        'orderby' => 'display_name',
+        'order'   => 'ASC',
+    ]);
+    if (empty($tenants)) return;
+
+    echo '<h3 style="margin:26px 0 6px;color:#c8102e">👥 Tous les locataires enregistrés</h3>';
+    echo '<div class="lfi-app-help">Accède au dossier juridique de n\'importe quel locataire. Si un dossier existe déjà, le bouton l\'ouvre ; sinon il en démarre un, pré-rempli.</div>';
+    echo '<ul class="lfi-app-list">';
+    foreach ($tenants as $u) {
+        $existing = lfi_nct_dossier_find_for_tenant($u->ID);
+        $name = $u->display_name ?: $u->user_login;
+        echo '<li class="lfi-app-card">';
+        echo '<div class="head"><div class="who">👤 ' . esc_html($name) . '</div>';
+        if ($existing) {
+            echo '<div class="badge" style="background:#186a3b;color:#fff">✓ Dossier #' . (int) $existing->id . '</div>';
+        } else {
+            echo '<div class="badge" style="background:#eee;color:#777">aucun dossier</div>';
+        }
+        echo '</div>';
+        echo '<div class="row-actions">';
+        if ($existing) {
+            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $existing->id])) . '">📂 Ouvrir le dossier</a>';
+        } else {
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID])) . '">+ Démarrer un dossier</a>';
+        }
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📁 Profil complet</a>';
+        echo '</div>';
+        echo '</li>';
+    }
+    echo '</ul>';
 }
 
 /* ============================================================== *
@@ -438,13 +552,26 @@ function lfi_nct_app_dossier_juridique_form($row) {
         exit;
     }
 
+    /* Valeurs par défaut COMPLÈTES — garantissent que tous les champs
+       existent toujours sur l'objet, même en création pré-remplie. Évite
+       les propriétés indéfinies (cause possible de page blanche). */
+    $defaults = [
+        'id'=>0, 'tenant_user_id'=>'', 'tenant_prenom'=>'', 'tenant_nom'=>'', 'tenant_adresse'=>'',
+        'tenant_etage'=>'', 'tenant_appartement'=>'', 'tenant_tel'=>'', 'tenant_email'=>'',
+        'visite_date'=>current_time('Y-m-d'), 'visite_duree'=>'', 'visite_heures'=>0,
+        'constatations'=>'', 'certificat_medecin'=>'',
+        'certificat_pathologie'=>'', 'certificat_date'=>'',
+        'demandes'=>'[]', 'statut'=>'ouvert', 'notes'=>'',
+        'lrar_travaux_date'=>null, 'lrar_relogement_date'=>null, 'schs_date'=>null, 'ars_date'=>null,
+        'facture_intervention_id'=>0,
+    ];
+
     /* Pré-remplissage depuis paramètres URL (raccourci depuis autre fiche) */
-    if (!$is_edit && !$row) {
-        $row = (object) [];
+    $prefill = [];
+    if (!$is_edit) {
         foreach (['tenant_prenom', 'tenant_nom', 'tenant_adresse', 'tenant_etage', 'tenant_appartement', 'tenant_tel'] as $f) {
-            if (!empty($_GET[$f])) $row->$f = sanitize_text_field(wp_unslash($_GET[$f]));
+            if (!empty($_GET[$f])) $prefill[$f] = sanitize_text_field(wp_unslash($_GET[$f]));
         }
-        if (empty((array) $row)) $row = null;
     }
 
     /* Pré-remplissage si nouveau + tenant_uid */
@@ -452,32 +579,26 @@ function lfi_nct_app_dossier_juridique_form($row) {
         $tuid = (int) $_GET['tenant_uid'];
         $u = get_userdata($tuid);
         if ($u) {
-            $row = (object) [
-                'tenant_user_id'   => $tuid,
-                'tenant_prenom'    => $u->first_name ?: $u->display_name,
-                'tenant_nom'       => $u->last_name,
-                'tenant_email'     => $u->user_email,
-                'tenant_tel'       => (string) get_user_meta($tuid, 'lfi_nct_tel', true),
-            ];
+            $prefill['tenant_user_id'] = $tuid;
+            $prefill['tenant_prenom']  = $u->first_name ?: $u->display_name;
+            $prefill['tenant_nom']     = $u->last_name;
+            $prefill['tenant_email']   = $u->user_email;
+            $tel = (string) get_user_meta($tuid, 'lfi_nct_tel', true);
+            if ($tel !== '') $prefill['tenant_tel'] = $tel;
             $resp_id = (int) get_user_meta($tuid, 'lfi_nct_response_id', true);
             if ($resp_id) {
                 $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $resp_id));
                 if ($resp) {
-                    $row->tenant_adresse = $resp->adresse;
-                    $row->tenant_etage   = $resp->etage;
+                    $prefill['tenant_adresse'] = $resp->adresse;
+                    $prefill['tenant_etage']   = $resp->etage;
                 }
             }
         }
     }
 
-    $r = $row ?: (object) [
-        'tenant_user_id'=>'', 'tenant_prenom'=>'', 'tenant_nom'=>'', 'tenant_adresse'=>'',
-        'tenant_etage'=>'', 'tenant_appartement'=>'', 'tenant_tel'=>'', 'tenant_email'=>'',
-        'visite_date'=>current_time('Y-m-d'), 'visite_duree'=>'',
-        'constatations'=>'', 'certificat_medecin'=>'',
-        'certificat_pathologie'=>'', 'certificat_date'=>'',
-        'demandes'=>'[]', 'statut'=>'ouvert', 'notes'=>'',
-    ];
+    /* Construit l'objet final : défauts + (ligne existante OU pré-remplissage). */
+    $base = $is_edit && $row ? (array) $row : [];
+    $r = (object) array_merge($defaults, $base, $prefill);
 
     $demandes_actives = json_decode($r->demandes ?? '[]', true);
     if (!is_array($demandes_actives)) $demandes_actives = [];

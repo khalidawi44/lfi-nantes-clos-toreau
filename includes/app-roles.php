@@ -2020,9 +2020,14 @@ function lfi_nct_app_view_comptes_locataires() {
             echo '</div>';
 
             /* Boutons principaux */
+            $dj = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+            $dj_url = $dj
+                ? lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $dj->id])
+                : lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID]);
+            $dj_lbl = $dj ? '📁 Ouvrir le dossier' : '📁 + Dossier juridique';
             echo '<div class="row-actions">';
             echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Dossier complet</a>';
-            echo '<a class="btn-primary" style="background:#a30b25" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID])) . '">📁 + Dossier juridique</a>';
+            echo '<a class="btn-primary" style="background:#a30b25" href="' . esc_url($dj_url) . '">' . $dj_lbl . '</a>';
             echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-add', ['tenant_uid' => $u->ID])) . '">🔧 + Intervention</a>';
             echo '</div>';
 

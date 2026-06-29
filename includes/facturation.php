@@ -1008,7 +1008,12 @@ function lfi_nct_app_intervention_form($row) {
             'tenant_appartement' => $r->tenant_appartement, 'tenant_tel' => $r->tenant_tel,
         ];
         echo '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
-        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Ouvrir un dossier juridique pour ce locataire</a>';
+        if (!empty($other_dossiers)) {
+            /* Un dossier existe déjà : on l'OUVRE au lieu d'en recréer un. */
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $other_dossiers[0]->id])) . '">📁 Ouvrir le dossier juridique de ce locataire</a>';
+        } else {
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Ouvrir un dossier juridique pour ce locataire</a>';
+        }
         echo '</div>';
     }
 
