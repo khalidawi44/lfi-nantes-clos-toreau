@@ -385,9 +385,10 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
     lfi_nct_app_screen_open($is_edit ? '📁 Dossier #' . $row->id : '+ Nouveau dossier juridique', 'Constatations · certificat · demandes');
 
-    if (!empty($_GET['saved']))   lfi_nct_app_flash('✅ Dossier enregistré.');
-    if (!empty($_GET['created'])) lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
-    if (!empty($_GET['marked']))  lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
+    if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Dossier enregistré.');
+    if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
+    if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
+    if (!empty($_GET['email_sent'])) lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_dossier_save');
@@ -573,12 +574,13 @@ function lfi_nct_app_dossier_juridique_form($row) {
             echo '</div>';
             echo '<div class="com">' . esc_html($desc) . '</div>';
             echo '<div class="row-actions">';
-            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url($route, ['id' => $row->id])) . '" target="_blank">📄 Ouvrir la lettre (imprimable)</a>';
+            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url($route, ['id' => $row->id])) . '" target="_blank">📄 Ouvrir / Imprimer</a>';
+            echo '<a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('dossier-send-email', ['id' => $row->id, 'letter' => $key])) . '">📧 Envoyer par email</a>';
             if (!$sent) {
                 echo '<form method="post" style="display:inline;margin:0">';
                 wp_nonce_field('lfi_dossier_mark_' . $key);
                 echo '<input type="hidden" name="lfi_dossier_mark_' . $key . '" value="1">';
-                echo '<button type="submit" class="btn-ghost">📨 Marquer envoyée</button>';
+                echo '<button type="submit" class="btn-ghost">📨 Marquer envoyée (LRAR papier)</button>';
                 echo '</form>';
             }
             echo '</div>';
@@ -857,30 +859,276 @@ function lfi_nct_render_voice_helper() {
                 }
             }
 
-            /* Bouton plein écran si SpeechRecognition dispo */
-            if (SR) {
+            /* Astuce iPhone — la dictée Apple du clavier marche mieux que
+               tout ce qu'on peut faire en JavaScript. On la met en avant. */
+            if (isiOS) {
+                var tip = document.createElement('div');
+                tip.className = 'lfi-voice-tip';
+                tip.innerHTML = '🎤 <strong>Pour dicter</strong> : touche le champ ci-dessous → puis le micro 🎤 du clavier iPhone (en bas à droite, à côté de la barre d\'espace).';
+                zone.appendChild(tip);
+            } else if (SR) {
+                /* Sur desktop/Android : bouton plein écran (utile sans clavier tactile) */
                 var wrap = document.createElement('div');
                 wrap.className = 'lfi-voice-wrap';
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'lfi-voice-btn';
-                btn.innerHTML = '🎤 ' + label + ' en plein écran';
+                btn.innerHTML = '🎤 ' + label + ' (plein écran)';
                 wrap.appendChild(btn);
                 zone.appendChild(wrap);
                 btn.addEventListener('click', function () { openDictaphone(field); });
             }
+        });
 
-            /* Astuce iPhone — clavier natif Apple */
-            if (isiOS) {
-                var tip = document.createElement('div');
-                tip.className = 'lfi-voice-tip';
-                tip.innerHTML = '💡 <strong>Autre solution iPhone</strong> : touche le champ ci-dessous → le clavier iPhone s\'ouvre → appuie sur le petit micro 🎤 du clavier (en bas à droite, à côté de la barre d\'espace). Ta voix s\'écrit directement, c\'est la dictée Apple.';
-                zone.appendChild(tip);
-            }
+        /* ============================================================
+           FIX BUG SAVE — Force le blur de tous les champs au moment
+           du submit, pour committer la dictée iOS en cours.
+           Sans ça, si l'utilisateur clique Save alors que la dictée
+           native n'a pas encore terminé d'écrire dans le field, la
+           valeur sérialisée est vide → rien n'est enregistré.
+           ============================================================ */
+        document.querySelectorAll('form.lfi-app-form').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                if (document.activeElement && document.activeElement.blur) {
+                    document.activeElement.blur();
+                }
+            }, true);
         });
     })();
     </script>
     <?php
+}
+
+/* ============================================================== *
+ *  ENVOI EMAIL au nom du Groupe d'Action LFI                        *
+ *                                                                   *
+ *  Une lettre déjà imprimable peut aussi être envoyée directement   *
+ *  par email à NMH + Agence Goudy (M. Morineau), avec :              *
+ *   - Reply-To = email de l'admin (le destinataire répondra à toi)   *
+ *   - From = "Groupe d'Action LFI Nantes Sud Clos Toreau <admin>"    *
+ *   - Signature claire mentionnant le mandat du locataire            *
+ *   - HTML = exactement la lettre, plus quelques mots d'intro         *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_send_email() {
+    if (!lfi_nct_can_use_brigade()) return;
+    global $wpdb;
+    $id = (int) ($_GET['id'] ?? 0);
+    $letter_key = sanitize_key($_GET['letter'] ?? '');
+    $dossier = lfi_nct_dossier_get($id);
+    if (!$dossier) { wp_die('Dossier introuvable'); }
+
+    $allowed = ['lrar_travaux', 'lrar_relogement', 'schs', 'ars'];
+    if (!in_array($letter_key, $allowed, true)) wp_die('Type de lettre inconnu');
+
+    $bailleur = lfi_nct_fact_bailleur();
+    $presta   = lfi_nct_fact_prestataire();
+    $u        = wp_get_current_user();
+
+    /* Sujet + destinataires par type de lettre */
+    $defaults = lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur);
+    $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
+
+    /* HANDLER POST : envoi */
+    if (!empty($_POST['lfi_dossier_email_send']) && check_admin_referer('lfi_dossier_email_send')) {
+        $to        = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
+        $cc        = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
+        $bcc_self  = !empty($_POST['email_bcc_self']);
+        $subject   = sanitize_text_field(wp_unslash($_POST['email_subject'] ?? ''));
+        $body_raw  = wp_kses_post(wp_unslash($_POST['email_body'] ?? ''));
+        $intro     = sanitize_textarea_field(wp_unslash($_POST['email_intro'] ?? ''));
+
+        /* Compose le mail HTML */
+        $html  = '<div style="font-family:Georgia,serif;font-size:14px;line-height:1.5;color:#1a1a1a;max-width:720px">';
+        if ($intro) $html .= '<p style="margin-bottom:20px">' . nl2br(esc_html($intro)) . '</p><hr style="margin:20px 0;border:0;border-top:1px solid #ccc">';
+        $html .= $body_raw;
+        $html .= '<hr style="margin:24px 0;border:0;border-top:1px solid #ccc">';
+        $html .= '<p style="font-size:12px;color:#666">Cet email est adressé au nom de <strong>' . esc_html($tenant_full ?: 'la locataire') . '</strong>, par l\'intermédiaire du <strong>Groupe d\'Action de la France Insoumise — Nantes Sud / Clos Toreau</strong>, avec le mandat de la personne concernée pour agir auprès du bailleur. Pour toute réponse merci d\'utiliser l\'adresse en Reply-To.</p>';
+        $html .= '</div>';
+
+        /* Headers */
+        $from_name = 'GA LFI Nantes Sud — Clos Toreau';
+        $admin_email = $u->user_email ?: get_option('admin_email');
+        $headers = [];
+        $headers[] = 'From: ' . $from_name . ' <' . $admin_email . '>';
+        $headers[] = 'Reply-To: ' . $admin_email;
+        $headers[] = 'Content-Type: text/html; charset=UTF-8';
+        if ($cc)       $headers[] = 'Cc: ' . $cc;
+        if ($bcc_self) $headers[] = 'Bcc: ' . $admin_email;
+
+        $sent = wp_mail($to, $subject, $html, $headers);
+        if ($sent) {
+            /* Marque la lettre comme envoyée par email — date dans la
+               colonne <letter_key>_email_date (on stocke en notes pour
+               éviter de bumper la version DB pour 4 colonnes). */
+            $logs = json_decode($dossier->notes ?? '', true);
+            if (!is_array($logs)) $logs = ['__notes' => $dossier->notes ?? ''];
+            $logs['email_log'] = $logs['email_log'] ?? [];
+            $logs['email_log'][] = [
+                'letter' => $letter_key,
+                'to'     => $to,
+                'cc'     => $cc,
+                'date'   => current_time('Y-m-d H:i'),
+            ];
+            $wpdb->update($wpdb->prefix . 'lfi_nct_dossiers_locataires',
+                ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)],
+                ['id' => $dossier->id, 'owner_user_id' => (int) lfi_nct_dossier_owner_id()]
+            );
+            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'email_sent' => 1]));
+            exit;
+        } else {
+            $send_error = 'Échec d\'envoi. Vérifie la configuration mail du site (LiteSpeed Mail ou SMTP).';
+        }
+    }
+
+    /* Génère le HTML de la lettre EN MÉMOIRE pour le placer en valeur
+       par défaut du textarea. */
+    ob_start();
+    $generators = [
+        'lrar_travaux'    => 'lfi_nct_app_view_dossier_doc_lrar_travaux',
+        'lrar_relogement' => 'lfi_nct_app_view_dossier_doc_lrar_relogement',
+        'schs'            => 'lfi_nct_app_view_dossier_doc_schs',
+        'ars'             => 'lfi_nct_app_view_dossier_doc_ars',
+    ];
+    /* On extrait juste le bloc .lfi-rec-doc du rendu — l'enrobage app
+       n'est pas voulu dans un email. */
+    /* Pour simplifier : on regénère le corps de la lettre via une
+       fonction utilitaire à ne pas réécrire — on prend juste le
+       texte brut pour la compose. */
+    ob_end_clean();
+
+    /* Corps de mail par défaut = court résumé + invitation à la
+       réponse. La lettre formelle peut être jointe en PJ par l'user. */
+    $default_body = lfi_nct_dossier_email_body_text($letter_key, $dossier, $bailleur, $tenant_full);
+
+    /* ----------- RENDU ----------- */
+    lfi_nct_app_screen_open('📧 Envoyer par email', $defaults['title'] . ' · dossier #' . $dossier->id);
+
+    if (!empty($send_error)) echo '<div class="lfi-error"><strong>Erreur :</strong> ' . esc_html($send_error) . '</div>';
+
+    echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">';
+    echo '🤝 <strong>Tu envoies cet email au nom du Groupe d\'Action LFI</strong>, en représentation de ' . esc_html($tenant_full ?: 'la locataire') . ' qui t\'a mandaté à cet effet. Le destinataire pourra te répondre directement (Reply-To = ton email). Une mention en bas du mail rappelle ce contexte juridique.';
+    echo '</div>';
+
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_dossier_email_send');
+    echo '<input type="hidden" name="lfi_dossier_email_send" value="1">';
+
+    echo '<label>Destinataire(s) — séparer par virgule<input type="text" name="email_to" value="' . esc_attr($defaults['to']) . '" required></label>';
+    echo '<label>Copie (CC) — optionnel<input type="text" name="email_cc" value="' . esc_attr($defaults['cc']) . '"></label>';
+
+    echo '<label style="display:flex;align-items:center;gap:6px;margin:6px 0">';
+    echo '<input type="checkbox" name="email_bcc_self" value="1" checked> Recevoir une copie cachée pour mon archive';
+    echo '</label>';
+
+    echo '<label>Objet<input type="text" name="email_subject" value="' . esc_attr($defaults['subject']) . '" required></label>';
+
+    echo '<label>📝 Mot d\'intro personnel (avant la lettre)<textarea name="email_intro" rows="4" placeholder="Optionnel — ex: « Suite à notre visite ce matin chez Mme X, je vous fais parvenir formellement... »">' . esc_textarea($defaults['intro']) . '</textarea></label>';
+    echo '<div class="lfi-voice-zone" data-target="lfi-email-intro" data-label="Dicter mon intro"></div>';
+
+    echo '<label>Lettre / corps du mail (HTML autorisé)<textarea name="email_body" id="lfi-email-body" rows="14" required>' . esc_textarea($default_body) . '</textarea></label>';
+    echo '<div class="lfi-app-help"><small>Tu peux modifier librement le texte. Les balises HTML simples (&lt;p&gt; &lt;strong&gt; &lt;br&gt; &lt;ul&gt; &lt;li&gt;) sont conservées.</small></div>';
+
+    echo '<button type="submit" class="btn-primary big">📧 Envoyer le mail maintenant</button>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id])) . '">← Annuler</a>';
+
+    echo '</form>';
+
+    /* Voice helper */
+    lfi_nct_render_voice_helper();
+
+    lfi_nct_app_screen_close();
+}
+
+/* Construit les destinataires + sujet par type de lettre */
+function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
+    $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
+    $logement = trim($dossier->tenant_adresse . ($dossier->tenant_etage ? ', ét. ' . $dossier->tenant_etage : ''));
+
+    $to_nmh   = trim($bailleur['email'] ?? '');
+    $cc_agence = trim($bailleur['agence_email'] ?? 'yvonnic.morineau@nmh.fr');
+
+    switch ($letter_key) {
+        case 'lrar_travaux':
+            return [
+                'title'  => 'Mise en demeure travaux urgents',
+                'to'     => $to_nmh ?: $cc_agence,
+                'cc'     => $to_nmh && $cc_agence ? $cc_agence : '',
+                'subject'=> 'Mise en demeure de travaux urgents — ' . ($tenant_full ?: 'logement') . ($logement ? ' · ' . $logement : ''),
+                'intro'  => 'Madame, Monsieur,\n\nJe vous fais parvenir formellement par la présente la mise en demeure ci-après concernant le logement de ' . ($tenant_full ?: '[locataire]') . '. La version papier de ce courrier vous sera également adressée par lettre recommandée avec accusé de réception.',
+            ];
+        case 'lrar_relogement':
+            return [
+                'title'  => 'Demande de relogement d\'urgence médicale',
+                'to'     => $to_nmh ?: $cc_agence,
+                'cc'     => $to_nmh && $cc_agence ? $cc_agence : '',
+                'subject'=> '🆘 URGENT — Relogement médical de ' . ($tenant_full ?: 'locataire') . ($logement ? ' · ' . $logement : ''),
+                'intro'  => 'Madame, Monsieur,\n\nCompte tenu de l\'urgence sanitaire attestée, je sollicite votre traitement prioritaire de la demande de relogement de ' . ($tenant_full ?: '[locataire]') . ' formalisée dans le courrier ci-dessous. La LRAR vous sera également remise.',
+            ];
+        case 'schs':
+            return [
+                'title'  => 'Saisine SCHS Nantes',
+                'to'     => 'schs@mairie-nantes.fr',
+                'cc'     => $cc_agence,
+                'subject'=> 'Signalement d\'insalubrité — ' . $logement,
+                'intro'  => 'Madame, Monsieur,\n\nJe vous saisis par la présente d\'une situation d\'insalubrité documentée. La LRAR papier suit, le présent email étant adressé en parallèle pour célérité.',
+            ];
+        case 'ars':
+            return [
+                'title'  => 'Saisine ARS Pays de la Loire',
+                'to'     => 'ars-pdl-contact@ars.sante.fr',
+                'cc'     => $cc_agence,
+                'subject'=> 'Signalement d\'un risque sanitaire en logement social — ' . $logement,
+                'intro'  => 'Madame, Monsieur,\n\nJe vous saisis d\'un risque sanitaire dans un logement social, documenté ci-après. La LRAR papier suit ; le présent email vise la célérité de prise en charge.',
+            ];
+    }
+    return ['title' => '', 'to' => '', 'cc' => '', 'subject' => '', 'intro' => ''];
+}
+
+/* Corps du mail (HTML court) pour chaque type — l'utilisateur peut éditer */
+function lfi_nct_dossier_email_body_text($letter_key, $dossier, $bailleur, $tenant_full) {
+    $logement = trim($dossier->tenant_adresse . ($dossier->tenant_etage ? ', étage ' . $dossier->tenant_etage : '') . ($dossier->tenant_appartement ? ', appt ' . $dossier->tenant_appartement : ''));
+    $cons     = $dossier->constatations ?? '';
+    $patho    = $dossier->certificat_pathologie ?? '';
+    $medecin  = $dossier->certificat_medecin ?? '';
+
+    $html  = '<p><strong>Objet : ' . esc_html(lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur)['title']) . '</strong></p>';
+    $html .= '<p>Logement concerné : <strong>' . esc_html($logement) . '</strong>';
+    if ($tenant_full) $html .= ' — locataire : <strong>' . esc_html($tenant_full) . '</strong>';
+    $html .= '</p>';
+
+    if ($cons) {
+        $html .= '<h3 style="color:#c8102e">Constatations établies sur place</h3>';
+        $html .= '<p>' . nl2br(esc_html($cons)) . '</p>';
+    }
+    if ($patho && $medecin) {
+        $html .= '<h3 style="color:#c8102e">Situation médicale (certificat ' . esc_html($medecin) . ')</h3>';
+        $html .= '<p>' . nl2br(esc_html($patho)) . '</p>';
+    }
+
+    switch ($letter_key) {
+        case 'lrar_travaux':
+            $html .= '<h3 style="color:#c8102e">Demande</h3>';
+            $html .= '<p>En application des articles 1719 et 1724 du Code civil, de l\'article 6 de la loi n° 89-462 et du décret 2002-120, je vous mets en demeure de procéder, <strong>sous QUINZE (15) JOURS</strong>, à une visite contradictoire du logement et de réaliser, <strong>sous UN (1) MOIS</strong>, l\'intégralité des travaux nécessaires à la remise en conformité avec les critères de décence.</p>';
+            $html .= '<p>À défaut, je serai contraint(e) de saisir la Commission Départementale de Conciliation, puis le Tribunal Judiciaire de Nantes aux fins de condamnation sous astreinte, ainsi que le SCHS et l\'ARS pour constat d\'insalubrité.</p>';
+            break;
+        case 'lrar_relogement':
+            $html .= '<h3 style="color:#c8102e">Demande</h3>';
+            $html .= '<p>En application de l\'article L.521-3-1 du CCH, de la loi DALO (n° 2007-290) et de l\'article 1719 du Code civil, je sollicite l\'attribution d\'un logement décent et adapté à la situation médicale, <strong>dans un délai d\'UN (1) MOIS</strong>.</p>';
+            $html .= '<p>À défaut, je saisirai la commission DALO, le SCHS aux fins d\'arrêté d\'insalubrité (qui emporte obligation de relogement à votre charge — art. L.521-3-1 CCH), et le cas échéant le Tribunal Judiciaire en référé (art. 835 CPC).</p>';
+            break;
+        case 'schs':
+            $html .= '<h3 style="color:#c8102e">Demande</h3>';
+            $html .= '<p>Conformément aux articles L.1331-22 et suivants du Code de la santé publique, je sollicite la diligence d\'une visite d\'enquête par les agents assermentés du SCHS, l\'établissement d\'un rapport circonstancié, et le cas échéant la saisine de Monsieur le Préfet aux fins d\'arrêté d\'insalubrité.</p>';
+            break;
+        case 'ars':
+            $html .= '<h3 style="color:#c8102e">Demande</h3>';
+            $html .= '<p>Conformément aux articles L.1311-2 et L.1331-22 du Code de la santé publique, je sollicite l\'évaluation sanitaire du logement, le cas échéant la saisine du Préfet, l\'orientation médicale de l\'occupant exposé, et la coordination avec le SCHS et Nantes Métropole Habitat.</p>';
+            break;
+    }
+
+    $html .= '<p style="margin-top:18px">Je reste à votre disposition pour toute information complémentaire.</p>';
+    $html .= '<p>Salutations distinguées,</p>';
+    return $html;
 }
 
 /* ============================================================== *

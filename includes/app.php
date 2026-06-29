@@ -435,6 +435,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-doc-lrar-relogement':lfi_nct_app_view_dossier_doc_lrar_relogement();  break;
                     case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
                     case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
+                    case 'dossier-send-email':         lfi_nct_app_view_dossier_send_email();           break;
                     case 'tutoriels':             lfi_nct_app_view_tutoriels();              break;
                     case 'tutoriel':              lfi_nct_app_view_tutoriel();               break;
                     case 'agenda':                lfi_nct_app_view_agenda();                 break;
