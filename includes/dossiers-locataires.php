@@ -946,6 +946,16 @@ function lfi_nct_app_dossier_juridique_form($row) {
  *  data-target="ID" data-label="..."> et y injecte un bouton.      *
  * ============================================================== */
 function lfi_nct_render_voice_helper() {
+    /* DÉSACTIVÉ (v0.77) — la dictée vocale maison injectait ~290 lignes de
+       <script> inline (regex, template strings) dans la page. Un
+       post-traitement HTML/JS de la page (minifieur du thème / optimiseur)
+       plantait dessus → PAGE BLANCHE sur les écrans qui l'utilisaient
+       (dossier juridique, intervention…). On s'en passe : le micro 🎤 du
+       clavier iPhone fait le même travail directement dans les champs.
+       Les <div class="lfi-voice-zone"> restantes deviennent inertes (vides),
+       sans aucun effet visible. */
+    return;
+
     static $rendered = false;
     if ($rendered) return;
     $rendered = true;
