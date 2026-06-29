@@ -167,16 +167,16 @@ function lfi_nct_fact_delai($uid = null) {
 function lfi_nct_association() {
     $data = get_option('lfi_nct_association', '');
     $defaults = [
-        'nom'       => 'Union des quartiers libres',
+        'nom'       => 'Union des Quartiers Libres',
         'rna'       => '',          /* n° W au RNA — à compléter */
         'siege'     => '14 rue de Saint-Jean-de-Luz',
         'cp_ville'  => '44200 Nantes',
-        'president' => '',
+        'president' => 'Fabrice Doucet',
         'email'     => 'quartierlibre44@proton.me',
         'tel'       => '06 23 52 60 74',
         'objet'     => 'défense des intérêts des habitants des quartiers populaires dans les domaines social, économique, environnemental et culturel — notamment le logement, le cadre de vie, la sécurité, les services publics, l\'accès aux droits et la protection des droits collectifs (association de locataires)',
         'cotisation'=> '5',
-        'secretaire'    => '',   /* nom du/de la secrétaire (ex: Gwenaël Gourdien) */
+        'secretaire'    => 'Gwenaëlle Gourdien',   /* nom du/de la secrétaire */
         'sig_president' => 0,    /* attachment ID signature président */
         'sig_secretaire'=> 0,    /* attachment ID signature secrétaire */
     ];

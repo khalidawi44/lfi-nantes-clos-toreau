@@ -1481,32 +1481,27 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<p>L\'assemblée, après en avoir délibéré, adopte les résolutions suivantes :</p>';
 
     echo '<h2>Première résolution — Modification de l\'objet (article 2)</h2>';
-    echo '<p>L\'article 2 des statuts est remplacé par la rédaction suivante :</p>';
+    echo '<p>L\'assemblée décide de <strong>compléter l\'article 2 (Objet)</strong> des statuts en y ajoutant, après les alinéas existants relatifs à la culture et à l\'édition, les deux alinéas suivants :</p>';
     echo '<div class="citations">';
-    echo '<p><strong>« Article 2 — Objet.</strong> L\'association ' . esc_html($nom) . ' a pour objet, dans les quartiers populaires de Nantes et de sa métropole :</p>';
-    echo '<ul>';
-    echo '<li>la défense des intérêts matériels et moraux, individuels et collectifs, des habitants et des <strong>locataires</strong>, notamment en matière de <strong>logement</strong>, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</li>';
-    echo '<li>l\'<strong>information, le conseil et l\'accompagnement</strong> des habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions ;</li>';
-    echo '<li>la promotion de l\'accès aux droits et la <strong>lutte contre l\'habitat indigne et la non-décence</strong> ;</li>';
-    echo '<li>toute action de promotion culturelle, éducative et citoyenne contribuant à ces buts.</li>';
-    echo '</ul>';
-    echo '<p>À ce titre, l\'association constitue une <strong>association de défense des locataires</strong> au sens de la loi n° 89-462 du 6 juillet 1989. »</p>';
+    echo '<p>« — de défendre les intérêts matériels et moraux, individuels et collectifs, des habitants et des <strong>locataires</strong> des quartiers populaires, notamment en matière de <strong>logement</strong>, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</p>';
+    echo '<p>— d\'<strong>informer, conseiller et accompagner</strong> les habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions, et de <strong>lutter contre l\'habitat indigne</strong> et la non-décence. »</p>';
+    echo '<p>Il est en outre ajouté la mention : « À ce titre, l\'association constitue une <strong>association de défense des intérêts des locataires</strong> au sens de la loi n° 89-462 du 6 juillet 1989. »</p>';
     echo '</div>';
-    echo '<p><em>Adoptée à l\'unanimité (ou à la majorité de ___ voix pour, ___ contre, ___ abstentions).</em></p>';
+    echo '<p><em>Adoptée à la majorité des deux tiers — ___ voix pour, ___ contre, ___ abstentions.</em></p>';
 
-    echo '<h2>Deuxième résolution — Moyens d\'action et capacité d\'ester en justice (nouvel article)</h2>';
-    echo '<p>Il est ajouté aux statuts un article ainsi rédigé :</p>';
+    echo '<h2>Deuxième résolution — Capacité d\'ester en justice (nouvel article 9)</h2>';
+    echo '<p>L\'assemblée décide d\'insérer un nouvel <strong>article 9 « Moyens d\'action et capacité d\'ester en justice »</strong> (les articles suivants étant renumérotés en conséquence : Bureau → art. 10, Réunions → art. 11, Modification des statuts → art. 12, Dissolution → art. 13), ainsi rédigé :</p>';
     echo '<div class="citations">';
-    echo '<p><strong>« Article ___ — Moyens d\'action et capacité juridique.</strong> Pour la réalisation de son objet, l\'association peut notamment :</p>';
+    echo '<p><strong>« Article 9 — Moyens d\'action et capacité d\'ester en justice.</strong> Pour la réalisation de son objet, l\'association peut notamment :</p>';
     echo '<ul>';
     echo '<li>assister et représenter ses membres dans leurs démarches amiables et contentieuses ;</li>';
     echo '<li><strong>agir en justice, tant en demande qu\'en défense</strong>, devant toutes juridictions, pour la défense de ses intérêts propres comme de l\'<strong>intérêt collectif</strong> entrant dans son objet ;</li>';
     echo '<li>agir en justice, sur <strong>mandat exprès et écrit</strong>, pour la défense des <strong>intérêts individuels de ses membres</strong>, notamment locataires, dans les conditions prévues par la loi du 6 juillet 1989 ;</li>';
     echo '<li>conclure toute convention, recevoir cotisations, dons et subventions concourant à son objet.</li>';
     echo '</ul>';
-    echo '<p>Le <strong>président représente l\'association en justice</strong> et dans tous les actes de la vie civile ; il peut agir en justice au nom de l\'association après autorisation du conseil d\'administration (ou, à défaut, du bureau). »</p>';
+    echo '<p>Le <strong>président représente l\'association en justice</strong> et dans tous les actes de la vie civile ; il peut agir en justice au nom de l\'association après autorisation du bureau. »</p>';
     echo '</div>';
-    echo '<p><em>Adoptée à l\'unanimité (ou à la majorité de ___ voix).</em></p>';
+    echo '<p><em>Adoptée à la majorité des deux tiers — ___ voix pour, ___ contre, ___ abstentions.</em></p>';
 
     echo '<h2>Troisième résolution — Pouvoirs</h2>';
     echo '<p>L\'assemblée donne tous pouvoirs au président, <strong>' . esc_html($pres) . '</strong>, à l\'effet d\'accomplir les formalités de déclaration et de publication de la présente modification auprès de la préfecture de la Loire-Atlantique.</p>';
@@ -1529,62 +1524,73 @@ function lfi_nct_app_view_asso_statuts() {
     /* ============ DOC 3 : STATUTS COMPLETS À JOUR ============ */
     echo '<div class="lfi-rec-doc">';
 
-    echo '<h1>Statuts</h1>';
-    echo '<p style="text-align:center;font-weight:700;font-size:1.1em">' . esc_html($nom) . '</p>';
-    echo '<p style="text-align:center;font-style:italic">Association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901<br>Statuts mis à jour par l\'Assemblée Générale Extraordinaire du ____ / ____ / 20____</p>';
+    echo '<h1>Statuts de l\'association « ' . esc_html($nom) . ' »</h1>';
+    echo '<p style="text-align:center;font-style:italic">Statuts mis à jour par l\'Assemblée Générale Extraordinaire du ____ / ____ / 20____</p>';
 
-    echo '<h2>Article 1 — Constitution et dénomination</h2>';
-    echo '<p>Il est fondé entre les adhérents aux présents statuts une association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901, ayant pour dénomination : <strong>' . esc_html($nom) . '</strong>.</p>';
+    echo '<h2>Article 1 — Dénomination</h2>';
+    echo '<p>Il est fondé, entre les adhérent·es aux présents statuts, une association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901, ayant pour titre : <strong>' . esc_html($nom) . '</strong>.</p>';
 
     echo '<h2>Article 2 — Objet</h2>';
-    echo '<p>L\'association a pour objet, dans les quartiers populaires de Nantes et de sa métropole :</p>';
+    echo '<p>L\'association a pour objet :</p>';
     echo '<ul>';
-    echo '<li>la défense des intérêts matériels et moraux, individuels et collectifs, des habitants et des locataires, notamment en matière de logement, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</li>';
-    echo '<li>l\'information, le conseil et l\'accompagnement des habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions ;</li>';
-    echo '<li>la promotion de l\'accès aux droits et la lutte contre l\'habitat indigne et la non-décence ;</li>';
-    echo '<li>toute action de promotion culturelle, éducative et citoyenne contribuant à ces buts.</li>';
+    echo '<li>de produire de la culture alternative à l\'attention de la jeunesse de Nantes et de ses environs ;</li>';
+    echo '<li>de créer, produire, éditer, diffuser et vendre des journaux, revues, livres, zines, brochures ou tout autre support écrit ou artistique ;</li>';
+    echo '<li>de promouvoir l\'expression artistique, politique et sociale des habitants des quartiers populaires ;</li>';
+    echo '<li>d\'organiser des ateliers d\'écriture, des résidences, des expositions ou des rencontres autour de la création et de l\'édition ;</li>';
+    echo '<li>de favoriser l\'autonomie éditoriale, l\'autoproduction et la création collective ;</li>';
+    echo '<li><strong>de défendre les intérêts matériels et moraux, individuels et collectifs, des habitants et des locataires des quartiers populaires, notamment en matière de logement, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</strong></li>';
+    echo '<li><strong>d\'informer, conseiller et accompagner les habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions, et de lutter contre l\'habitat indigne et la non-décence.</strong></li>';
     echo '</ul>';
-    echo '<p>À ce titre, l\'association constitue une association de défense des locataires au sens de la loi n° 89-462 du 6 juillet 1989.</p>';
+    echo '<p><strong>À ce titre, l\'association constitue une association de défense des intérêts des locataires au sens de la loi n° 89-462 du 6 juillet 1989.</strong></p>';
 
     echo '<h2>Article 3 — Siège social</h2>';
-    echo '<p>Le siège social est fixé au : <strong>' . esc_html($siege ?: '__________________________') . '</strong>. Il pourra être transféré par simple décision du conseil d\'administration.</p>';
+    echo '<p>Le siège social est fixé au : <strong>' . esc_html($siege ?: '14 rue de Saint-Jean-de-Luz, 44200 Nantes') . '</strong>. Il pourra être transféré par simple décision du bureau.</p>';
 
     echo '<h2>Article 4 — Durée</h2>';
     echo '<p>La durée de l\'association est illimitée.</p>';
 
     echo '<h2>Article 5 — Membres</h2>';
-    echo '<p>L\'association se compose de membres adhérents à jour de leur cotisation. Le montant de la cotisation est fixé chaque année par l\'assemblée générale. Pour être membre, il faut adhérer aux présents statuts et s\'acquitter de la cotisation.</p>';
+    echo '<p>L\'association se compose de : membres fondateurs ; membres actifs (adhérents) ; membres d\'honneur (personnes soutenant moralement ou matériellement l\'association, sans droit de vote).</p>';
 
-    echo '<h2>Article 6 — Perte de la qualité de membre</h2>';
-    echo '<p>La qualité de membre se perd par : la démission ; le décès ; le non-paiement de la cotisation ; la radiation prononcée par le conseil d\'administration pour motif grave, l\'intéressé ayant été invité à fournir ses explications.</p>';
+    echo '<h2>Article 6 — Admission</h2>';
+    echo '<p>L\'adhésion est ouverte à toute personne physique ou morale partageant les valeurs de l\'association. L\'adhésion implique l\'acceptation sans réserve des présents statuts.</p>';
 
-    echo '<h2>Article 7 — Ressources</h2>';
-    echo '<p>Les ressources de l\'association comprennent : les cotisations des membres ; les subventions publiques ; les dons manuels ; le produit des activités et manifestations conformes à l\'objet ; toute autre ressource autorisée par la loi. Les ressources sont exclusivement affectées à la réalisation de l\'objet ; aucun bénéfice n\'est distribué aux membres.</p>';
+    echo '<h2>Article 7 — Radiation</h2>';
+    echo '<p>La qualité de membre se perd par : la démission ; le décès ; l\'exclusion prononcée par le bureau pour motif grave ou contraire aux valeurs de l\'association.</p>';
 
-    echo '<h2>Article 8 — Conseil d\'administration et bureau</h2>';
-    echo '<p>L\'association est administrée par un conseil d\'administration élu par l\'assemblée générale. Le conseil élit en son sein un bureau comprenant au moins un président, un trésorier et un secrétaire. Les fonctions sont bénévoles.</p>';
+    echo '<h2>Article 8 — Ressources</h2>';
+    echo '<p>Les ressources de l\'association comprennent notamment : les cotisations des adhérents ; les dons autorisés par la loi ; les recettes provenant de la vente de ses publications ou de ses activités culturelles en lien avec l\'objet ; toute autre ressource conforme à la législation.</p>';
 
-    echo '<h2>Article 9 — Assemblée générale ordinaire</h2>';
-    echo '<p>L\'assemblée générale ordinaire se réunit au moins une fois par an. Elle entend les rapports moral et financier, approuve les comptes, fixe la cotisation et procède aux élections. Les décisions sont prises à la majorité des membres présents ou représentés.</p>';
-
-    echo '<h2>Article 10 — Assemblée générale extraordinaire</h2>';
-    echo '<p>L\'assemblée générale extraordinaire est compétente pour la modification des statuts et la dissolution. Elle est convoquée dans les conditions de l\'article 9. Les décisions sont prises à la majorité des deux tiers des membres présents ou représentés.</p>';
-
-    echo '<h2>Article 11 — Moyens d\'action et capacité d\'ester en justice</h2>';
+    echo '<h2>Article 9 — Moyens d\'action et capacité d\'ester en justice</h2>';
     echo '<p>Pour la réalisation de son objet, l\'association peut notamment :</p>';
     echo '<ul>';
-    echo '<li>assister et représenter ses membres dans leurs démarches amiables et contentieuses ;</li>';
-    echo '<li>agir en justice, tant en demande qu\'en défense, devant toutes juridictions, pour la défense de ses intérêts propres comme de l\'intérêt collectif entrant dans son objet ;</li>';
-    echo '<li>agir en justice, sur mandat exprès et écrit, pour la défense des intérêts individuels de ses membres, notamment locataires, dans les conditions prévues par la loi du 6 juillet 1989 ;</li>';
+    echo '<li>assister ses membres dans leurs démarches amiables et contentieuses ;</li>';
+    echo '<li><strong>agir en justice, tant en demande qu\'en défense, devant toutes les juridictions</strong>, pour la défense de ses intérêts propres comme de l\'intérêt collectif entrant dans son objet ;</li>';
+    echo '<li><strong>agir en justice, sur mandat exprès et écrit, pour la défense des intérêts individuels de ses membres</strong>, notamment locataires, dans les conditions prévues par la loi du 6 juillet 1989 ;</li>';
     echo '<li>conclure toute convention et recevoir cotisations, dons et subventions concourant à son objet.</li>';
     echo '</ul>';
-    echo '<p>Le président représente l\'association en justice et dans tous les actes de la vie civile ; il peut agir en justice au nom de l\'association après autorisation du conseil d\'administration.</p>';
+    echo '<p><strong>Le président représente l\'association en justice et dans tous les actes de la vie civile</strong> ; il peut agir en justice au nom de l\'association après autorisation du bureau.</p>';
 
-    echo '<h2>Article 12 — Règlement intérieur</h2>';
-    echo '<p>Un règlement intérieur peut être établi par le conseil d\'administration pour préciser les modalités d\'application des présents statuts.</p>';
+    echo '<h2>Article 10 — Bureau</h2>';
+    echo '<p>L\'association est dirigée par un bureau composé au minimum de 2 personnes. Les membres du bureau sont élus à main levée (ou à bulletin secret si demandé) pour une durée illimitée. Le bureau actuel est composé de :</p>';
+    echo '<ul>';
+    echo '<li><strong>Président :</strong> ' . esc_html($pres) . ', domicilié au 14 rue de Saint-Jean-de-Luz, 44200 Nantes ;</li>';
+    echo '<li><strong>Secrétaire :</strong> ' . esc_html($secr ?: 'Gwenaëlle Gourdien') . ', domiciliée à la même adresse.</li>';
+    echo '</ul>';
+    echo '<p>Le bureau peut être élargi à d\'autres membres sur décision de l\'Assemblée Générale. Les fonctions des membres du bureau sont bénévoles.</p>';
+
+    echo '<h2>Article 11 — Réunions</h2>';
+    echo '<ul>';
+    echo '<li>Une Assemblée Générale se tient au moins une fois par an.</li>';
+    echo '<li>Elle approuve le rapport d\'activité, les comptes, oriente les projets et peut modifier les statuts.</li>';
+    echo '<li>Les décisions se prennent à la majorité des membres présents ou représentés.</li>';
+    echo '</ul>';
+
+    echo '<h2>Article 12 — Modification des statuts</h2>';
+    echo '<p>Les statuts ne peuvent être modifiés que par l\'Assemblée Générale convoquée à cet effet, à la majorité des deux tiers des membres présents.</p>';
 
     echo '<h2>Article 13 — Dissolution</h2>';
-    echo '<p>En cas de dissolution prononcée par l\'assemblée générale extraordinaire, un ou plusieurs liquidateurs sont nommés et l\'actif net est dévolu à une association poursuivant un but similaire, conformément à l\'article 9 de la loi du 1<sup>er</sup> juillet 1901.</p>';
+    echo '<p>En cas de dissolution, l\'Assemblée Générale désigne un ou plusieurs liquidateurs et attribue l\'actif à une structure poursuivant un but analogue, conformément à la loi.</p>';
 
     echo '<p style="margin-top:30px">Fait à Nantes, le ____ / ____ / 20____</p>';
     echo '<div style="margin-top:10px;display:flex;gap:40px;justify-content:space-between">';
