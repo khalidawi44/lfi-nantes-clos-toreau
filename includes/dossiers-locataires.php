@@ -2278,9 +2278,15 @@ function lfi_nct_app_view_dossier_doc_analyse_nmh() {
 
     usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
 
+    /* Suivi (ce qui a été FAIT), stratégie (ce qu'il RESTE à faire) et note
+       avocats — gérés par le code, jamais mélangés. */
+    $suivi_fait   = ($from_code && !empty($from_code['timeline']) && is_array($from_code['timeline'])) ? $from_code['timeline'] : [];
+    $etapes_todo  = ($from_code && !empty($from_code['prochaines_etapes']) && is_array($from_code['prochaines_etapes'])) ? $from_code['prochaines_etapes'] : [];
+    $note_avocats = ($from_code && !empty($from_code['note_avocats'])) ? (string) $from_code['note_avocats'] : '';
+
     echo '<div class="lfi-rec-doc">';
 
-    echo '<h1>Note d\'analyse — réponse de Nantes Métropole Habitat</h1>';
+    echo '<h1>Suivi & analyse du dossier — ' . esc_html($tenant_full ?: 'locataire') . '</h1>';
     echo '<p style="text-align:center"><strong>' . esc_html($asso['nom']) . '</strong> — association de défense des locataires (loi du 6 juillet 1989)</p>';
     echo '<table class="detail">';
     echo '<tr><td><strong>Locataire</strong></td><td>' . esc_html($tenant_full ?: '—') . '</td></tr>';
@@ -2288,6 +2294,37 @@ function lfi_nct_app_view_dossier_doc_analyse_nmh() {
     echo '<tr><td><strong>Dossier</strong></td><td>n° ' . (int) $dossier->id . '</td></tr>';
     echo '<tr><td><strong>Date de la note</strong></td><td>' . esc_html(wp_date('j F Y')) . '</td></tr>';
     echo '</table>';
+
+    /* ===== CE QUI A ÉTÉ FAIT (timeline) — séparé de ce qu'il reste à faire ===== */
+    if (!empty($suivi_fait)) {
+        echo '<h2 style="border-left:5px solid #186a3b;padding-left:10px">🗓 Ce qui a été fait — timeline du dossier</h2>';
+        echo '<div class="citations" style="border-left-color:#186a3b">';
+        foreach ($suivi_fait as $t) {
+            if (!is_array($t)) continue;
+            echo '<p style="margin:4px 0">✅ ';
+            if (!empty($t['date'])) echo '<strong>' . esc_html($t['date']) . '</strong> — ';
+            echo esc_html($t['fait'] ?? '');
+            if (!empty($t['detail'])) echo '<br><span style="color:#555">' . nl2br(esc_html($t['detail'])) . '</span>';
+            echo '</p>';
+        }
+        echo '</div>';
+    }
+
+    /* ===== CE QU'IL RESTE À FAIRE (stratégie) ===== */
+    if (!empty($etapes_todo)) {
+        echo '<h2 style="border-left:5px solid #0066a3;padding-left:10px">➡️ Ce qu\'il reste à faire — stratégie (priorité à l\'amiable)</h2>';
+        echo '<div class="citations" style="border-left-color:#0066a3">';
+        $n = 0;
+        foreach ($etapes_todo as $e) {
+            if (!is_array($e)) continue;
+            $n++;
+            echo '<p style="margin:6px 0"><strong>' . $n . '. ' . esc_html($e['etape'] ?? '') . '</strong>';
+            if (!empty($e['echeance'])) echo ' <span style="color:#0066a3">(' . esc_html($e['echeance']) . ')</span>';
+            if (!empty($e['detail'])) echo '<br><span style="color:#555">' . nl2br(esc_html($e['detail'])) . '</span>';
+            echo '</p>';
+        }
+        echo '</div>';
+    }
 
     /* ---- 1. La discussion ---- */
     echo '<h2>1. Rappel de la correspondance</h2>';
@@ -2337,6 +2374,13 @@ function lfi_nct_app_view_dossier_doc_analyse_nmh() {
     echo '</ul>';
     echo '<p>Ces éléments sont versés au dossier comme témoignant d\'un traitement insuffisamment diligent de la situation.</p>';
     echo '</div>';
+
+    /* ===== NOTE POUR LES AVOCATS ===== */
+    if ($note_avocats !== '') {
+        echo '<div style="page-break-before:always;height:1px"></div>';
+        echo '<h2 style="border-left:5px solid #7a0000;padding-left:10px">⚖️ Note pour les avocats — ce que nous attendons d\'eux</h2>';
+        echo '<div>' . nl2br(esc_html($note_avocats)) . '</div>';
+    }
 
     echo '<div class="signature">Pour ' . esc_html($asso['nom']) . '<br>' . esc_html($asso['president'] ?: '') . ', président</div>';
     echo '<div class="pj"><strong>Annexes :</strong> copie des emails ci-dessus · constat de visite · certificat médical · photographies datées.</div>';
