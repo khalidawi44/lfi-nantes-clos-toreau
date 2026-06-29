@@ -58,6 +58,7 @@ function lfi_nct_render_site_navbar() {
             ['🏠', 'Tableau de bord', $app_root],
             ['🔧', 'Brigade',         lfi_nct_app_url('interventions')],
             ['📁', 'Dossiers',        lfi_nct_app_url('dossiers-juridiques')],
+            ['☎️', 'Appels NMH',      lfi_nct_app_url('appels-nmh')],
             ['⚖️', 'Recouvrement',    lfi_nct_app_url('recouvrements')],
             ['🛠', 'Tutos',           lfi_nct_app_url('tutoriels')],
         ];
@@ -66,6 +67,9 @@ function lfi_nct_render_site_navbar() {
             ['📅', 'Mon agenda',           lfi_nct_app_url('agenda')],
             ['📋', 'Faire passer enquête', home_url('/enquete-logement-clos-toreau/')],
         ];
+        if ($is_admin) {
+            $secondary[] = ['🔄', 'Synchroniser', admin_url('admin-post.php?action=lfi_nct_purge_all')];
+        }
         if ($is_admin) {
             $secondary[] = ['🗂', 'Réponses enquêtes', lfi_nct_app_url('dossiers')];
             $secondary[] = ['📈', 'Stats enquêtes',    lfi_nct_app_url('stats-enquete')];
@@ -256,6 +260,7 @@ function lfi_nct_admin_bar_menu($bar) {
                 ['＋ Nouvelle intervention', lfi_nct_app_url('intervention-add')],
                 ['📁 Dossiers juridiques',   lfi_nct_app_url('dossiers-juridiques')],
                 ['＋ Nouveau dossier',       lfi_nct_app_url('dossier-juridique-add')],
+                ['☎️ Appels NMH',           lfi_nct_app_url('appels-nmh')],
                 ['⚖️ Recouvrement NMH',      lfi_nct_app_url('recouvrements')],
                 ['🛠 Tutoriels',             lfi_nct_app_url('tutoriels')],
                 ['🔬 Outils scientifiques',  lfi_nct_app_url('outils')],

@@ -647,6 +647,10 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
             case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
             case 'dossier-send-email':         lfi_nct_app_view_dossier_send_email();           break;
+            case 'appels-nmh':                 lfi_nct_app_view_appels_nmh();                   break;
+            case 'appel-nmh-add':              lfi_nct_app_view_appel_nmh_add();                break;
+            case 'appel-nmh-edit':             lfi_nct_app_view_appel_nmh_edit();               break;
+            case 'appel-nmh-rapport':          lfi_nct_app_view_appel_nmh_rapport();            break;
             case 'tutoriels':               lfi_nct_app_view_tutoriels();                    break;
             case 'tutoriel':                lfi_nct_app_view_tutoriel();                     break;
             case 'agenda':                  lfi_nct_app_view_agenda();                       break;
@@ -707,6 +711,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['🔧', 'Mes interventions',         $my_interv . ' interv. · ' . $my_facture . ' facturée(s)', lfi_nct_app_url('interventions')],
         ['⚖️', 'Mes recouvrements NMH',     'Mandat, mise en demeure, tribunal',   lfi_nct_app_url('recouvrements')],
         ['📁', 'Dossiers juridiques',       'Travaux urgents, relogement médical', lfi_nct_app_url('dossiers-juridiques')],
+        ['☎️', 'Appels NMH',                'Journal + rapports d\'incident',      lfi_nct_app_url('appels-nmh')],
         ['🛠', 'Tutoriels brigade',         'Plâtre, peinture, plomberie…',        lfi_nct_app_url('tutoriels')],
         ['🔬', 'Outils scientifiques',      'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
         ['📅', 'Mon agenda perso',          'RDV, interventions, perso',           lfi_nct_app_url('agenda')],

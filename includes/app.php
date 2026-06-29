@@ -436,6 +436,10 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
                     case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
                     case 'dossier-send-email':         lfi_nct_app_view_dossier_send_email();           break;
+                    case 'appels-nmh':                 lfi_nct_app_view_appels_nmh();                   break;
+                    case 'appel-nmh-add':              lfi_nct_app_view_appel_nmh_add();                break;
+                    case 'appel-nmh-edit':             lfi_nct_app_view_appel_nmh_edit();               break;
+                    case 'appel-nmh-rapport':          lfi_nct_app_view_appel_nmh_rapport();            break;
                     case 'tutoriels':             lfi_nct_app_view_tutoriels();              break;
                     case 'tutoriel':              lfi_nct_app_view_tutoriel();               break;
                     case 'agenda':                lfi_nct_app_view_agenda();                 break;
@@ -1244,11 +1248,13 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🔧', 'Interventions',          'Suivi & facturation NMH',             lfi_nct_app_url('interventions')],
             ['⚖️', 'Recouvrement NMH',       'Mandat, mise en demeure, tribunal',    lfi_nct_app_url('recouvrements')],
             ['📁', 'Dossiers juridiques',    'LRAR travaux + relogement + SCHS/ARS', lfi_nct_app_url('dossiers-juridiques')],
+            ['☎️', 'Appels NMH',            'Journal + rapports d\'incident',       lfi_nct_app_url('appels-nmh')],
             ['🛠', 'Tutoriels',              'Guides pros par problème',            lfi_nct_app_url('tutoriels')],
             ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
             ['⚙️', 'Paramètres facturation', 'Prestataire · bailleur · tarif',      lfi_nct_app_url('facturation-params')],
         ],
         '⚙️ SYSTÈME' => [
+            ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
             ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],
             ['🔥', 'Purger le cache',        'Forcer la maj',                       lfi_nct_app_url('cache')],

@@ -366,8 +366,9 @@ function lfi_nct_app_view_dossier() {
     echo '</div>';
     echo '<div class="row-actions">';
     if ($tel) echo '<a class="btn-primary" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📱 SMS direct</a>';
-    if ($u->user_email) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email</a>';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('email')) . '">📨 Email blast</a>';
+    if ($tel) echo '<a class="btn-ghost" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
+    if ($u->user_email) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email perso</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Éditer la fiche</a>';
     echo '</div>';
     echo '</div>';
 
@@ -381,6 +382,35 @@ function lfi_nct_app_view_dossier() {
         foreach ($problem['chips'] as $ch) echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
         echo '</div></div>';
     }
+
+    /* === HUB D'ACTIONS — tout ce que je peux faire pour ce locataire === */
+    $shortcut = [
+        'tenant_uid'     => $u->ID,
+        'tenant_prenom'  => $u->first_name ?: '',
+        'tenant_nom'     => $u->last_name ?: $u->display_name,
+        'tenant_adresse' => $row->adresse ?? '',
+        'tenant_etage'   => $row->etage ?? '',
+        'tenant_tel'     => $tel,
+    ];
+    echo '<div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;border-radius:12px;padding:16px;margin:16px 0">';
+    echo '<div style="font-weight:800;font-size:1.05em;margin-bottom:10px">⚡ Actions pour ce locataire</div>';
+    echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+    $actions = [
+        ['📁', 'Dossier juridique', lfi_nct_app_url('dossier-juridique-add', $shortcut)],
+        ['🔧', 'Intervention',      lfi_nct_app_url('intervention-add', $shortcut)],
+        ['☎️', 'Appeler NMH',       lfi_nct_app_url('appel-nmh-add', ['tenant_uid' => $u->ID])],
+        ['📅', 'RDV / agenda',      lfi_nct_app_url('rdv-add', ['tenant_uid' => $u->ID])],
+    ];
+    foreach ($actions as $a) {
+        echo '<a href="' . esc_url($a[2]) . '" style="background:rgba(255,255,255,.16);color:#fff;text-decoration:none;padding:12px;border-radius:8px;text-align:center;font-weight:700;font-size:.92em;display:block">';
+        echo '<div style="font-size:1.5em;line-height:1;margin-bottom:4px">' . $a[0] . '</div>' . esc_html($a[1]);
+        echo '</a>';
+    }
+    echo '</div>';
+    echo '</div>';
+
+    /* === SUIVI : dossiers juridiques + interventions + recouvrements === */
+    lfi_nct_dossier_render_suivi($u, $row);
 
     /* Photos */
     echo '<h3 style="margin:18px 0 8px">📷 Photos envoyées (' . count($photos) . ')</h3>';
@@ -438,6 +468,178 @@ function lfi_nct_app_view_dossier() {
     }
 
     lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  Suivi complet d'un locataire — agrège dossiers juridiques,      *
+ *  interventions brigade et recouvrements liés à ce locataire.     *
+ *  Matching : tenant_user_id OU (nom + adresse).                   *
+ * ============================================================== */
+function lfi_nct_dossier_render_suivi($u, $row) {
+    global $wpdb;
+    $uid  = (int) $u->ID;
+    $nom  = $u->last_name ?: $u->display_name;
+    $adr  = $row->adresse ?? '';
+
+    /* Clauses de matching réutilisées */
+    $name_clause = $nom ? $wpdb->prepare('LOWER(tenant_nom) = LOWER(%s)', $nom) : '0';
+    $adr_clause  = $adr ? $wpdb->prepare('LOWER(tenant_adresse) = LOWER(%s)', $adr) : '0';
+    $uid_clause  = $wpdb->prepare('tenant_user_id = %d', $uid);
+
+    /* --- Dossiers juridiques --- */
+    $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $dossiers = $wpdb->get_results("SELECT * FROM $td WHERE ($uid_clause OR $name_clause OR $adr_clause) ORDER BY updated_at DESC LIMIT 30") ?: [];
+
+    /* --- Interventions brigade --- */
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $interv = $wpdb->get_results("SELECT * FROM $ti WHERE ($uid_clause OR $name_clause OR $adr_clause) ORDER BY date_intervention DESC, id DESC LIMIT 30") ?: [];
+
+    /* --- Recouvrements (via les n° de facture des interventions) --- */
+    $recs = [];
+    $facture_nums = array_filter(array_map(function ($i) { return $i->facture_numero; }, $interv));
+    if (!empty($facture_nums)) {
+        $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
+        $place = implode(',', array_fill(0, count($facture_nums), '%s'));
+        $recs = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE facture_numero IN ($place) ORDER BY updated_at DESC", ...array_values($facture_nums))) ?: [];
+    }
+
+    /* --- Appels NMH liés à ce locataire --- */
+    $appels = [];
+    $ta = $wpdb->prefix . 'lfi_nct_appels_nmh';
+    if ($wpdb->get_var("SHOW TABLES LIKE '$ta'") === $ta) {
+        $appels = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ta WHERE tenant_user_id = %d ORDER BY date_appel DESC LIMIT 30", $uid)) ?: [];
+    }
+
+    /* --- Emails envoyés au nom du GA (loggés dans les notes des dossiers juridiques) --- */
+    $emails_envoyes = [];
+    foreach ($dossiers as $d) {
+        $logs = json_decode($d->notes ?? '', true);
+        if (is_array($logs) && !empty($logs['email_log'])) {
+            foreach ($logs['email_log'] as $el) {
+                $el['dossier_id'] = $d->id;
+                $emails_envoyes[] = $el;
+            }
+        }
+    }
+
+    echo '<h3 style="margin:20px 0 8px;color:#c8102e">📋 Suivi complet</h3>';
+
+    if (empty($dossiers) && empty($interv) && empty($recs) && empty($appels)) {
+        echo '<div class="lfi-app-empty">Aucun dossier juridique, intervention ou appel pour ce locataire pour le moment. Utilise les boutons « Actions » ci-dessus pour en créer.</div>';
+        return;
+    }
+
+    /* Dossiers juridiques */
+    if (!empty($dossiers)) {
+        echo '<h4 style="margin:14px 0 6px">📁 Dossiers juridiques (' . count($dossiers) . ')</h4>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($dossiers as $d) {
+            $demandes = json_decode($d->demandes ?? '[]', true) ?: [];
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">📁 Dossier #' . (int) $d->id . '</div>';
+            echo '<div class="badge">' . esc_html($d->statut) . '</div></div>';
+            echo '<div class="meta">';
+            if ($d->visite_date) echo '<span class="meta-chip">🗓 ' . esc_html(wp_date('j M Y', strtotime($d->visite_date))) . '</span>';
+            if (in_array('relogement_urgent', $demandes, true)) echo '<span class="meta-chip" style="background:#fff3f5;color:#a30b25">🏥 Relogement urgent</span>';
+            if (in_array('travaux_urgents', $demandes, true))   echo '<span class="meta-chip" style="background:#fff8e6;color:#bd8600">🔧 Travaux urgents</span>';
+            /* Lettres envoyées */
+            foreach (['lrar_travaux_date' => 'MED travaux', 'lrar_relogement_date' => 'Relogement', 'schs_date' => 'SCHS', 'ars_date' => 'ARS'] as $col => $lbl) {
+                if (!empty($d->$col)) echo '<span class="meta-chip" style="background:#e8f5ea;color:#186a3b">✓ ' . esc_html($lbl) . '</span>';
+            }
+            echo '</div>';
+            echo '<div class="row-actions"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $d->id])) . '">📂 Ouvrir / Lettres</a></div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Interventions */
+    if (!empty($interv)) {
+        $total_facture = 0; $total_paye = 0;
+        foreach ($interv as $i) {
+            if (in_array($i->statut, ['facture', 'paye'], true)) $total_facture += (float) $i->total_ht;
+            if ($i->statut === 'paye') $total_paye += (float) $i->total_ht;
+        }
+        echo '<h4 style="margin:14px 0 6px">🔧 Interventions brigade (' . count($interv) . ')';
+        if ($total_facture > 0) echo ' <small style="color:#666;font-weight:400">· ' . number_format($total_facture, 2, ',', ' ') . ' € facturé</small>';
+        echo '</h4>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($interv as $i) {
+            $st = [
+                'planifie' => ['📅', '#bd8600'], 'realise' => ['✓', '#1a7f37'],
+                'facture'  => ['🧾', '#c8102e'], 'paye' => ['💰', '#186a3b'],
+                'annule'   => ['✕', '#777'],
+            ][$i->statut] ?? ['?', '#888'];
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">🔧 ' . esc_html($i->type_travaux ?: '(sans type)') . '</div>';
+            echo '<div class="badge" style="background:' . $st[1] . ';color:#fff">' . $st[0] . ' ' . esc_html($i->statut) . '</div></div>';
+            echo '<div class="meta">';
+            if ($i->date_intervention) echo '<span class="meta-chip">🗓 ' . esc_html(wp_date('j M Y', strtotime($i->date_intervention))) . '</span>';
+            if ($i->total_ht > 0)      echo '<span class="meta-chip"><strong>' . number_format($i->total_ht, 2, ',', ' ') . ' €</strong></span>';
+            if ($i->facture_numero)    echo '<span class="meta-chip">🧾 ' . esc_html($i->facture_numero) . '</span>';
+            echo '</div>';
+            echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-edit', ['id' => $i->id])) . '">Ouvrir →</a></div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Recouvrements */
+    if (!empty($recs)) {
+        echo '<h4 style="margin:14px 0 6px">⚖️ Recouvrements NMH (' . count($recs) . ')</h4>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($recs as $rc) {
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">⚖️ ' . esc_html($rc->facture_numero) . '</div>';
+            echo '<div class="badge">' . esc_html($rc->statut) . '</div></div>';
+            echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('recouvrement-dossier', ['id' => $rc->id])) . '">Ouvrir →</a></div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Appels NMH */
+    if (!empty($appels)) {
+        $inc_labels = function_exists('lfi_nct_appel_incidents_labels') ? lfi_nct_appel_incidents_labels() : [];
+        echo '<h4 style="margin:14px 0 6px">☎️ Appels à NMH (' . count($appels) . ')</h4>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($appels as $ap) {
+            $inc = json_decode($ap->incidents ?? '[]', true) ?: [];
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . (!empty($inc) ? '#a30b25' : '#0066a3') . '">';
+            echo '<div class="head"><div class="who">☎️ ' . esc_html($ap->date_appel ? wp_date('j M Y · H:i', strtotime($ap->date_appel)) : 'Appel') . '</div>';
+            if (!empty($inc)) echo '<div class="badge" style="background:#a30b25;color:#fff">⚠ Incident</div>';
+            echo '</div>';
+            echo '<div class="meta">';
+            if ($ap->duree_minutes > 0) echo '<span class="meta-chip">⏱ ' . esc_html(rtrim(rtrim(number_format($ap->duree_minutes, 2, ',', ' '), '0'), ',')) . ' min</span>';
+            if ($ap->interlocuteur)     echo '<span class="meta-chip">👤 ' . esc_html($ap->interlocuteur) . '</span>';
+            echo '</div>';
+            if ($ap->objet) echo '<div class="com">' . esc_html($ap->objet) . '</div>';
+            echo '<div class="row-actions">';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('appel-nmh-edit', ['id' => $ap->id])) . '">Ouvrir →</a>';
+            if (!empty($inc)) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('appel-nmh-rapport', ['id' => $ap->id])) . '" target="_blank">📄 Rapport</a>';
+            echo '</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Emails envoyés au nom du GA */
+    if (!empty($emails_envoyes)) {
+        $email_lbls = [
+            'lrar_travaux' => 'Mise en demeure travaux', 'lrar_relogement' => 'Relogement médical',
+            'schs' => 'Saisine SCHS', 'ars' => 'Saisine ARS',
+        ];
+        echo '<h4 style="margin:14px 0 6px">📧 Emails envoyés à NMH (' . count($emails_envoyes) . ')</h4>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($emails_envoyes as $el) {
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head"><div class="who">📧 ' . esc_html($email_lbls[$el['letter']] ?? $el['letter']) . '</div>';
+            echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($el['date'] ?? '') . '</div></div>';
+            echo '<div class="meta"><span class="meta-chip">→ ' . esc_html($el['to'] ?? '') . '</span></div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
 }
 
 /* ============================================================== *
