@@ -530,6 +530,17 @@ function lfi_nct_app_dossier_juridique_form($row) {
         exit;
     }
 
+    /* Enregistrer / mettre à jour l'analyse juridique de la réponse NMH */
+    if ($is_edit && isset($_POST['lfi_dossier_analyse_nmh']) && check_admin_referer('lfi_dossier_analyse_nmh')) {
+        $analyse = sanitize_textarea_field(wp_unslash($_POST['analyse_nmh'] ?? ''));
+        $logs = json_decode($row->notes ?? '', true);
+        if (!is_array($logs)) $logs = ['__notes' => $row->notes ?? ''];
+        if ($analyse === '') unset($logs['analyse_nmh']); else $logs['analyse_nmh'] = $analyse;
+        $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $row->id, 'owner_user_id' => $owner]);
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'analyse_ok' => 1]));
+        exit;
+    }
+
     /* Facturer la visite (temps de constat) — ANTI-DOUBLON */
     if ($is_edit && !empty($_POST['lfi_dossier_facturer_visite']) && check_admin_referer('lfi_dossier_facturer_visite')) {
         $heures = (float) ($_POST['visite_heures'] ?? 0);
@@ -613,11 +624,27 @@ function lfi_nct_app_dossier_juridique_form($row) {
     }
     echo '</div>';
 
+    /* Sommaire — accès rapide aux sections du dossier (réduit le « fouillis »). */
+    echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px;font-size:.85em">';
+    echo '<strong style="width:100%;color:#c8102e;margin-bottom:2px">Aller à :</strong>';
+    $somm = [['#sec-locataire', '👤 Locataire'], ['#sec-constat', '🔍 Constats']];
+    if ($is_edit) {
+        $somm[] = ['#sec-factu',   '🧾 Facturation'];
+        $somm[] = ['#sec-lettres', '📄 Lettres'];
+        $somm[] = ['#sec-emails',  '📧 Emails'];
+        $somm[] = ['#sec-analyse', '📑 Analyse'];
+    }
+    foreach ($somm as $s) {
+        echo '<a href="' . esc_attr($s[0]) . '" style="text-decoration:none;background:#fff;border:1px solid #ddd;color:#333;padding:5px 10px;border-radius:14px">' . esc_html($s[1]) . '</a>';
+    }
+    echo '</div>';
+
     if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Dossier enregistré.');
     if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
     if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
     if (!empty($_GET['email_sent']))     lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
     if (!empty($_GET['email_recu_ok']))  lfi_nct_app_flash('📥 Email reçu enregistré dans le dossier.');
+    if (!empty($_GET['analyse_ok']))     lfi_nct_app_flash('📑 Analyse enregistrée dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
 
     echo '<form method="post" class="lfi-app-form">';
@@ -632,7 +659,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (function_exists('lfi_nct_dossier_pick_tenant')) lfi_nct_dossier_pick_tenant($r);
 
     /* === LOCATAIRE === */
-    echo '<h3 style="margin:0">👤 Locataire <small style="color:#666;font-weight:400">(modifiable à tout moment)</small></h3>';
+    echo '<h3 id="sec-locataire" style="margin:0">👤 Locataire <small style="color:#666;font-weight:400">(modifiable à tout moment)</small></h3>';
     echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b"><small>💡 Tu peux compléter ces infos plus tard (étage, N° de porte, téléphone, etc.) au fur et à mesure que tu les découvres. Seul le <strong>nom OU prénom</strong> et l\'<strong>adresse</strong> sont obligatoires.</small></div>';
 
     /* Datalists pour autocomplétion */
@@ -657,7 +684,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
     echo '</div>';
 
     /* === VISITE / CONSTATATIONS === */
-    echo '<h3 style="margin:18px 0 0">🔍 Constatations de visite</h3>';
+    echo '<h3 id="sec-constat" style="margin:18px 0 0">🔍 Constatations de visite</h3>';
     echo '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
     echo '<label>Date de visite<input type="date" name="visite_date" value="' . esc_attr($r->visite_date) . '"></label>';
     echo '<label>Durée (texte)<input type="text" name="visite_duree" value="' . esc_attr($r->visite_duree) . '" placeholder="ex: 4 heures"></label>';
@@ -783,7 +810,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
     /* === RAPPORT DE VISITE + FACTURATION (après création) === */
     if ($is_edit) {
-        echo '<h3 style="margin:24px 0 8px;color:#c8102e">📄 Rapport de visite & facturation</h3>';
+        echo '<h3 id="sec-factu" style="margin:24px 0 8px;color:#c8102e">📄 Rapport de visite & facturation</h3>';
 
         echo '<div class="lfi-app-list"><div class="lfi-app-card" style="border-left:4px solid #0066a3">';
         echo '<div class="head"><div class="who">📄 Rapport de visite (PDF)</div></div>';
@@ -835,7 +862,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
         }
         echo '</div></div>';
 
-        echo '<h3 style="margin:24px 0 8px;color:#c8102e">📄 Lettres à générer (LRAR)</h3>';
+        echo '<h3 id="sec-lettres" style="margin:24px 0 8px;color:#c8102e">📄 Lettres à générer (LRAR)</h3>';
         echo '<div class="lfi-app-help">Clique sur une lettre pour l\'ouvrir (déjà pré-remplie avec tes constats). Bouton « Imprimer » en haut, puis envoi en recommandé avec accusé de réception.</div>';
 
         $lettres = [
@@ -881,7 +908,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</ul>';
 
         /* === SUIVI DES EMAILS (envoyés + reçus) === */
-        echo '<h3 style="margin:24px 0 8px;color:#c8102e">📧 Correspondance avec NMH</h3>';
+        echo '<h3 id="sec-emails" style="margin:24px 0 8px;color:#c8102e">📧 Correspondance avec NMH</h3>';
         $logs = json_decode($row->notes ?? '', true);
         $sent = (is_array($logs) && !empty($logs['email_log'])) ? $logs['email_log'] : [];
         $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
@@ -923,6 +950,20 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<button type="submit" class="btn-primary">📥 Enregistrer dans le dossier</button>';
         echo '</form>';
         echo '</details>';
+
+        /* === ANALYSE de la réponse NMH + document à imprimer/PDF === */
+        $analyse_val = (is_array($logs) && !empty($logs['analyse_nmh'])) ? (string) $logs['analyse_nmh'] : '';
+        echo '<h3 id="sec-analyse" style="margin:22px 0 6px;color:#c8102e">📑 Analyse de la réponse de NMH</h3>';
+        echo '<div class="lfi-app-help">Saisis (ou colle) ici l\'analyse du dossier : manquements juridiques de NMH et manque de professionnalisme dans la réponse. Le document à imprimer reprend la <strong>discussion complète</strong> (emails envoyés + reçus) suivie de cette analyse + une grille de référence des manquements.</div>';
+        echo '<form method="post" class="lfi-app-form" style="margin-top:6px">';
+        wp_nonce_field('lfi_dossier_analyse_nmh');
+        echo '<input type="hidden" name="lfi_dossier_analyse_nmh" value="1">';
+        echo '<label>Analyse (manquements juridiques + ton / professionnalisme)<textarea name="analyse_nmh" rows="6" placeholder="Ex : NMH oppose une absence de signalement, inopérante (art. 1719-1720 C. civ.). Silence total sur les moisissures et le certificat médical. Requalification abusive en charge locative. Ton expéditif, aucune proposition de visite…">' . esc_textarea($analyse_val) . '</textarea></label>';
+        echo '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+        echo '<button type="submit" class="btn-primary">💾 Enregistrer l\'analyse</button>';
+        echo '<a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('dossier-doc-analyse-nmh', ['id' => $row->id])) . '" target="_blank">📑 Ouvrir le document (discussion + analyse)</a>';
+        echo '</div>';
+        echo '</form>';
 
         /* Suppression définitive */
         echo '<form method="post" style="margin-top:24px" onsubmit="return confirm(\'Supprimer définitivement ce dossier ? Action irréversible.\')">';
@@ -2194,6 +2235,94 @@ function lfi_nct_app_view_dossier_doc_reponse_nmh() {
     echo '<div class="signature">Pour ' . esc_html($asso['nom']) . '<br>' . esc_html($asso['president'] ?: '') . ', président</div>';
 
     echo '<div class="pj"><strong>Pièces jointes :</strong> certificat médical' . (!empty($dossier->certificat_medecin) ? ' (' . esc_html($dossier->certificat_medecin) . ')' : '') . ' · photographies datées des désordres · mandat de la locataire.</div>';
+
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
+ *  NOTE : Discussion (emails) + ANALYSE des manquements de NMH      *
+ *  Document à imprimer / PDF : reprend la correspondance puis une   *
+ *  analyse juridique + sur la forme (professionnalisme).            *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_doc_analyse_nmh() {
+    if (!lfi_nct_app_guard_brigade()) return;
+    $ctx = lfi_nct_dossier_doc_open('📑 Discussion + analyse NMH');
+    extract($ctx);
+    $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des Quartiers Libres'];
+
+    /* Correspondance archivée dans le dossier */
+    $logs = json_decode($dossier->notes ?? '', true);
+    $sent = (is_array($logs) && !empty($logs['email_log']))  ? $logs['email_log']  : [];
+    $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
+    $analyse_perso = (is_array($logs) && !empty($logs['analyse_nmh'])) ? (string) $logs['analyse_nmh'] : '';
+    $timeline = [];
+    foreach ($sent as $e) { $e['sens'] = 'envoye'; $timeline[] = $e; }
+    foreach ($recu as $e) { $e['sens'] = 'recu';   $timeline[] = $e; }
+    usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
+
+    echo '<div class="lfi-rec-doc">';
+
+    echo '<h1>Note d\'analyse — réponse de Nantes Métropole Habitat</h1>';
+    echo '<p style="text-align:center"><strong>' . esc_html($asso['nom']) . '</strong> — association de défense des locataires (loi du 6 juillet 1989)</p>';
+    echo '<table class="detail">';
+    echo '<tr><td><strong>Locataire</strong></td><td>' . esc_html($tenant_full ?: '—') . '</td></tr>';
+    echo '<tr><td><strong>Logement</strong></td><td>' . esc_html($tenant_logement ?: '—') . '</td></tr>';
+    echo '<tr><td><strong>Dossier</strong></td><td>n° ' . (int) $dossier->id . '</td></tr>';
+    echo '<tr><td><strong>Date de la note</strong></td><td>' . esc_html(wp_date('j F Y')) . '</td></tr>';
+    echo '</table>';
+
+    /* ---- 1. La discussion ---- */
+    echo '<h2>1. Rappel de la correspondance</h2>';
+    if (empty($timeline)) {
+        echo '<p><em>Aucun email n\'est encore archivé dans ce dossier. Enregistre les échanges (envoyés et reçus) depuis la fiche du dossier pour qu\'ils apparaissent ici.</em></p>';
+    } else {
+        foreach ($timeline as $e) {
+            $is_recu = (($e['sens'] ?? '') === 'recu');
+            echo '<div class="citations" style="margin:8px 0">';
+            echo '<strong>' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</strong>';
+            if (!empty($e['date'])) echo ' — ' . esc_html($e['date']);
+            if ($is_recu && !empty($e['de'])) echo ' — de ' . esc_html($e['de']);
+            if (!$is_recu && !empty($e['to'])) echo ' — à ' . esc_html($e['to']);
+            if (!empty($e['objet'])) echo '<br><strong>Objet :</strong> ' . esc_html($e['objet']);
+            if (!empty($e['corps'])) echo '<br>' . nl2br(esc_html(mb_substr($e['corps'], 0, 1500)));
+            echo '</div>';
+        }
+    }
+
+    /* ---- 2. Analyse personnalisée (si saisie) ---- */
+    if ($analyse_perso !== '') {
+        echo '<h2>2. Analyse du dossier</h2>';
+        echo '<div>' . nl2br(esc_html($analyse_perso)) . '</div>';
+        echo '<h2>3. Grille de référence — manquements fréquents du bailleur</h2>';
+    } else {
+        echo '<h2>2. Analyse — manquements juridiques de NMH</h2>';
+    }
+
+    /* ---- Grille des manquements juridiques (toujours fournie) ---- */
+    echo '<div class="citations">';
+    echo '<p><strong>a) Obligation de délivrance d\'un logement décent — permanente.</strong> Le bailleur doit délivrer et maintenir le logement en état de servir à l\'usage prévu (articles <strong>1719 et 1720 du Code civil</strong>, décret n° 2002-120 sur la décence). Cette obligation ne dépend d\'<em>aucun</em> signalement préalable : opposer une « absence de signalement » est juridiquement inopérant.</p>';
+    echo '<p><strong>b) Silence sur l\'objet réel de la demande.</strong> La réponse n\'aborde ni les <strong>moisissures / l\'humidité</strong> constatées, ni le <strong>certificat médical</strong> produit. Ne pas répondre au cœur de la demande caractérise un défaut de diligence du bailleur.</p>';
+    echo '<p><strong>c) Requalification abusive en « charges locatives ».</strong> L\'humidité structurelle, la VMC, les infiltrations et les équipements relevant du bâti restent à la charge du bailleur (art. 1719-1720 C. civ.) ; ils ne peuvent être renvoyés à l\'entretien courant du décret n° 87-712.</p>';
+    echo '<p><strong>d) Délais et traçabilité.</strong> L\'absence de réponse utile dans un délai raisonnable, et l\'absence de proposition concrète (visite contradictoire, calendrier de travaux), aggravent le trouble de jouissance et ouvrent droit à réparation (art. 1231-1 et 1240 du Code civil).</p>';
+    echo '<p><strong>e) Conséquences.</strong> À défaut de prise en charge, saisine du <strong>SCHS de Nantes</strong> et de l\'<strong>ARS</strong> (art. L.1331-22 et s. du Code de la santé publique), pouvant emporter arrêté d\'insalubrité et <strong>obligation de relogement</strong> (art. L.521-3-1 du CCH).</p>';
+    echo '</div>';
+
+    /* ---- 3/4. Sur la forme : professionnalisme ---- */
+    echo '<h2>' . ($analyse_perso !== '' ? '4' : '3') . '. Sur la forme — qualité et professionnalisme de la réponse</h2>';
+    echo '<div class="citations">';
+    echo '<p>Indépendamment du fond, la réponse appelle des réserves sur la forme, qui nuisent à la relation locataire-bailleur attendue d\'un organisme de logement social :</p>';
+    echo '<ul>';
+    echo '<li><strong>Esquive des points essentiels</strong> (santé, moisissures, certificat) au profit d\'arguments de procédure.</li>';
+    echo '<li><strong>Report de responsabilité</strong> sur le locataire (prétendu défaut de signalement, prétendu défaut d\'accès) sans élément probant.</li>';
+    echo '<li><strong>Absence de proposition concrète</strong> et datée (pas de visite, pas de calendrier de travaux).</li>';
+    echo '<li><strong>Formulations imprécises ou expéditives</strong>, peu compatibles avec le devoir d\'information et de conseil d\'un bailleur social.</li>';
+    echo '</ul>';
+    echo '<p>Ces éléments sont versés au dossier comme témoignant d\'un traitement insuffisamment diligent de la situation.</p>';
+    echo '</div>';
+
+    echo '<div class="signature">Pour ' . esc_html($asso['nom']) . '<br>' . esc_html($asso['president'] ?: '') . ', président</div>';
+    echo '<div class="pj"><strong>Annexes :</strong> copie des emails ci-dessus · constat de visite · certificat médical · photographies datées.</div>';
 
     echo '</div>';
     lfi_nct_app_screen_close(false);
