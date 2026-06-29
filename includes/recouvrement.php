@@ -89,6 +89,20 @@ function lfi_nct_recouvrement_db_setup() {
  * ============================================================== */
 function lfi_nct_travaux_catalogue() {
     return [
+        'demarches' => [
+            'label'       => '🧰 PRESTATIONS & DÉMARCHES — facturables',
+            'remboursable'=> null,
+            'risque'      => 'moyen',
+            'couleur'     => '#0066a3',
+            'fondement'   => 'Prestations de service de l\'intervenant (auto-entrepreneur) : diagnostic, devis, déplacements, démarches écrites et téléphoniques engagées pour obtenir la remise en état. Facturables au temps passé ou au forfait — intégrables au devis de travaux, ou réclamées à NMH au titre du préjudice et des frais engagés (art. 1231-1 et 1240 du Code civil).',
+            'types'       => [
+                'deplacement_constat' => 'Déplacement + visite + constat du logement',
+                'devis_etude'         => 'Devis détaillé / étude technique du désordre',
+                'courrier_lrar'       => 'Rédaction courrier / email / LRAR',
+                'appel_demarche'      => 'Appel téléphonique / démarche auprès de NMH',
+                'suivi_dossier'       => 'Suivi de dossier / coordination / relances',
+            ],
+        ],
         'bailleur' => [
             'label'       => '🏛 OBLIGATION BAILLEUR — remboursable',
             'remboursable'=> true,
@@ -159,6 +173,38 @@ function lfi_nct_travaux_catalogue() {
  * ============================================================== */
 function lfi_nct_tarif_taches_catalogue() {
     return [
+        /* === PRESTATIONS & DÉMARCHES (temps passé / forfait) === */
+        'deplacement_constat' => [
+            'bas' => 40, 'juste' => 60, 'haut' => 90,
+            'unite' => 'forfait déplacement + constat',
+            'source' => 'Tarif prestation 40 €/h · barème expertise amiable 50-90 €',
+            'detail' => 'Déplacement sur site + constat détaillé des désordres + photos datées + rédaction du rapport de visite',
+        ],
+        'devis_etude' => [
+            'bas' => 40, 'juste' => 60, 'haut' => 90,
+            'unite' => 'forfait',
+            'source' => 'Étude technique / chiffrage : 40-90 € (déductible si travaux commandés)',
+            'detail' => 'Diagnostic du désordre + métré + devis écrit détaillé et chiffré, opposable à NMH',
+        ],
+        'courrier_lrar' => [
+            'bas' => 25, 'juste' => 40, 'haut' => 60,
+            'unite' => 'par courrier',
+            'source' => 'Rédaction pro 35-50 € (hors frais postaux LRAR ≈ 6,50 €)',
+            'detail' => 'Rédaction argumentée (mise en demeure, signalement, relance) + mise en forme + envoi',
+        ],
+        'appel_demarche' => [
+            'bas' => 15, 'juste' => 25, 'haut' => 40,
+            'unite' => 'par appel / démarche',
+            'source' => 'Tarif prestation 40 €/h (≈ 30 min par démarche)',
+            'detail' => 'Appel NMH / agence / administration, prise de notes, compte-rendu, relance téléphonique',
+        ],
+        'suivi_dossier' => [
+            'bas' => 30, 'juste' => 50, 'haut' => 80,
+            'unite' => 'forfait période',
+            'source' => 'Tarif prestation 40 €/h',
+            'detail' => 'Suivi du dossier, coordination des démarches, relances et points d\'étape sur une période',
+        ],
+
         /* === DÉSINSECTISATION / DÉRATISATION (réalisable avec EPI + protocole) === */
         'punaises_lit' => [
             'bas' => 250, 'juste' => 350, 'haut' => 600,
