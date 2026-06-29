@@ -296,6 +296,18 @@ function lfi_nct_app_no_cache() {
     if (!is_singular()) return;
     $post = get_post();
     if (!$post || $post->post_name !== LFI_NCT_APP_SLUG) return;
+
+    /* === Marge mémoire LARGE, posée TÔT (avant que le thème ne rende) ===
+       Diagnostic : une vue de l'app peut faire grimper le pic mémoire d'un
+       rendu complet (thème + navbar + plugins + vue) au-delà de la limite
+       PHP de l'hébergeur → erreur fatale « mémoire épuisée » non
+       rattrapable → page blanche. On relève la limite ici, sur le hook
+       « wp », donc AVANT le rendu du thème (le bump fait dans le shortcode
+       arrivait trop tard, après l'en-tête du thème). */
+    if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('lfi_nct_app');
+    @ini_set('memory_limit', '512M');
+    if (function_exists('set_time_limit')) @set_time_limit(120);
+
     if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
     if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
     if (!defined('DONOTCACHEDB')) define('DONOTCACHEDB', true);
