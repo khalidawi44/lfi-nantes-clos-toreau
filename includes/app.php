@@ -329,6 +329,44 @@ function lfi_nct_app_head_meta() {
  * ============================================================== */
 add_shortcode('lfi_nct_app', 'lfi_nct_app_shortcode');
 function lfi_nct_app_shortcode() {
+    /* === Anti-page-blanche niveau « fatal » ===
+       Le try/catch plus bas n'attrape PAS les erreurs fatales non
+       rattrapables (mémoire épuisée, dépassement de temps, erreur de
+       compilation). On augmente la marge mémoire/temps pour les écrans
+       lourds, et on pose un garde-fou de shutdown qui, en cas de fatal
+       pendant le rendu de l'app, affiche un message lisible (+ le détail
+       pour l'admin) au lieu d'un écran vide. */
+    if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('lfi_nct_app');
+    @ini_set('memory_limit', '512M');
+    if (function_exists('set_time_limit')) @set_time_limit(60);
+
+    if (!defined('LFI_NCT_APP_RENDERING')) define('LFI_NCT_APP_RENDERING', true);
+    static $shutdown_guard = false;
+    if (!$shutdown_guard) {
+        $shutdown_guard = true;
+        register_shutdown_function(function () {
+            $e = error_get_last();
+            if (!$e || !in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) return;
+            /* On ne réagit qu'aux fatals survenus dans le code du plugin (rendu app). */
+            if (empty($e['file']) || strpos($e['file'], 'lfi-nantes-clos-toreau') === false) return;
+            if (function_exists('error_log')) {
+                error_log('[LFI app] FATAL pendant le rendu : ' . $e['message'] . ' @ ' . $e['file'] . ':' . $e['line']);
+            }
+            /* Nettoie tout buffer partiel pour ne pas afficher un demi-écran. */
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+            $is_admin = function_exists('current_user_can') && current_user_can('manage_options');
+            echo '<div style="max-width:640px;margin:24px auto;background:#fff;border-radius:12px;padding:22px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;color:#1a1a1a;box-shadow:0 2px 14px rgba(0,0,0,.12)">';
+            echo '<div style="font-size:2.4em">😕</div>';
+            echo '<h2 style="color:#c8102e;margin:6px 0 8px">Cette page a rencontré un souci technique</h2>';
+            echo '<p style="color:#555;line-height:1.5">Rien n\'est perdu. Reviens à l\'accueil et réessaie.</p>';
+            if ($is_admin) {
+                echo '<p style="font-size:.8em;color:#999;background:#f7f7f7;padding:10px;border-radius:6px;text-align:left;word-break:break-word">' . htmlspecialchars($e['message']) . '<br><small>' . htmlspecialchars(basename($e['file'])) . ':' . (int) $e['line'] . '</small></p>';
+            }
+            echo '<a href="' . esc_url(home_url('/app/')) . '" style="display:inline-block;margin-top:8px;background:#c8102e;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:700">🏠 Retour à l\'accueil</a>';
+            echo '</div>';
+        });
+    }
+
     ob_start();
 
     /* Routes accessibles sans login : installer + flow d'inscription */
