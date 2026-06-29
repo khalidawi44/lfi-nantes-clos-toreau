@@ -1403,7 +1403,26 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
  * ============================================================== */
 function lfi_nct_app_view_comptes() {
     if (!current_user_can('manage_options')) return;
-    lfi_nct_app_view_comptes_ga();
+    /* Par défaut on ouvre les Locataires (le plus utilisé) ;
+       on bascule sur les GA via ?tab=ga. La nav par onglets est gérée
+       dans chacune des deux sous-vues. */
+    $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'locataires';
+    if ($tab === 'ga') {
+        lfi_nct_app_view_comptes_ga();
+    } else {
+        lfi_nct_app_view_comptes_locataires();
+    }
+}
+
+/* Helper : nav par onglets affichée en haut des deux pages Comptes */
+function lfi_nct_app_comptes_tabs($current) {
+    $url_loc = lfi_nct_app_url('comptes', ['tab' => 'locataires']);
+    $url_ga  = lfi_nct_app_url('comptes', ['tab' => 'ga']);
+    $on = function ($t) use ($current) { return $current === $t ? 'on' : ''; };
+    echo '<div class="lfi-app-filter-chips" style="margin-bottom:14px;flex-wrap:wrap">';
+    echo '<a class="fc ' . esc_attr($on('locataires')) . '" href="' . esc_url($url_loc) . '" style="font-size:1em;padding:8px 14px">🏠 Locataires</a>';
+    echo '<a class="fc ' . esc_attr($on('ga')) . '" href="' . esc_url($url_ga) . '" style="font-size:1em;padding:8px 14px">👥 Membres GA</a>';
+    echo '</div>';
 }
 
 /* ============================================================== *
@@ -1554,7 +1573,10 @@ function lfi_nct_app_view_comptes_ga() {
         'number' => 50, 'orderby' => 'registered', 'order' => 'DESC',
     ]);
 
-    lfi_nct_app_screen_open('👥 Comptes Membres du GA', (int) $n_ga . ' compte(s) actif(s) · ' . $unlinked_total . ' adhérent(s) à importer');
+    lfi_nct_app_screen_open('🪪 Comptes', (int) $n_ga . ' membre(s) GA · ' . $unlinked_total . ' adhérent(s) à importer');
+
+    /* Onglets en haut */
+    lfi_nct_app_comptes_tabs('ga');
 
     /* Flash erreur */
     if ($created_err) lfi_nct_app_flash('❌ ' . $created_err, 'err');
@@ -1688,6 +1710,61 @@ function lfi_nct_app_view_comptes_locataires() {
     $created     = null;
     $created_err = null;
 
+    /* === ACTION : ÉDITION d'un locataire (nom, email, tel, problème) === */
+    if (!empty($_POST['lfi_app_edit_tenant']) && check_admin_referer('lfi_app_edit_tenant')) {
+        $uid = (int) ($_POST['uid'] ?? 0);
+        $u = $uid ? get_userdata($uid) : null;
+        if ($u && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+            $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
+            $nom    = sanitize_text_field(wp_unslash($_POST['nom']    ?? ''));
+            $email  = sanitize_email(wp_unslash($_POST['email']       ?? ''));
+            $tel    = sanitize_text_field(wp_unslash($_POST['tel']    ?? ''));
+            wp_update_user([
+                'ID'           => $uid,
+                'first_name'   => $prenom,
+                'last_name'    => $nom,
+                'user_email'   => $email ?: $u->user_email,
+                'display_name' => trim($prenom . ' ' . $nom) ?: $u->display_name,
+            ]);
+            if ($tel !== '') update_user_meta($uid, 'lfi_nct_tel', $tel);
+
+            /* Édition du problème principal (si enquête liée) */
+            $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+            if ($rid && isset($_POST['edit_probleme'])) {
+                $resp = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+                if ($resp) {
+                    $data = json_decode($resp->data ?? '', true) ?: [];
+                    $data['problemes_types']       = array_values(array_filter((array) ($_POST['problemes_types'] ?? [])));
+                    $data['problemes_types_autre'] = sanitize_text_field(wp_unslash($_POST['problemes_types_autre'] ?? ''));
+                    $data['problemes_gravite']    = max(0, min(10, (int) ($_POST['problemes_gravite'] ?? 0)));
+                    $data['problemes_duree']      = sanitize_text_field(wp_unslash($_POST['problemes_duree'] ?? ''));
+                    $upd = [
+                        'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
+                    ];
+                    $adresse_in = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+                    $etage_in   = sanitize_text_field(wp_unslash($_POST['etage']   ?? ''));
+                    if ($adresse_in !== '') $upd['adresse'] = function_exists('lfi_nct_normalize_address') ? lfi_nct_normalize_address($adresse_in) : $adresse_in;
+                    if ($etage_in !== '')   $upd['etage']   = $etage_in;
+                    $wpdb->update($wpdb->prefix . 'lfi_nct_responses', $upd, ['id' => $rid]);
+                }
+            }
+            wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'edited' => $uid, 'open' => $uid]));
+            exit;
+        }
+    }
+
+    /* === ACTION : SUPPRESSION d'un compte locataire === */
+    if (!empty($_POST['lfi_app_delete_tenant']) && check_admin_referer('lfi_app_delete_tenant')) {
+        $uid = (int) ($_POST['uid'] ?? 0);
+        $u = $uid ? get_userdata($uid) : null;
+        if ($u && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+            wp_delete_user($uid);
+            wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'deleted' => 1]));
+            exit;
+        }
+    }
+
     /* Créer locataire depuis une réponse d'enquête */
     if (!empty($_POST['lfi_app_create_tenant']) && check_admin_referer('lfi_app_create_tenant')) {
         $resp_id = (int) ($_POST['response_id'] ?? 0);
@@ -1777,17 +1854,39 @@ function lfi_nct_app_view_comptes_locataires() {
          ORDER BY contact_recontact DESC, submitted_at DESC LIMIT 100"
     ) ?: [];
 
-    /* Liste des comptes locataires */
-    $users_tenant = get_users([
+    /* Liste des comptes locataires — avec tri configurable */
+    $sort = isset($_GET['sort']) ? sanitize_key($_GET['sort']) : 'recent';
+    $search = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
+    $orderby = 'registered'; $order = 'DESC';
+    if ($sort === 'alpha') { $orderby = 'display_name'; $order = 'ASC'; }
+    $args_users = [
         'role' => LFI_NCT_ROLE_TENANT,
         'fields' => ['ID', 'user_login', 'display_name', 'user_email'],
-        'number' => 50, 'orderby' => 'registered', 'order' => 'DESC',
-    ]);
+        'number' => 500, 'orderby' => $orderby, 'order' => $order,
+    ];
+    if ($search !== '') {
+        $args_users['search'] = '*' . esc_attr($search) . '*';
+        $args_users['search_columns'] = ['display_name', 'user_login', 'user_email', 'user_nicename'];
+    }
+    $users_tenant = get_users($args_users);
 
-    lfi_nct_app_screen_open('🏠 Comptes Locataires', (int) $n_tenant . ' compte(s) actif(s) · ' . count($unlinked_responses) . ' enquête(s) sans compte');
+    /* Tri "avec enquête / sans enquête" : on filtre après coup */
+    if ($sort === 'avec_enq' || $sort === 'sans_enq') {
+        $users_tenant = array_values(array_filter($users_tenant, function ($u) use ($sort) {
+            $has = (bool) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+            return $sort === 'avec_enq' ? $has : !$has;
+        }));
+    }
 
-    /* Flash erreur */
-    if ($created_err) lfi_nct_app_flash('❌ ' . $created_err, 'err');
+    lfi_nct_app_screen_open('🪪 Comptes', (int) $n_tenant . ' locataire(s) · ' . count($unlinked_responses) . ' enquête(s) sans compte');
+
+    /* Onglets en haut */
+    lfi_nct_app_comptes_tabs('locataires');
+
+    /* Flash erreur / succès */
+    if ($created_err)              lfi_nct_app_flash('❌ ' . $created_err, 'err');
+    if (!empty($_GET['edited']))   lfi_nct_app_flash('✅ Compte locataire mis à jour.');
+    if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 Compte locataire supprimé.');
 
     /* Credentials nouveau compte */
     if ($created) {
@@ -1843,36 +1942,163 @@ function lfi_nct_app_view_comptes_locataires() {
     echo '<button type="submit" class="btn-primary">✓ Créer le compte locataire</button>';
     echo '</form></details>';
 
-    /* Liste des comptes locataires */
-    echo '<h3 style="margin-top:18px">📋 Locataires suivis (' . (int) $n_tenant . ')</h3>';
+    /* === LISTE des comptes locataires — recherche + tri === */
+    echo '<h3 style="margin:18px 0 8px">📋 Locataires suivis (' . (int) $n_tenant . ')</h3>';
+
+    /* Barre de recherche + tri */
+    echo '<form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">';
+    echo '<input type="hidden" name="vue" value="comptes">';
+    echo '<input type="hidden" name="tab" value="locataires">';
+    echo '<input type="search" name="q" value="' . esc_attr($search) . '" placeholder="🔎 Rechercher un nom, login, email…" style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid #ddd;border-radius:8px">';
+    echo '<select name="sort" onchange="this.form.submit()" style="padding:8px 12px;border:1.5px solid #ddd;border-radius:8px">';
+    foreach ([
+        'recent'    => '📅 Plus récents',
+        'alpha'     => '🔤 Alphabétique (A→Z)',
+        'avec_enq'  => '📋 Avec enquête liée',
+        'sans_enq'  => '⚠ Sans enquête liée',
+    ] as $k => $lbl) {
+        echo '<option value="' . esc_attr($k) . '" ' . selected($sort, $k, false) . '>' . esc_html($lbl) . '</option>';
+    }
+    echo '</select>';
+    if ($search !== '') echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">✕ Effacer</a>';
+    echo '<button type="submit" class="btn-primary">Filtrer</button>';
+    echo '</form>';
+
     if (empty($users_tenant)) {
-        echo '<div class="lfi-app-empty">Aucun compte locataire pour l\'instant.</div>';
+        echo '<div class="lfi-app-empty">';
+        if ($search !== '') {
+            echo 'Aucun résultat pour « ' . esc_html($search) . ' ». <a href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">Effacer la recherche</a>';
+        } else {
+            echo 'Aucun compte locataire pour l\'instant.';
+        }
+        echo '</div>';
     } else {
+        $open_uid = isset($_GET['open']) ? (int) $_GET['open'] : 0;
         echo '<ul class="lfi-app-list">';
         foreach ($users_tenant as $u) {
             $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
             $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
+            $resp_row = null; $problem = null;
+            if ($rid) {
+                $resp_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+                if ($resp_row && function_exists('lfi_nct_app_enq_problem')) {
+                    $problem = lfi_nct_app_enq_problem($resp_row);
+                }
+            }
+
             echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">Locataire</div></div>';
-            echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span>';
-            if ($rid) echo '<span class="meta-chip">enquête #' . $rid . '</span>';
-            if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
-            if ($tel) echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
+            echo '<div class="head"><div class="who">' . esc_html($u->display_name ?: $u->user_login) . '</div>';
+            echo '<div class="badge" style="background:#1a7f37;color:#fff">🏠 Locataire</div></div>';
+
+            echo '<div class="meta">';
+            echo '<span class="meta-chip">@' . esc_html($u->user_login) . '</span>';
+            if ($rid)            echo '<span class="meta-chip" style="background:#e8f5ea;color:#186a3b">📋 Enquête #' . $rid . '</span>';
+            else                  echo '<span class="meta-chip" style="background:#fff8e6;color:#bd8600">⚠ Sans enquête</span>';
+            if ($u->user_email)   echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
+            if ($tel)             echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
+            if ($resp_row && $resp_row->adresse) echo '<span class="meta-chip">📍 ' . esc_html(trim($resp_row->adresse . ($resp_row->etage ? ' · ét. ' . $resp_row->etage : ''))) . '</span>';
+            if ($problem) {
+                $main = $problem['main'];
+                echo '<span class="meta-chip" style="background:#fff3f5;color:#a30b25">' . $main[0] . ' ' . esc_html($main[1]);
+                if ($problem['gravite']) echo ' · ' . (int) $problem['gravite'] . '/10';
+                echo '</span>';
+            }
             echo '</div>';
+
+            /* Boutons principaux */
             echo '<div class="row-actions">';
-            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Ouvrir le dossier</a>';
+            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Dossier complet</a>';
             echo '</div>';
-            echo '<form method="post" class="row-actions">';
+
+            /* Accordéon édition — ouvert si ?open=UID */
+            $open_attr = ($open_uid === (int) $u->ID) ? ' open' : '';
+            echo '<details' . $open_attr . ' style="margin-top:10px;background:#fafafa;border-radius:8px;padding:10px 14px;border:1px solid #eee">';
+            echo '<summary style="cursor:pointer;font-weight:700;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
+            echo '<span>✏️ Éditer ce locataire</span><span style="font-size:1.2em">▾</span>';
+            echo '</summary>';
+
+            echo '<form method="post" class="lfi-app-form" style="margin-top:10px">';
+            wp_nonce_field('lfi_app_edit_tenant');
+            echo '<input type="hidden" name="lfi_app_edit_tenant" value="1">';
+            echo '<input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+
+            $u_full = get_userdata($u->ID);
+            echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+            echo '<label>Prénom<input type="text" name="prenom" value="' . esc_attr($u_full->first_name) . '"></label>';
+            echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($u_full->last_name) . '"></label>';
+            echo '</div>';
+            echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+            echo '<label>Email<input type="email" name="email" value="' . esc_attr($u->user_email) . '"></label>';
+            echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr($tel) . '"></label>';
+            echo '</div>';
+
+            /* Édition du problème si enquête liée */
+            if ($resp_row) {
+                $data = json_decode($resp_row->data ?? '', true) ?: [];
+                $cur_types = (array) ($data['problemes_types'] ?? []);
+                $cur_autre = (string) ($data['problemes_types_autre'] ?? '');
+                $cur_gravite = (int) ($data['problemes_gravite'] ?? 0);
+                $cur_duree = (string) ($data['problemes_duree'] ?? '');
+
+                echo '<h4 style="margin:14px 0 4px;color:#c8102e">📋 Problème principal (enquête #' . $rid . ')</h4>';
+                echo '<input type="hidden" name="edit_probleme" value="1">';
+                echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+                echo '<label>Adresse<input type="text" name="adresse" value="' . esc_attr($resp_row->adresse) . '"></label>';
+                echo '<label>Étage<input type="text" name="etage" value="' . esc_attr($resp_row->etage) . '"></label>';
+                echo '</div>';
+
+                $type_labels = [
+                    'degats_eaux'      => '💧 Dégâts des eaux',
+                    'humidite'         => '🌫 Humidité / moisissures',
+                    'insectes'         => '🐜 Nuisibles (cafards, rats…)',
+                    'chauffage'        => '🥶 Chauffage défaillant',
+                    'electricite'      => '⚡ Électricité défectueuse',
+                    'ascenseur'        => '🛗 Ascenseur en panne',
+                    'parties_communes' => '🚪 Parties communes dégradées',
+                    'bruit'            => '🔊 Nuisances sonores',
+                    'securite'         => '🚨 Insécurité',
+                ];
+                echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px;background:#fff;padding:10px;border-radius:6px;margin:6px 0">';
+                foreach ($type_labels as $k => $lbl) {
+                    $check = in_array($k, $cur_types, true) ? 'checked' : '';
+                    echo '<label style="display:flex;align-items:center;gap:6px;margin:0;padding:4px;cursor:pointer">';
+                    echo '<input type="checkbox" name="problemes_types[]" value="' . esc_attr($k) . '" ' . $check . '>';
+                    echo '<span>' . esc_html($lbl) . '</span></label>';
+                }
+                echo '</div>';
+                echo '<label>Autre problème (libre)<input type="text" name="problemes_types_autre" value="' . esc_attr($cur_autre) . '"></label>';
+                echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+                echo '<label>Gravité (0-10)<input type="number" name="problemes_gravite" min="0" max="10" value="' . esc_attr($cur_gravite) . '"></label>';
+                echo '<label>Durée du problème<input type="text" name="problemes_duree" value="' . esc_attr($cur_duree) . '" placeholder="ex: 18 mois"></label>';
+                echo '</div>';
+            }
+
+            echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+            echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
+            echo '</div>';
+            echo '</form>';
+
+            /* Reset password + Supprimer */
+            echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed #ddd">';
+            echo '<form method="post" style="margin:0">';
             wp_nonce_field('lfi_app_reset_pwd');
             echo '<input type="hidden" name="lfi_app_reset_pwd" value="1">';
             echo '<input type="hidden" name="uid" value="' . (int) $u->ID . '">';
             echo '<button type="submit" class="btn-ghost">🔑 Réinitialiser mot de passe</button>';
-            echo '</form></li>';
+            echo '</form>';
+
+            echo '<form method="post" style="margin:0" onsubmit="return confirm(\'Supprimer définitivement le compte de ' . esc_js($u->display_name ?: $u->user_login) . ' ? Cette action est irréversible.\')">';
+            wp_nonce_field('lfi_app_delete_tenant');
+            echo '<input type="hidden" name="lfi_app_delete_tenant" value="1">';
+            echo '<input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+            echo '<button type="submit" style="background:#a30b25;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer">🗑 Supprimer ce compte</button>';
+            echo '</form>';
+            echo '</div>';
+
+            echo '</details>';
+            echo '</li>';
         }
         echo '</ul>';
-        if ((int) $n_tenant > count($users_tenant)) {
-            echo '<div class="lfi-app-help"><small>Affichage des 50 plus récents. ' . ((int) $n_tenant - count($users_tenant)) . ' autres en base.</small></div>';
-        }
     }
 
     lfi_nct_app_screen_close();
