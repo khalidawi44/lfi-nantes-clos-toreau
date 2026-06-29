@@ -1379,9 +1379,31 @@ function lfi_nct_app_view_asso_statuts() {
     $nom = $asso['nom'] ?: 'Union des quartiers libres';
     $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));
     $pres = $asso['president'] ?: '[Nom du président]';
+    $secr = $asso['secretaire'] ?? '';
+    $sig_pres_url = !empty($asso['sig_president']) ? wp_get_attachment_url((int) $asso['sig_president']) : '';
+    $sig_secr_url = !empty($asso['sig_secretaire']) ? wp_get_attachment_url((int) $asso['sig_secretaire']) : '';
+
+    /* Helper de bloc signature : image manuscrite si dispo, sinon ligne vide */
+    $sig_block = function ($role, $name, $url) {
+        $h = '<div style="flex:1">';
+        $h .= '<p><strong>' . esc_html($role) . '</strong>' . ($name ? '<br>' . esc_html($name) : '') . '</p>';
+        if ($url) {
+            $h .= '<img src="' . esc_url($url) . '" alt="signature" style="max-height:70px;max-width:90%;margin-top:4px">';
+        } else {
+            $h .= '<div style="height:50px;border-bottom:1px solid #999;width:80%"></div>';
+        }
+        $h .= '</div>';
+        return $h;
+    };
 
     lfi_nct_app_screen_open('📜 Dossier statuts complet', 'Convocation + PV + statuts à jour');
     if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    if (!$sig_pres_url || !$sig_secr_url) {
+        echo '<div class="lfi-app-help no-print" style="background:#fff3f5;border-left:4px solid #c8102e">';
+        echo '✍️ <strong>Signatures manquantes.</strong> Pour que la préfecture accepte (signatures manuscrites), téléverse les 2 signatures dans <a href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">⚙️ Paramètres → Association</a>. Sans ça, le document s\'imprime avec des lignes vides à signer à la main.';
+        echo '</div>';
+    }
 
     /* Mode d'emploi (à l'écran, pas imprimé) */
     echo '<div class="lfi-app-help no-print" style="background:#e8f0ff;border-left:4px solid #0066a3">';
@@ -1493,8 +1515,8 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<p>L\'ordre du jour étant épuisé, la séance est levée à ____ h ____.</p>';
 
     echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
-    echo '<div style="flex:1"><p><strong>Le Président</strong><br>' . esc_html($pres) . '</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
-    echo '<div style="flex:1"><p><strong>Le Secrétaire</strong></p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo $sig_block('Le Président', $pres, $sig_pres_url);
+    echo $sig_block('Le Secrétaire', $secr, $sig_secr_url);
     echo '</div>';
 
     echo '<div class="pj"><strong>À joindre à la déclaration en préfecture :</strong> le présent procès-verbal daté et signé + un exemplaire des statuts mis à jour, daté et signé, portant la mention « Statuts modifiés par l\'AGE du ____ ».</div>';
@@ -1564,9 +1586,10 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<h2>Article 13 — Dissolution</h2>';
     echo '<p>En cas de dissolution prononcée par l\'assemblée générale extraordinaire, un ou plusieurs liquidateurs sont nommés et l\'actif net est dévolu à une association poursuivant un but similaire, conformément à l\'article 9 de la loi du 1<sup>er</sup> juillet 1901.</p>';
 
-    echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
-    echo '<div style="flex:1"><p>Fait à Nantes, le ____ / ____ / 20____</p><p style="margin-top:20px"><strong>Le Président</strong><br>' . esc_html($pres) . '</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
-    echo '<div style="flex:1"><p>&nbsp;</p><p style="margin-top:20px"><strong>Le Secrétaire</strong></p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '<p style="margin-top:30px">Fait à Nantes, le ____ / ____ / 20____</p>';
+    echo '<div style="margin-top:10px;display:flex;gap:40px;justify-content:space-between">';
+    echo $sig_block('Le Président', $pres, $sig_pres_url);
+    echo $sig_block('Le Secrétaire', $secr, $sig_secr_url);
     echo '</div>';
 
     echo '</div>';

@@ -176,6 +176,9 @@ function lfi_nct_association() {
         'tel'       => '06 23 52 60 74',
         'objet'     => 'défense des intérêts des habitants des quartiers populaires dans les domaines social, économique, environnemental et culturel — notamment le logement, le cadre de vie, la sécurité, les services publics, l\'accès aux droits et la protection des droits collectifs (association de locataires)',
         'cotisation'=> '5',
+        'secretaire'    => '',   /* nom du/de la secrétaire (ex: Gwenaël Gourdien) */
+        'sig_president' => 0,    /* attachment ID signature président */
+        'sig_secretaire'=> 0,    /* attachment ID signature secrétaire */
     ];
     if (is_array($data) && !empty($data)) return array_merge($defaults, $data);
     return $defaults;
@@ -1225,10 +1228,24 @@ function lfi_nct_app_view_facturation_params() {
         /* Association loi 1901 — globale, admin only */
         if (current_user_can('manage_options') && isset($_POST['asso_nom'])) {
             $asso = lfi_nct_association();
-            foreach (['nom', 'rna', 'president', 'siege', 'cp_ville', 'email', 'tel', 'cotisation'] as $k) {
+            foreach (['nom', 'rna', 'president', 'siege', 'cp_ville', 'email', 'tel', 'cotisation', 'secretaire'] as $k) {
                 $asso[$k] = sanitize_text_field(wp_unslash($_POST['asso_' . $k] ?? ''));
             }
             $asso['objet'] = sanitize_textarea_field(wp_unslash($_POST['asso_objet'] ?? ''));
+
+            /* Uploads des signatures manuscrites scannées */
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            foreach (['sig_president' => 'asso_sig_president', 'sig_secretaire' => 'asso_sig_secretaire'] as $key => $field) {
+                if (!empty($_FILES[$field]['name'])) {
+                    $att = media_handle_upload($field, 0);
+                    if (!is_wp_error($att)) {
+                        update_post_meta((int) $att, '_lfi_asso_signature', 1);
+                        $asso[$key] = (int) $att;
+                    }
+                }
+            }
             update_option('lfi_nct_association', $asso, false);
         }
 
@@ -1255,7 +1272,7 @@ function lfi_nct_app_view_facturation_params() {
     echo '⚖️ <strong>Avant de facturer NMH, comprends le cadre légal :</strong> ce qui est facturable au bailleur, ce qui doit passer par le locataire, et pourquoi la facture est en ton nom (pas celui du GA). <a href="' . esc_url(lfi_nct_app_url('cadre-juridique')) . '">📖 Lire le cadre juridique</a>';
     echo '</div>';
 
-    echo '<form method="post" class="lfi-app-form">';
+    echo '<form method="post" class="lfi-app-form" enctype="multipart/form-data">';
     wp_nonce_field('lfi_app_fact_params');
     echo '<input type="hidden" name="lfi_app_fact_params" value="1">';
 
@@ -1303,8 +1320,36 @@ function lfi_nct_app_view_facturation_params() {
         echo '<label>Téléphone<input type="tel" name="asso_tel" value="' . esc_attr($asso['tel']) . '"></label>';
         echo '<label>Objet social (extrait des statuts)<textarea name="asso_objet" rows="2">' . esc_textarea($asso['objet']) . '</textarea></label>';
         echo '<label>Cotisation d\'adhésion (€)<input type="number" name="asso_cotisation" value="' . esc_attr($asso['cotisation']) . '" step="1" min="0"></label>';
-        echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';
-        echo '📜 <strong>Tes statuts en préfecture doivent autoriser le volet logement ET l\'action en justice.</strong> Si ce n\'est pas le cas, génère le dossier de modification prêt à déposer : <a href="' . esc_url(lfi_nct_app_url('asso-statuts')) . '">📜 Modifier les statuts (PV d\'AGE + articles)</a>';
+
+        /* === SIGNATURES MANUSCRITES (scannées) === */
+        echo '<h4 style="margin:14px 0 4px;color:#7a0000">✍️ Signatures manuscrites (pour les statuts/PV)</h4>';
+        echo '<div class="lfi-app-help"><small>La préfecture exige des signatures <strong>manuscrites</strong>. Signe sur papier blanc, prends en photo (ou scanne), et téléverse l\'image ici. Elle s\'insérera automatiquement dans le PV et les statuts.</small></div>';
+
+        echo '<label>Nom du/de la secrétaire<input type="text" name="asso_secretaire" value="' . esc_attr($asso['secretaire'] ?? '') . '" placeholder="ex: Gwenaël Gourdien"></label>';
+
+        echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">';
+        /* Président */
+        echo '<div style="background:#fff;border:1px solid #eee;border-radius:8px;padding:10px">';
+        echo '<div style="font-weight:700;font-size:.9em;margin-bottom:4px">Signature du président</div>';
+        $sigp = (int) ($asso['sig_president'] ?? 0);
+        if ($sigp && wp_get_attachment_url($sigp)) {
+            echo '<img src="' . esc_url(wp_get_attachment_url($sigp)) . '" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
+        }
+        echo '<input type="file" name="asso_sig_president" accept="image/*" style="font-size:.85em">';
+        echo '</div>';
+        /* Secrétaire */
+        echo '<div style="background:#fff;border:1px solid #eee;border-radius:8px;padding:10px">';
+        echo '<div style="font-weight:700;font-size:.9em;margin-bottom:4px">Signature du/de la secrétaire</div>';
+        $sigs = (int) ($asso['sig_secretaire'] ?? 0);
+        if ($sigs && wp_get_attachment_url($sigs)) {
+            echo '<img src="' . esc_url(wp_get_attachment_url($sigs)) . '" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
+        }
+        echo '<input type="file" name="asso_sig_secretaire" accept="image/*" style="font-size:.85em">';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600;margin-top:10px">';
+        echo '📜 <strong>Tes statuts en préfecture doivent autoriser le volet logement ET l\'action en justice.</strong> Génère le dossier prêt à déposer (signatures insérées) : <a href="' . esc_url(lfi_nct_app_url('asso-statuts')) . '">📜 Modifier les statuts</a>';
         echo '</div>';
     }
 
