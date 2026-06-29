@@ -113,13 +113,15 @@ TXT,
             ['etape' => 'Faire adhérer la locataire à l’association + mandat écrit', 'echeance' => 'avant tout courrier en son nom', 'detail' => 'Condition pour agir et écrire au nom de la locataire (loi du 6 juillet 1989 ; art. 63-66 loi 71-1130). Générer le bulletin d’adhésion depuis le dossier.'],
             ['etape' => 'Envoyer la mise en demeure LRAR (réponse argumentée)', 'echeance' => 'semaine en cours', 'detail' => 'Utiliser le document « 📨 Réponse argumentée à NMH » : réfutation point par point + exiger une RECHERCHE DE FUITE et un DIAGNOSTIC électricité/volet à la charge de NMH, un calendrier ferme de travaux, et une réponse écrite sur les moisissures + la demande de relogement.'],
             ['etape' => 'À défaut de réponse satisfaisante : saisir le SCHS de Nantes et l’ARS', 'echeance' => 'sous 15 jours', 'detail' => 'Documents « 🏥 SCHS » et « 🏛 ARS » du dossier. Une insalubrité confirmée peut emporter un arrêté préfectoral et l’obligation de relogement (L.521-3-1 CCH).'],
-            ['etape' => 'Consulter les avocats (Me … et Me Valet)', 'echeance' => 'en parallèle', 'detail' => 'Voir la « Note pour les avocats » ci-dessous : référé-expertise (art. 145 CPC), action au fond (travaux + dommages-intérêts + réduction de loyer, art. 20-1 loi 89-462), éligibilité à l’aide juridictionnelle.'],
+            ['etape' => 'Consulter les avocats (Me Vallée — Cabinet 333, et Me Gouache)', 'echeance' => 'en parallèle', 'detail' => 'Voir la « Note pour les avocats » ci-dessous : volet civil/logement (référé-expertise art. 145 CPC, travaux + dommages-intérêts + réduction de loyer art. 20-1 loi 89-462) et volet pénal/habitat indigne (art. 225-14 C. pén., L.1337-4 CSP). Éligibilité à l’aide juridictionnelle.'],
             ['etape' => 'Documenter en continu', 'echeance' => 'permanent', 'detail' => 'Photos datées, relevés d’humidité, et — de façon anonymisée — les cas similaires dans l’immeuble (pour étayer un défaut collectif du bâti).'],
         ],
 
         /* NOTE POUR LES AVOCATS — synthèse de ce qu’on attend d’eux. */
         'note_avocats' => <<<'AVO'
-À l’attention de Maître …………………… et de Maître Valet
+À l’attention de :
+• Maître Stéphane VALLÉE — Cabinet d’Avocats 333, 14 boulevard Gabriel Guist’hau, 44000 Nantes — Tél. 02 40 20 00 22 — contact@cabinet333.com
+• Maître Maxime GOUACHE — Cabinet Poquet-Gouache, barreau de Nantes (droit pénal, exécution des peines, droit des étrangers)
 
 OBJET : logement de Mme Fadiga — appui juridique envisagé (bailleur : Nantes Métropole Habitat).
 
@@ -129,19 +131,28 @@ Mme Fadiga est locataire d’un logement social géré par Nantes Métropole Hab
 2. CE QUI A DÉJÀ ÉTÉ FAIT
 Constat de visite avec photographies datées ; recueil du certificat médical ; signalement écrit à NMH ; analyse réfutant point par point la réponse du bailleur. À venir : visite contradictoire, mise en demeure LRAR, puis saisine SCHS/ARS si nécessaire.
 
-3. CE QUE NOUS ATTENDONS DE VOUS
-a) Un avis sur la stratégie contentieuse et le séquencement (amiable → référé → fond).
-b) Un éventuel RÉFÉRÉ-EXPERTISE (art. 145 du Code de procédure civile) pour faire constater par expert l’humidité/les moisissures, leur origine (bâti vs usage) et le lien avec la santé.
-c) Une action en EXÉCUTION FORCÉE des travaux (obligations du bailleur, art. 1719-1720 C. civ. ; décret n° 2002-120 sur la décence) assortie de DOMMAGES-INTÉRÊTS pour trouble de jouissance (art. 1231-1 et 1240 C. civ.).
-d) Le cas échéant, une demande de RÉDUCTION DE LOYER et d’injonction de travaux pour non-décence (art. 20-1 de la loi n° 89-462).
-e) L’articulation avec une procédure d’INSALUBRITÉ (SCHS/ARS, art. L.1331-22 et s. CSP) et l’obligation de RELOGEMENT (art. L.521-3-1 CCH).
-f) Une appréciation de la faisabilité d’une ACTION COLLECTIVE (plusieurs locataires, même bailleur, désordres communs du bâti — art. 24-1 de la loi n° 89-462) si plusieurs ménages sont concernés.
+3. CE QUE NOUS ATTENDONS DE VOUS — DEUX VOLETS
+
+A) VOLET CIVIL / LOGEMENT (plutôt Maître Vallée / Cabinet 333, à confirmer selon vos domaines) :
+   a) Un avis sur la stratégie et le séquencement (amiable → référé → fond).
+   b) Un RÉFÉRÉ-EXPERTISE (art. 145 du Code de procédure civile) pour faire constater par expert l’humidité/les moisissures, leur origine (bâti vs usage) et le lien avec la santé.
+   c) Une action en EXÉCUTION FORCÉE des travaux (art. 1719-1720 C. civ. ; décret n° 2002-120 sur la décence), assortie de DOMMAGES-INTÉRÊTS pour trouble de jouissance (art. 1231-1 et 1240 C. civ.).
+   d) Une demande de RÉDUCTION DE LOYER et d’injonction de travaux pour non-décence (art. 20-1 de la loi n° 89-462).
+   e) L’articulation avec l’INSALUBRITÉ (SCHS/ARS, art. L.1331-22 et s. CSP) et l’obligation de RELOGEMENT (art. L.521-3-1 CCH).
+   f) La faisabilité d’une ACTION COLLECTIVE (plusieurs locataires, même bailleur, désordres communs du bâti — art. 24-1 de la loi n° 89-462), si plusieurs ménages sont concernés.
+
+B) VOLET PÉNAL / HABITAT INDIGNE (Maître Gouache, droit pénal) :
+   a) L’opportunité d’agir sur le fondement de la SOUMISSION D’UNE PERSONNE VULNÉRABLE À DES CONDITIONS D’HÉBERGEMENT INDIGNES (art. 225-14 du Code pénal).
+   b) Les SANCTIONS PÉNALES en cas de non-respect d’un arrêté d’insalubrité ou de mise en sécurité (art. L.1337-4 du Code de la santé publique), si un tel arrêté venait à être pris.
+   c) L’opportunité d’un dépôt de plainte / d’une constitution de partie civile, et son articulation avec le volet civil.
 
 4. QUESTIONS PRÉCISES
+- Lequel d’entre vous (ou via le Cabinet 333) prend en charge le volet baux d’habitation / immobilier ?
 - Mme Fadiga est-elle éligible à l’AIDE JURIDICTIONNELLE, et pouvez-vous intervenir à ce titre ?
-- Quel est, selon vous, le levier le plus rapide pour obtenir les travaux (référé-injonction de faire / référé-expertise) ?
-- Quels éléments de preuve devons-nous sécuriser dès maintenant pour solidifier le dossier ?
-- Quelles sont vos modalités et honoraires pour une première consultation ?
+- Quel est le levier le plus rapide pour obtenir les travaux (référé-injonction de faire / référé-expertise) ?
+- Le volet pénal (habitat indigne) est-il opportun ici, et à quelles conditions ?
+- Quels éléments de preuve sécuriser dès maintenant pour solidifier le dossier ?
+- Vos modalités et honoraires pour une première consultation ?
 
 5. PIÈCES À VOTRE DISPOSITION
 Constat de visite + photographies datées ; certificat médical ; copie du signalement et de la réponse de NMH ; analyse juridique jointe.
