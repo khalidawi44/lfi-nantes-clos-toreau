@@ -153,6 +153,65 @@ self.addEventListener('fetch', e => {
         lfi_nct_app_render_icon($size, $mask);
         exit;
     }
+
+    /* ============================================================== *
+     *  DIAGNOSTIC : /?lfi_app=diag&vue=...&id=...                      *
+     *  Rend une vue directement, SANS thème, SANS Service Worker,     *
+     *  SANS bufferisation cachée, avec affichage COMPLET des erreurs. *
+     *  Réservé à l'admin. Sert à identifier une page blanche.         *
+     * ============================================================== */
+    if ($ep === 'diag') {
+        nocache_headers();
+        header('Content-Type: text/html; charset=utf-8');
+        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+        if (!current_user_can('manage_options')) {
+            echo 'Réservé à l\'administrateur. Connecte-toi puis reviens sur cette URL.';
+            exit;
+        }
+        @ini_set('display_errors', '1');
+        @ini_set('display_startup_errors', '1');
+        error_reporting(E_ALL);
+        @ini_set('memory_limit', '512M');
+        if (function_exists('set_time_limit')) @set_time_limit(60);
+
+        $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+        echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
+        echo '<div style="font-family:-apple-system,sans-serif;padding:14px;max-width:900px;margin:auto">';
+        echo '<h2 style="color:#c8102e">🔬 Diagnostic — vue « ' . esc_html($vue) . ' »</h2>';
+        echo '<p style="color:#666">Mémoire départ : ' . size_format(memory_get_usage(true)) . ' · limite : ' . esc_html(ini_get('memory_limit')) . '</p><hr>';
+
+        /* Map vue -> fonction (sous-ensemble utile au diag). */
+        $map = [
+            'dossier-juridique-edit' => 'lfi_nct_app_view_dossier_juridique_edit',
+            'dossier-juridique-add'  => 'lfi_nct_app_view_dossier_juridique_add',
+            'dossiers-juridiques'    => 'lfi_nct_app_view_dossiers_juridiques',
+            'association'            => 'lfi_nct_app_view_association',
+            'asso-statuts'           => 'lfi_nct_app_view_asso_statuts',
+            'dossier'                => 'lfi_nct_app_view_dossier',
+        ];
+        $fn = $map[$vue] ?? '';
+        if (!$fn || !function_exists($fn)) {
+            echo '<p style="color:#c8102e">Vue inconnue ou fonction absente : ' . esc_html($vue) . ' → ' . esc_html($fn) . '</p>';
+            exit;
+        }
+        echo '<p>▶️ Appel de <code>' . esc_html($fn) . '()</code>…</p>';
+        echo str_repeat(' ', 4096); /* casse tout buffer LiteSpeed pour voir le flux */
+        if (function_exists('flush')) { @ob_flush(); @flush(); }
+        $t0 = microtime(true);
+        try {
+            $fn();
+            $dt = round((microtime(true) - $t0) * 1000);
+            echo '<hr><p style="color:#186a3b">✅ Rendu terminé sans exception en ' . $dt . ' ms · mémoire pic : ' . size_format(memory_get_peak_usage(true)) . '</p>';
+        } catch (\Throwable $e) {
+            echo '<hr><div style="background:#fff3f5;border:2px solid #c8102e;padding:12px;border-radius:8px">';
+            echo '<strong style="color:#c8102e">❌ ' . esc_html(get_class($e)) . '</strong><br>';
+            echo esc_html($e->getMessage()) . '<br><small>' . esc_html($e->getFile()) . ':' . (int) $e->getLine() . '</small>';
+            echo '<pre style="white-space:pre-wrap;font-size:.75em;color:#555;margin-top:8px">' . esc_html($e->getTraceAsString()) . '</pre>';
+            echo '</div>';
+        }
+        echo '</div>';
+        exit;
+    }
 }
 
 /**
