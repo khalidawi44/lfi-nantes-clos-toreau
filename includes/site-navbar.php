@@ -276,6 +276,8 @@ function lfi_nct_admin_bar_menu($bar) {
 
         if ($is_admin) {
             $sections[] = ['👁 Admin (RGPD)', [
+                ['🏠 Comptes locataires (wp-admin)', admin_url('admin.php?page=lfi-nct-comptes-loc')],
+                ['👥 Comptes membres GA (wp-admin)', admin_url('admin.php?page=lfi-nct-comptes-ga')],
                 ['🗂 Réponses d\'enquête',  lfi_nct_app_url('dossiers')],
                 ['📈 Stats enquêtes',      lfi_nct_app_url('stats-enquete')],
                 ['📊 Stats globales',      lfi_nct_app_url('stats')],
