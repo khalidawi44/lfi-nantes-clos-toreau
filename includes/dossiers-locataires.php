@@ -1823,6 +1823,8 @@ function lfi_nct_app_view_association() {
         $tiles[] = ['📜', 'Modifier les statuts', 'Convocation + PV + statuts à jour, signés', lfi_nct_app_url('asso-statuts')];
     }
     $tiles[] = ['⚖️', 'Cadre juridique', 'Ce qui est facturable, comment, par qui', lfi_nct_app_url('cadre-juridique')];
+    $tiles[] = ['🧮', 'Aide juridictionnelle', 'Savoir à l\'avance qui y a droit', lfi_nct_app_url('aj-calcul')];
+    $tiles[] = ['🤝', 'Stratégie avocats', 'Note générale à envoyer aux cabinets', lfi_nct_app_url('doc-strategie-avocats')];
     $tiles[] = ['📁', 'Dossiers juridiques', 'Un dossier par locataire accompagné', lfi_nct_app_url('dossiers-juridiques')];
     $tiles[] = ['🔧', 'Interventions & factures', 'Brigade travaux, facturation NMH', lfi_nct_app_url('interventions')];
     foreach ($tiles as $t) {

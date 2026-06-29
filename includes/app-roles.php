@@ -661,6 +661,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
             case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
             case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
+            case 'aj-calcul':                  lfi_nct_app_view_aj_calcul();                    break;
+            case 'doc-strategie-avocats':      lfi_nct_app_view_doc_strategie_avocats();        break;
             case 'association':                lfi_nct_app_view_association();                  break;
             case 'asso-statuts':               lfi_nct_app_view_asso_statuts();                 break;
             case 'dossier':                    lfi_nct_app_view_dossier();                      break;
