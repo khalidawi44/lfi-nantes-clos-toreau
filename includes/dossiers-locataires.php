@@ -21,7 +21,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_DOSSIER_DBVER_KEY = 'lfi_nct_dossier_db_ver';
-const LFI_NCT_DOSSIER_DBVER_VAL = '1';
+const LFI_NCT_DOSSIER_DBVER_VAL = '2';
 
 /* ============================================================== *
  *  DB Setup                                                        *
@@ -52,6 +52,8 @@ function lfi_nct_dossier_db_setup() {
         certificat_pathologie TEXT,
         certificat_date DATE DEFAULT NULL,
         demandes TEXT,
+        visite_heures DECIMAL(5,2) DEFAULT 0,
+        facture_intervention_id BIGINT UNSIGNED DEFAULT NULL,
         statut VARCHAR(20) DEFAULT 'ouvert',
         lrar_travaux_date DATE DEFAULT NULL,
         lrar_relogement_date DATE DEFAULT NULL,
@@ -185,6 +187,45 @@ function lfi_nct_dossier_get($id) {
     return $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d AND owner_user_id = %d", (int) $id, $owner));
 }
 
+/* Tarif horaire pour une visite/constat (= tarif brigade par défaut) */
+function lfi_nct_visite_tarif_horaire() {
+    return function_exists('lfi_nct_fact_tarif_defaut') ? lfi_nct_fact_tarif_defaut() : 40.00;
+}
+
+/* Crée une intervention facturable pour le TEMPS DE VISITE (constat).
+   Facturé à l'heure (tarif brigade). Retourne l'ID intervention ou null. */
+function lfi_nct_dossier_creer_facture_visite($dossier, $heures, $owner) {
+    global $wpdb;
+    if ($heures <= 0) return null;
+    $tarif = lfi_nct_visite_tarif_horaire();
+    $total = round($heures * $tarif, 2);
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $h_lbl = rtrim(rtrim(number_format($heures, 2, ',', ' '), '0'), ',');
+    $wpdb->insert($ti, [
+        'owner_user_id' => $owner,
+        'tenant_user_id'=> $dossier->tenant_user_id ?: null,
+        'tenant_prenom' => $dossier->tenant_prenom ?: '',
+        'tenant_nom'    => $dossier->tenant_nom ?: '',
+        'tenant_adresse'=> $dossier->tenant_adresse ?: '',
+        'tenant_etage'  => $dossier->tenant_etage ?: '',
+        'tenant_appartement' => $dossier->tenant_appartement ?: '',
+        'bailleur'      => 'Nantes Métropole Habitat',
+        'date_intervention' => $dossier->visite_date ?: current_time('Y-m-d'),
+        'type_travaux'  => 'Constat et rapport de visite du logement',
+        'type_travaux_key' => '',
+        'description'   => 'Visite contradictoire du logement, constat détaillé des désordres et rédaction du rapport de visite (dossier juridique #' . $dossier->id . '). Durée : ' . $h_lbl . ' h.',
+        'tarif_mode'    => 'horaire',
+        'prix_tache'    => 0,
+        'duree_heures'  => $heures,
+        'tarif_horaire' => $tarif,
+        'cout_materiaux'=> 0,
+        'total_ht'      => $total,
+        'statut'        => 'realise',
+        'notes'         => 'Généré automatiquement depuis le dossier juridique #' . $dossier->id . ' (visite facturée ' . number_format($tarif, 2, ',', ' ') . ' €/h).',
+    ]);
+    return (int) $wpdb->insert_id;
+}
+
 /* Étiquettes lisibles pour les codes de demandes */
 function lfi_nct_dossier_demandes_labels() {
     return [
@@ -309,6 +350,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
             'tenant_email'         => sanitize_email(wp_unslash($_POST['tenant_email'] ?? '')),
             'visite_date'          => sanitize_text_field(wp_unslash($_POST['visite_date'] ?? '')) ?: null,
             'visite_duree'         => sanitize_text_field(wp_unslash($_POST['visite_duree'] ?? '')),
+            'visite_heures'        => (float) ($_POST['visite_heures'] ?? 0),
             'constatations'        => sanitize_textarea_field(wp_unslash($_POST['constatations'] ?? '')),
             'certificat_medecin'   => sanitize_text_field(wp_unslash($_POST['certificat_medecin'] ?? '')),
             'certificat_pathologie'=> sanitize_textarea_field(wp_unslash($_POST['certificat_pathologie'] ?? '')),
@@ -337,6 +379,28 @@ function lfi_nct_app_dossier_juridique_form($row) {
             wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'marked' => $etape]));
             exit;
         }
+    }
+
+    /* Facturer la visite (temps de constat) — ANTI-DOUBLON */
+    if ($is_edit && !empty($_POST['lfi_dossier_facturer_visite']) && check_admin_referer('lfi_dossier_facturer_visite')) {
+        $heures = (float) ($_POST['visite_heures'] ?? 0);
+        /* Garde-fou anti-doublon : si déjà facturé, on n'en recrée pas. */
+        $deja = (int) ($row->facture_intervention_id ?? 0);
+        $exists = $deja ? $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}lfi_nct_interventions WHERE id = %d", $deja)) : 0;
+        if ($exists) {
+            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'deja_facture' => 1]));
+            exit;
+        }
+        if ($heures > 0) {
+            $iid = lfi_nct_dossier_creer_facture_visite($row, $heures, $owner);
+            if ($iid) {
+                $wpdb->update($t, ['visite_heures' => $heures, 'facture_intervention_id' => $iid], ['id' => $row->id, 'owner_user_id' => $owner]);
+                wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $iid, 'billed' => 1]));
+                exit;
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id]));
+        exit;
     }
 
     /* Pré-remplissage depuis paramètres URL (raccourci depuis autre fiche) */
@@ -388,7 +452,8 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Dossier enregistré.');
     if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
     if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
-    if (!empty($_GET['email_sent'])) lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
+    if (!empty($_GET['email_sent']))   lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
+    if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_dossier_save');
@@ -428,10 +493,13 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
     /* === VISITE / CONSTATATIONS === */
     echo '<h3 style="margin:18px 0 0">🔍 Constatations de visite</h3>';
-    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
     echo '<label>Date de visite<input type="date" name="visite_date" value="' . esc_attr($r->visite_date) . '"></label>';
-    echo '<label>Durée<input type="text" name="visite_duree" value="' . esc_attr($r->visite_duree) . '" placeholder="ex: 4 heures"></label>';
+    echo '<label>Durée (texte)<input type="text" name="visite_duree" value="' . esc_attr($r->visite_duree) . '" placeholder="ex: 4 heures"></label>';
+    echo '<label>Heures (à facturer)<input type="number" name="visite_heures" step="0.25" min="0" value="' . esc_attr($r->visite_heures ?? '') . '" placeholder="ex: 4"></label>';
     echo '</div>';
+    $tarif_v = lfi_nct_visite_tarif_horaire();
+    echo '<div class="lfi-app-help">💶 La visite est facturable à <strong>' . number_format($tarif_v, 2, ',', ' ') . ' €/h</strong> (temps de constat + rapport). Renseigne le nb d\'heures puis utilise le bouton « Facturer la visite » plus bas.</div>';
     echo '<label>Description détaillée des désordres observés<textarea name="constatations" id="lfi-constatations" rows="8" placeholder="Décris pièce par pièce : moisissures (couleur, surface, emplacement précis), fuites, infiltrations d\'air, humidité au toucher, taux ressenti, odeurs… Sois factuel et précis : ces constatations seront citées dans toutes les lettres.">' . esc_textarea($r->constatations) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-constatations" data-label="Dicter mes constats sur place"></div>';
 
@@ -544,8 +612,45 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</div>';
     }
 
-    /* === GÉNÉRATION DES LETTRES (uniquement après création) === */
+    /* === RAPPORT DE VISITE + FACTURATION (après création) === */
     if ($is_edit) {
+        echo '<h3 style="margin:24px 0 8px;color:#c8102e">📄 Rapport de visite & facturation</h3>';
+
+        echo '<div class="lfi-app-list"><div class="lfi-app-card" style="border-left:4px solid #0066a3">';
+        echo '<div class="head"><div class="who">📄 Rapport de visite (PDF)</div></div>';
+        echo '<div class="com">Document officiel reprenant tes constatations, daté et signé, pour le dossier juridique. Imprimable / PDF.</div>';
+        echo '<div class="row-actions">';
+        echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-doc-rapport-visite', ['id' => $row->id])) . '" target="_blank">📄 Ouvrir le rapport de visite</a>';
+        echo '</div></div></div>';
+
+        /* Facturation de la visite — anti-doublon */
+        $deja_iid = (int) ($row->facture_intervention_id ?? 0);
+        $deja_ok = $deja_iid ? $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}lfi_nct_interventions WHERE id = %d", $deja_iid)) : 0;
+        $tarif_v = lfi_nct_visite_tarif_horaire();
+        $heures_v = (float) ($row->visite_heures ?? 0);
+
+        echo '<div class="lfi-app-list"><div class="lfi-app-card" style="border-left:4px solid ' . ($deja_ok ? '#186a3b' : '#bd8600') . '">';
+        echo '<div class="head"><div class="who">🧾 Facturer la visite</div>';
+        if ($deja_ok) echo '<div class="badge" style="background:#186a3b;color:#fff">✓ Déjà facturée</div>';
+        echo '</div>';
+        if ($deja_ok) {
+            echo '<div class="com">Cette visite a déjà été facturée (intervention #' . (int) $deja_iid . '). Pas de doublon possible.</div>';
+            echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-edit', ['id' => $deja_iid])) . '">Voir la facture →</a></div>';
+        } else {
+            $montant_v = $heures_v * $tarif_v;
+            echo '<div class="com">Temps de constat + rédaction du rapport, facturé à ' . number_format($tarif_v, 2, ',', ' ') . ' €/h.</div>';
+            echo '<form method="post" class="lfi-app-form" style="margin-top:8px">';
+            wp_nonce_field('lfi_dossier_facturer_visite');
+            echo '<input type="hidden" name="lfi_dossier_facturer_visite" value="1">';
+            echo '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">';
+            echo '<label style="margin:0">Nombre d\'heures<input type="number" name="visite_heures" step="0.25" min="0" value="' . esc_attr($heures_v ?: '') . '" placeholder="ex: 4" required></label>';
+            echo '<button type="submit" class="btn-primary">🧾 Facturer la visite</button>';
+            echo '</div>';
+            echo '<div class="lfi-app-help"><small>Ex : 4 h × ' . number_format($tarif_v, 0, ',', ' ') . ' € = ' . number_format(4 * $tarif_v, 0, ',', ' ') . ' €. La facture est créée dans la brigade, rattachée à ce locataire. Impossible de la créer deux fois.</small></div>';
+            echo '</form>';
+        }
+        echo '</div></div>';
+
         echo '<h3 style="margin:24px 0 8px;color:#c8102e">📄 Lettres à générer (LRAR)</h3>';
         echo '<div class="lfi-app-help">Clique sur une lettre pour l\'ouvrir (déjà pré-remplie avec tes constats). Bouton « Imprimer » en haut, puis envoi en recommandé avec accusé de réception.</div>';
 
@@ -1184,6 +1289,55 @@ function lfi_nct_dossier_header_destinataire_nmh($bailleur) {
         if (!empty($bailleur['agence_tel']))     echo ' · Tél. ' . esc_html($bailleur['agence_tel']);
         echo '</div>';
     }
+}
+
+/* ============================================================== *
+ *  RAPPORT DE VISITE (PDF imprimable)                              *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_doc_rapport_visite() {
+    if (!lfi_nct_can_use_brigade()) return;
+    $ctx = lfi_nct_dossier_doc_open('📄 Rapport de visite');
+    extract($ctx);
+
+    echo '<div class="lfi-rec-doc">';
+
+    echo '<h1>Rapport de visite de logement</h1>';
+    echo '<p style="text-align:center;font-style:italic;margin-bottom:24px">Constat des désordres — Groupe d\'Action LFI Nantes Sud / Clos Toreau</p>';
+
+    echo '<table class="detail">';
+    echo '<tr><td><strong>Logement visité</strong></td><td>' . esc_html($tenant_logement ?: '—') . '</td></tr>';
+    echo '<tr><td><strong>Locataire</strong></td><td>' . esc_html($tenant_full ?: '—') . '</td></tr>';
+    echo '<tr><td><strong>Bailleur</strong></td><td>' . esc_html($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '</td></tr>';
+    if ($dossier->visite_date) echo '<tr><td><strong>Date de la visite</strong></td><td>' . esc_html(wp_date('j F Y', strtotime($dossier->visite_date))) . '</td></tr>';
+    if ($dossier->visite_duree) echo '<tr><td><strong>Durée de la visite</strong></td><td>' . esc_html($dossier->visite_duree) . '</td></tr>';
+    if (!empty($presta['nom'])) echo '<tr><td><strong>Constaté par</strong></td><td>' . esc_html($presta['nom']) . ', membre du Groupe d\'Action</td></tr>';
+    echo '</table>';
+
+    echo '<h2>Désordres constatés</h2>';
+    if ($dossier->constatations) {
+        echo '<p>' . nl2br(esc_html($dossier->constatations)) . '</p>';
+    } else {
+        echo '<p><em>[Constatations à compléter dans le dossier.]</em></p>';
+    }
+
+    if (!empty($dossier->certificat_medecin) && !empty($dossier->certificat_pathologie)) {
+        echo '<h2>Élément médical porté à connaissance</h2>';
+        echo '<p>Un certificat médical du <strong>' . esc_html($dossier->certificat_medecin) . '</strong>';
+        if ($dossier->certificat_date) echo ' en date du ' . esc_html(wp_date('j F Y', strtotime($dossier->certificat_date)));
+        echo ' atteste : </p>';
+        echo '<div class="citations"><em>' . nl2br(esc_html($dossier->certificat_pathologie)) . '</em></div>';
+    }
+
+    echo '<h2>Conclusion</h2>';
+    echo '<p>Les désordres constatés ci-dessus caractérisent un manquement du bailleur à son obligation de délivrer et d\'entretenir un logement décent (articles 1719 et 1724 du Code civil, article 6 de la loi n° 89-462, décret n° 2002-120). Le présent rapport est versé au dossier du locataire et peut être produit à l\'appui de toute démarche amiable ou contentieuse.</p>';
+
+    echo '<p style="margin-top:30px">Fait à Nantes, le ' . esc_html(wp_date('j F Y')) . '.</p>';
+    echo '<div class="signature">' . esc_html($presta['nom'] ?? 'Le Groupe d\'Action LFI') . '</div>';
+
+    echo '<div class="pj"><strong>Pièces jointes :</strong> photographies datées des désordres' . (!empty($dossier->certificat_medecin) ? ', certificat médical' : '') . '.</div>';
+
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
 }
 
 /* ============================================================== *
