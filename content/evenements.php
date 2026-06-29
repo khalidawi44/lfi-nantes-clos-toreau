@@ -20,15 +20,7 @@ if (!defined('ABSPATH')) exit;
 
 return [
 
-    [
-        'titre'   => 'Conférence — Logement social & municipales 2026',
-        'date'    => '2026-07-08',
-        'heure'   => '19:00',
-        'lieu'    => 'Quartier Clos Toreau, Nantes Sud',
-        'resume'  => 'Débat public : le logement social au cœur des municipales. Venez poser vos questions.',
-        'details' => '',
-        'lien'    => '',
-    ],
+    // (La conférence du 8 juillet a son propre événement dédié.)
 
     [
         'titre'   => 'Porte-à-porte — à la rencontre des locataires',

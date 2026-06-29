@@ -148,6 +148,91 @@ function lfi_nct_evenements_autoinject($content) {
     return $content . lfi_nct_evenements_shortcode([]);
 }
 
+/**
+ * SYNCHRONISATION des événements du fichier vers le CPT du thème
+ * (ag_evenement) → ils apparaissent nativement sur la page /evenements/.
+ *
+ * Idempotent : ne s'exécute que quand le fichier change (hash). Crée /
+ * met à jour un post ag_evenement par événement (clé stable), et met à la
+ * corbeille ceux qu'on a créés mais qui ne sont plus dans le fichier.
+ * Ne touche JAMAIS les événements créés à la main (sans notre marqueur).
+ */
+add_action('init', 'lfi_nct_sync_content_events', 25);
+function lfi_nct_sync_content_events() {
+    $cpt = post_type_exists('ag_evenement') ? 'ag_evenement'
+         : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : null);
+    if (!$cpt) return;
+
+    $events = lfi_nct_content_events();
+    $hash = md5(wp_json_encode($events) . '|' . $cpt . '|v1');
+    if (get_option('lfi_nct_events_sync_hash') === $hash) return;
+
+    $seen = [];
+    foreach ($events as $e) {
+        $titre = trim($e['titre'] ?? '');
+        $date  = trim($e['date'] ?? '');
+        if ($titre === '' || $date === '') continue;
+        $key = substr(md5($titre . '|' . $date), 0, 12);
+        $seen[] = $key;
+
+        $found = get_posts([
+            'post_type' => $cpt, 'post_status' => 'any', 'numberposts' => 1,
+            'fields' => 'ids', 'meta_key' => '_lfi_content_event_key', 'meta_value' => $key,
+        ]);
+
+        $arr = [
+            'post_type'     => $cpt,
+            'post_status'   => 'publish',
+            'post_title'    => $titre,
+            'post_content'  => lfi_nct_content_event_html($e),
+            'post_excerpt'  => mb_substr((string) ($e['resume'] ?? ''), 0, 200),
+            'post_author'   => 1,
+            'comment_status'=> 'closed',
+            'ping_status'   => 'closed',
+        ];
+        if (!empty($found)) { $arr['ID'] = (int) $found[0]; $pid = wp_update_post($arr, true); }
+        else                { $pid = wp_insert_post($arr, true); }
+        if (is_wp_error($pid) || !$pid) continue;
+
+        update_post_meta($pid, '_lfi_content_event_key', $key);
+        update_post_meta($pid, '_lfi_content_event', 1);
+        update_post_meta($pid, '_lfi_evt_internal', 1);
+        update_post_meta($pid, '_ag_event_date', $date);
+        if (!empty($e['heure'])) update_post_meta($pid, '_ag_event_time', $e['heure']);
+        else delete_post_meta($pid, '_ag_event_time');
+        if (!empty($e['lieu'])) {
+            update_post_meta($pid, '_ag_event_place', $e['lieu']);
+            update_post_meta($pid, '_ag_event_address', $e['lieu']);
+        }
+    }
+
+    /* Corbeille les événements QUE NOUS avons créés et qui ont disparu du fichier. */
+    $ours = get_posts([
+        'post_type' => $cpt, 'post_status' => 'any', 'numberposts' => 200,
+        'fields' => 'ids', 'meta_key' => '_lfi_content_event', 'meta_value' => 1,
+    ]);
+    foreach ($ours as $oid) {
+        $k = get_post_meta($oid, '_lfi_content_event_key', true);
+        if (!in_array($k, $seen, true)) wp_trash_post($oid);
+    }
+
+    update_option('lfi_nct_events_sync_hash', $hash, false);
+}
+
+/** Corps HTML (Gutenberg-friendly) d'un événement du fichier. */
+function lfi_nct_content_event_html($e) {
+    $ts = strtotime(($e['date'] ?? '') . ' ' . ($e['heure'] ?? ''));
+    ob_start();
+    if (!empty($e['resume'])) echo '<p><strong>' . esc_html($e['resume']) . '</strong></p>' . "\n";
+    echo '<h3>📅 Quand &amp; où ?</h3>' . "\n<ul>\n";
+    echo '  <li><strong>' . esc_html(wp_date('l j F Y', $ts)) . (!empty($e['heure']) ? ' · ' . esc_html($e['heure']) : '') . '</strong></li>' . "\n";
+    if (!empty($e['lieu'])) echo '  <li>📍 ' . esc_html($e['lieu']) . '</li>' . "\n";
+    echo "</ul>\n";
+    if (!empty($e['details'])) echo '<p>' . nl2br(esc_html($e['details'])) . '</p>' . "\n";
+    if (!empty($e['lien']))    echo '<p><a href="' . esc_url($e['lien']) . '">S\'inscrire / en savoir plus</a></p>' . "\n";
+    return ob_get_clean();
+}
+
 /* ============================================================== *
  *  ANALYSES D'EMAILS NMH (gérées par le code)                     *
  * ============================================================== */
