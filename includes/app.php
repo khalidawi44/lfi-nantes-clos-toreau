@@ -194,21 +194,45 @@ self.addEventListener('fetch', e => {
             echo '<p style="color:#c8102e">Vue inconnue ou fonction absente : ' . esc_html($vue) . ' → ' . esc_html($fn) . '</p>';
             exit;
         }
-        echo '<p>▶️ Appel de <code>' . esc_html($fn) . '()</code>…</p>';
         echo str_repeat(' ', 4096); /* casse tout buffer LiteSpeed pour voir le flux */
         if (function_exists('flush')) { @ob_flush(); @flush(); }
-        $t0 = microtime(true);
-        try {
-            $fn();
-            $dt = round((microtime(true) - $t0) * 1000);
-            echo '<hr><p style="color:#186a3b">✅ Rendu terminé sans exception en ' . $dt . ' ms · mémoire pic : ' . size_format(memory_get_peak_usage(true)) . '</p>';
-        } catch (\Throwable $e) {
-            echo '<hr><div style="background:#fff3f5;border:2px solid #c8102e;padding:12px;border-radius:8px">';
-            echo '<strong style="color:#c8102e">❌ ' . esc_html(get_class($e)) . '</strong><br>';
-            echo esc_html($e->getMessage()) . '<br><small>' . esc_html($e->getFile()) . ':' . (int) $e->getLine() . '</small>';
-            echo '<pre style="white-space:pre-wrap;font-size:.75em;color:#555;margin-top:8px">' . esc_html($e->getTraceAsString()) . '</pre>';
-            echo '</div>';
-        }
+
+        /* Petit lanceur d'étape : exécute un test, capture sortie/mémoire/temps/erreur. */
+        $run = function ($titre, callable $cb) {
+            echo '<h3 style="margin:18px 0 4px">▶️ ' . esc_html($titre) . '</h3>';
+            if (function_exists('flush')) { @ob_flush(); @flush(); }
+            $t0 = microtime(true);
+            try {
+                $len = (int) $cb();
+                $dt = round((microtime(true) - $t0) * 1000);
+                echo '<p style="color:#186a3b">✅ OK — ' . number_format($len) . ' octets · ' . $dt . ' ms · pic mémoire ' . size_format(memory_get_peak_usage(true)) . '</p>';
+            } catch (\Throwable $e) {
+                echo '<div style="background:#fff3f5;border:2px solid #c8102e;padding:12px;border-radius:8px">';
+                echo '<strong style="color:#c8102e">❌ ' . esc_html(get_class($e)) . '</strong><br>';
+                echo esc_html($e->getMessage()) . '<br><small>' . esc_html($e->getFile()) . ':' . (int) $e->getLine() . '</small>';
+                echo '</div>';
+            }
+            if (function_exists('flush')) { @ob_flush(); @flush(); }
+        };
+
+        /* Étape 1 : la vue seule (déjà connue OK). */
+        $run('1. Vue seule — ' . $fn . '()', function () use ($fn) {
+            ob_start(); $fn(); return strlen((string) ob_get_clean());
+        });
+
+        /* Étape 2 : le shortcode complet [lfi_nct_app] (coquille + voix + SW + styles). */
+        $run('2. Shortcode complet lfi_nct_app_shortcode()', function () {
+            $out = function_exists('lfi_nct_app_shortcode') ? (string) lfi_nct_app_shortcode() : '';
+            return strlen($out);
+        });
+
+        /* Étape 3 : filtres the_content (wpautop, wptexturize, do_shortcode…). */
+        $run('3. Filtres the_content sur [lfi_nct_app]', function () {
+            $out = apply_filters('the_content', '[lfi_nct_app]');
+            return strlen((string) $out);
+        });
+
+        echo '<hr><p style="color:#666">Si les 3 étapes sont ✅, le souci est dans le <strong>thème</strong> ou <strong>LiteSpeed</strong> (post-traitement de la page), pas dans le plugin. Mémoire pic finale : ' . size_format(memory_get_peak_usage(true)) . ' · limite effective : ' . esc_html(ini_get('memory_limit')) . '</p>';
         echo '</div>';
         exit;
     }
@@ -312,6 +336,11 @@ function lfi_nct_app_no_cache() {
     if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
     if (!defined('DONOTCACHEDB')) define('DONOTCACHEDB', true);
     do_action('litespeed_control_set_nocache', 'LFI App : page dynamique');
+    /* DÉSACTIVE TOUTE l'optimisation LiteSpeed (minify/combine CSS-JS, lazyload…)
+       sur la page de l'app : ces écrans contiennent de gros <script> inline
+       (dictaphone, etc.) que l'optimiseur peut casser → page blanche. La page
+       est dynamique et privée : aucun intérêt à l'optimiser. */
+    do_action('litespeed_disable_all', 'LFI App : page dynamique lourde (scripts inline)');
     /* Envoie des headers no-cache aussi (au cas où LiteSpeed cache HTML
        au niveau serveur sans respecter DONOTCACHEPAGE). */
     nocache_headers();
