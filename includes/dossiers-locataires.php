@@ -1370,12 +1370,12 @@ function lfi_nct_app_view_asso_statuts() {
     $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));
     $pres = $asso['president'] ?: '[Nom du président]';
 
-    lfi_nct_app_screen_open('📜 Modifier les statuts', 'Objet logement + capacité d\'ester en justice');
+    lfi_nct_app_screen_open('📜 Dossier statuts complet', 'Convocation + PV + statuts à jour');
     if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
 
     /* Mode d'emploi (à l'écran, pas imprimé) */
     echo '<div class="lfi-app-help no-print" style="background:#e8f0ff;border-left:4px solid #0066a3">';
-    echo '<strong>📋 Procédure (gratuite) — ce document contient la convocation ET le PV :</strong><br>';
+    echo '<strong>📋 Procédure (gratuite) — ce document contient la convocation, le PV ET les statuts complets à jour :</strong><br>';
     echo '1. <strong>Convoquer</strong> les membres à l\'AGE (1re page ci-dessous), en respectant le délai prévu par tes statuts (souvent 15 jours).<br>';
     echo '2. Tenir l\'<strong>Assemblée Générale Extraordinaire</strong> et voter les modifications.<br>';
     echo '3. Signer le <strong>PV</strong> (2e page) + mettre à jour le texte des statuts (articles fournis).<br>';
@@ -1480,6 +1480,76 @@ function lfi_nct_app_view_asso_statuts() {
     echo '</div>';
 
     echo '<div class="pj"><strong>À joindre à la déclaration en préfecture :</strong> le présent procès-verbal daté et signé + un exemplaire des statuts mis à jour, daté et signé, portant la mention « Statuts modifiés par l\'AGE du ____ ».</div>';
+
+    echo '</div>';
+
+    /* Saut de page avant les statuts complets */
+    echo '<div style="page-break-before:always;height:1px"></div>';
+
+    /* ============ DOC 3 : STATUTS COMPLETS À JOUR ============ */
+    echo '<div class="lfi-rec-doc">';
+
+    echo '<h1>Statuts</h1>';
+    echo '<p style="text-align:center;font-weight:700;font-size:1.1em">' . esc_html($nom) . '</p>';
+    echo '<p style="text-align:center;font-style:italic">Association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901<br>Statuts mis à jour par l\'Assemblée Générale Extraordinaire du ____ / ____ / 20____</p>';
+
+    echo '<h2>Article 1 — Constitution et dénomination</h2>';
+    echo '<p>Il est fondé entre les adhérents aux présents statuts une association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901, ayant pour dénomination : <strong>' . esc_html($nom) . '</strong>.</p>';
+
+    echo '<h2>Article 2 — Objet</h2>';
+    echo '<p>L\'association a pour objet, dans les quartiers populaires de Nantes et de sa métropole :</p>';
+    echo '<ul>';
+    echo '<li>la défense des intérêts matériels et moraux, individuels et collectifs, des habitants et des locataires, notamment en matière de logement, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</li>';
+    echo '<li>l\'information, le conseil et l\'accompagnement des habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions ;</li>';
+    echo '<li>la promotion de l\'accès aux droits et la lutte contre l\'habitat indigne et la non-décence ;</li>';
+    echo '<li>toute action de promotion culturelle, éducative et citoyenne contribuant à ces buts.</li>';
+    echo '</ul>';
+    echo '<p>À ce titre, l\'association constitue une association de défense des locataires au sens de la loi n° 89-462 du 6 juillet 1989.</p>';
+
+    echo '<h2>Article 3 — Siège social</h2>';
+    echo '<p>Le siège social est fixé au : <strong>' . esc_html($siege ?: '__________________________') . '</strong>. Il pourra être transféré par simple décision du conseil d\'administration.</p>';
+
+    echo '<h2>Article 4 — Durée</h2>';
+    echo '<p>La durée de l\'association est illimitée.</p>';
+
+    echo '<h2>Article 5 — Membres</h2>';
+    echo '<p>L\'association se compose de membres adhérents à jour de leur cotisation. Le montant de la cotisation est fixé chaque année par l\'assemblée générale. Pour être membre, il faut adhérer aux présents statuts et s\'acquitter de la cotisation.</p>';
+
+    echo '<h2>Article 6 — Perte de la qualité de membre</h2>';
+    echo '<p>La qualité de membre se perd par : la démission ; le décès ; le non-paiement de la cotisation ; la radiation prononcée par le conseil d\'administration pour motif grave, l\'intéressé ayant été invité à fournir ses explications.</p>';
+
+    echo '<h2>Article 7 — Ressources</h2>';
+    echo '<p>Les ressources de l\'association comprennent : les cotisations des membres ; les subventions publiques ; les dons manuels ; le produit des activités et manifestations conformes à l\'objet ; toute autre ressource autorisée par la loi. Les ressources sont exclusivement affectées à la réalisation de l\'objet ; aucun bénéfice n\'est distribué aux membres.</p>';
+
+    echo '<h2>Article 8 — Conseil d\'administration et bureau</h2>';
+    echo '<p>L\'association est administrée par un conseil d\'administration élu par l\'assemblée générale. Le conseil élit en son sein un bureau comprenant au moins un président, un trésorier et un secrétaire. Les fonctions sont bénévoles.</p>';
+
+    echo '<h2>Article 9 — Assemblée générale ordinaire</h2>';
+    echo '<p>L\'assemblée générale ordinaire se réunit au moins une fois par an. Elle entend les rapports moral et financier, approuve les comptes, fixe la cotisation et procède aux élections. Les décisions sont prises à la majorité des membres présents ou représentés.</p>';
+
+    echo '<h2>Article 10 — Assemblée générale extraordinaire</h2>';
+    echo '<p>L\'assemblée générale extraordinaire est compétente pour la modification des statuts et la dissolution. Elle est convoquée dans les conditions de l\'article 9. Les décisions sont prises à la majorité des deux tiers des membres présents ou représentés.</p>';
+
+    echo '<h2>Article 11 — Moyens d\'action et capacité d\'ester en justice</h2>';
+    echo '<p>Pour la réalisation de son objet, l\'association peut notamment :</p>';
+    echo '<ul>';
+    echo '<li>assister et représenter ses membres dans leurs démarches amiables et contentieuses ;</li>';
+    echo '<li>agir en justice, tant en demande qu\'en défense, devant toutes juridictions, pour la défense de ses intérêts propres comme de l\'intérêt collectif entrant dans son objet ;</li>';
+    echo '<li>agir en justice, sur mandat exprès et écrit, pour la défense des intérêts individuels de ses membres, notamment locataires, dans les conditions prévues par la loi du 6 juillet 1989 ;</li>';
+    echo '<li>conclure toute convention et recevoir cotisations, dons et subventions concourant à son objet.</li>';
+    echo '</ul>';
+    echo '<p>Le président représente l\'association en justice et dans tous les actes de la vie civile ; il peut agir en justice au nom de l\'association après autorisation du conseil d\'administration.</p>';
+
+    echo '<h2>Article 12 — Règlement intérieur</h2>';
+    echo '<p>Un règlement intérieur peut être établi par le conseil d\'administration pour préciser les modalités d\'application des présents statuts.</p>';
+
+    echo '<h2>Article 13 — Dissolution</h2>';
+    echo '<p>En cas de dissolution prononcée par l\'assemblée générale extraordinaire, un ou plusieurs liquidateurs sont nommés et l\'actif net est dévolu à une association poursuivant un but similaire, conformément à l\'article 9 de la loi du 1<sup>er</sup> juillet 1901.</p>';
+
+    echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
+    echo '<div style="flex:1"><p>Fait à Nantes, le ____ / ____ / 20____</p><p style="margin-top:20px"><strong>Le Président</strong><br>' . esc_html($pres) . '</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '<div style="flex:1"><p>&nbsp;</p><p style="margin-top:20px"><strong>Le Secrétaire</strong></p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '</div>';
 
     echo '</div>';
     lfi_nct_app_screen_close(false);
