@@ -120,7 +120,7 @@ function lfi_nct_agenda_rdvs_tenant($user_id, $limit = 10) {
  *  ADMIN : Agenda complet (tous les RDV + interventions)           *
  * ============================================================== */
 function lfi_nct_app_view_agenda() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_rdv';
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
@@ -237,11 +237,11 @@ function lfi_nct_app_view_agenda() {
  *  ADMIN : Création / édition d'un RDV                              *
  * ============================================================== */
 function lfi_nct_app_view_rdv_add() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_agenda_rdv_form(null);
 }
 function lfi_nct_app_view_rdv_edit() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_rdv WHERE id = %d", $id)) : null;

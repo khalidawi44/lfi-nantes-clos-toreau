@@ -134,7 +134,7 @@ function lfi_nct_appel_creer_facture($row) {
  *  VUE : Journal des appels                                        *
  * ============================================================== */
 function lfi_nct_app_view_appels_nmh() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_appels_nmh';
     $owner = (int) lfi_nct_appel_owner_id();
@@ -294,8 +294,8 @@ function lfi_nct_app_view_appels_nmh() {
 /* ============================================================== *
  *  Formulaire ajout / édition d'un appel                           *
  * ============================================================== */
-function lfi_nct_app_view_appel_nmh_add()  { if (!lfi_nct_can_use_brigade()) return; lfi_nct_appel_form(null); }
-function lfi_nct_app_view_appel_nmh_edit() { if (!lfi_nct_can_use_brigade()) return; lfi_nct_appel_form(lfi_nct_appel_get((int) ($_GET['id'] ?? 0))); }
+function lfi_nct_app_view_appel_nmh_add()  { if (!lfi_nct_app_guard_brigade()) return; lfi_nct_appel_form(null); }
+function lfi_nct_app_view_appel_nmh_edit() { if (!lfi_nct_app_guard_brigade()) return; lfi_nct_appel_form(lfi_nct_appel_get((int) ($_GET['id'] ?? 0))); }
 
 function lfi_nct_appel_form($row) {
     global $wpdb;
@@ -553,7 +553,7 @@ function lfi_nct_appel_form($row) {
  *  Guide : comment enregistrer ses appels                          *
  * ============================================================== */
 function lfi_nct_app_view_appel_guide() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_screen_open('📖 Enregistrer mes appels', 'La marche à suivre, étape par étape');
 
     echo '<div class="lfi-app-help" style="background:#fff3f5;border-left:4px solid #c8102e">';
@@ -622,7 +622,7 @@ function lfi_nct_app_view_appel_guide() {
  *  Rapport d'incident (imprimable + email)                         *
  * ============================================================== */
 function lfi_nct_app_view_appel_nmh_rapport() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $row = lfi_nct_appel_get((int) ($_GET['id'] ?? 0));
     if (!$row) { wp_die('Appel introuvable'); }
 

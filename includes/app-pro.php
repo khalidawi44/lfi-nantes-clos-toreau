@@ -307,7 +307,12 @@ function lfi_nct_app_view_dossiers() {
 }
 
 function lfi_nct_app_view_dossier() {
-    if (!current_user_can('manage_options')) return;
+    if (!current_user_can('manage_options')) {
+        lfi_nct_app_screen_open('📂 Dossier locataire');
+        echo '<div class="lfi-app-empty">Le profil complet d\'un locataire (avec ses données d\'enquête) est réservé à l\'administrateur.<br><br><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossiers-juridiques')) . '">📁 Voir les dossiers juridiques</a></div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
     global $wpdb;
 
     $uid = (int) ($_GET['uid'] ?? 0);
@@ -425,8 +430,18 @@ function lfi_nct_app_view_dossier() {
     echo '<div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;border-radius:12px;padding:16px;margin:16px 0">';
     echo '<div style="font-weight:800;font-size:1.05em;margin-bottom:10px">⚡ Actions pour ce locataire</div>';
     echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
+    /* Dossier juridique : OUVRE le dossier existant s'il y en a un,
+       sinon ouvre le formulaire de création pré-rempli. */
+    $dossier_existant = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+    if ($dossier_existant) {
+        $dossier_url = lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $dossier_existant->id]);
+        $dossier_lbl = 'Ouvrir le dossier';
+    } else {
+        $dossier_url = lfi_nct_app_url('dossier-juridique-add', $shortcut);
+        $dossier_lbl = 'Dossier juridique';
+    }
     $actions = [
-        ['📁', 'Dossier juridique', lfi_nct_app_url('dossier-juridique-add', $shortcut)],
+        ['📁', $dossier_lbl,        $dossier_url],
         ['🔧', 'Intervention',      lfi_nct_app_url('intervention-add', $shortcut)],
         ['☎️', 'Appeler NMH',       lfi_nct_app_url('appel-nmh-add', ['tenant_uid' => $u->ID])],
         ['📅', 'RDV / agenda',      lfi_nct_app_url('rdv-add', ['tenant_uid' => $u->ID])],
@@ -830,7 +845,7 @@ function lfi_nct_dossier_render_suivi($u, $row) {
  *  Toutes les interventions d'un locataire + total dû.             *
  * ============================================================== */
 function lfi_nct_app_view_dossier_recap_nmh() {
-    if (!current_user_can('manage_options') && !(function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga())) return;
+    if (!lfi_nct_app_guard_brigade('🧾 Récapitulatif NMH')) return;
     global $wpdb;
     $uid = (int) ($_GET['uid'] ?? 0);
     $u = $uid ? get_userdata($uid) : null;

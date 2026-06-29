@@ -1244,7 +1244,7 @@ function lfi_nct_tutoriels_all() {
  *  VUE : Liste des tutoriels (admin seulement)                     *
  * ============================================================== */
 function lfi_nct_app_view_tutoriels() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $tutos = lfi_nct_tutoriels_all();
 
     lfi_nct_app_screen_open('🛠 Tutoriels brigade', count($tutos) . ' guides pros pour les chantiers');
@@ -1269,7 +1269,7 @@ function lfi_nct_app_view_tutoriels() {
  *  VUE : Un tutoriel détaillé                                      *
  * ============================================================== */
 function lfi_nct_app_view_tutoriel() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $slug = sanitize_key($_GET['t'] ?? '');
     $tutos = lfi_nct_tutoriels_all();
     if (!isset($tutos[$slug])) {

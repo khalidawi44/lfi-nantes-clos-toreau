@@ -235,7 +235,7 @@ function lfi_nct_fact_total_smart($mode, $prix_tache, $duree, $tarif, $materiaux
  *  VUE : Liste des interventions                                   *
  * ============================================================== */
 function lfi_nct_app_view_interventions() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     $owner = (int) lfi_nct_fact_owner_id();
@@ -403,11 +403,11 @@ function lfi_nct_app_view_interventions() {
  *  VUE : Ajout / édition d'intervention                            *
  * ============================================================== */
 function lfi_nct_app_view_intervention_add() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_intervention_form(null);
 }
 function lfi_nct_app_view_intervention_edit() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $t = $wpdb->prefix . 'lfi_nct_interventions';
@@ -1008,7 +1008,12 @@ function lfi_nct_app_intervention_form($row) {
             'tenant_appartement' => $r->tenant_appartement, 'tenant_tel' => $r->tenant_tel,
         ];
         echo '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
-        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Ouvrir un dossier juridique pour ce locataire</a>';
+        if (!empty($other_dossiers)) {
+            /* Un dossier existe déjà : on l'OUVRE au lieu d'en recréer un. */
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $other_dossiers[0]->id])) . '">📁 Ouvrir le dossier juridique de ce locataire</a>';
+        } else {
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', $shortcut_args)) . '">+ Ouvrir un dossier juridique pour ce locataire</a>';
+        }
         echo '</div>';
     }
 
@@ -1022,7 +1027,7 @@ function lfi_nct_app_intervention_form($row) {
  *  VUE : Facture (imprimable / PDF via print)                      *
  * ============================================================== */
 function lfi_nct_app_view_facture() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
 
@@ -1201,7 +1206,7 @@ function lfi_nct_app_view_facture() {
  *  VUE : Paramètres facturation (prestataire + bailleur + tarif)   *
  * ============================================================== */
 function lfi_nct_app_view_facturation_params() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
 
     $uid = (int) lfi_nct_fact_owner_id();
 

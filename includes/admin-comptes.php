@@ -245,7 +245,14 @@ function lfi_nct_admin_render_comptes_loc() {
                         </td>
                         <td>
                             <a class="button button-primary" href="<?php echo esc_url(add_query_arg(['page' => 'lfi-nct-comptes-loc', 'edit' => $u->ID], admin_url('admin.php'))); ?>">✏️ Éditer</a>
-                            <a class="button" style="background:#fff3f5;color:#a30b25;border-color:#a30b25" href="<?php echo esc_url(home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $u->ID)); ?>" target="_blank" title="Ouvrir un dossier juridique pré-rempli pour ce locataire">📁 Dossier juridique</a>
+                            <?php
+                            $dj_row = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+                            $dj_href = $dj_row
+                                ? home_url('/app/?vue=dossier-juridique-edit&id=' . (int) $dj_row->id)
+                                : home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $u->ID);
+                            $dj_text = $dj_row ? '📁 Ouvrir le dossier' : '📁 Dossier juridique';
+                            ?>
+                            <a class="button" style="background:#fff3f5;color:#a30b25;border-color:#a30b25" href="<?php echo esc_url($dj_href); ?>" target="_blank" title="Accéder au dossier juridique de ce locataire"><?php echo $dj_text; ?></a>
                             <form method="post" style="display:inline" onsubmit="return confirm('Supprimer définitivement le compte de <?php echo esc_js($u->display_name ?: $u->user_login); ?> ?');">
                                 <?php wp_nonce_field('lfi_nct_comptes_loc'); ?>
                                 <input type="hidden" name="lfi_nct_action" value="delete">
@@ -396,7 +403,14 @@ function lfi_nct_admin_render_compte_loc_edit($uid) {
                 <button type="submit" class="button" style="color:#a30b25;border-color:#a30b25">🗑 Supprimer ce compte</button>
             </form>
             <a class="button" href="<?php echo esc_url(home_url('/app/?vue=dossier&uid=' . (int) $uid)); ?>" target="_blank">📂 Voir le dossier complet (app)</a>
-            <a class="button button-primary" style="background:#a30b25;border-color:#7a0000" href="<?php echo esc_url(home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $uid)); ?>" target="_blank">📁 Ouvrir un dossier juridique pour ce locataire</a>
+            <?php
+            $dj_one = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($uid) : null;
+            $dj_one_href = $dj_one
+                ? home_url('/app/?vue=dossier-juridique-edit&id=' . (int) $dj_one->id)
+                : home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $uid);
+            $dj_one_txt = $dj_one ? '📁 Ouvrir le dossier juridique de ce locataire' : '📁 Ouvrir un dossier juridique pour ce locataire';
+            ?>
+            <a class="button button-primary" style="background:#a30b25;border-color:#7a0000" href="<?php echo esc_url($dj_one_href); ?>" target="_blank"><?php echo $dj_one_txt; ?></a>
             <a class="button" href="<?php echo esc_url(home_url('/app/?vue=intervention-add&tenant_uid=' . (int) $uid)); ?>" target="_blank">🔧 Créer une intervention</a>
         </div>
     </div>
