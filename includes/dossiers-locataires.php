@@ -311,7 +311,7 @@ function lfi_nct_dossier_demandes_labels() {
  *  VUE : Liste des dossiers                                        *
  * ============================================================== */
 function lfi_nct_app_view_dossiers_juridiques() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
     $owner = (int) lfi_nct_dossier_owner_id();
@@ -422,11 +422,11 @@ function lfi_nct_dossiers_render_tenant_directory() {
  *  Formulaire création / édition                                   *
  * ============================================================== */
 function lfi_nct_app_view_dossier_juridique_add() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_dossier_juridique_form(null);
 }
 function lfi_nct_app_view_dossier_juridique_edit() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $row = lfi_nct_dossier_get((int) ($_GET['id'] ?? 0));
     if (!$row) {
         lfi_nct_app_screen_open('Dossier introuvable');
@@ -1246,7 +1246,7 @@ function lfi_nct_render_voice_helper() {
  *   - HTML = exactement la lettre, plus quelques mots d'intro         *
  * ============================================================== */
 function lfi_nct_app_view_dossier_send_email() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $letter_key = sanitize_key($_GET['letter'] ?? '');
@@ -1546,7 +1546,7 @@ function lfi_nct_dossier_header_destinataire_nmh($bailleur) {
  *  ÉCRAN : Cadre juridique de la facturation                       *
  * ============================================================== */
 function lfi_nct_app_view_cadre_juridique() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_screen_open('⚖️ Cadre juridique de la facturation', 'Comment facturer NMH légalement');
 
     echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';
@@ -1648,7 +1648,7 @@ function lfi_nct_email_detect_tenant($texte) {
 }
 
 function lfi_nct_app_view_email_import() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $owner = (int) lfi_nct_dossier_owner_id();
     $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
@@ -1743,7 +1743,7 @@ function lfi_nct_app_view_email_import() {
  *  ESPACE ASSOCIATION — hub central (config, documents, factures)  *
  * ============================================================== */
 function lfi_nct_app_view_association() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des Quartiers Libres'];
     $is_admin = current_user_can('manage_options');
 
@@ -2039,7 +2039,7 @@ function lfi_nct_app_view_asso_statuts() {
  *  BULLETIN D'ADHÉSION à l'association (clé de l'accompagnement)    *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_adhesion() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('🎫 Bulletin d\'adhésion');
     extract($ctx);
     $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
@@ -2081,7 +2081,7 @@ function lfi_nct_app_view_dossier_doc_adhesion() {
  *  RAPPORT DE VISITE (PDF imprimable)                              *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_rapport_visite() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('📄 Rapport de visite');
     extract($ctx);
 
@@ -2131,7 +2131,7 @@ function lfi_nct_app_view_dossier_doc_rapport_visite() {
  *  (contre les "charge locative", "pas de signalement", etc.)       *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_reponse_nmh() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('📨 Réponse argumentée à NMH');
     extract($ctx);
     $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des Quartiers Libres'];
@@ -2193,7 +2193,7 @@ function lfi_nct_app_view_dossier_doc_reponse_nmh() {
  *  LETTRE 1 : Mise en demeure travaux urgents                       *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_lrar_travaux() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('📨 Mise en demeure — travaux urgents');
     extract($ctx);
 
@@ -2287,7 +2287,7 @@ function lfi_nct_app_view_dossier_doc_lrar_travaux() {
  *  LETTRE 2 : Demande de relogement d'urgence médicale              *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_lrar_relogement() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('🏥 Relogement d\'urgence médicale');
     extract($ctx);
 
@@ -2387,7 +2387,7 @@ function lfi_nct_app_view_dossier_doc_lrar_relogement() {
  *  LETTRE 3 : Saisine SCHS Nantes                                   *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_schs() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('🏥 Saisine SCHS Nantes');
     extract($ctx);
 
@@ -2465,7 +2465,7 @@ function lfi_nct_app_view_dossier_doc_schs() {
  *  LETTRE 4 : Saisine ARS Pays de la Loire                          *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_ars() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_dossier_doc_open('🏛 Saisine ARS Pays de la Loire');
     extract($ctx);
 

@@ -235,7 +235,7 @@ function lfi_nct_fact_total_smart($mode, $prix_tache, $duree, $tarif, $materiaux
  *  VUE : Liste des interventions                                   *
  * ============================================================== */
 function lfi_nct_app_view_interventions() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     $owner = (int) lfi_nct_fact_owner_id();
@@ -403,11 +403,11 @@ function lfi_nct_app_view_interventions() {
  *  VUE : Ajout / édition d'intervention                            *
  * ============================================================== */
 function lfi_nct_app_view_intervention_add() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_intervention_form(null);
 }
 function lfi_nct_app_view_intervention_edit() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $t = $wpdb->prefix . 'lfi_nct_interventions';
@@ -1027,7 +1027,7 @@ function lfi_nct_app_intervention_form($row) {
  *  VUE : Facture (imprimable / PDF via print)                      *
  * ============================================================== */
 function lfi_nct_app_view_facture() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
 
@@ -1206,7 +1206,7 @@ function lfi_nct_app_view_facture() {
  *  VUE : Paramètres facturation (prestataire + bailleur + tarif)   *
  * ============================================================== */
 function lfi_nct_app_view_facturation_params() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
 
     $uid = (int) lfi_nct_fact_owner_id();
 

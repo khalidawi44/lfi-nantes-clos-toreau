@@ -307,7 +307,12 @@ function lfi_nct_app_view_dossiers() {
 }
 
 function lfi_nct_app_view_dossier() {
-    if (!current_user_can('manage_options')) return;
+    if (!current_user_can('manage_options')) {
+        lfi_nct_app_screen_open('📂 Dossier locataire');
+        echo '<div class="lfi-app-empty">Le profil complet d\'un locataire (avec ses données d\'enquête) est réservé à l\'administrateur.<br><br><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossiers-juridiques')) . '">📁 Voir les dossiers juridiques</a></div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
     global $wpdb;
 
     $uid = (int) ($_GET['uid'] ?? 0);
@@ -840,7 +845,7 @@ function lfi_nct_dossier_render_suivi($u, $row) {
  *  Toutes les interventions d'un locataire + total dû.             *
  * ============================================================== */
 function lfi_nct_app_view_dossier_recap_nmh() {
-    if (!current_user_can('manage_options') && !(function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga())) return;
+    if (!lfi_nct_app_guard_brigade('🧾 Récapitulatif NMH')) return;
     global $wpdb;
     $uid = (int) ($_GET['uid'] ?? 0);
     $u = $uid ? get_userdata($uid) : null;

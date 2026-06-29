@@ -507,7 +507,7 @@ function lfi_nct_rec_interventions_by_facture($numero) {
  *  VUE : Tableau de bord recouvrements                              *
  * ============================================================== */
 function lfi_nct_app_view_recouvrements() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
@@ -660,7 +660,7 @@ function lfi_nct_app_view_recouvrements() {
  *  VUE : Dossier d'un recouvrement (timeline + actions)             *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_dossier() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
     $owner = (int) lfi_nct_fact_owner_id();
@@ -974,7 +974,7 @@ function lfi_nct_rec_doc_header($presta, $bailleur, $lrar = true) {
  *  Fabrice peut réclamer remboursement à NMH au nom du locataire.   *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_mandat() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('✍️ Mandat du locataire');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1096,7 +1096,7 @@ function lfi_nct_app_view_recouvrement_doc_mandat() {
  *  DOC 1 : Mise en demeure initiale (15 jours)                      *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_med1() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('📨 Mise en demeure');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1166,7 +1166,7 @@ function lfi_nct_app_view_recouvrement_doc_med1() {
  *  DOC 2 : Mise en demeure de relance (avec pénalités calculées)    *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_med2() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('📨 Mise en demeure — Relance');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1221,7 +1221,7 @@ function lfi_nct_app_view_recouvrement_doc_med2() {
  *  DOC 3 : Saisine CDC (Commission Départementale de Conciliation) *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_cdc() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('⚖️ Saisine Commission de Conciliation');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1345,7 +1345,7 @@ function lfi_nct_app_view_recouvrement_doc_cdc() {
  *  DOC 4 : Assignation Tribunal Judiciaire                          *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_tj() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('🏛 Requête Tribunal Judiciaire');
     extract($ctx);
     lfi_nct_rec_doc_styles();
@@ -1455,7 +1455,7 @@ function lfi_nct_app_view_recouvrement_doc_tj() {
  *  DOC 5 : Plainte SCHS / ARS pour insalubrité                      *
  * ============================================================== */
 function lfi_nct_app_view_recouvrement_doc_schs() {
-    if (!lfi_nct_can_use_brigade()) return;
+    if (!lfi_nct_app_guard_brigade()) return;
     $ctx = lfi_nct_rec_doc_open('🏥 Plainte SCHS / ARS');
     extract($ctx);
     lfi_nct_rec_doc_styles();

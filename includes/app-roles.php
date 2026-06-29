@@ -293,6 +293,24 @@ function lfi_nct_can_use_brigade() {
     return current_user_can('manage_options') || lfi_nct_user_role_ga();
 }
 
+/* Garde-fou anti-page-blanche : si l'utilisateur n'a pas accès à l'espace
+   brigade/association, on AFFICHE un message clair au lieu de faire un
+   « return; » muet (qui produisait une page vide). Renvoie true si l'accès
+   est autorisé, false sinon (après avoir affiché l'écran « réservé »). */
+function lfi_nct_app_guard_brigade($titre = '🔒 Espace réservé') {
+    if (lfi_nct_can_use_brigade()) return true;
+    if (function_exists('lfi_nct_app_screen_open')) {
+        lfi_nct_app_screen_open($titre);
+        echo '<div class="lfi-app-empty">Cet espace est réservé aux membres du Groupe d\'Action et à l\'administrateur.';
+        if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) {
+            echo ' Tu es en <strong>mode aperçu</strong> : sors de l\'aperçu pour y accéder.';
+        }
+        echo '<br><br><a class="btn-primary" href="' . esc_url(home_url('/app/')) . '">🏠 Retour à l\'accueil</a></div>';
+        if (function_exists('lfi_nct_app_screen_close')) lfi_nct_app_screen_close(false);
+    }
+    return false;
+}
+
 /* Owner ID effectif pour les requêtes brigade.
    En mode aperçu admin (cookie de preview), respecte le user prévisualisé. */
 function lfi_nct_brigade_owner_id() {
@@ -644,6 +662,9 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
             case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
             case 'association':                lfi_nct_app_view_association();                  break;
+            case 'asso-statuts':               lfi_nct_app_view_asso_statuts();                 break;
+            case 'dossier':                    lfi_nct_app_view_dossier();                      break;
+            case 'dossier-recap-nmh':          lfi_nct_app_view_dossier_recap_nmh();            break;
             case 'email-import':               lfi_nct_app_view_email_import();                 break;
             case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
             case 'dossier-doc-reponse-nmh':    lfi_nct_app_view_dossier_doc_reponse_nmh();      break;
