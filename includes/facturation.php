@@ -168,13 +168,13 @@ function lfi_nct_association() {
     $data = get_option('lfi_nct_association', '');
     $defaults = [
         'nom'       => 'Union des quartiers libres',
-        'rna'       => '',          /* n° W au RNA */
-        'siege'     => '',
+        'rna'       => '',          /* n° W au RNA — à compléter */
+        'siege'     => '14 rue de Saint-Jean-de-Luz',
         'cp_ville'  => '44200 Nantes',
         'president' => '',
-        'email'     => '',
-        'tel'       => '',
-        'objet'     => 'défense des habitants et amélioration des conditions de logement et du cadre de vie dans les quartiers',
+        'email'     => 'quartierlibre44@proton.me',
+        'tel'       => '06 23 52 60 74',
+        'objet'     => 'défense des intérêts des habitants des quartiers populaires dans les domaines social, économique, environnemental et culturel — notamment le logement, le cadre de vie, la sécurité, les services publics, l\'accès aux droits et la protection des droits collectifs (association de locataires)',
         'cotisation'=> '5',
     ];
     if (is_array($data) && !empty($data)) return array_merge($defaults, $data);
@@ -1303,6 +1303,9 @@ function lfi_nct_app_view_facturation_params() {
         echo '<label>Téléphone<input type="tel" name="asso_tel" value="' . esc_attr($asso['tel']) . '"></label>';
         echo '<label>Objet social (extrait des statuts)<textarea name="asso_objet" rows="2">' . esc_textarea($asso['objet']) . '</textarea></label>';
         echo '<label>Cotisation d\'adhésion (€)<input type="number" name="asso_cotisation" value="' . esc_attr($asso['cotisation']) . '" step="1" min="0"></label>';
+        echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';
+        echo '📜 <strong>Tes statuts en préfecture doivent autoriser le volet logement ET l\'action en justice.</strong> Si ce n\'est pas le cas, génère le dossier de modification prêt à déposer : <a href="' . esc_url(lfi_nct_app_url('asso-statuts')) . '">📜 Modifier les statuts (PV d\'AGE + articles)</a>';
+        echo '</div>';
     }
 
     echo '<h3 style="margin:18px 0 0">💶 Tarification</h3>';

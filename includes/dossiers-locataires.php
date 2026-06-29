@@ -1360,6 +1360,88 @@ function lfi_nct_app_view_cadre_juridique() {
 }
 
 /* ============================================================== *
+ *  DOSSIER DE MODIFICATION DES STATUTS (ester en justice + logement)*
+ *  À déposer en préfecture. Imprimable / PDF.                       *
+ * ============================================================== */
+function lfi_nct_app_view_asso_statuts() {
+    if (!current_user_can('manage_options')) return;
+    $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
+    $nom = $asso['nom'] ?: 'Union des quartiers libres';
+    $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));
+    $pres = $asso['president'] ?: '[Nom du président]';
+
+    lfi_nct_app_screen_open('📜 Modifier les statuts', 'Objet logement + capacité d\'ester en justice');
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    /* Mode d'emploi (à l'écran, pas imprimé) */
+    echo '<div class="lfi-app-help no-print" style="background:#e8f0ff;border-left:4px solid #0066a3">';
+    echo '<strong>📋 Procédure (gratuite) :</strong><br>';
+    echo '1. Réunir une <strong>Assemblée Générale Extraordinaire</strong> (même à quelques membres, selon tes statuts).<br>';
+    echo '2. Voter les modifications (le PV ci-dessous est prêt).<br>';
+    echo '3. Mettre à jour le texte des statuts (articles ci-dessous).<br>';
+    echo '4. Déclarer la modification <strong>dans les 3 mois</strong> sur <strong>lecompteasso.associations.gouv.fr</strong> (ou Cerfa n° 13972*03 à la préfecture de Loire-Atlantique), en joignant le PV + les statuts mis à jour datés et signés.<br>';
+    echo '<em>⚖️ Fais relire par l\'ADIL 44 ou Juris\'Asso avant dépôt. Ceci est un modèle, pas un avis d\'avocat.</em>';
+    echo '</div>';
+
+    echo '<div class="lfi-rec-doc">';
+
+    /* ---- PV d'AGE ---- */
+    echo '<h1>Procès-verbal d\'Assemblée Générale Extraordinaire</h1>';
+    echo '<p style="text-align:center"><strong>' . esc_html($nom) . '</strong>';
+    if (!empty($asso['rna'])) echo '<br>Association déclarée — n° RNA ' . esc_html($asso['rna']);
+    if ($siege) echo '<br>Siège : ' . esc_html($siege);
+    echo '</p>';
+
+    echo '<p>Le ____ / ____ / 20____, à ____ h ____, les membres de l\'association <strong>' . esc_html($nom) . '</strong> se sont réunis en Assemblée Générale Extraordinaire au siège de l\'association, sur convocation du président, à l\'effet de délibérer sur l\'ordre du jour suivant :</p>';
+    echo '<ul><li>Modification de l\'objet social ;</li><li>Ajout d\'un article relatif aux moyens d\'action et à la capacité d\'ester en justice ;</li><li>Mise à jour des statuts ;</li><li>Pouvoirs pour les formalités de déclaration.</li></ul>';
+    echo '<p>L\'assemblée, après en avoir délibéré, adopte les résolutions suivantes :</p>';
+
+    echo '<h2>Première résolution — Modification de l\'objet (article 2)</h2>';
+    echo '<p>L\'article 2 des statuts est remplacé par la rédaction suivante :</p>';
+    echo '<div class="citations">';
+    echo '<p><strong>« Article 2 — Objet.</strong> L\'association ' . esc_html($nom) . ' a pour objet, dans les quartiers populaires de Nantes et de sa métropole :</p>';
+    echo '<ul>';
+    echo '<li>la défense des intérêts matériels et moraux, individuels et collectifs, des habitants et des <strong>locataires</strong>, notamment en matière de <strong>logement</strong>, de conditions d\'habitat, de salubrité, de décence, de cadre de vie, de sécurité et d\'accès aux services publics ;</li>';
+    echo '<li>l\'<strong>information, le conseil et l\'accompagnement</strong> des habitants et locataires dans leurs démarches amiables et contentieuses, y compris auprès des bailleurs, des administrations et des juridictions ;</li>';
+    echo '<li>la promotion de l\'accès aux droits et la <strong>lutte contre l\'habitat indigne et la non-décence</strong> ;</li>';
+    echo '<li>toute action de promotion culturelle, éducative et citoyenne contribuant à ces buts.</li>';
+    echo '</ul>';
+    echo '<p>À ce titre, l\'association constitue une <strong>association de défense des locataires</strong> au sens de la loi n° 89-462 du 6 juillet 1989. »</p>';
+    echo '</div>';
+    echo '<p><em>Adoptée à l\'unanimité (ou à la majorité de ___ voix pour, ___ contre, ___ abstentions).</em></p>';
+
+    echo '<h2>Deuxième résolution — Moyens d\'action et capacité d\'ester en justice (nouvel article)</h2>';
+    echo '<p>Il est ajouté aux statuts un article ainsi rédigé :</p>';
+    echo '<div class="citations">';
+    echo '<p><strong>« Article ___ — Moyens d\'action et capacité juridique.</strong> Pour la réalisation de son objet, l\'association peut notamment :</p>';
+    echo '<ul>';
+    echo '<li>assister et représenter ses membres dans leurs démarches amiables et contentieuses ;</li>';
+    echo '<li><strong>agir en justice, tant en demande qu\'en défense</strong>, devant toutes juridictions, pour la défense de ses intérêts propres comme de l\'<strong>intérêt collectif</strong> entrant dans son objet ;</li>';
+    echo '<li>agir en justice, sur <strong>mandat exprès et écrit</strong>, pour la défense des <strong>intérêts individuels de ses membres</strong>, notamment locataires, dans les conditions prévues par la loi du 6 juillet 1989 ;</li>';
+    echo '<li>conclure toute convention, recevoir cotisations, dons et subventions concourant à son objet.</li>';
+    echo '</ul>';
+    echo '<p>Le <strong>président représente l\'association en justice</strong> et dans tous les actes de la vie civile ; il peut agir en justice au nom de l\'association après autorisation du conseil d\'administration (ou, à défaut, du bureau). »</p>';
+    echo '</div>';
+    echo '<p><em>Adoptée à l\'unanimité (ou à la majorité de ___ voix).</em></p>';
+
+    echo '<h2>Troisième résolution — Pouvoirs</h2>';
+    echo '<p>L\'assemblée donne tous pouvoirs au président, <strong>' . esc_html($pres) . '</strong>, à l\'effet d\'accomplir les formalités de déclaration et de publication de la présente modification auprès de la préfecture de la Loire-Atlantique.</p>';
+    echo '<p><em>Adoptée à l\'unanimité.</em></p>';
+
+    echo '<p>L\'ordre du jour étant épuisé, la séance est levée à ____ h ____.</p>';
+
+    echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
+    echo '<div style="flex:1"><p><strong>Le Président</strong><br>' . esc_html($pres) . '</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '<div style="flex:1"><p><strong>Le Secrétaire</strong></p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '</div>';
+
+    echo '<div class="pj"><strong>À joindre à la déclaration en préfecture :</strong> le présent procès-verbal daté et signé + un exemplaire des statuts mis à jour, daté et signé, portant la mention « Statuts modifiés par l\'AGE du ____ ».</div>';
+
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
  *  BULLETIN D'ADHÉSION à l'association (clé de l'accompagnement)    *
  * ============================================================== */
 function lfi_nct_app_view_dossier_doc_adhesion() {
