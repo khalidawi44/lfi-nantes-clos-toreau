@@ -340,10 +340,15 @@ function lfi_nct_appel_form($row) {
     $audio_id = (int) ($r->audio_attachment_id ?? 0);
     if ($audio_id) {
         $audio_url = wp_get_attachment_url($audio_id);
+        $mime = get_post_mime_type($audio_id);
         if ($audio_url) {
             echo '<div style="background:#e8f0ff;border-radius:8px;padding:12px;margin:6px 0">';
             echo '<div style="font-weight:700;color:#0066a3;margin-bottom:6px">✅ Enregistrement joint :</div>';
-            echo '<audio controls preload="none" style="width:100%"><source src="' . esc_url($audio_url) . '">Ton navigateur ne peut pas lire l\'audio.</audio>';
+            if ($mime && strpos($mime, 'video') === 0) {
+                echo '<video controls preload="none" style="width:100%;max-height:360px;border-radius:6px"><source src="' . esc_url($audio_url) . '" type="' . esc_attr($mime) . '">Ton navigateur ne peut pas lire la vidéo.</video>';
+            } else {
+                echo '<audio controls preload="none" style="width:100%"><source src="' . esc_url($audio_url) . '">Ton navigateur ne peut pas lire l\'audio.</audio>';
+            }
             echo '<div style="margin-top:6px"><a href="' . esc_url($audio_url) . '" download style="font-size:.85em;color:#0066a3">⬇️ Télécharger le fichier</a></div>';
             echo '</div>';
         }
@@ -356,8 +361,8 @@ function lfi_nct_appel_form($row) {
     echo '<em>⚖️ En France, tu as le droit d\'enregistrer une conversation à laquelle tu participes pour t\'en servir comme preuve. Préviens idéalement ton interlocuteur (« cet appel est enregistré »).</em>';
     echo '</div>';
 
-    echo '<label>🎙 Joindre le fichier audio<input type="file" name="enregistrement_audio" accept="audio/*"></label>';
-    echo '<div class="lfi-app-help"><small>Formats acceptés : m4a, mp3, wav, etc. Le fichier devient une pièce du dossier, lisible directement ici.</small></div>';
+    echo '<label>🎙 Joindre l\'enregistrement (audio OU vidéo d\'écran)<input type="file" name="enregistrement_audio" accept="audio/*,video/*"></label>';
+    echo '<div class="lfi-app-help"><small>Audio (m4a, mp3…) ou vidéo de capture d\'écran (mov, mp4). Le fichier devient une pièce du dossier, lisible directement ici.</small></div>';
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Enregistrer l\'appel') . '</button>';
     echo '</form>';
@@ -435,6 +440,20 @@ function lfi_nct_app_view_appel_guide() {
     echo '5️⃣ Ouvre Notes → tu peux <strong>copier la transcription</strong> (à coller ici) et <strong>partager le fichier audio</strong> (à joindre à l\'appel)<br>';
     echo '</div>';
     echo '<div style="background:#e8f5ea;border-radius:8px;padding:10px;margin-top:10px;font-size:.88em">💡 Si tu ne vois pas le bouton Enregistrer : va dans <strong>Réglages → Apps → Téléphone</strong> et vérifie que l\'enregistrement d\'appel est activé. Disponible en France depuis iOS 18.2.</div>';
+    echo '</div>';
+
+    /* Méthode capture d'écran vidéo + micro */
+    echo '<div style="background:#fff;border:2px solid #0066a3;border-radius:12px;padding:16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#0066a3;font-size:1.05em;margin-bottom:6px">🎬 MÉTHODE CAPTURE VIDÉO D\'ÉCRAN (marche sur tous les iPhone)</div>';
+    echo '<div style="font-size:.92em;line-height:1.6;color:#333">';
+    echo 'L\'enregistrement d\'écran capture la vidéo <strong>+ les 2 voix</strong> (toi et NMH). Mais attention, par défaut <strong>ton micro est coupé</strong> — il faut l\'activer une fois :<br><br>';
+    echo '1️⃣ Ouvre le <strong>Centre de contrôle</strong> (glisse depuis le coin haut-droit)<br>';
+    echo '2️⃣ <strong>Appui LONG</strong> (reste appuyé) sur le bouton d\'enregistrement d\'écran (le rond ⏺)<br>';
+    echo '3️⃣ Appuie sur l\'icône <strong>🎤 Microphone</strong> en bas → elle devient <strong style="color:#c8102e">ROUGE</strong> (= micro activé)<br>';
+    echo '4️⃣ Appuie sur <strong>Démarrer l\'enregistrement</strong>, puis lance ton appel sur haut-parleur<br>';
+    echo '5️⃣ À la fin, la vidéo est dans <strong>Photos</strong> → tu peux la joindre à l\'appel ici<br>';
+    echo '</div>';
+    echo '<div style="background:#fff8e6;border-radius:8px;padding:10px;margin-top:10px;font-size:.88em">💡 Le réglage du micro reste mémorisé : tu ne le fais qu\'une fois. Si ta voix n\'est pas enregistrée, c\'est que le micro 🎤 était gris (coupé) au lieu de rouge.</div>';
     echo '</div>';
 
     /* Méthode 2 — app dédiée */
