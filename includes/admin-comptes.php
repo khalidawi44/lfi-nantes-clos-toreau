@@ -245,6 +245,7 @@ function lfi_nct_admin_render_comptes_loc() {
                         </td>
                         <td>
                             <a class="button button-primary" href="<?php echo esc_url(add_query_arg(['page' => 'lfi-nct-comptes-loc', 'edit' => $u->ID], admin_url('admin.php'))); ?>">✏️ Éditer</a>
+                            <a class="button" style="background:#fff3f5;color:#a30b25;border-color:#a30b25" href="<?php echo esc_url(home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $u->ID)); ?>" target="_blank" title="Ouvrir un dossier juridique pré-rempli pour ce locataire">📁 Dossier juridique</a>
                             <form method="post" style="display:inline" onsubmit="return confirm('Supprimer définitivement le compte de <?php echo esc_js($u->display_name ?: $u->user_login); ?> ?');">
                                 <?php wp_nonce_field('lfi_nct_comptes_loc'); ?>
                                 <input type="hidden" name="lfi_nct_action" value="delete">
@@ -395,6 +396,8 @@ function lfi_nct_admin_render_compte_loc_edit($uid) {
                 <button type="submit" class="button" style="color:#a30b25;border-color:#a30b25">🗑 Supprimer ce compte</button>
             </form>
             <a class="button" href="<?php echo esc_url(home_url('/app/?vue=dossier&uid=' . (int) $uid)); ?>" target="_blank">📂 Voir le dossier complet (app)</a>
+            <a class="button button-primary" style="background:#a30b25;border-color:#7a0000" href="<?php echo esc_url(home_url('/app/?vue=dossier-juridique-add&tenant_uid=' . (int) $uid)); ?>" target="_blank">📁 Ouvrir un dossier juridique pour ce locataire</a>
+            <a class="button" href="<?php echo esc_url(home_url('/app/?vue=intervention-add&tenant_uid=' . (int) $uid)); ?>" target="_blank">🔧 Créer une intervention</a>
         </div>
     </div>
     <?php

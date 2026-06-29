@@ -75,6 +75,109 @@ function lfi_nct_dossier_owner_id() {
     return function_exists('lfi_nct_brigade_owner_id') ? lfi_nct_brigade_owner_id() : (int) get_current_user_id();
 }
 
+/* ============================================================== *
+ *  Dropdown locataires existants — affiché en haut du formulaire    *
+ *                                                                   *
+ *  Permet de PICK un locataire déjà enregistré et de remplir auto   *
+ *  toutes ses infos (adresse, étage, tel, email, problème enquête). *
+ * ============================================================== */
+function lfi_nct_dossier_pick_tenant($r) {
+    if (!defined('LFI_NCT_ROLE_TENANT')) return;
+    global $wpdb;
+
+    $tenants = get_users([
+        'role' => LFI_NCT_ROLE_TENANT,
+        'fields' => ['ID', 'display_name', 'user_login'],
+        'number' => 500,
+        'orderby' => 'display_name',
+        'order' => 'ASC',
+    ]);
+    if (empty($tenants)) return;
+
+    /* Construit l'URL de rechargement avec ?tenant_uid=X pour utiliser
+       le pré-remplissage déjà existant dans le formulaire. */
+    $base_url = lfi_nct_app_url('dossier-juridique-add');
+    $current_uid = (int) ($r->tenant_user_id ?? 0);
+
+    echo '<div style="background:#fff;border:2px solid #c8102e;border-radius:10px;padding:12px 14px;margin:0 0 18px">';
+    echo '<div style="font-weight:800;color:#c8102e;margin-bottom:6px">🔗 Lier à un compte locataire enregistré</div>';
+    echo '<div style="font-size:.88em;color:#444;margin-bottom:8px">Sélectionne un locataire déjà recensé → nom, adresse, étage, téléphone, problème de l\'enquête se remplissent automatiquement.</div>';
+
+    echo '<select onchange="if(this.value){window.location.href=this.value;}" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:1em;background:#fff">';
+    echo '<option value="">— Saisie manuelle (locataire pas encore enregistré) —</option>';
+
+    /* On groupe en deux optgroups : avec enquête (info riche) / sans */
+    $with_enq = [];
+    $without_enq = [];
+    foreach ($tenants as $u) {
+        $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+        if ($rid) $with_enq[]    = [$u, $rid];
+        else      $without_enq[] = [$u, 0];
+    }
+
+    if (!empty($with_enq)) {
+        echo '<optgroup label="✓ Avec enquête liée (infos complètes)">';
+        foreach ($with_enq as $pair) {
+            list($u, $rid) = $pair;
+            $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+            $label = $u->display_name ?: $u->user_login;
+            if ($resp) {
+                if ($resp->adresse) $label .= ' · ' . $resp->adresse;
+                if ($resp->etage)   $label .= ' (ét. ' . $resp->etage . ')';
+            }
+            $url = add_query_arg('tenant_uid', $u->ID, $base_url);
+            $sel = ($current_uid === (int) $u->ID) ? 'selected' : '';
+            echo '<option value="' . esc_url($url) . '" ' . $sel . '>' . esc_html($label) . '</option>';
+        }
+        echo '</optgroup>';
+    }
+    if (!empty($without_enq)) {
+        echo '<optgroup label="⚠ Sans enquête liée">';
+        foreach ($without_enq as $pair) {
+            list($u, $rid) = $pair;
+            $label = $u->display_name ?: $u->user_login;
+            $url = add_query_arg('tenant_uid', $u->ID, $base_url);
+            $sel = ($current_uid === (int) $u->ID) ? 'selected' : '';
+            echo '<option value="' . esc_url($url) . '" ' . $sel . '>' . esc_html($label) . '</option>';
+        }
+        echo '</optgroup>';
+    }
+    echo '</select>';
+
+    /* Si déjà lié, affiche un récap visuel + lien vers le compte */
+    if ($current_uid) {
+        $u = get_userdata($current_uid);
+        if ($u) {
+            $tel = (string) get_user_meta($current_uid, 'lfi_nct_tel', true);
+            $rid = (int) get_user_meta($current_uid, 'lfi_nct_response_id', true);
+            $problem_html = '';
+            if ($rid) {
+                $resp = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+                if ($resp && function_exists('lfi_nct_app_enq_problem')) {
+                    $p = lfi_nct_app_enq_problem($resp);
+                    if ($p) {
+                        $main = $p['main'];
+                        $problem_html = '<span style="background:#fff3f5;color:#a30b25;padding:3px 8px;border-radius:4px;font-size:.85em">' . $main[0] . ' ' . esc_html($main[1]);
+                        if ($p['gravite']) $problem_html .= ' · ' . (int) $p['gravite'] . '/10';
+                        $problem_html .= '</span>';
+                    }
+                }
+            }
+
+            echo '<div style="margin-top:10px;padding:10px;background:#e8f5ea;border-radius:8px;font-size:.92em;line-height:1.5">';
+            echo '✅ <strong>Lié au compte : ' . esc_html($u->display_name ?: $u->user_login) . '</strong> ';
+            if ($problem_html) echo $problem_html;
+            echo '<div style="margin-top:6px;color:#444;font-size:.9em">';
+            if ($u->user_email) echo '📧 ' . esc_html($u->user_email) . ' &nbsp; ';
+            if ($tel)            echo '📞 ' . esc_html($tel);
+            echo '</div>';
+            echo '</div>';
+        }
+    }
+
+    echo '</div>';
+}
+
 function lfi_nct_dossier_get($id) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
@@ -289,6 +392,13 @@ function lfi_nct_app_dossier_juridique_form($row) {
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_dossier_save');
     echo '<input type="hidden" name="lfi_dossier_save" value="1">';
+
+    /* Champ caché qui PRÉSERVE le lien au compte locataire — bug fix
+       majeur : sans ça, la liaison se perdait à la sauvegarde. */
+    echo '<input type="hidden" name="tenant_user_id" value="' . esc_attr((int) ($r->tenant_user_id ?? 0)) . '">';
+
+    /* === SÉLECTEUR DE COMPTE LOCATAIRE EXISTANT === */
+    if (function_exists('lfi_nct_dossier_pick_tenant')) lfi_nct_dossier_pick_tenant($r);
 
     /* === LOCATAIRE === */
     echo '<h3 style="margin:0">👤 Locataire <small style="color:#666;font-weight:400">(modifiable à tout moment)</small></h3>';

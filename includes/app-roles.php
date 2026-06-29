@@ -2008,6 +2008,8 @@ function lfi_nct_app_view_comptes_locataires() {
             /* Boutons principaux */
             echo '<div class="row-actions">';
             echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Dossier complet</a>';
+            echo '<a class="btn-primary" style="background:#a30b25" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID])) . '">📁 + Dossier juridique</a>';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-add', ['tenant_uid' => $u->ID])) . '">🔧 + Intervention</a>';
             echo '</div>';
 
             /* Accordéon édition — ouvert si ?open=UID */
