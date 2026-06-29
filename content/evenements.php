@@ -30,6 +30,16 @@ return [
         'lien'    => '',
     ],
 
+    [
+        'titre'   => 'Porte-à-porte — à la rencontre des locataires',
+        'date'    => '2026-07-11',
+        'heure'   => '14:00',
+        'lieu'    => 'Rendez-vous place du Pays Basque, Clos Toreau (Nantes Sud)',
+        'resume'  => 'Action de porte-à-porte du Groupe d\'Action : on va à la rencontre des locataires pour recenser les problèmes de logement. RDV à 14h place du Pays Basque.',
+        'details' => '',
+        'lien'    => '',
+    ],
+
     // ——— Modèle à copier pour un nouvel événement ———
     // [
     //     'titre'   => '',
