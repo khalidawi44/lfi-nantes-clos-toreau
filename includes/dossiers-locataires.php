@@ -1345,6 +1345,16 @@ function lfi_nct_app_view_cadre_juridique() {
         echo '</div>';
     }
 
+    /* Bloc essentiel : ce que l'asso peut VRAIMENT faire en justice */
+    echo '<div style="background:#fff;border:2px solid #c8102e;border-radius:10px;padding:14px 16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#c8102e;margin-bottom:8px">⚖️ Ester en justice : la nuance à connaître (vérifiée)</div>';
+    echo '<div style="font-size:.92em;line-height:1.6;color:#333">';
+    echo '<strong>1. Aider UN locataire (mandat écrit) → ✅ aucune ancienneté requise.</strong> L\'asso l\'accompagne, rédige ses courriers, monte son dossier ; le locataire reste la partie. Possible dès le 1er jour. <em>C\'est ton cas le plus fréquent.</em><br><br>';
+    echo '<strong>2. Action CONJOINTE (plusieurs locataires, même bailleur — art. 24-1 loi 89-462) → conditions.</strong> L\'asso doit être <strong>affiliée</strong> à une organisation siégeant à la Commission Nationale de Concertation (CNL, CLCV, CGL…) ou <strong>agréée</strong>. Pas une question d\'âge, mais d\'agrément/affiliation.<br><br>';
+    echo '<strong>3. Agir EN SON NOM pour l\'intérêt général (ex. partie civile au pénal) → là, le « 5 ans » s\'applique</strong> (asso régulièrement déclarée depuis au moins 5 ans, art. 2-1 et s. CPP et textes spéciaux).<br><br>';
+    echo '💡 <strong>Le raccourci malin :</strong> <strong>affilie ton association à la CNL ou la CLCV</strong> (fédérations de locataires) → tu obtiens le standing pour les actions collectives <strong>tout de suite</strong>, sans attendre 5 ans.';
+    echo '</div></div>';
+
     $asso_nom = function_exists('lfi_nct_association') ? lfi_nct_association()['nom'] : 'Union des quartiers libres';
     echo '<div style="background:#e8f5ea;border-radius:10px;padding:14px 16px;margin:14px 0">';
     echo '<div style="font-weight:800;color:#186a3b;margin-bottom:6px">📋 Ton montage à 2 étages</div>';
@@ -1381,6 +1391,14 @@ function lfi_nct_app_view_asso_statuts() {
     echo '3. Signer le <strong>PV</strong> (2e page) + mettre à jour le texte des statuts (articles fournis).<br>';
     echo '4. Déclarer la modification <strong>dans les 3 mois</strong> sur <strong>lecompteasso.associations.gouv.fr</strong> (ou Cerfa n° 13972*03 à la préfecture de Loire-Atlantique), en joignant le PV + les statuts mis à jour datés et signés.<br>';
     echo '<em>⚖️ Fais relire par l\'ADIL 44 ou Juris\'Asso avant dépôt. Ceci est un modèle, pas un avis d\'avocat.</em>';
+    echo '</div>';
+
+    echo '<div class="lfi-app-help no-print" style="background:#fff3f5;border-left:4px solid #c8102e">';
+    echo '⚠️ <strong>Important sur la clause « ester en justice » (article 11).</strong> L\'inscrire dans les statuts est utile et légitime, mais ne suffit pas à tout débloquer :<br>';
+    echo '• <strong>Accompagner UN locataire sur son mandat écrit</strong> → possible immédiatement, à tout âge de l\'asso ;<br>';
+    echo '• <strong>Action collective</strong> (plusieurs locataires, même bailleur, art. 24-1 loi 89-462) → exige l\'<strong>affiliation</strong> à une fédération (CNL, CLCV…) ou l\'<strong>agrément</strong> ;<br>';
+    echo '• <strong>Agir en son nom pour l\'intérêt général / partie civile</strong> → souvent <strong>5 ans</strong> d\'ancienneté requis (art. 2-1 et s. CPP).<br>';
+    echo '<strong>Conseil :</strong> affilie l\'asso à la CNL ou la CLCV pour obtenir le standing collectif sans attendre.';
     echo '</div>';
 
     /* ============ DOC 1 : CONVOCATION À L'AGE ============ */
