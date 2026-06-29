@@ -92,6 +92,44 @@ function lfi_nct_appel_get($id) {
     return $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d AND owner_user_id = %d", (int) $id, $owner));
 }
 
+/* Crée une intervention facturable depuis un appel. Retourne l'ID de
+   l'intervention créée, ou null. Marque l'appel comme facturé. */
+function lfi_nct_appel_creer_facture($row) {
+    global $wpdb;
+    $owner = (int) lfi_nct_appel_owner_id();
+    $duree_min = (float) $row->duree_minutes;
+    if ($duree_min <= 0) return null;
+    if (!empty($row->facture)) return null; /* déjà facturé */
+
+    $prix = round($duree_min * lfi_nct_appel_tarif_min(), 2);
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $duree_lbl = rtrim(rtrim(number_format($duree_min, 2, ',', ' '), '0'), ',');
+    $wpdb->insert($ti, [
+        'owner_user_id' => $owner,
+        'tenant_user_id'=> $row->tenant_user_id ?: null,
+        'tenant_nom'    => $row->tenant_label ?: 'Appel NMH',
+        'bailleur'      => 'Nantes Métropole Habitat',
+        'date_intervention' => $row->date_appel ? date('Y-m-d', strtotime($row->date_appel)) : current_time('Y-m-d'),
+        'type_travaux'  => 'Temps d\'appel NMH',
+        'type_travaux_key' => '',
+        'description'   => 'Temps passé au téléphone avec Nantes Métropole Habitat le ' . ($row->date_appel ? wp_date('j/m/Y à H:i', strtotime($row->date_appel)) : '') . ' — durée ' . $duree_lbl . ' min'
+                           . ($row->objet ? '. Objet : ' . $row->objet : '')
+                           . ($row->interlocuteur ? '. Interlocuteur : ' . $row->interlocuteur : '') . '.',
+        'tarif_mode'    => 'tache',
+        'prix_tache'    => $prix,
+        'duree_heures'  => round($duree_min / 60, 2),
+        'tarif_horaire' => 0,
+        'cout_materiaux'=> 0,
+        'total_ht'      => $prix,
+        'statut'        => 'realise',
+        'notes'         => 'Généré automatiquement depuis le journal des appels NMH (appel #' . $row->id . ', tarif ' . number_format(lfi_nct_appel_tarif_min(), 2, ',', ' ') . ' €/min).',
+    ]);
+    $new_iid = (int) $wpdb->insert_id;
+    $t = $wpdb->prefix . 'lfi_nct_appels_nmh';
+    $wpdb->update($t, ['facture' => 1, 'intervention_id' => $new_iid], ['id' => $row->id, 'owner_user_id' => $owner]);
+    return $new_iid;
+}
+
 /* ============================================================== *
  *  VUE : Journal des appels                                        *
  * ============================================================== */
@@ -120,13 +158,88 @@ function lfi_nct_app_view_appels_nmh() {
     if (!empty($_GET['billed']))   lfi_nct_app_flash('🧾 Appel facturé — intervention créée dans la brigade.');
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 Appel supprimé.');
 
-    /* Gros bouton appeler */
+    /* Gros bouton appeler AVEC CHRONOMÈTRE automatique */
+    $save_url = lfi_nct_app_url('appel-nmh-add');
     echo '<div style="background:linear-gradient(135deg,#0066a3,#004d7a);color:#fff;border-radius:12px;padding:18px;margin-bottom:14px;text-align:center">';
     echo '<div style="font-weight:800;font-size:1.05em;margin-bottom:4px">Nantes Métropole Habitat</div>';
     echo '<div style="opacity:.9;margin-bottom:12px">' . esc_html($phone) . '</div>';
-    echo '<a href="tel:' . esc_attr($phone_tel) . '" style="background:#fff;color:#0066a3;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:800;font-size:1.1em;display:inline-block">📞 Appeler maintenant</a>';
-    echo '<div style="opacity:.85;font-size:.85em;margin-top:12px">⚠️ Pendant l\'appel, note l\'heure de début. Juste après, clique « + Enregistrer l\'appel » pour consigner durée, interlocuteur et incidents.</div>';
+
+    /* Bouton appeler — démarre le chrono + ouvre le tel: */
+    echo '<a href="tel:' . esc_attr($phone_tel) . '" id="lfi-call-btn" style="background:#fff;color:#0066a3;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:800;font-size:1.1em;display:inline-block">📞 Appeler (démarre le chrono)</a>';
+
+    /* Zone chrono live (cachée par défaut) */
+    echo '<div id="lfi-chrono-zone" style="display:none;margin-top:14px">';
+    echo '<div style="font-size:2.4em;font-weight:900;font-variant-numeric:tabular-nums" id="lfi-chrono">00:00</div>';
+    echo '<div style="opacity:.85;font-size:.85em;margin:6px 0 12px">⏱ Chronomètre en cours… reviens ici après l\'appel.</div>';
+    echo '<button type="button" id="lfi-call-stop" style="background:#fff;color:#0066a3;padding:12px 22px;border:0;border-radius:10px;font-weight:800;cursor:pointer">✅ Appel terminé — enregistrer</button>';
     echo '</div>';
+
+    echo '<div id="lfi-call-hint" style="opacity:.85;font-size:.85em;margin-top:12px">Le chrono démarre quand tu appuies sur Appeler. À la fin, il te propose d\'enregistrer + facturer l\'appel automatiquement.</div>';
+    echo '</div>';
+
+    /* JS du chronomètre — persiste via localStorage à travers le tel: */
+    ?>
+    <script>
+    (function () {
+        var KEY = 'lfi_appel_chrono_start';
+        var btn  = document.getElementById('lfi-call-btn');
+        var zone = document.getElementById('lfi-chrono-zone');
+        var disp = document.getElementById('lfi-chrono');
+        var stop = document.getElementById('lfi-call-stop');
+        var hint = document.getElementById('lfi-call-hint');
+        var SAVE = <?php echo json_encode($save_url); ?>;
+        var timer = null;
+
+        function fmt(sec) {
+            var m = Math.floor(sec / 60), s = sec % 60;
+            return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }
+        function render() {
+            var start = parseInt(localStorage.getItem(KEY) || '0', 10);
+            if (!start) return;
+            var sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+            if (disp) disp.textContent = fmt(sec);
+        }
+        function showChrono() {
+            if (zone) zone.style.display = 'block';
+            if (hint) hint.style.display = 'none';
+            if (timer) clearInterval(timer);
+            render();
+            timer = setInterval(render, 1000);
+        }
+        /* Démarre le chrono au clic appeler */
+        if (btn) {
+            btn.addEventListener('click', function () {
+                localStorage.setItem(KEY, String(Date.now()));
+                setTimeout(showChrono, 300);
+            });
+        }
+        /* Reprend le chrono si on revient sur la page après l'appel */
+        var existing = parseInt(localStorage.getItem(KEY) || '0', 10);
+        if (existing && (Date.now() - existing) < 3 * 3600 * 1000) {
+            showChrono();
+        }
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                var e = parseInt(localStorage.getItem(KEY) || '0', 10);
+                if (e) showChrono();
+            }
+        });
+        /* Stop → calcule la durée approx en minutes (arrondi sup, min 1) et
+           ouvre le formulaire pré-rempli + facturation auto activée. */
+        if (stop) {
+            stop.addEventListener('click', function () {
+                var start = parseInt(localStorage.getItem(KEY) || '0', 10);
+                localStorage.removeItem(KEY);
+                if (timer) clearInterval(timer);
+                var min = 1;
+                if (start) min = Math.max(1, Math.round((Date.now() - start) / 60000));
+                window.location.href = SAVE + '&duree=' + min + '&from_chrono=1';
+            });
+        }
+    })();
+    </script>
+    <?php
 
     echo '<div class="lfi-app-bulk-row">';
     echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('appel-nmh-add')) . '">+ Enregistrer un appel</a>';
@@ -197,40 +310,37 @@ function lfi_nct_appel_form($row) {
         exit;
     }
 
-    /* Facturation : crée une intervention "Appel NMH" */
+    /* Facturation manuelle : crée une intervention "Appel NMH" */
     if ($is_edit && !empty($_POST['lfi_appel_facturer']) && check_admin_referer('lfi_appel_facturer')) {
-        $duree_min = (float) $row->duree_minutes;
-        if ($duree_min > 0) {
-            $prix = round($duree_min * lfi_nct_appel_tarif_min(), 2);
-            $ti = $wpdb->prefix . 'lfi_nct_interventions';
-            $wpdb->insert($ti, [
-                'owner_user_id' => $owner,
-                'tenant_user_id'=> $row->tenant_user_id ?: null,
-                'tenant_nom'    => $row->tenant_label ?: 'Appel NMH',
-                'bailleur'      => 'Nantes Métropole Habitat',
-                'date_intervention' => $row->date_appel ? date('Y-m-d', strtotime($row->date_appel)) : current_time('Y-m-d'),
-                'type_travaux'  => 'Temps d\'appel NMH',
-                'type_travaux_key' => '',
-                'description'   => 'Temps passé au téléphone avec Nantes Métropole Habitat le ' . ($row->date_appel ? wp_date('j/m/Y à H:i', strtotime($row->date_appel)) : '') . ' — durée ' . rtrim(rtrim(number_format($duree_min, 2, ',', ' '), '0'), ',') . ' min'
-                                   . ($row->objet ? '. Objet : ' . $row->objet : '')
-                                   . ($row->interlocuteur ? '. Interlocuteur : ' . $row->interlocuteur : '') . '.',
-                'tarif_mode'    => 'tache',
-                'prix_tache'    => $prix,
-                'duree_heures'  => round($duree_min / 60, 2),
-                'tarif_horaire' => 0,
-                'cout_materiaux'=> 0,
-                'total_ht'      => $prix,
-                'statut'        => 'realise',
-                'notes'         => 'Généré automatiquement depuis le journal des appels NMH (appel #' . $row->id . ', tarif ' . number_format(lfi_nct_appel_tarif_min(), 2, ',', ' ') . ' €/min).',
-            ]);
-            $new_iid = (int) $wpdb->insert_id;
-            $wpdb->update($t, ['facture' => 1, 'intervention_id' => $new_iid], ['id' => $row->id, 'owner_user_id' => $owner]);
+        $new_iid = lfi_nct_appel_creer_facture($row);
+        if ($new_iid) {
             wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $new_iid, 'billed' => 1]));
             exit;
         }
     }
 
-    /* Save */
+    /* Upload SÉPARÉ d'un enregistrement (gros fichier) — formulaire dédié,
+       pour qu'un échec d'upload ne bloque JAMAIS la sauvegarde des données. */
+    if ($is_edit && !empty($_POST['lfi_appel_upload']) && check_admin_referer('lfi_appel_upload')) {
+        if (!empty($_FILES['enregistrement_audio']['name'])) {
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            $att = media_handle_upload('enregistrement_audio', 0);
+            if (is_wp_error($att)) {
+                wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $row->id, 'upload_err' => 1]));
+            } else {
+                update_post_meta((int) $att, '_lfi_appel_audio', 1);
+                $wpdb->update($t, ['audio_attachment_id' => (int) $att], ['id' => $row->id, 'owner_user_id' => $owner]);
+                wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $row->id, 'uploaded' => 1]));
+            }
+            exit;
+        }
+        wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $row->id, 'upload_err' => 1]));
+        exit;
+    }
+
+    /* Save des DONNÉES (texte uniquement — jamais bloqué par un fichier) */
     if (!empty($_POST['lfi_appel_save']) && check_admin_referer('lfi_appel_save')) {
         $incidents = array_keys(array_filter((array) ($_POST['incidents'] ?? [])));
         $tuid = (int) ($_POST['tenant_user_id'] ?? 0);
@@ -239,39 +349,38 @@ function lfi_nct_appel_form($row) {
             $tu = get_userdata($tuid);
             if ($tu) $tlabel = $tu->display_name;
         }
+        $duree = (float) ($_POST['duree_minutes'] ?? 0);
         $data = [
             'tenant_user_id' => $tuid ?: null,
             'tenant_label'   => $tlabel,
             'date_appel'     => sanitize_text_field(wp_unslash($_POST['date_appel'] ?? '')) ?: current_time('mysql'),
-            'duree_minutes'  => (float) ($_POST['duree_minutes'] ?? 0),
+            'duree_minutes'  => $duree,
             'interlocuteur'  => sanitize_text_field(wp_unslash($_POST['interlocuteur'] ?? '')),
             'objet'          => sanitize_text_field(wp_unslash($_POST['objet'] ?? '')),
             'incidents'      => wp_json_encode($incidents),
             'notes'          => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
-        /* Upload éventuel d'un enregistrement audio de l'appel */
-        $audio_id = null;
-        if (!empty($_FILES['enregistrement_audio']['name'])) {
-            require_once ABSPATH . 'wp-admin/includes/image.php';
-            require_once ABSPATH . 'wp-admin/includes/file.php';
-            require_once ABSPATH . 'wp-admin/includes/media.php';
-            $att = media_handle_upload('enregistrement_audio', 0);
-            if (!is_wp_error($att)) {
-                $audio_id = (int) $att;
-                update_post_meta($audio_id, '_lfi_appel_audio', 1);
-            }
-        }
-        if ($audio_id) $data['audio_attachment_id'] = $audio_id;
+        $auto_facture = !empty($_POST['auto_facture']) && $duree > 0;
 
         if ($is_edit) {
             $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
-            wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $row->id, 'saved' => 1]));
+            $aid = (int) $row->id;
+            $already = (int) $row->facture;
         } else {
             $data['owner_user_id'] = $owner;
             $wpdb->insert($t, $data);
-            $new_id = (int) $wpdb->insert_id;
-            wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $new_id, 'saved' => 1]));
+            $aid = (int) $wpdb->insert_id;
+            $already = 0;
         }
+
+        if ($auto_facture && !$already) {
+            $appel_row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $aid));
+            if ($appel_row && lfi_nct_appel_creer_facture($appel_row)) {
+                wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $aid, 'saved' => 1, 'billed' => 1]));
+                exit;
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $aid, 'saved' => 1]));
         exit;
     }
 
@@ -281,19 +390,29 @@ function lfi_nct_appel_form($row) {
         if ($tu) $row = (object) ['tenant_user_id' => $tu->ID, 'tenant_label' => $tu->display_name];
     }
 
+    /* Durée pré-remplie depuis le chronomètre */
+    $duree_chrono = isset($_GET['duree']) ? (float) $_GET['duree'] : '';
+    $from_chrono  = !empty($_GET['from_chrono']);
+
     $r = $row ?: (object) [
         'tenant_user_id' => '', 'tenant_label' => '', 'date_appel' => current_time('Y-m-d\TH:i'),
         'duree_minutes' => '', 'interlocuteur' => '', 'objet' => '', 'incidents' => '[]', 'notes' => '',
         'facture' => 0, 'id' => 0,
     ];
+    if ($duree_chrono !== '' && !$is_edit) $r->duree_minutes = $duree_chrono;
     $cur_inc = json_decode($r->incidents ?? '[]', true) ?: [];
     $date_val = $r->date_appel ? date('Y-m-d\TH:i', strtotime($r->date_appel)) : current_time('Y-m-d\TH:i');
 
     lfi_nct_app_screen_open($is_edit ? '✏️ Appel #' . $row->id : '+ Enregistrer un appel', 'Durée · interlocuteur · incidents');
 
-    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Appel enregistré.');
+    if ($from_chrono) lfi_nct_app_flash('⏱ Appel chronométré : ~' . (int) $duree_chrono . ' min. Vérifie, complète les incidents, et enregistre — la facture se génère toute seule.');
 
-    echo '<form method="post" class="lfi-app-form" enctype="multipart/form-data">';
+    if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Appel enregistré.');
+    if (!empty($_GET['billed']))     lfi_nct_app_flash('🧾 Facture générée automatiquement (temps d\'appel).');
+    if (!empty($_GET['uploaded']))   lfi_nct_app_flash('🎙 Enregistrement joint à l\'appel.');
+    if (!empty($_GET['upload_err'])) lfi_nct_app_flash('⚠ Le fichier n\'a pas pu être téléversé (trop volumineux ?). Les données de l\'appel sont bien enregistrées.', 'err');
+
+    echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_appel_save');
     echo '<input type="hidden" name="lfi_appel_save" value="1">';
 
@@ -315,6 +434,17 @@ function lfi_nct_appel_form($row) {
     $montant_preview = ((float) $r->duree_minutes) * lfi_nct_appel_tarif_min();
     echo '<div class="lfi-app-help">💶 Coût facturable : <strong id="lfi-appel-montant">' . number_format($montant_preview, 2, ',', ' ') . ' €</strong> (' . number_format(lfi_nct_appel_tarif_min(), 2, ',', ' ') . ' €/min)</div>';
 
+    /* Facturation automatique — cochée par défaut (sauf si déjà facturé) */
+    $already_billed = $is_edit && !empty($row->facture);
+    if (!$already_billed) {
+        echo '<label style="display:flex;align-items:center;gap:8px;background:#e8f5ea;padding:10px 12px;border-radius:8px;margin:6px 0;cursor:pointer">';
+        echo '<input type="checkbox" name="auto_facture" value="1" checked>';
+        echo '<span><strong>🧾 Générer la facture automatiquement</strong> en enregistrant (recommandé)</span>';
+        echo '</label>';
+    } else {
+        echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">✅ Cet appel est déjà facturé.</div>';
+    }
+
     echo '<label>Interlocuteur<input type="text" name="interlocuteur" value="' . esc_attr($r->interlocuteur) . '" placeholder="Nom du conseiller, ou « a refusé de donner son identité »"></label>';
     echo '<label>Objet de l\'appel<input type="text" name="objet" value="' . esc_attr($r->objet) . '" placeholder="ex: relance travaux Mme Fadila"></label>';
 
@@ -333,39 +463,41 @@ function lfi_nct_appel_form($row) {
     echo '<label>📝 Transcription / notes de l\'appel<textarea name="notes" id="lfi-appel-notes" rows="6" placeholder="Ce qui a été dit, mot pour mot si possible. Cite les propos exacts s\'il y a eu manque de respect.">' . esc_textarea($r->notes) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-appel-notes" data-label="Dicter le compte-rendu"></div>';
 
-    /* === ENREGISTREMENT AUDIO === */
-    echo '<h3 style="margin:16px 0 4px;color:#0066a3">🎙 Enregistrement de l\'appel (preuve)</h3>';
-
-    /* Lecteur si un enregistrement existe déjà */
-    $audio_id = (int) ($r->audio_attachment_id ?? 0);
-    if ($audio_id) {
-        $audio_url = wp_get_attachment_url($audio_id);
-        $mime = get_post_mime_type($audio_id);
-        if ($audio_url) {
-            echo '<div style="background:#e8f0ff;border-radius:8px;padding:12px;margin:6px 0">';
-            echo '<div style="font-weight:700;color:#0066a3;margin-bottom:6px">✅ Enregistrement joint :</div>';
-            if ($mime && strpos($mime, 'video') === 0) {
-                echo '<video controls preload="none" style="width:100%;max-height:360px;border-radius:6px"><source src="' . esc_url($audio_url) . '" type="' . esc_attr($mime) . '">Ton navigateur ne peut pas lire la vidéo.</video>';
-            } else {
-                echo '<audio controls preload="none" style="width:100%"><source src="' . esc_url($audio_url) . '">Ton navigateur ne peut pas lire l\'audio.</audio>';
-            }
-            echo '<div style="margin-top:6px"><a href="' . esc_url($audio_url) . '" download style="font-size:.85em;color:#0066a3">⬇️ Télécharger le fichier</a></div>';
-            echo '</div>';
-        }
-    }
-
-    echo '<div style="background:#fff8e6;border-left:4px solid #bd8600;padding:12px 14px;border-radius:8px;margin:6px 0;font-size:.88em;line-height:1.5">';
-    echo '<strong>📲 Comment enregistrer un appel sur iPhone :</strong><br><br>';
-    echo '<strong>Méthode 1 — iOS 18 et + (le plus simple) :</strong> pendant l\'appel, appuie sur le bouton <strong>Enregistrer</strong> en haut à gauche. iPhone enregistre + transcrit (un message prévient ton interlocuteur, c\'est légal). À la fin, l\'enregistrement est dans l\'app <strong>Notes</strong>. Récupère le fichier audio et joins-le ci-dessous.<br><br>';
-    echo '<strong>Méthode 2 — universelle :</strong> mets l\'appel sur <strong>haut-parleur</strong>, et sur un 2e appareil (ou via l\'app <strong>Dictaphone</strong>/Voice Memos en arrière-plan) enregistre la conversation. Exporte le fichier .m4a et joins-le ci-dessous.<br><br>';
-    echo '<em>⚖️ En France, tu as le droit d\'enregistrer une conversation à laquelle tu participes pour t\'en servir comme preuve. Préviens idéalement ton interlocuteur (« cet appel est enregistré »).</em>';
-    echo '</div>';
-
-    echo '<label>🎙 Joindre l\'enregistrement (audio OU vidéo d\'écran)<input type="file" name="enregistrement_audio" accept="audio/*,video/*"></label>';
-    echo '<div class="lfi-app-help"><small>Audio (m4a, mp3…) ou vidéo de capture d\'écran (mov, mp4). Le fichier devient une pièce du dossier, lisible directement ici.</small></div>';
-
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Enregistrer l\'appel') . '</button>';
     echo '</form>';
+
+    /* === ENREGISTREMENT AUDIO/VIDÉO — formulaire SÉPARÉ (gros fichiers) === */
+    if ($is_edit) {
+        echo '<h3 style="margin:20px 0 4px;color:#0066a3">🎙 Enregistrement de l\'appel (preuve)</h3>';
+
+        $audio_id = (int) ($r->audio_attachment_id ?? 0);
+        if ($audio_id) {
+            $audio_url = wp_get_attachment_url($audio_id);
+            $mime = get_post_mime_type($audio_id);
+            if ($audio_url) {
+                echo '<div style="background:#e8f0ff;border-radius:8px;padding:12px;margin:6px 0">';
+                echo '<div style="font-weight:700;color:#0066a3;margin-bottom:6px">✅ Enregistrement joint :</div>';
+                if ($mime && strpos($mime, 'video') === 0) {
+                    echo '<video controls preload="none" style="width:100%;max-height:360px;border-radius:6px"><source src="' . esc_url($audio_url) . '" type="' . esc_attr($mime) . '">Vidéo illisible ici.</video>';
+                } else {
+                    echo '<audio controls preload="none" style="width:100%"><source src="' . esc_url($audio_url) . '">Audio illisible ici.</audio>';
+                }
+                echo '<div style="margin-top:6px"><a href="' . esc_url($audio_url) . '" download style="font-size:.85em;color:#0066a3">⬇️ Télécharger</a></div>';
+                echo '</div>';
+            }
+        }
+
+        echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>📖 Tu ne sais pas comment enregistrer ? <a href="' . esc_url(lfi_nct_app_url('appel-guide')) . '">Vois le guide</a>. Les gros fichiers vidéo peuvent prendre du temps à téléverser — patiente après le clic.</small></div>';
+
+        /* Formulaire d'upload SÉPARÉ pour que les données soient sauvées même
+           si le fichier est trop gros. */
+        echo '<form method="post" class="lfi-app-form" enctype="multipart/form-data">';
+        wp_nonce_field('lfi_appel_upload');
+        echo '<input type="hidden" name="lfi_appel_upload" value="1">';
+        echo '<label>🎙 Joindre l\'enregistrement (audio OU vidéo)<input type="file" name="enregistrement_audio" accept="audio/*,video/*"></label>';
+        echo '<button type="submit" class="btn-ghost">⬆️ Téléverser l\'enregistrement</button>';
+        echo '</form>';
+    }
 
     /* Actions sur un appel existant */
     if ($is_edit) {
