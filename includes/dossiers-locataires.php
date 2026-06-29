@@ -625,182 +625,258 @@ function lfi_nct_render_voice_helper() {
         font-size: .88em; line-height: 1.5; color: #1a3a5c;
     }
     .lfi-voice-btn {
-        background: #fff; color: #c8102e; border: 1.5px solid #c8102e;
-        padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer;
-        font-size: .95em; display: inline-flex; align-items: center;
-        gap: 6px; transition: all .15s; -webkit-appearance: none;
+        background: #c8102e; color: #fff; border: 0;
+        padding: 14px 18px; border-radius: 10px; font-weight: 800; cursor: pointer;
+        font-size: 1em; display: inline-flex; align-items: center;
+        gap: 8px; -webkit-appearance: none;
+        box-shadow: 0 2px 6px rgba(200,16,46,.3);
+        width: 100%; justify-content: center;
     }
-    .lfi-voice-btn.listening {
-        background: #c8102e; color: #fff;
-        animation: lfi-pulse 1.2s infinite;
+
+    /* === DICTAPHONE PLEIN ÉCRAN === */
+    .lfi-dict {
+        position: fixed; inset: 0; z-index: 999999;
+        background: linear-gradient(180deg, #1a1a1a, #2a0a0e);
+        color: #fff;
+        display: flex; flex-direction: column;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    @keyframes lfi-pulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(200,16,46,.6); }
-        50%      { box-shadow: 0 0 0 10px rgba(200,16,46,0); }
+    .lfi-dict-bar {
+        padding: max(14px, env(safe-area-inset-top)) 14px 12px;
+        display: flex; gap: 10px; align-items: center;
+        background: rgba(0,0,0,.4); backdrop-filter: blur(8px);
+        border-bottom: 1px solid rgba(255,255,255,.1);
     }
-    .lfi-voice-status { font-size: .9em; color: #555; margin-top: 6px; min-height: 18px; }
+    .lfi-dict-bar button {
+        flex: 1; padding: 14px 12px; border: 0; border-radius: 10px;
+        font-weight: 800; font-size: 1em; cursor: pointer;
+        -webkit-appearance: none;
+    }
+    .lfi-dict-use   { background: #186a3b; color: #fff; }
+    .lfi-dict-cancel{ background: rgba(255,255,255,.15); color: #fff; }
+    .lfi-dict-status {
+        padding: 10px 16px; text-align: center;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        font-size: .95em; color: #ffb;
+    }
+    .lfi-dict-dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: #c8102e;
+        animation: lfi-rec-pulse 1.2s infinite;
+        box-shadow: 0 0 0 0 rgba(200,16,46,.7);
+    }
+    @keyframes lfi-rec-pulse {
+        0%,100% { box-shadow: 0 0 0 0 rgba(200,16,46,.7); }
+        50%     { box-shadow: 0 0 0 14px rgba(200,16,46,0); }
+    }
+    .lfi-dict-area {
+        flex: 1; overflow-y: auto; padding: 18px 18px 28px;
+        font-size: 1.25em; line-height: 1.5;
+        color: #fff;
+    }
+    .lfi-dict-area .interim { color: #aaa; font-style: italic; }
+    .lfi-dict-area .placeholder {
+        color: #666; font-style: italic; font-size: .85em; text-align: center;
+        margin-top: 30vh;
+    }
+    .lfi-dict-help {
+        padding: 12px 16px; background: rgba(255,255,255,.05);
+        font-size: .85em; color: #ccc; text-align: center;
+        border-top: 1px solid rgba(255,255,255,.1);
+    }
     </style>
     <script>
     (function () {
         var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         var ua = navigator.userAgent || '';
         var isiOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-        var isStandalonePWA = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
 
-        document.querySelectorAll('.lfi-voice-zone').forEach(function (zone) {
-            var fieldId = zone.getAttribute('data-target');
-            var label = zone.getAttribute('data-label') || 'Dicter';
-            var field = document.getElementById(fieldId);
-            if (!field) return;
-
-            /* === ASTUCE CLAVIER iOS — fonctionne TOUJOURS sur iPhone === */
-            if (isiOS) {
-                var tip = document.createElement('div');
-                tip.className = 'lfi-voice-tip';
-                tip.innerHTML = '💡 <strong>Astuce iPhone qui marche à 100%</strong> :<br>' +
-                                '1. Touche le champ ci-dessus pour ouvrir le clavier<br>' +
-                                '2. Appuie sur le petit micro 🎤 du clavier iOS (en bas, à côté de la barre d\'espace)<br>' +
-                                '3. Parle naturellement, ta voix s\'écrit directement dans le champ<br>' +
-                                '<em>C\'est la dictée Apple : pas besoin d\'autorisation, ça marche partout, partout, partout.</em>';
-                zone.appendChild(tip);
-            }
-
-            /* === Bouton dictée vocale via API navigateur === */
+        /* ============================================================
+           DICTAPHONE PLEIN ÉCRAN
+           Ouvre un overlay sombre qui prend TOUTE la fenêtre. Le clavier
+           ne peut plus le couvrir car aucun input n'est focusé.
+           Le bouton "✓ Utiliser ce texte" est en HAUT, toujours visible.
+           ============================================================ */
+        function openDictaphone(targetField) {
             if (!SR) {
-                if (!isiOS) {
-                    var info = document.createElement('div');
-                    info.className = 'lfi-voice-wrap unsupported';
-                    info.innerHTML = '🎤 La dictée vocale du navigateur n\'est pas disponible ici. Utilise Chrome, Edge ou Safari récent.';
-                    zone.appendChild(info);
-                }
+                alert('La dictée vocale du navigateur n\'est pas disponible. Utilise plutôt le micro 🎤 du clavier iPhone (à côté de la barre d\'espace).');
                 return;
             }
+            try { targetField.blur(); } catch (e) {}
 
-            var wrap = document.createElement('div');
-            wrap.className = 'lfi-voice-wrap';
-            zone.appendChild(wrap);
+            var overlay = document.createElement('div');
+            overlay.className = 'lfi-dict';
+            overlay.innerHTML = ''
+                + '<div class="lfi-dict-bar">'
+                +   '<button type="button" class="lfi-dict-cancel">✕ Annuler</button>'
+                +   '<button type="button" class="lfi-dict-use">✓ Utiliser ce texte</button>'
+                + '</div>'
+                + '<div class="lfi-dict-status">'
+                +   '<span class="lfi-dict-dot"></span>'
+                +   '<span class="lfi-dict-label">J\'écoute… parle naturellement</span>'
+                + '</div>'
+                + '<div class="lfi-dict-area" tabindex="-1"></div>'
+                + '<div class="lfi-dict-help">Tout ce que tu dis s\'ajoute au texte existant du champ. Appuie sur ✓ quand t\'as fini.</div>';
+            document.body.appendChild(overlay);
+            try { overlay.querySelector('.lfi-dict-area').focus({ preventScroll: true }); } catch (e) {}
 
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'lfi-voice-btn';
-            btn.innerHTML = '🎤 ' + label;
-            wrap.appendChild(btn);
+            var area    = overlay.querySelector('.lfi-dict-area');
+            var labelEl = overlay.querySelector('.lfi-dict-label');
+            var useBtn  = overlay.querySelector('.lfi-dict-use');
+            var cancelBtn = overlay.querySelector('.lfi-dict-cancel');
 
-            var status = document.createElement('div');
-            status.className = 'lfi-voice-status';
-            wrap.appendChild(status);
-
+            /* État interne : on accumule le texte ICI, pas dans le field,
+               pour ne pas perdre ce qui était déjà tapé. */
+            var anchor = targetField.value || '';
+            if (anchor && !/[\s\.\!\?]$/.test(anchor)) anchor += ' ';
+            var newText = '';
             var recognition = null;
-            var listening = false;
             var manualStop = false;
-            var anchor = '';
-            var lastFinal = '';
+            var restartTimer = null;
 
-            function ensureSeparator(s) {
-                if (!s) return '';
-                if (/[\s\.\!\?]$/.test(s)) return s;
-                return s + ' ';
+            function paint(interim) {
+                area.innerHTML = '';
+                if (anchor) {
+                    var a = document.createElement('span');
+                    a.style.opacity = '.5';
+                    a.textContent = anchor;
+                    area.appendChild(a);
+                }
+                if (newText) {
+                    var n = document.createElement('span');
+                    n.textContent = newText;
+                    area.appendChild(n);
+                }
+                if (interim) {
+                    var i = document.createElement('span');
+                    i.className = 'interim';
+                    i.textContent = interim;
+                    area.appendChild(i);
+                }
+                if (!anchor && !newText && !interim) {
+                    area.innerHTML = '<div class="placeholder">Parle… ce que tu dis apparaîtra ici en grand.</div>';
+                }
+                area.scrollTop = area.scrollHeight;
             }
+            paint('');
 
             function buildRecognition() {
                 var r;
                 try { r = new SR(); } catch (e) { return null; }
-                /* iOS Safari ne supporte que single-shot (continuous = false).
-                   Sur les autres on tente continuous = true. */
                 r.continuous     = !isiOS;
                 r.interimResults = true;
                 try { r.lang = 'fr-FR'; } catch (e) {}
-                return r;
-            }
-
-            function start() {
-                recognition = buildRecognition();
-                if (!recognition) {
-                    status.textContent = 'Impossible de démarrer le micro (API indisponible).';
-                    return false;
-                }
-                anchor = ensureSeparator(field.value);
-                lastFinal = '';
-                manualStop = false;
-
-                recognition.onresult = function (event) {
+                r.onresult = function (event) {
                     var fin = '', interim = '';
                     for (var i = 0; i < event.results.length; i++) {
                         var t = event.results[i][0].transcript;
                         if (event.results[i].isFinal) fin += t + ' ';
                         else interim += t;
                     }
-                    if (fin) lastFinal += fin;
-                    field.value = anchor + lastFinal + interim;
-                    status.textContent = interim ? '… ' + interim.slice(-40) : '✓ enregistré';
+                    if (fin) newText += fin;
+                    paint(interim);
                 };
-
-                recognition.onerror = function (e) {
+                r.onerror = function (e) {
                     var err = e && e.error ? e.error : 'inconnue';
                     if (err === 'not-allowed' || err === 'service-not-allowed') {
-                        status.textContent = '🔒 Le micro est bloqué. Vérifie les Réglages Safari → Site Web → Microphone.';
+                        labelEl.textContent = '🔒 Micro bloqué — autorise dans Réglages Safari';
                         manualStop = true;
                     } else if (err === 'no-speech') {
-                        status.textContent = '🤫 Pas de voix détectée…';
+                        labelEl.textContent = '🤫 J\'écoute toujours… parle un peu plus fort';
                     } else if (err === 'audio-capture') {
-                        status.textContent = '🎙 Pas de micro accessible. Vérifie l\'autorisation.';
+                        labelEl.textContent = '🎙 Pas de micro accessible';
                         manualStop = true;
                     } else if (err === 'network') {
-                        status.textContent = '📡 Erreur réseau. Essaie en wifi.';
+                        labelEl.textContent = '📡 Erreur réseau, réessaie';
                     } else {
-                        status.textContent = 'Erreur : ' + err;
+                        labelEl.textContent = 'Erreur : ' + err;
                     }
                 };
-
-                recognition.onend = function () {
-                    /* Sur iOS le moteur s'arrête après chaque pause — on
-                       redémarre tant que l'utilisateur n'a pas cliqué Stop. */
-                    if (!manualStop) {
-                        setTimeout(function () {
-                            if (manualStop) return;
-                            anchor = ensureSeparator(field.value);
-                            lastFinal = '';
-                            try { recognition.start(); } catch (e) {
-                                stopListening();
-                            }
-                        }, 80);
-                        return;
-                    }
-                    stopListening();
+                r.onend = function () {
+                    if (manualStop) return;
+                    /* iOS Safari coupe toutes les 2-5 secondes — on relance */
+                    restartTimer = setTimeout(function () {
+                        if (manualStop) return;
+                        try { recognition.start(); } catch (e) {}
+                    }, 80);
                 };
-
-                try {
-                    recognition.start();
-                    listening = true;
-                    btn.classList.add('listening');
-                    btn.innerHTML = '⏹ Arrêter la dictée';
-                    status.textContent = '🎙 Parle… ta voix s\'écrit dans le champ.';
-                    return true;
-                } catch (e) {
-                    status.textContent = 'Impossible de démarrer : ' + (e.message || e.name || 'erreur');
-                    stopListening();
-                    return false;
-                }
+                return r;
             }
 
-            function stopListening() {
-                listening = false;
-                btn.classList.remove('listening');
-                btn.innerHTML = '🎤 ' + label;
-                if (status.textContent.indexOf('🔒') === -1 && status.textContent.indexOf('Erreur') === -1) {
-                    status.textContent = field.value !== anchor ? '✅ Texte ajouté dans le champ.' : '';
-                }
-            }
-
-            btn.addEventListener('click', function () {
-                if (listening) {
-                    manualStop = true;
-                    try { recognition && recognition.stop(); } catch (e) {}
-                    stopListening();
+            function startReco() {
+                recognition = buildRecognition();
+                if (!recognition) {
+                    labelEl.textContent = 'Impossible de lancer le micro (API indisponible).';
                     return;
                 }
-                start();
+                try {
+                    recognition.start();
+                    labelEl.textContent = 'J\'écoute… parle naturellement';
+                } catch (e) {
+                    labelEl.textContent = 'Démarrage impossible : ' + (e.message || e.name);
+                }
+            }
+            startReco();
+
+            function close(commit) {
+                manualStop = true;
+                if (restartTimer) clearTimeout(restartTimer);
+                try { recognition && recognition.stop(); } catch (e) {}
+                if (commit) {
+                    targetField.value = anchor + newText;
+                    /* Petit feedback visuel : on défile vers le champ */
+                    try {
+                        var ev = new Event('input', { bubbles: true });
+                        targetField.dispatchEvent(ev);
+                        targetField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } catch (e) {}
+                }
+                if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            }
+
+            useBtn.addEventListener('click', function () { close(true); });
+            cancelBtn.addEventListener('click', function () {
+                if (newText && !confirm('Annuler ? Le texte dicté sera perdu.')) return;
+                close(false);
             });
+        }
+
+        /* === Pose des boutons + tip iPhone === */
+        document.querySelectorAll('.lfi-voice-zone').forEach(function (zone) {
+            var fieldId = zone.getAttribute('data-target');
+            var label = zone.getAttribute('data-label') || 'Dicter';
+            var field = document.getElementById(fieldId);
+            if (!field) return;
+
+            /* On déplace la zone AU-DESSUS du champ pour que le bouton
+               reste cliquable quand le clavier iOS est ouvert. */
+            if (field.parentNode && field.parentNode.parentNode) {
+                var labelEl = field.closest('label');
+                if (labelEl && labelEl.parentNode) {
+                    labelEl.parentNode.insertBefore(zone, labelEl);
+                }
+            }
+
+            /* Bouton plein écran si SpeechRecognition dispo */
+            if (SR) {
+                var wrap = document.createElement('div');
+                wrap.className = 'lfi-voice-wrap';
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'lfi-voice-btn';
+                btn.innerHTML = '🎤 ' + label + ' en plein écran';
+                wrap.appendChild(btn);
+                zone.appendChild(wrap);
+                btn.addEventListener('click', function () { openDictaphone(field); });
+            }
+
+            /* Astuce iPhone — clavier natif Apple */
+            if (isiOS) {
+                var tip = document.createElement('div');
+                tip.className = 'lfi-voice-tip';
+                tip.innerHTML = '💡 <strong>Autre solution iPhone</strong> : touche le champ ci-dessous → le clavier iPhone s\'ouvre → appuie sur le petit micro 🎤 du clavier (en bas à droite, à côté de la barre d\'espace). Ta voix s\'écrit directement, c\'est la dictée Apple.';
+                zone.appendChild(tip);
+            }
         });
     })();
     </script>
