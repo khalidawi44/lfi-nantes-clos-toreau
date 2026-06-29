@@ -1596,6 +1596,64 @@ function lfi_nct_dossier_header_destinataire_nmh($bailleur) {
 /* ============================================================== *
  *  ÉCRAN : Cadre juridique de la facturation                       *
  * ============================================================== */
+/* ============================================================== *
+ *  MONTAGE FINANCIER : faire payer NMH, financer les avocats       *
+ * ============================================================== */
+function lfi_nct_app_view_montage_financier() {
+    if (!lfi_nct_app_guard_brigade()) return;
+    lfi_nct_app_screen_open('💰 Montage financier', 'Faire payer NMH · financer les avocats — proprement');
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    echo '<div class="lfi-app-help no-print" style="background:#fff8e6;border-left:4px solid #bd8600">';
+    echo '⚠️ <strong>Ceci n\'est pas un avis comptable ni juridique.</strong> Le principe : faire supporter les coûts par NMH par des voies légales, en gardant les <strong>caisses strictement séparées</strong>. À faire valider par un <strong>expert-comptable</strong> et par les avocats (Me Vallée, Me Gouache).';
+    echo '</div>';
+
+    echo '<div class="lfi-rec-doc">';
+    echo '<h1>Montage financier — faire payer Nantes Métropole Habitat et financer les avocats</h1>';
+
+    echo '<h2>Le principe : 3 caisses séparées (ne jamais les mélanger)</h2>';
+    echo '<div class="citations">';
+    echo '<p><strong>1) 🧰 Ton auto-entreprise (toi).</strong> Tu factures à NMH les <strong>travaux et prestations techniques</strong> (réparations, constat, devis, déplacement) via la <strong>substitution de l\'art. 1222 du Code civil</strong> (après mise en demeure). C\'est ton <strong>revenu professionnel personnel</strong>, sur le compte de l\'auto-entreprise. Jamais mélangé avec l\'association.</p>';
+    echo '<p><strong>2) 🏛 L\'association.</strong> Elle perçoit les <strong>cotisations</strong> des locataires accompagnés, les <strong>dons</strong>, et — lorsqu\'elle est <strong>partie à l\'action</strong> — l\'<strong>article 700 du CPC</strong> (remboursement des frais, dont avocat) + d\'éventuels <strong>dommages-intérêts pour préjudice à l\'intérêt collectif</strong>. Avec ces fonds, <strong>l\'association règle les avocats</strong> (ou avance leurs honoraires, récupérés ensuite sur NMH).</p>';
+    echo '<p><strong>3) 👤 Le locataire.</strong> S\'il a droit à l\'<strong>aide juridictionnelle</strong>, l\'État paie l\'avocat (coût nul). Sinon, sur <strong>mandat écrit</strong>, l\'association peut prendre en charge / avancer les frais et les récupérer via la condamnation de NMH.</p>';
+    echo '</div>';
+
+    echo '<h2>Comment NMH finit par tout payer</h2>';
+    echo '<div class="citations">';
+    echo '<ul>';
+    echo '<li><strong>Les travaux</strong> → tes <strong>factures d\'auto-entrepreneur</strong> (art. 1222 C. civ., après mise en demeure).</li>';
+    echo '<li><strong>Les honoraires d\'avocat</strong> → <strong>article 700 du CPC</strong> : le juge condamne NMH (partie perdante) à rembourser les frais d\'avocat.</li>';
+    echo '<li><strong>Les frais de procédure</strong> (dépens) → <strong>article 696 du CPC</strong>, à la charge de NMH.</li>';
+    echo '<li><strong>Les dommages-intérêts</strong> → trouble de jouissance (art. 1231-1 et 1240 C. civ.) au locataire, et le cas échéant à l\'association (préjudice collectif).</li>';
+    echo '</ul>';
+    echo '</div>';
+
+    echo '<h2>Le circuit de l\'argent</h2>';
+    echo '<div class="citations">';
+    echo '<p>NMH —— (travaux, art. 1222) ——▶ <strong>ton auto-entreprise</strong></p>';
+    echo '<p>NMH —— (art. 700 + dépens + D.-I. collectif) ——▶ <strong>l\'association</strong> ——▶ paie les <strong>avocats</strong></p>';
+    echo '<p>NMH —— (dommages-intérêts) ——▶ <strong>le locataire</strong></p>';
+    echo '<p>État (aide juridictionnelle) ——▶ <strong>l\'avocat</strong> (si le locataire est éligible)</p>';
+    echo '</div>';
+
+    echo '<h2>Garde-fous — pour que ce soit solide et légal</h2>';
+    echo '<div class="citations">';
+    echo '<ul>';
+    echo '<li><strong>Séparer strictement</strong> le compte de l\'auto-entreprise et celui de l\'association. Deux comptabilités distinctes.</li>';
+    echo '<li>Tu ne « perçois » pas personnellement l\'argent de l\'association : <strong>c\'est l\'association qui encaisse</strong> ; en tant que président tu peux être <strong>remboursé de tes frais sur justificatifs</strong>, mais les fonds appartiennent à l\'association (sinon : gestion de fait / abus de confiance).</li>';
+    echo '<li><strong>Conventions écrites</strong> : mandat locataire → association ; convention association ↔ avocats (qui paie quoi, avances, art. 700).</li>';
+    echo '<li><strong>Honoraires de résultat</strong> : possibles en complément d\'honoraires de base, mais le « <strong>quota litis</strong> » pur (honoraires uniquement en % du gain) est interdit.</li>';
+    echo '<li><strong>Activité économique de l\'association</strong> : si elle facture des prestations, surveiller le seuil de fiscalisation et tenir une comptabilité ; au besoin, garder la facturation de travaux côté auto-entreprise.</li>';
+    echo '<li><strong>Faire valider</strong> le schéma par un expert-comptable et par les avocats.</li>';
+    echo '</ul>';
+    echo '</div>';
+
+    echo '<p style="margin-top:16px">Fait à Nantes, le ' . esc_html(wp_date('j F Y')) . '.</p>';
+    echo '</div>';
+
+    lfi_nct_app_screen_close(false);
+}
+
 function lfi_nct_app_view_cadre_juridique() {
     if (!lfi_nct_app_guard_brigade()) return;
     lfi_nct_app_screen_open('⚖️ Cadre juridique de la facturation', 'Comment facturer NMH légalement');
@@ -1823,6 +1881,7 @@ function lfi_nct_app_view_association() {
         $tiles[] = ['📜', 'Modifier les statuts', 'Convocation + PV + statuts à jour, signés', lfi_nct_app_url('asso-statuts')];
     }
     $tiles[] = ['⚖️', 'Cadre juridique', 'Ce qui est facturable, comment, par qui', lfi_nct_app_url('cadre-juridique')];
+    $tiles[] = ['💰', 'Montage financier', 'Faire payer NMH, financer les avocats', lfi_nct_app_url('montage-financier')];
     $tiles[] = ['🧮', 'Aide juridictionnelle', 'Savoir à l\'avance qui y a droit', lfi_nct_app_url('aj-calcul')];
     $tiles[] = ['🤝', 'Stratégie avocats', 'Note générale à envoyer aux cabinets', lfi_nct_app_url('doc-strategie-avocats')];
     $tiles[] = ['📁', 'Dossiers juridiques', 'Un dossier par locataire accompagné', lfi_nct_app_url('dossiers-juridiques')];
