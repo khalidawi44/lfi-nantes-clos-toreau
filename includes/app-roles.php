@@ -651,6 +651,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'appel-nmh-add':              lfi_nct_app_view_appel_nmh_add();                break;
             case 'appel-nmh-edit':             lfi_nct_app_view_appel_nmh_edit();               break;
             case 'appel-nmh-rapport':          lfi_nct_app_view_appel_nmh_rapport();            break;
+            case 'appel-guide':                lfi_nct_app_view_appel_guide();                  break;
             case 'tutoriels':               lfi_nct_app_view_tutoriels();                    break;
             case 'tutoriel':                lfi_nct_app_view_tutoriel();                     break;
             case 'agenda':                  lfi_nct_app_view_agenda();                       break;

@@ -130,6 +130,7 @@ function lfi_nct_app_view_appels_nmh() {
 
     echo '<div class="lfi-app-bulk-row">';
     echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('appel-nmh-add')) . '">+ Enregistrer un appel</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('appel-guide')) . '">📖 Comment enregistrer mes appels</a>';
     echo '</div>';
 
     if (empty($rows)) {
@@ -407,6 +408,61 @@ function lfi_nct_appel_form($row) {
     </script>
     <?php
     if (function_exists('lfi_nct_render_voice_helper')) lfi_nct_render_voice_helper();
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  Guide : comment enregistrer ses appels                          *
+ * ============================================================== */
+function lfi_nct_app_view_appel_guide() {
+    if (!lfi_nct_can_use_brigade()) return;
+    lfi_nct_app_screen_open('📖 Enregistrer mes appels', 'La marche à suivre, étape par étape');
+
+    echo '<div class="lfi-app-help" style="background:#fff3f5;border-left:4px solid #c8102e">';
+    echo '⚠️ <strong>Important :</strong> aucune app installée depuis ce site ne peut enregistrer un appel — Apple et Google le bloquent pour des raisons de sécurité. Mais ton iPhone sait déjà le faire tout seul. Voici comment.';
+    echo '</div>';
+
+    /* Méthode 1 — iOS 18 natif */
+    echo '<div style="background:#fff;border:2px solid #186a3b;border-radius:12px;padding:16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#186a3b;font-size:1.05em;margin-bottom:6px">✅ MÉTHODE RECOMMANDÉE — iPhone (iOS 18 ou plus récent)</div>';
+    echo '<div style="font-size:.92em;line-height:1.6;color:#333">';
+    echo '<strong>Gratuit, intégré, et ça transcrit automatiquement le texte.</strong><br><br>';
+    echo '1️⃣ Lance l\'appel à NMH normalement<br>';
+    echo '2️⃣ En haut à gauche de l\'écran d\'appel, appuie sur le bouton <strong>« Enregistrer »</strong> (icône avec des ondes)<br>';
+    echo '3️⃣ Un message annonce à NMH que l\'appel est enregistré (c\'est ce qui le rend légal)<br>';
+    echo '4️⃣ À la fin de l\'appel, l\'enregistrement <strong>+ sa transcription écrite</strong> sont rangés dans l\'app <strong>Notes</strong> de l\'iPhone<br>';
+    echo '5️⃣ Ouvre Notes → tu peux <strong>copier la transcription</strong> (à coller ici) et <strong>partager le fichier audio</strong> (à joindre à l\'appel)<br>';
+    echo '</div>';
+    echo '<div style="background:#e8f5ea;border-radius:8px;padding:10px;margin-top:10px;font-size:.88em">💡 Si tu ne vois pas le bouton Enregistrer : va dans <strong>Réglages → Apps → Téléphone</strong> et vérifie que l\'enregistrement d\'appel est activé. Disponible en France depuis iOS 18.2.</div>';
+    echo '</div>';
+
+    /* Méthode 2 — app dédiée */
+    echo '<div style="background:#fff;border:1.5px solid #ddd;border-radius:12px;padding:16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#0066a3;font-size:1.05em;margin-bottom:6px">📲 SI TON IPHONE EST PLUS ANCIEN — app dédiée</div>';
+    echo '<div style="font-size:.92em;line-height:1.6;color:#333">';
+    echo 'Les apps qui marchent vraiment utilisent une « conférence à 3 » : elles ajoutent une ligne qui enregistre. Les plus fiables :<br><br>';
+    echo '• <strong>TapeACall</strong> (App Store) — la référence, ~10 €/an<br>';
+    echo '• <strong>Rev Call Recorder</strong> (App Store) — gratuit, transcription payante<br><br>';
+    echo 'Après l\'appel, l\'app te donne un fichier audio → tu le joins à l\'appel ici.';
+    echo '</div>';
+    echo '</div>';
+
+    /* Méthode 3 — universelle */
+    echo '<div style="background:#fff;border:1.5px solid #ddd;border-radius:12px;padding:16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#bd8600;font-size:1.05em;margin-bottom:6px">🔊 SOLUTION DE SECOURS — sans rien installer</div>';
+    echo '<div style="font-size:.92em;line-height:1.6;color:#333">';
+    echo '1️⃣ Mets l\'appel sur <strong>haut-parleur</strong><br>';
+    echo '2️⃣ Sur un <strong>2e téléphone</strong> (ou celui d\'un voisin), lance l\'app <strong>Dictaphone</strong> et enregistre<br>';
+    echo '3️⃣ Exporte le fichier et joins-le à l\'appel ici<br>';
+    echo '</div>';
+    echo '</div>';
+
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3">';
+    echo '⚖️ <strong>C\'est légal :</strong> en France, tu as le droit d\'enregistrer une conversation à laquelle tu participes, pour t\'en servir comme preuve. L\'idéal est de prévenir (« cet appel est enregistré ») — ce que fait l\'iPhone automatiquement.';
+    echo '</div>';
+
+    echo '<div style="margin-top:16px"><a class="btn-primary big" href="' . esc_url(lfi_nct_app_url('appel-nmh-add')) . '">+ Enregistrer un appel maintenant</a></div>';
 
     lfi_nct_app_screen_close();
 }
