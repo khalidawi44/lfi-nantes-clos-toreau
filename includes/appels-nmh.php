@@ -21,7 +21,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_APPEL_DBVER_KEY = 'lfi_nct_appel_db_ver';
-const LFI_NCT_APPEL_DBVER_VAL = '1';
+const LFI_NCT_APPEL_DBVER_VAL = '2';
 
 /* Numéro NMH + tarif par défaut */
 function lfi_nct_nmh_phone()        { return (string) get_option('lfi_nct_nmh_phone', '02 40 67 07 37'); }
@@ -49,6 +49,7 @@ function lfi_nct_appel_db_setup() {
         objet VARCHAR(255) DEFAULT '',
         incidents TEXT,
         notes TEXT,
+        audio_attachment_id BIGINT UNSIGNED DEFAULT NULL,
         facture INT DEFAULT 0,
         intervention_id BIGINT UNSIGNED DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -147,6 +148,7 @@ function lfi_nct_app_view_appels_nmh() {
         if ($r->facture) echo '<div class="badge" style="background:#186a3b;color:#fff">🧾 Facturé</div>';
         elseif ($has_inc) echo '<div class="badge" style="background:#a30b25;color:#fff">⚠ Incident</div>';
         echo '</div>';
+        if (!empty($r->audio_attachment_id)) echo '<div class="meta"><span class="meta-chip" style="background:#e8f0ff;color:#0066a3">🎙 Enregistrement joint</span></div>';
         echo '<div class="meta">';
         if ($r->duree_minutes > 0) echo '<span class="meta-chip">⏱ ' . esc_html(rtrim(rtrim(number_format($r->duree_minutes, 2, ',', ' '), '0'), ',')) . ' min</span>';
         if ($r->interlocuteur)     echo '<span class="meta-chip">👤 ' . esc_html($r->interlocuteur) . '</span>';
@@ -246,13 +248,28 @@ function lfi_nct_appel_form($row) {
             'incidents'      => wp_json_encode($incidents),
             'notes'          => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
+        /* Upload éventuel d'un enregistrement audio de l'appel */
+        $audio_id = null;
+        if (!empty($_FILES['enregistrement_audio']['name'])) {
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            $att = media_handle_upload('enregistrement_audio', 0);
+            if (!is_wp_error($att)) {
+                $audio_id = (int) $att;
+                update_post_meta($audio_id, '_lfi_appel_audio', 1);
+            }
+        }
+        if ($audio_id) $data['audio_attachment_id'] = $audio_id;
+
         if ($is_edit) {
             $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
             wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $row->id, 'saved' => 1]));
         } else {
             $data['owner_user_id'] = $owner;
             $wpdb->insert($t, $data);
-            wp_safe_redirect(lfi_nct_app_url('appels-nmh', ['saved' => 1]));
+            $new_id = (int) $wpdb->insert_id;
+            wp_safe_redirect(lfi_nct_app_url('appel-nmh-edit', ['id' => $new_id, 'saved' => 1]));
         }
         exit;
     }
@@ -275,7 +292,7 @@ function lfi_nct_appel_form($row) {
 
     if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Appel enregistré.');
 
-    echo '<form method="post" class="lfi-app-form">';
+    echo '<form method="post" class="lfi-app-form" enctype="multipart/form-data">';
     wp_nonce_field('lfi_appel_save');
     echo '<input type="hidden" name="lfi_appel_save" value="1">';
 
@@ -314,6 +331,32 @@ function lfi_nct_appel_form($row) {
 
     echo '<label>📝 Transcription / notes de l\'appel<textarea name="notes" id="lfi-appel-notes" rows="6" placeholder="Ce qui a été dit, mot pour mot si possible. Cite les propos exacts s\'il y a eu manque de respect.">' . esc_textarea($r->notes) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-appel-notes" data-label="Dicter le compte-rendu"></div>';
+
+    /* === ENREGISTREMENT AUDIO === */
+    echo '<h3 style="margin:16px 0 4px;color:#0066a3">🎙 Enregistrement de l\'appel (preuve)</h3>';
+
+    /* Lecteur si un enregistrement existe déjà */
+    $audio_id = (int) ($r->audio_attachment_id ?? 0);
+    if ($audio_id) {
+        $audio_url = wp_get_attachment_url($audio_id);
+        if ($audio_url) {
+            echo '<div style="background:#e8f0ff;border-radius:8px;padding:12px;margin:6px 0">';
+            echo '<div style="font-weight:700;color:#0066a3;margin-bottom:6px">✅ Enregistrement joint :</div>';
+            echo '<audio controls preload="none" style="width:100%"><source src="' . esc_url($audio_url) . '">Ton navigateur ne peut pas lire l\'audio.</audio>';
+            echo '<div style="margin-top:6px"><a href="' . esc_url($audio_url) . '" download style="font-size:.85em;color:#0066a3">⬇️ Télécharger le fichier</a></div>';
+            echo '</div>';
+        }
+    }
+
+    echo '<div style="background:#fff8e6;border-left:4px solid #bd8600;padding:12px 14px;border-radius:8px;margin:6px 0;font-size:.88em;line-height:1.5">';
+    echo '<strong>📲 Comment enregistrer un appel sur iPhone :</strong><br><br>';
+    echo '<strong>Méthode 1 — iOS 18 et + (le plus simple) :</strong> pendant l\'appel, appuie sur le bouton <strong>Enregistrer</strong> en haut à gauche. iPhone enregistre + transcrit (un message prévient ton interlocuteur, c\'est légal). À la fin, l\'enregistrement est dans l\'app <strong>Notes</strong>. Récupère le fichier audio et joins-le ci-dessous.<br><br>';
+    echo '<strong>Méthode 2 — universelle :</strong> mets l\'appel sur <strong>haut-parleur</strong>, et sur un 2e appareil (ou via l\'app <strong>Dictaphone</strong>/Voice Memos en arrière-plan) enregistre la conversation. Exporte le fichier .m4a et joins-le ci-dessous.<br><br>';
+    echo '<em>⚖️ En France, tu as le droit d\'enregistrer une conversation à laquelle tu participes pour t\'en servir comme preuve. Préviens idéalement ton interlocuteur (« cet appel est enregistré »).</em>';
+    echo '</div>';
+
+    echo '<label>🎙 Joindre le fichier audio<input type="file" name="enregistrement_audio" accept="audio/*"></label>';
+    echo '<div class="lfi-app-help"><small>Formats acceptés : m4a, mp3, wav, etc. Le fichier devient une pièce du dossier, lisible directement ici.</small></div>';
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Enregistrer l\'appel') . '</button>';
     echo '</form>';
@@ -434,6 +477,11 @@ function lfi_nct_app_view_appel_nmh_rapport() {
     if ($row->notes) {
         echo '<h2>Compte-rendu détaillé</h2>';
         echo '<p>' . nl2br(esc_html($row->notes)) . '</p>';
+    }
+
+    if (!empty($row->audio_attachment_id)) {
+        echo '<h2>Pièce justificative</h2>';
+        echo '<p>Un <strong>enregistrement audio de la conversation</strong> a été conservé et peut être communiqué sur demande, ou produit à l\'appui de toute procédure de médiation ou contentieuse.</p>';
     }
 
     echo '<h2>Rappel des obligations</h2>';
