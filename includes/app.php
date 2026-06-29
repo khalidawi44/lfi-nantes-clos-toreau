@@ -428,6 +428,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
                     case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
                     case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
+                    case 'association':                lfi_nct_app_view_association();                  break;
                     case 'asso-statuts':               lfi_nct_app_view_asso_statuts();                 break;
                     case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
                     case 'dossier-doc-adhesion':       lfi_nct_app_view_dossier_doc_adhesion();         break;
@@ -1248,37 +1249,39 @@ function lfi_nct_admin_get_tiles($stats = null) {
 function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
     return [
-        '🏠 ENQUÊTE LOGEMENT' => [
+        '🟣 ESPACE GROUPE D\'ACTION' => [
+            ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+            ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
+            ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
+            ['📣', 'Inscrits réunion',       $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
+            ['📱', 'SMS aux adhérents',      'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+            ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
+            ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
+        ],
+        '📋 ENQUÊTE LOGEMENT (terrain)' => [
             ['🏠', 'Réponses',              $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
             ['📊', 'Stats enquête',          'Problèmes · adresses · gravité',     lfi_nct_app_url('stats-enquete')],
             ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
             ['➕', 'Saisir une réponse',     'Porte-à-porte / papier',             lfi_nct_app_url('temoignage-add')],
         ],
-        '👥 PERSONNES & COMPTES' => [
-            ['📣', 'Inscrits 26 juin',       $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
-            ['🗂', 'Dossiers locataires',    'Photos · historique',                 lfi_nct_app_url('dossiers')],
-            ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
-            ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
-            ['🏠', 'Comptes Locataires',     'Créer · reset mot de passe',          lfi_nct_app_url('comptes-locataires')],
-        ],
-        '📨 COMMUNICATION' => [
-            ['📱', 'SMS aux adhérents',      'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+        '🏠 ESPACE LOCATAIRES' => [
+            ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
+            ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
             ['📲', 'SMS aux locataires',     'Vouvoiement · 7 modèles',             lfi_nct_app_url('sms-locataires')],
-            ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
-            ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
         ],
-        '📅 ÉVÉNEMENTS' => [
-            ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
-        ],
-        '🔧 BRIGADE TRAVAUX' => [
-            ['📅', 'Agenda',                 'Tous mes RDV et interventions',       lfi_nct_app_url('agenda')],
-            ['🔧', 'Interventions',          'Suivi & facturation NMH',             lfi_nct_app_url('interventions')],
-            ['⚖️', 'Recouvrement NMH',       'Mandat, mise en demeure, tribunal',    lfi_nct_app_url('recouvrements')],
-            ['📁', 'Dossiers juridiques',    'LRAR travaux + relogement + SCHS/ARS', lfi_nct_app_url('dossiers-juridiques')],
+        '🔧 ESPACE INTERVENTION (brigade)' => [
+            ['🔧', 'Interventions',          'Travaux chez les locataires',         lfi_nct_app_url('interventions')],
             ['☎️', 'Appels NMH',            'Journal + rapports d\'incident',       lfi_nct_app_url('appels-nmh')],
-            ['🛠', 'Tutoriels',              'Guides pros par problème',            lfi_nct_app_url('tutoriels')],
+            ['⚖️', 'Recouvrement NMH',       'Mise en demeure, tribunal',           lfi_nct_app_url('recouvrements')],
+            ['📅', 'Agenda',                 'RDV et interventions',                lfi_nct_app_url('agenda')],
+            ['🛠', 'Tutoriels',              'Guides par problème',                 lfi_nct_app_url('tutoriels')],
             ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
             ['⚙️', 'Paramètres facturation', 'Prestataire · bailleur · tarif',      lfi_nct_app_url('facturation-params')],
+        ],
+        '🏛 ESPACE ASSOCIATION' => [
+            ['🏛', 'Association',            'Statuts · identité · documents',      lfi_nct_app_url('association')],
+            ['📁', 'Dossiers juridiques',    'LRAR · relogement · SCHS/ARS',        lfi_nct_app_url('dossiers-juridiques')],
+            ['⚖️', 'Cadre juridique',        'Ce qui est facturable, par qui',      lfi_nct_app_url('cadre-juridique')],
         ],
         '⚙️ SYSTÈME' => [
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],

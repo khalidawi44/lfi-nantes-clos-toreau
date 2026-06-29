@@ -357,8 +357,22 @@ function lfi_nct_app_dossier_juridique_form($row) {
             'certificat_date'      => sanitize_text_field(wp_unslash($_POST['certificat_date'] ?? '')) ?: null,
             'demandes'             => wp_json_encode($demandes),
             'statut'               => sanitize_key($_POST['statut'] ?? 'ouvert'),
-            'notes'                => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
+
+        /* Notes : préserve les logs d'emails (envoyés/reçus) stockés en JSON
+           dans le même champ. On ne réécrit QUE la partie texte libre. */
+        $new_notes_txt = sanitize_textarea_field(wp_unslash($_POST['notes'] ?? ''));
+        if ($is_edit) {
+            $existing = json_decode($row->notes ?? '', true);
+            if (is_array($existing) && (isset($existing['email_log']) || isset($existing['email_recu']) || isset($existing['__notes']))) {
+                $existing['__notes'] = $new_notes_txt;
+                $data['notes'] = wp_json_encode($existing, JSON_UNESCAPED_UNICODE);
+            } else {
+                $data['notes'] = $new_notes_txt;
+            }
+        } else {
+            $data['notes'] = $new_notes_txt;
+        }
 
         if ($is_edit) {
             $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
@@ -379,6 +393,27 @@ function lfi_nct_app_dossier_juridique_form($row) {
             wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'marked' => $etape]));
             exit;
         }
+    }
+
+    /* Enregistrer un email REÇU (réponse de NMH / M. Morineau…) dans le dossier */
+    if ($is_edit && !empty($_POST['lfi_dossier_email_recu']) && check_admin_referer('lfi_dossier_email_recu')) {
+        $de    = sanitize_text_field(wp_unslash($_POST['email_de'] ?? ''));
+        $objet = sanitize_text_field(wp_unslash($_POST['email_objet'] ?? ''));
+        $corps = sanitize_textarea_field(wp_unslash($_POST['email_corps'] ?? ''));
+        if ($corps !== '' || $objet !== '') {
+            $logs = json_decode($row->notes ?? '', true);
+            if (!is_array($logs)) $logs = ['__notes' => $row->notes ?? ''];
+            $logs['email_recu'] = $logs['email_recu'] ?? [];
+            $logs['email_recu'][] = [
+                'de'    => $de,
+                'objet' => $objet,
+                'corps' => $corps,
+                'date'  => current_time('Y-m-d H:i'),
+            ];
+            $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $row->id, 'owner_user_id' => $owner]);
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'email_recu_ok' => 1]));
+        exit;
     }
 
     /* Facturer la visite (temps de constat) — ANTI-DOUBLON */
@@ -452,7 +487,8 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Dossier enregistré.');
     if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
     if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
-    if (!empty($_GET['email_sent']))   lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
+    if (!empty($_GET['email_sent']))     lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
+    if (!empty($_GET['email_recu_ok']))  lfi_nct_app_flash('📥 Email reçu enregistré dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
 
     echo '<form method="post" class="lfi-app-form">';
@@ -530,7 +566,11 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<option value="' . esc_attr($k) . '" ' . selected($r->statut, $k, false) . '>' . esc_html($lbl) . '</option>';
     }
     echo '</select></label>';
-    echo '<label>Notes internes (non publiées)<textarea name="notes" id="lfi-notes-dossier" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
+    /* Notes : on ne montre PAS le JSON brut si des logs y sont stockés */
+    $notes_raw = $r->notes ?? '';
+    $notes_decoded = json_decode($notes_raw, true);
+    $notes_display = (is_array($notes_decoded) && isset($notes_decoded['__notes'])) ? $notes_decoded['__notes'] : (is_array($notes_decoded) ? '' : $notes_raw);
+    echo '<label>Notes internes (non publiées)<textarea name="notes" id="lfi-notes-dossier" rows="2">' . esc_textarea($notes_display) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-notes-dossier" data-label="Dicter mes notes"></div>';
 
     echo '<button type="submit" class="btn-primary big">' . ($is_edit ? '💾 Enregistrer' : '+ Créer le dossier') . '</button>';
@@ -707,6 +747,50 @@ function lfi_nct_app_dossier_juridique_form($row) {
             echo '</li>';
         }
         echo '</ul>';
+
+        /* === SUIVI DES EMAILS (envoyés + reçus) === */
+        echo '<h3 style="margin:24px 0 8px;color:#c8102e">📧 Correspondance avec NMH</h3>';
+        $logs = json_decode($row->notes ?? '', true);
+        $sent = (is_array($logs) && !empty($logs['email_log'])) ? $logs['email_log'] : [];
+        $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
+        /* Fusion chronologique */
+        $timeline = [];
+        foreach ($sent as $e) { $e['sens'] = 'envoye'; $timeline[] = $e; }
+        foreach ($recu as $e) { $e['sens'] = 'recu';   $timeline[] = $e; }
+        usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
+
+        if (empty($timeline)) {
+            echo '<div class="lfi-app-help">Aucun email conservé pour l\'instant. Les emails que tu envoies (bouton « 📧 Envoyer par email ») sont archivés ici. Tu peux aussi coller un email REÇU ci-dessous.</div>';
+        } else {
+            echo '<ul class="lfi-app-list">';
+            foreach ($timeline as $e) {
+                $is_recu = ($e['sens'] === 'recu');
+                echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
+                echo '<div class="head"><div class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</div>';
+                echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
+                echo '<div class="meta">';
+                if ($is_recu && !empty($e['de'])) echo '<span class="meta-chip">de ' . esc_html($e['de']) . '</span>';
+                if (!$is_recu && !empty($e['to'])) echo '<span class="meta-chip">à ' . esc_html($e['to']) . '</span>';
+                echo '</div>';
+                if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
+                if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
+                echo '</li>';
+            }
+            echo '</ul>';
+        }
+
+        /* Formulaire : coller un email reçu */
+        echo '<details style="margin-top:10px;background:#e8f0ff;border-radius:8px;padding:10px 14px">';
+        echo '<summary style="cursor:pointer;font-weight:700;color:#0066a3">📥 Enregistrer un email reçu (ex : réponse de M. Morineau)</summary>';
+        echo '<form method="post" class="lfi-app-form" style="margin-top:10px">';
+        wp_nonce_field('lfi_dossier_email_recu');
+        echo '<input type="hidden" name="lfi_dossier_email_recu" value="1">';
+        echo '<label>De (expéditeur)<input type="text" name="email_de" placeholder="yvonnic.morineau@nmh.fr"></label>';
+        echo '<label>Objet<input type="text" name="email_objet" placeholder="Re: Mme Fadila — relogement"></label>';
+        echo '<label>Contenu de l\'email<textarea name="email_corps" rows="5" placeholder="Colle ici le texte de l\'email reçu…"></textarea></label>';
+        echo '<button type="submit" class="btn-primary">📥 Enregistrer dans le dossier</button>';
+        echo '</form>';
+        echo '</details>';
 
         /* Suppression définitive */
         echo '<form method="post" style="margin-top:24px" onsubmit="return confirm(\'Supprimer définitivement ce dossier ? Action irréversible.\')">';
@@ -1370,11 +1454,66 @@ function lfi_nct_app_view_cadre_juridique() {
 }
 
 /* ============================================================== *
+ *  ESPACE ASSOCIATION — hub central (config, documents, factures)  *
+ * ============================================================== */
+function lfi_nct_app_view_association() {
+    if (!lfi_nct_can_use_brigade()) return;
+    $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des Quartiers Libres'];
+    $is_admin = current_user_can('manage_options');
+
+    lfi_nct_app_screen_open('🏛 ' . ($asso['nom'] ?: 'Association'), 'Espace association — documents & gestion');
+
+    /* Carte d'identité de l'asso */
+    echo '<div class="lfi-app-card">';
+    echo '<div class="head"><div class="who">📇 Identité</div></div>';
+    echo '<div class="meta">';
+    if (!empty($asso['rna']))       echo '<span class="meta-chip">RNA ' . esc_html($asso['rna']) . '</span>';
+    if (!empty($asso['siege']))     echo '<span class="meta-chip">📍 ' . esc_html(trim($asso['siege'] . ' ' . ($asso['cp_ville'] ?? ''))) . '</span>';
+    if (!empty($asso['president'])) echo '<span class="meta-chip">👤 ' . esc_html($asso['president']) . ' (prés.)</span>';
+    if (!empty($asso['secretaire']))echo '<span class="meta-chip">✍️ ' . esc_html($asso['secretaire']) . ' (secr.)</span>';
+    if (!empty($asso['email']))     echo '<span class="meta-chip">✉️ ' . esc_html($asso['email']) . '</span>';
+    echo '</div>';
+    if ($is_admin) {
+        echo '<div class="row-actions"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">⚙️ Modifier les infos & signatures</a></div>';
+    }
+    echo '</div>';
+
+    /* Tuiles de documents */
+    echo '<h3 style="margin:18px 0 8px;color:#c8102e">📄 Documents de l\'association</h3>';
+    echo '<div class="lfi-app-grid">';
+    $tiles = [];
+    if ($is_admin) {
+        $tiles[] = ['📜', 'Modifier les statuts', 'Convocation + PV + statuts à jour, signés', lfi_nct_app_url('asso-statuts')];
+    }
+    $tiles[] = ['⚖️', 'Cadre juridique', 'Ce qui est facturable, comment, par qui', lfi_nct_app_url('cadre-juridique')];
+    $tiles[] = ['📁', 'Dossiers juridiques', 'Un dossier par locataire accompagné', lfi_nct_app_url('dossiers-juridiques')];
+    $tiles[] = ['🔧', 'Interventions & factures', 'Brigade travaux, facturation NMH', lfi_nct_app_url('interventions')];
+    foreach ($tiles as $t) {
+        echo '<a class="lfi-app-tile" href="' . esc_url($t[3]) . '">';
+        echo '<div class="ico">' . $t[0] . '</div>';
+        echo '<div class="tit">' . esc_html($t[1]) . '</div>';
+        echo '<div class="sub">' . esc_html($t[2]) . '</div>';
+        echo '</a>';
+    }
+    echo '</div>';
+
+    /* Rappel : bulletin d'adhésion se génère depuis chaque dossier locataire */
+    echo '<div class="lfi-app-help" style="margin-top:14px">💡 Le <strong>bulletin d\'adhésion</strong> d\'un locataire se génère depuis SON dossier juridique (chaque locataire adhère individuellement). Ouvre un dossier dans 📁 Dossiers juridiques → bouton « 🎫 Bulletin d\'adhésion ».</div>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
  *  DOSSIER DE MODIFICATION DES STATUTS (ester en justice + logement)*
  *  À déposer en préfecture. Imprimable / PDF.                       *
  * ============================================================== */
 function lfi_nct_app_view_asso_statuts() {
-    if (!current_user_can('manage_options')) return;
+    if (!current_user_can('manage_options')) {
+        lfi_nct_app_screen_open('📜 Statuts');
+        echo '<div class="lfi-app-empty">Cette page est réservée à l\'administrateur. Si tu es en mode aperçu, reviens en mode admin. <a href="' . esc_url(lfi_nct_app_url('')) . '">← Accueil</a></div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
     $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
     $nom = $asso['nom'] ?: 'Union des quartiers libres';
     $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));

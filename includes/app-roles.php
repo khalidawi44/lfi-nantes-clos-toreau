@@ -643,6 +643,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
             case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
             case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
+            case 'association':                lfi_nct_app_view_association();                  break;
             case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
             case 'dossier-doc-adhesion':       lfi_nct_app_view_dossier_doc_adhesion();         break;
             case 'dossier-doc-lrar-travaux':   lfi_nct_app_view_dossier_doc_lrar_travaux();     break;
@@ -716,6 +717,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['⚖️', 'Mes recouvrements NMH',     'Mandat, mise en demeure, tribunal',   lfi_nct_app_url('recouvrements')],
         ['📁', 'Dossiers juridiques',       'Travaux urgents, relogement médical', lfi_nct_app_url('dossiers-juridiques')],
         ['☎️', 'Appels NMH',                'Journal + rapports d\'incident',      lfi_nct_app_url('appels-nmh')],
+        ['🏛', 'Association',               'Statuts, adhésions, cadre légal',    lfi_nct_app_url('association')],
         ['🛠', 'Tutoriels brigade',         'Plâtre, peinture, plomberie…',        lfi_nct_app_url('tutoriels')],
         ['🔬', 'Outils scientifiques',      'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
         ['📅', 'Mon agenda perso',          'RDV, interventions, perso',           lfi_nct_app_url('agenda')],
