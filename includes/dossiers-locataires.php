@@ -613,61 +613,115 @@ function lfi_nct_render_voice_helper() {
     $rendered = true;
     ?>
     <style>
+    .lfi-voice-wrap {
+        background: #fff8e6; border-left: 4px solid #bd8600;
+        padding: 10px 14px; border-radius: 8px; margin-top: 8px;
+        font-size: .92em; line-height: 1.5;
+    }
+    .lfi-voice-wrap.unsupported { background: #f5f5f5; border-left-color: #999; }
+    .lfi-voice-tip {
+        background: #e8f0ff; border-left: 4px solid #2e7dd7;
+        padding: 10px 14px; border-radius: 8px; margin-top: 6px;
+        font-size: .88em; line-height: 1.5; color: #1a3a5c;
+    }
     .lfi-voice-btn {
         background: #fff; color: #c8102e; border: 1.5px solid #c8102e;
-        padding: 8px 14px; border-radius: 8px; font-weight: 700; cursor: pointer;
-        margin-top: 6px; font-size: .92em; display: inline-flex; align-items: center;
-        gap: 6px; transition: all .15s;
+        padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer;
+        font-size: .95em; display: inline-flex; align-items: center;
+        gap: 6px; transition: all .15s; -webkit-appearance: none;
     }
-    .lfi-voice-btn.listening { background: #c8102e; color: #fff; animation: lfi-pulse 1.2s infinite; }
-    @keyframes lfi-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(200,16,46,.6); } 50% { box-shadow: 0 0 0 8px rgba(200,16,46,0); } }
-    .lfi-voice-unavailable { font-size: .85em; color: #888; font-style: italic; margin-top: 4px; }
-    .lfi-voice-status { font-size: .85em; color: #666; margin-top: 4px; min-height: 18px; }
+    .lfi-voice-btn.listening {
+        background: #c8102e; color: #fff;
+        animation: lfi-pulse 1.2s infinite;
+    }
+    @keyframes lfi-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(200,16,46,.6); }
+        50%      { box-shadow: 0 0 0 10px rgba(200,16,46,0); }
+    }
+    .lfi-voice-status { font-size: .9em; color: #555; margin-top: 6px; min-height: 18px; }
     </style>
     <script>
     (function () {
         var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        var ua = navigator.userAgent || '';
+        var isiOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        var isStandalonePWA = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+
         document.querySelectorAll('.lfi-voice-zone').forEach(function (zone) {
             var fieldId = zone.getAttribute('data-target');
             var label = zone.getAttribute('data-label') || 'Dicter';
             var field = document.getElementById(fieldId);
             if (!field) return;
 
+            /* === ASTUCE CLAVIER iOS — fonctionne TOUJOURS sur iPhone === */
+            if (isiOS) {
+                var tip = document.createElement('div');
+                tip.className = 'lfi-voice-tip';
+                tip.innerHTML = '💡 <strong>Astuce iPhone qui marche à 100%</strong> :<br>' +
+                                '1. Touche le champ ci-dessus pour ouvrir le clavier<br>' +
+                                '2. Appuie sur le petit micro 🎤 du clavier iOS (en bas, à côté de la barre d\'espace)<br>' +
+                                '3. Parle naturellement, ta voix s\'écrit directement dans le champ<br>' +
+                                '<em>C\'est la dictée Apple : pas besoin d\'autorisation, ça marche partout, partout, partout.</em>';
+                zone.appendChild(tip);
+            }
+
+            /* === Bouton dictée vocale via API navigateur === */
             if (!SR) {
-                zone.innerHTML = '<div class="lfi-voice-unavailable">🎤 Dictée vocale indisponible sur ce navigateur (utilise Chrome, Edge ou Safari iOS).</div>';
+                if (!isiOS) {
+                    var info = document.createElement('div');
+                    info.className = 'lfi-voice-wrap unsupported';
+                    info.innerHTML = '🎤 La dictée vocale du navigateur n\'est pas disponible ici. Utilise Chrome, Edge ou Safari récent.';
+                    zone.appendChild(info);
+                }
                 return;
             }
+
+            var wrap = document.createElement('div');
+            wrap.className = 'lfi-voice-wrap';
+            zone.appendChild(wrap);
 
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'lfi-voice-btn';
             btn.innerHTML = '🎤 ' + label;
-            zone.appendChild(btn);
+            wrap.appendChild(btn);
 
             var status = document.createElement('div');
             status.className = 'lfi-voice-status';
-            zone.appendChild(status);
+            wrap.appendChild(status);
 
             var recognition = null;
             var listening = false;
+            var manualStop = false;
             var anchor = '';
+            var lastFinal = '';
 
-            btn.addEventListener('click', function () {
-                if (listening) {
-                    if (recognition) recognition.stop();
-                    return;
+            function ensureSeparator(s) {
+                if (!s) return '';
+                if (/[\s\.\!\?]$/.test(s)) return s;
+                return s + ' ';
+            }
+
+            function buildRecognition() {
+                var r;
+                try { r = new SR(); } catch (e) { return null; }
+                /* iOS Safari ne supporte que single-shot (continuous = false).
+                   Sur les autres on tente continuous = true. */
+                r.continuous     = !isiOS;
+                r.interimResults = true;
+                try { r.lang = 'fr-FR'; } catch (e) {}
+                return r;
+            }
+
+            function start() {
+                recognition = buildRecognition();
+                if (!recognition) {
+                    status.textContent = 'Impossible de démarrer le micro (API indisponible).';
+                    return false;
                 }
-                try {
-                    recognition = new SR();
-                } catch (e) {
-                    status.textContent = 'Erreur micro : ' + e.message;
-                    return;
-                }
-                recognition.lang = 'fr-FR';
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                anchor = field.value || '';
-                if (anchor && !/[\s\.\!\?]$/.test(anchor)) anchor += ' ';
+                anchor = ensureSeparator(field.value);
+                lastFinal = '';
+                manualStop = false;
 
                 recognition.onresult = function (event) {
                     var fin = '', interim = '';
@@ -676,26 +730,43 @@ function lfi_nct_render_voice_helper() {
                         if (event.results[i].isFinal) fin += t + ' ';
                         else interim += t;
                     }
-                    field.value = anchor + fin + interim;
-                    status.textContent = interim ? '… ' + interim : '✓ ' + (fin ? fin.slice(0, 50) + '…' : '');
+                    if (fin) lastFinal += fin;
+                    field.value = anchor + lastFinal + interim;
+                    status.textContent = interim ? '… ' + interim.slice(-40) : '✓ enregistré';
                 };
-                recognition.onend = function () {
-                    listening = false;
-                    btn.classList.remove('listening');
-                    btn.innerHTML = '🎤 ' + label;
-                    status.textContent = field.value !== anchor ? '✅ Enregistré dans le champ.' : '';
-                };
+
                 recognition.onerror = function (e) {
-                    listening = false;
-                    btn.classList.remove('listening');
-                    btn.innerHTML = '🎤 ' + label;
-                    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-                        status.textContent = '🔒 Autorise l\'accès au micro pour le site.';
-                    } else if (e.error === 'no-speech') {
-                        status.textContent = '🤫 Pas de voix détectée, réessaie.';
+                    var err = e && e.error ? e.error : 'inconnue';
+                    if (err === 'not-allowed' || err === 'service-not-allowed') {
+                        status.textContent = '🔒 Le micro est bloqué. Vérifie les Réglages Safari → Site Web → Microphone.';
+                        manualStop = true;
+                    } else if (err === 'no-speech') {
+                        status.textContent = '🤫 Pas de voix détectée…';
+                    } else if (err === 'audio-capture') {
+                        status.textContent = '🎙 Pas de micro accessible. Vérifie l\'autorisation.';
+                        manualStop = true;
+                    } else if (err === 'network') {
+                        status.textContent = '📡 Erreur réseau. Essaie en wifi.';
                     } else {
-                        status.textContent = 'Erreur : ' + e.error;
+                        status.textContent = 'Erreur : ' + err;
                     }
+                };
+
+                recognition.onend = function () {
+                    /* Sur iOS le moteur s'arrête après chaque pause — on
+                       redémarre tant que l'utilisateur n'a pas cliqué Stop. */
+                    if (!manualStop) {
+                        setTimeout(function () {
+                            if (manualStop) return;
+                            anchor = ensureSeparator(field.value);
+                            lastFinal = '';
+                            try { recognition.start(); } catch (e) {
+                                stopListening();
+                            }
+                        }, 80);
+                        return;
+                    }
+                    stopListening();
                 };
 
                 try {
@@ -703,10 +774,32 @@ function lfi_nct_render_voice_helper() {
                     listening = true;
                     btn.classList.add('listening');
                     btn.innerHTML = '⏹ Arrêter la dictée';
-                    status.textContent = '🎙 J\'écoute… parle naturellement.';
+                    status.textContent = '🎙 Parle… ta voix s\'écrit dans le champ.';
+                    return true;
                 } catch (e) {
-                    status.textContent = 'Impossible de démarrer : ' + e.message;
+                    status.textContent = 'Impossible de démarrer : ' + (e.message || e.name || 'erreur');
+                    stopListening();
+                    return false;
                 }
+            }
+
+            function stopListening() {
+                listening = false;
+                btn.classList.remove('listening');
+                btn.innerHTML = '🎤 ' + label;
+                if (status.textContent.indexOf('🔒') === -1 && status.textContent.indexOf('Erreur') === -1) {
+                    status.textContent = field.value !== anchor ? '✅ Texte ajouté dans le champ.' : '';
+                }
+            }
+
+            btn.addEventListener('click', function () {
+                if (listening) {
+                    manualStop = true;
+                    try { recognition && recognition.stop(); } catch (e) {}
+                    stopListening();
+                    return;
+                }
+                start();
             });
         });
     })();
