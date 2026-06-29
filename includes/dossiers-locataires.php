@@ -1375,17 +1375,61 @@ function lfi_nct_app_view_asso_statuts() {
 
     /* Mode d'emploi (à l'écran, pas imprimé) */
     echo '<div class="lfi-app-help no-print" style="background:#e8f0ff;border-left:4px solid #0066a3">';
-    echo '<strong>📋 Procédure (gratuite) :</strong><br>';
-    echo '1. Réunir une <strong>Assemblée Générale Extraordinaire</strong> (même à quelques membres, selon tes statuts).<br>';
-    echo '2. Voter les modifications (le PV ci-dessous est prêt).<br>';
-    echo '3. Mettre à jour le texte des statuts (articles ci-dessous).<br>';
+    echo '<strong>📋 Procédure (gratuite) — ce document contient la convocation ET le PV :</strong><br>';
+    echo '1. <strong>Convoquer</strong> les membres à l\'AGE (1re page ci-dessous), en respectant le délai prévu par tes statuts (souvent 15 jours).<br>';
+    echo '2. Tenir l\'<strong>Assemblée Générale Extraordinaire</strong> et voter les modifications.<br>';
+    echo '3. Signer le <strong>PV</strong> (2e page) + mettre à jour le texte des statuts (articles fournis).<br>';
     echo '4. Déclarer la modification <strong>dans les 3 mois</strong> sur <strong>lecompteasso.associations.gouv.fr</strong> (ou Cerfa n° 13972*03 à la préfecture de Loire-Atlantique), en joignant le PV + les statuts mis à jour datés et signés.<br>';
     echo '<em>⚖️ Fais relire par l\'ADIL 44 ou Juris\'Asso avant dépôt. Ceci est un modèle, pas un avis d\'avocat.</em>';
     echo '</div>';
 
+    /* ============ DOC 1 : CONVOCATION À L'AGE ============ */
     echo '<div class="lfi-rec-doc">';
 
-    /* ---- PV d'AGE ---- */
+    echo '<h1>Convocation à l\'Assemblée Générale Extraordinaire</h1>';
+    echo '<p style="text-align:center"><strong>' . esc_html($nom) . '</strong>';
+    if (!empty($asso['rna'])) echo '<br>Association déclarée — n° RNA ' . esc_html($asso['rna']);
+    if ($siege) echo '<br>Siège : ' . esc_html($siege);
+    echo '</p>';
+
+    echo '<div class="lieu-date">À Nantes, le ____ / ____ / 20____</div>';
+    echo '<p class="objet">Objet : Convocation à l\'Assemblée Générale Extraordinaire</p>';
+
+    echo '<p>Chère adhérente, cher adhérent,</p>';
+    echo '<p>En ma qualité de président de l\'association <strong>' . esc_html($nom) . '</strong>, j\'ai l\'honneur de vous convoquer à l\'<strong>Assemblée Générale Extraordinaire</strong> qui se tiendra :</p>';
+
+    echo '<table class="detail">';
+    echo '<tr><td><strong>Date</strong></td><td>____ / ____ / 20____ à ____ h ____</td></tr>';
+    echo '<tr><td><strong>Lieu</strong></td><td>' . esc_html($siege ?: '__________________________') . '</td></tr>';
+    echo '</table>';
+
+    echo '<h2>Ordre du jour</h2>';
+    echo '<div class="citations"><ol>';
+    echo '<li>Modification de l\'objet social (article 2) : défense des locataires, logement, lutte contre l\'habitat indigne ;</li>';
+    echo '<li>Ajout d\'un article relatif aux moyens d\'action et à la <strong>capacité d\'ester en justice</strong> ;</li>';
+    echo '<li>Adoption des statuts mis à jour ;</li>';
+    echo '<li>Pouvoirs au président pour les formalités de déclaration en préfecture ;</li>';
+    echo '<li>Questions diverses.</li>';
+    echo '</ol></div>';
+
+    echo '<p>Chaque membre peut se faire représenter par un autre membre muni d\'un <strong>pouvoir écrit</strong> (coupon ci-dessous). En cas d\'empêchement, merci de retourner votre pouvoir avant la réunion.</p>';
+    echo '<p>Comptant sur votre présence, je vous prie d\'agréer mes salutations associatives.</p>';
+    echo '<div class="signature">' . esc_html($pres) . '<br><em>Président</em></div>';
+
+    echo '<div style="margin-top:26px;border:1px dashed #999;padding:14px;border-radius:8px">';
+    echo '<p style="text-align:center;font-weight:700;margin-top:0">✂ — — — POUVOIR — — —</p>';
+    echo '<p>Je soussigné(e) ____________________________, membre de l\'association ' . esc_html($nom) . ', donne pouvoir à ____________________________ pour me représenter et voter en mon nom à l\'Assemblée Générale Extraordinaire du ____ / ____ / 20____.</p>';
+    echo '<p>Fait à ____________, le ____ / ____ / 20____. &nbsp; Signature : ____________</p>';
+    echo '</div>';
+
+    echo '</div>';
+
+    /* Saut de page avant le PV */
+    echo '<div style="page-break-before:always;height:1px"></div>';
+
+    /* ============ DOC 2 : PV d'AGE ============ */
+    echo '<div class="lfi-rec-doc">';
+
     echo '<h1>Procès-verbal d\'Assemblée Générale Extraordinaire</h1>';
     echo '<p style="text-align:center"><strong>' . esc_html($nom) . '</strong>';
     if (!empty($asso['rna'])) echo '<br>Association déclarée — n° RNA ' . esc_html($asso['rna']);
