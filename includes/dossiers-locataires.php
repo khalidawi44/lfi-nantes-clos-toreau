@@ -2259,6 +2259,23 @@ function lfi_nct_app_view_dossier_doc_analyse_nmh() {
     $timeline = [];
     foreach ($sent as $e) { $e['sens'] = 'envoye'; $timeline[] = $e; }
     foreach ($recu as $e) { $e['sens'] = 'recu';   $timeline[] = $e; }
+
+    /* Contenu géré par le code (content/analyses-nmh.php) : si une analyse
+       est rattachée à ce dossier, elle est PRIORITAIRE — c'est le contenu
+       qu'on a rédigé ensemble ici, poussé via GitHub. */
+    $from_code = function_exists('lfi_nct_content_nmh_for_dossier')
+        ? lfi_nct_content_nmh_for_dossier($dossier->id) : null;
+    if ($from_code) {
+        if (!empty($from_code['emails']) && is_array($from_code['emails'])) {
+            foreach ($from_code['emails'] as $e) {
+                if (!is_array($e)) continue;
+                $e['sens'] = ($e['sens'] ?? 'recu') === 'envoye' ? 'envoye' : 'recu';
+                $timeline[] = $e;
+            }
+        }
+        if (!empty($from_code['analyse'])) $analyse_perso = (string) $from_code['analyse'];
+    }
+
     usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
 
     echo '<div class="lfi-rec-doc">';
