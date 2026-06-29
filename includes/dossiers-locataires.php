@@ -1454,6 +1454,140 @@ function lfi_nct_app_view_cadre_juridique() {
 }
 
 /* ============================================================== *
+ *  IMPORT D'EMAIL — colle un email brut, l'app détecte tout         *
+ *  (expéditeur, objet, date, LOCATAIRE concerné) et le range dans   *
+ *  le bon dossier juridique.                                         *
+ * ============================================================== */
+function lfi_nct_email_parse($raw) {
+    $out = ['de' => '', 'objet' => '', 'date' => '', 'corps' => trim($raw)];
+    if (preg_match('/^(?:de|from)\s*:\s*(.+)$/im', $raw, $m)) $out['de'] = trim($m[1]);
+    if (!$out['de'] && preg_match('/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i', $raw, $m)) $out['de'] = $m[0];
+    if (preg_match('/^(?:objet|subject)\s*:\s*(.+)$/im', $raw, $m)) $out['objet'] = trim($m[1]);
+    if (preg_match('/^(?:date|envoyé|le)\s*:\s*(.+)$/im', $raw, $m)) $out['date'] = trim($m[1]);
+    return $out;
+}
+
+function lfi_nct_email_detect_tenant($texte) {
+    if (!defined('LFI_NCT_ROLE_TENANT')) return [];
+    global $wpdb;
+    $texte_l = ' ' . strtolower(remove_accents($texte)) . ' ';
+    $tenants = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID', 'display_name'], 'number' => 500]);
+    $scores = [];
+    foreach ($tenants as $u) {
+        $score = 0;
+        $full = get_userdata($u->ID);
+        foreach ([$full->last_name, $full->first_name] as $part) {
+            $p = strtolower(remove_accents(trim($part)));
+            if (strlen($p) >= 3 && strpos($texte_l, ' ' . $p) !== false) $score += 3;
+        }
+        $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+        if ($rid) {
+            $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+            if ($resp && $resp->adresse) {
+                $rue = strtolower(remove_accents(preg_replace('/^\s*\d+\s*(bis|ter)?\s*/i', '', $resp->adresse)));
+                $rue = trim(preg_replace('/^(rue|avenue|boulevard|impasse|place|allee|chemin)\s+(de\s+la\s+|de\s+l.|des\s+|du\s+|de\s+|d.|la\s+|le\s+|les\s+)?/i', '', $rue));
+                if (strlen($rue) >= 5 && strpos($texte_l, $rue) !== false) $score += 2;
+            }
+        }
+        if ($score > 0) $scores[$u->ID] = $score;
+    }
+    arsort($scores);
+    return $scores;
+}
+
+function lfi_nct_app_view_email_import() {
+    if (!lfi_nct_can_use_brigade()) return;
+    global $wpdb;
+    $owner = (int) lfi_nct_dossier_owner_id();
+    $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+
+    if (!empty($_POST['lfi_email_import_save']) && check_admin_referer('lfi_email_import_save')) {
+        $uid   = (int) ($_POST['tenant_uid'] ?? 0);
+        $sens  = ($_POST['sens'] ?? 'recu') === 'envoye' ? 'envoye' : 'recu';
+        $de    = sanitize_text_field(wp_unslash($_POST['email_de'] ?? ''));
+        $objet = sanitize_text_field(wp_unslash($_POST['email_objet'] ?? ''));
+        $corps = sanitize_textarea_field(wp_unslash($_POST['email_corps'] ?? ''));
+        $u = $uid ? get_userdata($uid) : null;
+        if ($u) {
+            $dossier = $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE owner_user_id = %d AND tenant_user_id = %d ORDER BY id DESC LIMIT 1", $owner, $uid));
+            if (!$dossier) {
+                $resp = null;
+                $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+                if ($rid) $resp = $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+                $wpdb->insert($td, [
+                    'owner_user_id' => $owner, 'tenant_user_id' => $uid,
+                    'tenant_prenom' => $u->first_name, 'tenant_nom' => $u->last_name ?: $u->display_name,
+                    'tenant_adresse'=> $resp->adresse ?? '', 'tenant_etage' => $resp->etage ?? '',
+                    'tenant_email'  => $u->user_email, 'tenant_tel' => (string) get_user_meta($uid, 'lfi_nct_tel', true),
+                    'statut' => 'ouvert',
+                ]);
+                $dossier = $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE id = %d", (int) $wpdb->insert_id));
+            }
+            $logs = json_decode($dossier->notes ?? '', true);
+            if (!is_array($logs)) $logs = ['__notes' => $dossier->notes ?? ''];
+            $key = ($sens === 'envoye') ? 'email_log' : 'email_recu';
+            $logs[$key] = $logs[$key] ?? [];
+            $entry = ['objet' => $objet, 'corps' => $corps, 'date' => current_time('Y-m-d H:i')];
+            if ($sens === 'envoye') $entry['to'] = $de; else $entry['de'] = $de;
+            $logs[$key][] = $entry;
+            $wpdb->update($td, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $dossier->id, 'owner_user_id' => $owner]);
+            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'email_recu_ok' => 1]));
+            exit;
+        }
+    }
+
+    lfi_nct_app_screen_open('📥 Importer un email', 'Colle l\'email — l\'app détecte le locataire et range tout');
+
+    $raw = isset($_POST['raw_email']) ? wp_unslash($_POST['raw_email']) : '';
+    $analyzed = !empty($_POST['lfi_email_import_analyze']) && check_admin_referer('lfi_email_import_analyze');
+
+    if (!$analyzed || trim($raw) === '') {
+        echo '<div class="lfi-app-help">Colle l\'email reçu (ou envoyé). L\'app détecte automatiquement l\'expéditeur, l\'objet et le <strong>locataire concerné</strong> (par son nom ou son adresse), puis le range dans son dossier juridique.</div>';
+        echo '<form method="post" class="lfi-app-form">';
+        wp_nonce_field('lfi_email_import_analyze');
+        echo '<input type="hidden" name="lfi_email_import_analyze" value="1">';
+        echo '<label>Email complet (copier-coller)<textarea name="raw_email" rows="12" placeholder="De : yvonnic.morineau@nmh.fr&#10;Objet : Mme Fadila — relogement&#10;&#10;Bonjour, suite à votre courrier concernant Mme Fadila au 8 rue de Saint-Jean-de-Luz…" required>' . esc_textarea($raw) . '</textarea></label>';
+        echo '<button type="submit" class="btn-primary big">🔎 Analyser l\'email</button>';
+        echo '</form>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    $parsed = lfi_nct_email_parse($raw);
+    $scores = lfi_nct_email_detect_tenant($raw);
+    $best_uid = !empty($scores) ? (int) array_key_first($scores) : 0;
+
+    echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">✅ <strong>Analyse terminée.</strong> Vérifie ce que l\'app a détecté, puis enregistre.</div>';
+    if ($best_uid) {
+        $bu = get_userdata($best_uid);
+        echo '<div class="lfi-app-card"><div class="head"><div class="who">🎯 Locataire détecté</div><div class="badge" style="background:#186a3b;color:#fff">' . esc_html($bu->display_name) . '</div></div>';
+        echo '<div class="com">Détecté dans le texte. Corrige ci-dessous si besoin.</div></div>';
+    } else {
+        echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">⚠ Aucun locataire détecté. Choisis-le manuellement.</div>';
+    }
+
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_email_import_save');
+    echo '<input type="hidden" name="lfi_email_import_save" value="1">';
+    $tenants = get_users(['role' => LFI_NCT_ROLE_TENANT, 'fields' => ['ID', 'display_name'], 'number' => 500, 'orderby' => 'display_name']);
+    echo '<label>Locataire concerné<select name="tenant_uid" required><option value="">— choisir —</option>';
+    foreach ($tenants as $tu) {
+        $lbl = $tu->display_name . (isset($scores[$tu->ID]) ? ' ✓ (détecté)' : '');
+        echo '<option value="' . (int) $tu->ID . '" ' . selected($best_uid, $tu->ID, false) . '>' . esc_html($lbl) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<label>Sens<select name="sens"><option value="recu">📥 Email REÇU (de NMH)</option><option value="envoye">📤 Email ENVOYÉ (à NMH)</option></select></label>';
+    echo '<label>Expéditeur / destinataire<input type="text" name="email_de" value="' . esc_attr($parsed['de']) . '"></label>';
+    echo '<label>Objet<input type="text" name="email_objet" value="' . esc_attr($parsed['objet']) . '"></label>';
+    echo '<label>Contenu<textarea name="email_corps" rows="8">' . esc_textarea($parsed['corps']) . '</textarea></label>';
+    echo '<button type="submit" class="btn-primary big">💾 Ranger dans le dossier du locataire</button>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('email-import')) . '">↩ Recommencer</a>';
+    echo '</form>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
  *  ESPACE ASSOCIATION — hub central (config, documents, factures)  *
  * ============================================================== */
 function lfi_nct_app_view_association() {

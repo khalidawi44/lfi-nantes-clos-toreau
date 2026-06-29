@@ -429,6 +429,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
                     case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
                     case 'association':                lfi_nct_app_view_association();                  break;
+                    case 'email-import':               lfi_nct_app_view_email_import();                 break;
                     case 'asso-statuts':               lfi_nct_app_view_asso_statuts();                 break;
                     case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
                     case 'dossier-doc-adhesion':       lfi_nct_app_view_dossier_doc_adhesion();         break;
@@ -1267,6 +1268,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '🏠 ESPACE LOCATAIRES' => [
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
+            ['📥', 'Importer un email',      'Colle l\'email → bon dossier auto',    lfi_nct_app_url('email-import')],
             ['📲', 'SMS aux locataires',     'Vouvoiement · 7 modèles',             lfi_nct_app_url('sms-locataires')],
         ],
         '🔧 ESPACE INTERVENTION (brigade)' => [

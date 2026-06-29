@@ -644,6 +644,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
             case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
             case 'association':                lfi_nct_app_view_association();                  break;
+            case 'email-import':               lfi_nct_app_view_email_import();                 break;
             case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
             case 'dossier-doc-adhesion':       lfi_nct_app_view_dossier_doc_adhesion();         break;
             case 'dossier-doc-lrar-travaux':   lfi_nct_app_view_dossier_doc_lrar_travaux();     break;
