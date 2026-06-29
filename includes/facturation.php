@@ -1333,7 +1333,8 @@ function lfi_nct_app_view_facturation_params() {
         echo '<div style="font-weight:700;font-size:.9em;margin-bottom:4px">Signature du président</div>';
         $sigp = (int) ($asso['sig_president'] ?? 0);
         if ($sigp && wp_get_attachment_url($sigp)) {
-            echo '<img src="' . esc_url(wp_get_attachment_url($sigp)) . '" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
+            $sigp_url = wp_get_attachment_image_url($sigp, 'medium') ?: wp_get_attachment_url($sigp);
+            echo '<img src="' . esc_url($sigp_url) . '" loading="lazy" decoding="async" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
         }
         echo '<input type="file" name="asso_sig_president" accept="image/*" style="font-size:.85em">';
         echo '</div>';
@@ -1342,7 +1343,8 @@ function lfi_nct_app_view_facturation_params() {
         echo '<div style="font-weight:700;font-size:.9em;margin-bottom:4px">Signature du/de la secrétaire</div>';
         $sigs = (int) ($asso['sig_secretaire'] ?? 0);
         if ($sigs && wp_get_attachment_url($sigs)) {
-            echo '<img src="' . esc_url(wp_get_attachment_url($sigs)) . '" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
+            $sigs_url = wp_get_attachment_image_url($sigs, 'medium') ?: wp_get_attachment_url($sigs);
+            echo '<img src="' . esc_url($sigs_url) . '" loading="lazy" decoding="async" style="max-height:60px;max-width:100%;background:#fff;border:1px solid #ddd;border-radius:4px"><br>';
         }
         echo '<input type="file" name="asso_sig_secretaire" accept="image/*" style="font-size:.85em">';
         echo '</div>';

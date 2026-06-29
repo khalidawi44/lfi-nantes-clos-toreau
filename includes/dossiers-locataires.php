@@ -1676,15 +1676,23 @@ function lfi_nct_app_view_asso_statuts() {
     $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));
     $pres = $asso['president'] ?: '[Nom du président]';
     $secr = $asso['secretaire'] ?? '';
-    $sig_pres_url = !empty($asso['sig_president']) ? wp_get_attachment_url((int) $asso['sig_president']) : '';
-    $sig_secr_url = !empty($asso['sig_secretaire']) ? wp_get_attachment_url((int) $asso['sig_secretaire']) : '';
+    /* IMPORTANT : version REDIMENSIONNÉE (medium) des signatures, jamais la
+       pleine résolution — une photo de signature en plein format sature la
+       mémoire de Safari iOS et fait disparaître la page. */
+    $sig_url = function ($att_id) {
+        if (empty($att_id)) return '';
+        $u = wp_get_attachment_image_url((int) $att_id, 'medium');
+        return $u ?: wp_get_attachment_url((int) $att_id);
+    };
+    $sig_pres_url = $sig_url($asso['sig_president'] ?? 0);
+    $sig_secr_url = $sig_url($asso['sig_secretaire'] ?? 0);
 
     /* Helper de bloc signature : image manuscrite si dispo, sinon ligne vide */
     $sig_block = function ($role, $name, $url) {
         $h = '<div style="flex:1">';
         $h .= '<p><strong>' . esc_html($role) . '</strong>' . ($name ? '<br>' . esc_html($name) : '') . '</p>';
         if ($url) {
-            $h .= '<img src="' . esc_url($url) . '" alt="signature" style="max-height:70px;max-width:90%;margin-top:4px">';
+            $h .= '<img src="' . esc_url($url) . '" alt="signature" loading="lazy" decoding="async" style="max-height:70px;max-width:90%;margin-top:4px">';
         } else {
             $h .= '<div style="height:50px;border-bottom:1px solid #999;width:80%"></div>';
         }
