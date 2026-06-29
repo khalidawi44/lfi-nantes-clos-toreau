@@ -484,6 +484,14 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
     lfi_nct_app_screen_open($is_edit ? '📁 Dossier #' . $row->id : '+ Nouveau dossier juridique', 'Constatations · certificat · demandes');
 
+    /* Navigation claire entre dossier juridique et profil locataire */
+    echo '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossiers-juridiques')) . '">← Tous les dossiers</a>';
+    if ($is_edit && !empty($row->tenant_user_id)) {
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => (int) $row->tenant_user_id])) . '">📂 Profil complet du locataire</a>';
+    }
+    echo '</div>';
+
     if (!empty($_GET['saved']))      lfi_nct_app_flash('✅ Dossier enregistré.');
     if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
     if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');

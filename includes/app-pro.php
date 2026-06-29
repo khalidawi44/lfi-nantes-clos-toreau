@@ -663,17 +663,19 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         }));
     }
 
-    /* --- Emails envoyés au nom du GA (loggés dans les notes des dossiers) --- */
+    /* --- Correspondance email (envoyés + reçus), loggée dans les dossiers --- */
     $emails_envoyes = [];
     foreach ($dossiers as $d) {
         $logs = json_decode($d->notes ?? '', true);
-        if (is_array($logs) && !empty($logs['email_log'])) {
-            foreach ($logs['email_log'] as $el) {
-                $el['dossier_id'] = $d->id;
-                $emails_envoyes[] = $el;
-            }
+        if (!is_array($logs)) continue;
+        if (!empty($logs['email_log'])) {
+            foreach ($logs['email_log'] as $el) { $el['dossier_id'] = $d->id; $el['sens'] = 'envoye'; $emails_envoyes[] = $el; }
+        }
+        if (!empty($logs['email_recu'])) {
+            foreach ($logs['email_recu'] as $el) { $el['dossier_id'] = $d->id; $el['sens'] = 'recu'; $emails_envoyes[] = $el; }
         }
     }
+    usort($emails_envoyes, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
 
     /* === TOTAUX FINANCIERS === */
     $total_realise = 0; $total_facture = 0; $total_paye = 0;
@@ -797,19 +799,26 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         echo '</ul>';
     }
 
-    /* Emails envoyés au nom du GA */
+    /* Correspondance email (envoyés + reçus) — timeline */
     if (!empty($emails_envoyes)) {
         $email_lbls = [
             'lrar_travaux' => 'Mise en demeure travaux', 'lrar_relogement' => 'Relogement médical',
-            'schs' => 'Saisine SCHS', 'ars' => 'Saisine ARS',
+            'schs' => 'Saisine SCHS', 'ars' => 'Saisine ARS', 'reponse_nmh' => 'Réponse argumentée',
         ];
-        echo '<h4 style="margin:14px 0 6px">📧 Emails envoyés à NMH (' . count($emails_envoyes) . ')</h4>';
+        echo '<h4 style="margin:14px 0 6px">📧 Correspondance NMH (' . count($emails_envoyes) . ')</h4>';
         echo '<ul class="lfi-app-list">';
         foreach ($emails_envoyes as $el) {
-            echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">📧 ' . esc_html($email_lbls[$el['letter']] ?? $el['letter']) . '</div>';
+            $is_recu = (($el['sens'] ?? '') === 'recu');
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
+            $titre = $is_recu ? ('📥 Reçu' . (!empty($el['objet']) ? ' — ' . $el['objet'] : '')) : ('📤 ' . ($email_lbls[$el['letter'] ?? ''] ?? ($el['objet'] ?? 'Email envoyé')));
+            echo '<div class="head"><div class="who">' . esc_html($titre) . '</div>';
             echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($el['date'] ?? '') . '</div></div>';
-            echo '<div class="meta"><span class="meta-chip">→ ' . esc_html($el['to'] ?? '') . '</span></div>';
+            echo '<div class="meta">';
+            if ($is_recu && !empty($el['de'])) echo '<span class="meta-chip">de ' . esc_html($el['de']) . '</span>';
+            if (!$is_recu && !empty($el['to'])) echo '<span class="meta-chip">→ ' . esc_html($el['to']) . '</span>';
+            if (!empty($el['dossier_id'])) echo '<a class="meta-chip" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $el['dossier_id']])) . '">📁 dossier</a>';
+            echo '</div>';
+            if ($is_recu && !empty($el['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($el['corps'], 0, 300)) . (mb_strlen($el['corps']) > 300 ? '…' : '') . '</div>';
             echo '</li>';
         }
         echo '</ul>';
