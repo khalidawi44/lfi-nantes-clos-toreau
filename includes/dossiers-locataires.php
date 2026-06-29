@@ -710,6 +710,9 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<div class="lfi-app-help">Clique sur une lettre pour l\'ouvrir (déjà pré-remplie avec tes constats). Bouton « Imprimer » en haut, puis envoi en recommandé avec accusé de réception.</div>';
 
         $lettres = [
+            ['reponse_nmh',     '📨 RÉPONSE argumentée à un refus NMH',
+             'Quand NMH esquive (« charge locative », « pas de signalement »…). Contre-argumente point par point + annonce SCHS/ARS.',
+             'dossier-doc-reponse-nmh',     null],
             ['lrar_travaux',    '🔧 Mise en demeure — TRAVAUX URGENTS',
              'NMH doit réaliser les travaux sans délai. Cite art. 1719, 1724 CC + loi 89-462 + décret 2002-120.',
              'dossier-doc-lrar-travaux',    $row->lrar_travaux_date],
@@ -1121,7 +1124,7 @@ function lfi_nct_app_view_dossier_send_email() {
     $dossier = lfi_nct_dossier_get($id);
     if (!$dossier) { wp_die('Dossier introuvable'); }
 
-    $allowed = ['lrar_travaux', 'lrar_relogement', 'schs', 'ars'];
+    $allowed = ['reponse_nmh', 'lrar_travaux', 'lrar_relogement', 'schs', 'ars'];
     if (!in_array($letter_key, $allowed, true)) wp_die('Type de lettre inconnu');
 
     $bailleur = lfi_nct_fact_bailleur();
@@ -1252,6 +1255,14 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
     $cc_agence = trim($bailleur['agence_email'] ?? 'yvonnic.morineau@nmh.fr');
 
     switch ($letter_key) {
+        case 'reponse_nmh':
+            return [
+                'title'  => 'Réponse argumentée',
+                'to'     => $cc_agence ?: $to_nmh,
+                'cc'     => $to_nmh && $cc_agence && $to_nmh !== $cc_agence ? $to_nmh : '',
+                'subject'=> 'RE: ' . ($tenant_full ?: 'logement') . ($logement ? ' — ' . $logement : ''),
+                'intro'  => 'Monsieur Morineau,\n\nNous accusons réception de votre message et y répondons point par point ci-dessous. La version papier suit par lettre recommandée.',
+            ];
         case 'lrar_travaux':
             return [
                 'title'  => 'Mise en demeure travaux urgents',
@@ -1310,6 +1321,18 @@ function lfi_nct_dossier_email_body_text($letter_key, $dossier, $bailleur, $tena
     }
 
     switch ($letter_key) {
+        case 'reponse_nmh':
+            $html .= '<h3 style="color:#c8102e">1. Absence prétendue de signalement</h3>';
+            $html .= '<p>L\'obligation d\'entretien (art. 1719-1720 CC, décret 2002-120) est permanente et ne dépend d\'aucun signalement préalable. La présente correspondance constitue ce signalement formel et écrit.</p>';
+            $html .= '<h3 style="color:#c8102e">2. Objet réel resté sans réponse</h3>';
+            $html .= '<p>Votre message n\'évoque ni les moisissures/humidité constatées, ni le certificat médical, qui sont l\'objet même de notre demande de relogement. Ces désordres relèvent du bâti (ventilation, étanchéité) et non d\'une charge locative.</p>';
+            $html .= '<h3 style="color:#c8102e">3. Visite contradictoire</h3>';
+            $html .= '<p>Vous indiquez n\'avoir pas eu accès au logement : nous proposons une visite contradictoire en présence de la locataire et de l\'association. Merci de confirmer une date sous 8 jours.</p>';
+            $html .= '<h3 style="color:#c8102e">4. « Charge locative »</h3>';
+            $html .= '<p>Acte pris pour l\'entretien courant. En revanche l\'humidité structurelle, la VMC, le moteur du volet électrifié et les infiltrations du bâti restent à votre charge (art. 1719-1720 CC).</p>';
+            $html .= '<h3 style="color:#c8102e">5. À défaut</h3>';
+            $html .= '<p>Nous saisissons le SCHS de Nantes et l\'ARS aux fins de constat d\'insalubrité (art. L.1331-22 et s. CSP), susceptible d\'emporter votre obligation de relogement (art. L.521-3-1 CCH), et réservons la saisine de la juridiction compétente.</p>';
+            break;
         case 'lrar_travaux':
             $html .= '<h3 style="color:#c8102e">Demande</h3>';
             $html .= '<p>En application des articles 1719 et 1724 du Code civil, de l\'article 6 de la loi n° 89-462 et du décret 2002-120, je vous mets en demeure de procéder, <strong>sous QUINZE (15) JOURS</strong>, à une visite contradictoire du logement et de réaliser, <strong>sous UN (1) MOIS</strong>, l\'intégralité des travaux nécessaires à la remise en conformité avec les critères de décence.</p>';
@@ -1961,6 +1984,69 @@ function lfi_nct_app_view_dossier_doc_rapport_visite() {
     echo '<div class="signature">' . esc_html($presta['nom'] ?? 'Le Groupe d\'Action LFI') . '</div>';
 
     echo '<div class="pj"><strong>Pièces jointes :</strong> photographies datées des désordres' . (!empty($dossier->certificat_medecin) ? ', certificat médical' : '') . '.</div>';
+
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
+ *  RÉPONSE ARGUMENTÉE à un refus / une esquive de NMH               *
+ *  (contre les "charge locative", "pas de signalement", etc.)       *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_doc_reponse_nmh() {
+    if (!lfi_nct_can_use_brigade()) return;
+    $ctx = lfi_nct_dossier_doc_open('📨 Réponse argumentée à NMH');
+    extract($ctx);
+    $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des Quartiers Libres'];
+
+    echo '<div class="lfi-rec-doc">';
+
+    /* Expéditeur = association (avec mandat du locataire) */
+    echo '<div class="expediteur">';
+    echo '<strong>' . esc_html($asso['nom']) . '</strong><br>';
+    echo '<em>Association de défense des locataires (loi du 6 juillet 1989)</em><br>';
+    if (!empty($asso['siege']))  echo esc_html(trim($asso['siege'] . ' ' . ($asso['cp_ville'] ?? ''))) . '<br>';
+    if (!empty($asso['email']))  echo 'Mél. : ' . esc_html($asso['email']) . '<br>';
+    echo 'Agissant sur mandat de ' . esc_html($tenant_full ?: 'la locataire') . '</div>';
+
+    lfi_nct_dossier_header_destinataire_nmh($bailleur);
+
+    echo '<p class="lrar">Lettre recommandée avec accusé de réception</p>';
+    echo '<div class="lieu-date">À Nantes, le ' . esc_html(wp_date('j F Y')) . '</div>';
+
+    echo '<p class="objet">Objet : Réponse — logement de ' . esc_html($tenant_full) . ', ' . esc_html($tenant_logement) . '</p>';
+
+    echo '<p>Monsieur,</p>';
+    echo '<p>Nous accusons réception de votre message et y répondons point par point.</p>';
+
+    echo '<h2>1. Sur l\'absence prétendue de signalement</h2>';
+    echo '<p>L\'obligation du bailleur de délivrer et d\'entretenir un logement décent (articles <strong>1719 et 1720 du Code civil</strong>, décret n° 2002-120) est <strong>permanente</strong> et ne dépend d\'aucun signalement préalable par un canal particulier. La présente lettre, ainsi que nos précédents courriers, <strong>constituent ce signalement formel et écrit</strong>. Nous relevons au demeurant que vos services confirment eux-mêmes une demande en cours du locataire : la démarche est donc établie.</p>';
+
+    echo '<h2>2. Sur l\'objet réel de notre saisine, demeuré sans réponse</h2>';
+    echo '<p>Votre réponse n\'évoque ni les <strong>moisissures et l\'humidité constatées</strong>, ni le <strong>certificat médical</strong>';
+    if (!empty($dossier->certificat_medecin)) echo ' du ' . esc_html($dossier->certificat_medecin);
+    echo ', qui sont l\'objet même de notre demande de relogement. Ces désordres relèvent du bâti (ventilation, étanchéité) et affectent la santé d\'un occupant, médicalement attestée.</p>';
+    if (!empty($dossier->constatations)) {
+        echo '<div class="citations"><strong>Rappel des constatations effectuées sur place</strong>';
+        if ($dossier->visite_date) echo ' le ' . esc_html(wp_date('j F Y', strtotime($dossier->visite_date)));
+        echo ' :<br>' . nl2br(esc_html(mb_substr($dossier->constatations, 0, 600))) . '</div>';
+    }
+
+    echo '<h2>3. Sur l\'accès au logement</h2>';
+    echo '<p>Vous indiquez n\'avoir pas eu accès au logement. Nous vous proposons en conséquence une <strong>visite contradictoire</strong>, en présence de la locataire et de notre association, le <strong>____ / ____ / 20____</strong>. Merci de nous confirmer une date sous huit (8) jours.</p>';
+
+    echo '<h2>4. Sur les qualifications de « charge locative »</h2>';
+    echo '<p>Nous prenons acte de ce qui relève de l\'entretien courant (décret n° 87-712). En revanche, l\'<strong>humidité structurelle</strong>, la <strong>ventilation (VMC)</strong>, le <strong>moteur du volet roulant électrifié</strong> et toute <strong>infiltration relevant du bâti</strong> demeurent à votre charge (articles 1719 et 1720 du Code civil). Le constat d\'état des lieux d\'entrée, ancien, ne saurait exonérer le bailleur de son obligation continue d\'entretien.</p>';
+
+    echo '<h2>5. À défaut de prise en charge effective</h2>';
+    echo '<p>Compte tenu de l\'urgence sanitaire attestée, et faute de réponse satisfaisante, nous saisissons le <strong>Service Communal d\'Hygiène et Santé de la Ville de Nantes</strong> et l\'<strong>Agence Régionale de Santé des Pays de la Loire</strong> aux fins de constat d\'insalubrité (articles L.1331-22 et suivants du Code de la santé publique), démarche susceptible d\'emporter un arrêté préfectoral et, partant, votre <strong>obligation de relogement</strong> (article L.521-3-1 du Code de la construction et de l\'habitation). Nous nous réservons par ailleurs la saisine de la juridiction compétente.</p>';
+    echo '<p>Nous réservons l\'ensemble des droits de la locataire.</p>';
+
+    echo '<p>Dans l\'attente d\'une date de visite contradictoire, nous vous prions d\'agréer, Monsieur, l\'expression de nos salutations distinguées.</p>';
+
+    echo '<div class="signature">Pour ' . esc_html($asso['nom']) . '<br>' . esc_html($asso['president'] ?: '') . ', président</div>';
+
+    echo '<div class="pj"><strong>Pièces jointes :</strong> certificat médical' . (!empty($dossier->certificat_medecin) ? ' (' . esc_html($dossier->certificat_medecin) . ')' : '') . ' · photographies datées des désordres · mandat de la locataire.</div>';
 
     echo '</div>';
     lfi_nct_app_screen_close(false);
