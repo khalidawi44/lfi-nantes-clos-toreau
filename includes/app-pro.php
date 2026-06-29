@@ -327,6 +327,29 @@ function lfi_nct_app_view_dossier() {
         exit;
     }
 
+    /* Parcours de suivi : ajout / coche / suppression d'étapes */
+    if (!empty($_POST['lfi_app_dossier_step']) && check_admin_referer('lfi_app_dossier_step')) {
+        $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+        if (!is_array($steps)) $steps = [];
+        $action = sanitize_key($_POST['step_action'] ?? '');
+        if ($action === 'add') {
+            $txt = sanitize_text_field(wp_unslash($_POST['step_text'] ?? ''));
+            $echeance = sanitize_text_field(wp_unslash($_POST['step_echeance'] ?? ''));
+            if ($txt !== '') {
+                $steps[] = ['text' => $txt, 'done' => false, 'echeance' => $echeance, 'created' => current_time('Y-m-d')];
+            }
+        } elseif ($action === 'toggle') {
+            $idx = (int) ($_POST['step_idx'] ?? -1);
+            if (isset($steps[$idx])) $steps[$idx]['done'] = !$steps[$idx]['done'];
+        } elseif ($action === 'del') {
+            $idx = (int) ($_POST['step_idx'] ?? -1);
+            if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
+        }
+        update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'step_saved' => 1]));
+        exit;
+    }
+
     $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
     $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
     $admin_notes = (string) get_user_meta($u->ID, 'lfi_nct_admin_notes', true);
@@ -354,7 +377,14 @@ function lfi_nct_app_view_dossier() {
 
     lfi_nct_app_screen_open('📂 ' . $u->display_name, $rid ? 'Enquête #' . $rid : 'Compte sans enquête liée');
 
+    /* Bouton retour — revient à la page précédente sans repasser par le menu */
+    echo '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
+    echo '<a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Page précédente</a>';
+    echo '</div>';
+
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');
+    if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
 
     /* Profil + actions */
     echo '<div class="lfi-app-card">';
@@ -408,6 +438,9 @@ function lfi_nct_app_view_dossier() {
     }
     echo '</div>';
     echo '</div>';
+
+    /* === PARCOURS DE SUIVI — checklist d'actions à mener === */
+    lfi_nct_dossier_render_parcours($u);
 
     /* === SUIVI : dossiers juridiques + interventions + recouvrements === */
     lfi_nct_dossier_render_suivi($u, $row);
@@ -471,46 +504,166 @@ function lfi_nct_app_view_dossier() {
 }
 
 /* ============================================================== *
+ *  Parcours de suivi — checklist d'étapes (numérotée, cochable)    *
+ * ============================================================== */
+function lfi_nct_dossier_render_parcours($u) {
+    $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+    if (!is_array($steps)) $steps = [];
+
+    /* Suggestions rapides (dropdown) — le parcours type d'un dossier */
+    $suggestions = [
+        'Passer chez le locataire pour constater',
+        'Faire signer le mandat de représentation',
+        'Envoyer la mise en demeure travaux à NMH',
+        'Appeler NMH (agence Goudy / M. Morineau)',
+        'Attendre la réponse de M. Morineau (NMH)',
+        '1re relance NMH',
+        '2e relance NMH',
+        'Saisir la Commission de Conciliation',
+        'Saisir le SCHS (insalubrité)',
+        'Saisir l\'ARS',
+        'Préparer l\'assignation au Tribunal Judiciaire',
+        'Envoyer le récapitulatif de facturation à NMH',
+    ];
+
+    echo '<details open style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
+    echo '<span>🧭 Parcours de suivi';
+    $todo = count(array_filter($steps, function ($s) { return empty($s['done']); }));
+    if ($todo) echo ' <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 7px;border-radius:10px;vertical-align:middle">' . $todo . ' à faire</span>';
+    echo '</span><span style="font-size:1.2em">▾</span>';
+    echo '</summary>';
+    echo '<div style="padding:0 16px 16px">';
+
+    /* Liste des étapes */
+    if (empty($steps)) {
+        echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Ajoute la 1re action à mener ci-dessous (ou choisis dans la liste).</div>';
+    } else {
+        echo '<ol style="list-style:none;padding:0;margin:8px 0;counter-reset:lfi-step">';
+        foreach ($steps as $idx => $s) {
+            $done = !empty($s['done']);
+            echo '<li style="counter-increment:lfi-step;display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px;background:' . ($done ? '#e8f5ea' : '#fafafa') . ';border-left:3px solid ' . ($done ? '#186a3b' : '#c8102e') . '">';
+
+            /* Numéro / coche */
+            echo '<form method="post" style="margin:0">';
+            wp_nonce_field('lfi_app_dossier_step');
+            echo '<input type="hidden" name="lfi_app_dossier_step" value="1">';
+            echo '<input type="hidden" name="step_action" value="toggle">';
+            echo '<input type="hidden" name="step_idx" value="' . $idx . '">';
+            echo '<button type="submit" title="Cocher" style="width:28px;height:28px;border-radius:50%;border:2px solid ' . ($done ? '#186a3b' : '#c8102e') . ';background:' . ($done ? '#186a3b' : '#fff') . ';color:#fff;cursor:pointer;font-weight:800;flex-shrink:0">' . ($done ? '✓' : (string) ($idx + 1)) . '</button>';
+            echo '</form>';
+
+            echo '<div style="flex:1">';
+            echo '<div style="font-weight:600;' . ($done ? 'text-decoration:line-through;color:#888' : 'color:#1a1a1a') . '">' . esc_html($s['text']) . '</div>';
+            if (!empty($s['echeance'])) {
+                $late = (!$done && strtotime($s['echeance']) < strtotime(current_time('Y-m-d')));
+                echo '<div style="font-size:.82em;color:' . ($late ? '#c8102e' : '#888') . ';margin-top:2px">' . ($late ? '⚠ en retard — ' : '🗓 ') . 'échéance ' . esc_html(wp_date('j M Y', strtotime($s['echeance']))) . '</div>';
+            }
+            echo '</div>';
+
+            /* Supprimer */
+            echo '<form method="post" style="margin:0" onsubmit="return confirm(\'Supprimer cette étape ?\')">';
+            wp_nonce_field('lfi_app_dossier_step');
+            echo '<input type="hidden" name="lfi_app_dossier_step" value="1">';
+            echo '<input type="hidden" name="step_action" value="del">';
+            echo '<input type="hidden" name="step_idx" value="' . $idx . '">';
+            echo '<button type="submit" title="Supprimer" style="background:none;border:0;color:#bbb;cursor:pointer;font-size:1.1em">✕</button>';
+            echo '</form>';
+
+            echo '</li>';
+        }
+        echo '</ol>';
+    }
+
+    /* Ajout d'une étape — avec dropdown de suggestions */
+    echo '<form method="post" class="lfi-app-form" style="margin-top:10px;background:#f8f8f8;padding:12px;border-radius:8px">';
+    wp_nonce_field('lfi_app_dossier_step');
+    echo '<input type="hidden" name="lfi_app_dossier_step" value="1">';
+    echo '<input type="hidden" name="step_action" value="add">';
+    echo '<label style="margin:0">➕ Ajouter une étape';
+    echo '<select onchange="if(this.value){document.getElementById(\'lfi-step-text\').value=this.value;}" style="margin-top:4px">';
+    echo '<option value="">— Choisir dans la liste —</option>';
+    foreach ($suggestions as $sg) echo '<option value="' . esc_attr($sg) . '">' . esc_html($sg) . '</option>';
+    echo '</select></label>';
+    echo '<input type="text" id="lfi-step-text" name="step_text" placeholder="… ou écris l\'action à mener" style="margin-top:6px">';
+    echo '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px;align-items:end">';
+    echo '<label style="margin:0">Échéance / rappel (optionnel)<input type="date" name="step_echeance"></label>';
+    echo '<button type="submit" class="btn-primary">Ajouter</button>';
+    echo '</div>';
+    echo '</form>';
+
+    echo '</div>';
+    echo '</details>';
+}
+
+/* ============================================================== *
  *  Suivi complet d'un locataire — agrège dossiers juridiques,      *
  *  interventions brigade et recouvrements liés à ce locataire.     *
- *  Matching : tenant_user_id OU (nom + adresse).                   *
+ *  Matching : tenant_user_id OU adresse canonique OU nom.          *
  * ============================================================== */
 function lfi_nct_dossier_render_suivi($u, $row) {
     global $wpdb;
     $uid  = (int) $u->ID;
-    $nom  = $u->last_name ?: $u->display_name;
+    $nom  = trim($u->last_name . ' ' . $u->first_name) ?: $u->display_name;
     $adr  = $row->adresse ?? '';
+    $adr_key = ($adr && function_exists('lfi_nct_address_canonical_key')) ? lfi_nct_address_canonical_key($adr) : '';
 
-    /* Clauses de matching réutilisées */
-    $name_clause = $nom ? $wpdb->prepare('LOWER(tenant_nom) = LOWER(%s)', $nom) : '0';
-    $adr_clause  = $adr ? $wpdb->prepare('LOWER(tenant_adresse) = LOWER(%s)', $adr) : '0';
-    $uid_clause  = $wpdb->prepare('tenant_user_id = %d', $uid);
+    /* Helper de matching robuste : un enregistrement concerne ce locataire si
+       son tenant_user_id == uid, OU si son adresse a la même clé canonique,
+       OU si le nom correspond (insensible casse/espaces). Gère les fautes de
+       frappe sur la rue (Saint-Jean-de-Luz orthographié différemment). */
+    $matches = function ($r_uid, $r_nom, $r_adr) use ($uid, $nom, $adr_key) {
+        if ((int) $r_uid === $uid && $uid) return true;
+        if ($adr_key && function_exists('lfi_nct_address_canonical_key')) {
+            if (lfi_nct_address_canonical_key($r_adr) === $adr_key && $adr_key !== '') return true;
+        }
+        if ($nom && $r_nom) {
+            $a = strtolower(trim(preg_replace('/\s+/', ' ', $nom)));
+            $b = strtolower(trim(preg_replace('/\s+/', ' ', $r_nom)));
+            if ($a === $b) return true;
+            /* Match partiel : le nom du locataire est contenu dans l'autre */
+            if (strlen($a) >= 4 && (strpos($b, $a) !== false || strpos($a, $b) !== false)) return true;
+        }
+        return false;
+    };
 
-    /* --- Dossiers juridiques --- */
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
+
+    /* --- Dossiers juridiques (fetch large par owner, filtre PHP robuste) --- */
     $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
-    $dossiers = $wpdb->get_results("SELECT * FROM $td WHERE ($uid_clause OR $name_clause OR $adr_clause) ORDER BY updated_at DESC LIMIT 30") ?: [];
+    $all_d = $wpdb->get_results($wpdb->prepare("SELECT * FROM $td WHERE owner_user_id = %d ORDER BY updated_at DESC LIMIT 300", $owner)) ?: [];
+    $dossiers = array_values(array_filter($all_d, function ($d) use ($matches) {
+        return $matches($d->tenant_user_id, $d->tenant_nom, $d->tenant_adresse);
+    }));
 
     /* --- Interventions brigade --- */
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
-    $interv = $wpdb->get_results("SELECT * FROM $ti WHERE ($uid_clause OR $name_clause OR $adr_clause) ORDER BY date_intervention DESC, id DESC LIMIT 30") ?: [];
+    $all_i = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ti WHERE owner_user_id = %d ORDER BY date_intervention DESC, id DESC LIMIT 500", $owner)) ?: [];
+    $interv = array_values(array_filter($all_i, function ($i) use ($matches) {
+        return $matches($i->tenant_user_id, $i->tenant_nom, $i->tenant_adresse);
+    }));
 
     /* --- Recouvrements (via les n° de facture des interventions) --- */
     $recs = [];
     $facture_nums = array_filter(array_map(function ($i) { return $i->facture_numero; }, $interv));
     if (!empty($facture_nums)) {
+        $facture_nums = array_values(array_unique($facture_nums));
         $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
         $place = implode(',', array_fill(0, count($facture_nums), '%s'));
-        $recs = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE facture_numero IN ($place) ORDER BY updated_at DESC", ...array_values($facture_nums))) ?: [];
+        $recs = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE facture_numero IN ($place) ORDER BY updated_at DESC", ...$facture_nums)) ?: [];
     }
 
-    /* --- Appels NMH liés à ce locataire --- */
+    /* --- Appels NMH liés (uid OU nom) --- */
     $appels = [];
     $ta = $wpdb->prefix . 'lfi_nct_appels_nmh';
     if ($wpdb->get_var("SHOW TABLES LIKE '$ta'") === $ta) {
-        $appels = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ta WHERE tenant_user_id = %d ORDER BY date_appel DESC LIMIT 30", $uid)) ?: [];
+        $all_a = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ta WHERE owner_user_id = %d ORDER BY date_appel DESC LIMIT 200", $owner)) ?: [];
+        $appels = array_values(array_filter($all_a, function ($a) use ($matches) {
+            return $matches($a->tenant_user_id, $a->tenant_label, '');
+        }));
     }
 
-    /* --- Emails envoyés au nom du GA (loggés dans les notes des dossiers juridiques) --- */
+    /* --- Emails envoyés au nom du GA (loggés dans les notes des dossiers) --- */
     $emails_envoyes = [];
     foreach ($dossiers as $d) {
         $logs = json_decode($d->notes ?? '', true);
@@ -522,7 +675,28 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         }
     }
 
+    /* === TOTAUX FINANCIERS === */
+    $total_realise = 0; $total_facture = 0; $total_paye = 0;
+    foreach ($interv as $i) {
+        if ($i->statut === 'realise') $total_realise += (float) $i->total_ht;
+        if (in_array($i->statut, ['facture', 'paye'], true)) $total_facture += (float) $i->total_ht;
+        if ($i->statut === 'paye') $total_paye += (float) $i->total_ht;
+    }
+    $a_recouvrer = $total_facture - $total_paye;
+    $du_total = $total_realise + $total_facture; /* tout ce qui n'est pas payé reste dû */
+
     echo '<h3 style="margin:20px 0 8px;color:#c8102e">📋 Suivi complet</h3>';
+
+    /* Bandeau totaux — toujours affiché s'il y a des interventions */
+    if (!empty($interv)) {
+        echo '<div class="lfi-app-stats-grid" style="margin-bottom:10px">';
+        echo '<div class="stat"><div class="ico">🔧</div><div class="n">' . count($interv) . '</div><div class="l">Interventions</div></div>';
+        echo '<div class="stat"><div class="ico">💵</div><div class="n">' . number_format($total_facture, 0, ',', ' ') . ' €</div><div class="l">Facturé NMH</div></div>';
+        echo '<div class="stat"><div class="ico">⏳</div><div class="n">' . number_format($a_recouvrer, 0, ',', ' ') . ' €</div><div class="l">À recouvrer</div></div>';
+        echo '<div class="stat"><div class="ico">✅</div><div class="n">' . number_format($total_paye, 0, ',', ' ') . ' €</div><div class="l">Payé</div></div>';
+        echo '</div>';
+        echo '<div style="margin-bottom:14px"><a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => $uid])) . '" target="_blank">🧾 Récapitulatif complet à envoyer à NMH</a></div>';
+    }
 
     if (empty($dossiers) && empty($interv) && empty($recs) && empty($appels)) {
         echo '<div class="lfi-app-empty">Aucun dossier juridique, intervention ou appel pour ce locataire pour le moment. Utilise les boutons « Actions » ci-dessus pour en créer.</div>';
@@ -640,6 +814,93 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         }
         echo '</ul>';
     }
+}
+
+/* ============================================================== *
+ *  Récapitulatif de facturation à envoyer à NMH (imprimable)       *
+ *  Toutes les interventions d'un locataire + total dû.             *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_recap_nmh() {
+    if (!current_user_can('manage_options') && !(function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga())) return;
+    global $wpdb;
+    $uid = (int) ($_GET['uid'] ?? 0);
+    $u = $uid ? get_userdata($uid) : null;
+    if (!$u) { wp_die('Locataire introuvable'); }
+
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    $resp = $rid ? $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    $adr_key = ($resp && $resp->adresse && function_exists('lfi_nct_address_canonical_key')) ? lfi_nct_address_canonical_key($resp->adresse) : '';
+    $nom = trim($u->last_name . ' ' . $u->first_name) ?: $u->display_name;
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
+
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $all = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ti WHERE owner_user_id = %d AND statut != 'annule' ORDER BY date_intervention ASC", $owner)) ?: [];
+    $interv = array_values(array_filter($all, function ($i) use ($uid, $nom, $adr_key) {
+        if ((int) $i->tenant_user_id === $uid && $uid) return true;
+        if ($adr_key && function_exists('lfi_nct_address_canonical_key') && lfi_nct_address_canonical_key($i->tenant_adresse) === $adr_key) return true;
+        if ($nom && $i->tenant_nom && strtolower(trim($i->tenant_nom)) === strtolower(trim($nom))) return true;
+        return false;
+    }));
+
+    $presta = function_exists('lfi_nct_fact_prestataire') ? lfi_nct_fact_prestataire() : [];
+    $bailleur = function_exists('lfi_nct_fact_bailleur') ? lfi_nct_fact_bailleur() : ['nom' => 'Nantes Métropole Habitat'];
+
+    lfi_nct_app_screen_open('🧾 Récapitulatif NMH', $u->display_name);
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    echo '<div class="lfi-rec-doc">';
+    echo '<h1>Récapitulatif des interventions<br><small>à la charge de ' . esc_html($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '</small></h1>';
+
+    echo '<div class="expediteur">';
+    if (!empty($presta['nom'])) echo '<strong>' . esc_html($presta['nom']) . '</strong><br>';
+    if (!empty($presta['adresse'])) echo esc_html($presta['adresse']) . '<br>';
+    if (!empty($presta['cp_ville'])) echo esc_html($presta['cp_ville']);
+    echo '</div>';
+
+    echo '<div class="destinataire">';
+    echo '<strong>' . esc_html($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '</strong><br>';
+    if (!empty($bailleur['agence_contact'])) echo esc_html($bailleur['agence_contact']) . '<br>';
+    if (!empty($bailleur['agence_email'])) echo esc_html($bailleur['agence_email']);
+    echo '</div>';
+
+    echo '<div class="lieu-date">À Nantes, le ' . esc_html(wp_date('j F Y')) . '</div>';
+
+    $logement = $resp && $resp->adresse ? $resp->adresse . ($resp->etage ? ', étage ' . $resp->etage : '') : '';
+    echo '<p class="objet">Objet : Récapitulatif des interventions conservatoires réalisées au logement de ' . esc_html($u->display_name) . ($logement ? ' — ' . esc_html($logement) : '') . '</p>';
+
+    if (empty($interv)) {
+        echo '<p>Aucune intervention enregistrée pour ce locataire.</p>';
+        echo '</div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
+
+    echo '<table class="detail">';
+    echo '<tr><td><strong>Date</strong></td><td><strong>Prestation</strong></td><td class="num"><strong>Montant HT</strong></td><td><strong>Statut</strong></td></tr>';
+    $total = 0; $total_du = 0;
+    foreach ($interv as $i) {
+        $total += (float) $i->total_ht;
+        if ($i->statut !== 'paye') $total_du += (float) $i->total_ht;
+        echo '<tr>';
+        echo '<td>' . esc_html($i->date_intervention ? wp_date('d/m/Y', strtotime($i->date_intervention)) : '—') . '</td>';
+        echo '<td>' . esc_html($i->type_travaux);
+        if ($i->description) echo '<br><small style="color:#666">' . esc_html(mb_substr($i->description, 0, 120)) . (mb_strlen($i->description) > 120 ? '…' : '') . '</small>';
+        echo '</td>';
+        echo '<td class="num">' . number_format($i->total_ht, 2, ',', ' ') . ' €</td>';
+        echo '<td>' . esc_html($i->statut === 'paye' ? '✓ payé' : ($i->facture_numero ? 'facturé ' . $i->facture_numero : 'à facturer')) . '</td>';
+        echo '</tr>';
+    }
+    echo '<tr class="total"><td colspan="2">TOTAL des interventions</td><td class="num">' . number_format($total, 2, ',', ' ') . ' €</td><td></td></tr>';
+    echo '<tr class="total" style="background:#fff3f5"><td colspan="2"><strong>RESTE DÛ PAR NMH</strong></td><td class="num"><strong>' . number_format($total_du, 2, ',', ' ') . ' €</strong></td><td></td></tr>';
+    echo '</table>';
+
+    echo '<p style="margin-top:14px">Ces interventions, réalisées en substitution du bailleur défaillant à son obligation d\'entretien (articles 1719 et 1724 du Code civil), sont à la charge de ' . esc_html($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '. Le détail de chaque prestation (facture, photographies avant/après, justificatifs de matériaux) est disponible sur demande.</p>';
+    echo '<p><strong>TVA non applicable, art. 293 B du CGI.</strong></p>';
+
+    echo '<div class="signature">' . esc_html($presta['nom'] ?? '') . '</div>';
+    echo '</div>';
+
+    lfi_nct_app_screen_close(false);
 }
 
 /* ============================================================== *

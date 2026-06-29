@@ -409,6 +409,7 @@ function lfi_nct_app_shortcode() {
                     case 'temoignage-add':     lfi_nct_app_view_temoignage_add();       break;
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
+                    case 'dossier-recap-nmh': lfi_nct_app_view_dossier_recap_nmh(); break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
                     case 'carte':           lfi_nct_app_view_carte();           break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
