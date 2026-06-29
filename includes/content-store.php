@@ -159,3 +159,31 @@ function lfi_nct_content_nmh_for_dossier($dossier_id) {
     }
     return null;
 }
+
+/* ============================================================== *
+ *  STRATÉGIE AVOCATS (note générale, gérée par le code)           *
+ * ============================================================== */
+function lfi_nct_content_strategie_avocats() {
+    return lfi_nct_content_load('strategie-avocats.php');
+}
+
+/** Document imprimable « ⚖️ Stratégie avocats ». */
+function lfi_nct_app_view_doc_strategie_avocats() {
+    if (function_exists('lfi_nct_app_guard_brigade') && !lfi_nct_app_guard_brigade()) return;
+    $data = lfi_nct_content_strategie_avocats();
+    lfi_nct_app_screen_open('⚖️ Stratégie avocats', 'Note générale à envoyer aux cabinets');
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    echo '<div class="lfi-rec-doc">';
+    echo '<h1>' . esc_html($data['titre'] ?? 'Stratégie — défense des locataires du Clos Toreau') . '</h1>';
+    if (!empty($data['destinataires'])) echo '<p style="text-align:center"><strong>' . esc_html($data['destinataires']) . '</strong></p>';
+    if (!empty($data['intro'])) echo '<p>' . nl2br(esc_html($data['intro'])) . '</p>';
+    foreach (($data['sections'] ?? []) as $s) {
+        if (!is_array($s)) continue;
+        echo '<h2>' . esc_html($s['titre'] ?? '') . '</h2>';
+        echo '<div class="citations">' . nl2br(esc_html($s['corps'] ?? '')) . '</div>';
+    }
+    echo '<p style="margin-top:20px">Fait à Nantes, le ' . esc_html(wp_date('j F Y')) . '.</p>';
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
