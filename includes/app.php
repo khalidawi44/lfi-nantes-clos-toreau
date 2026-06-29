@@ -425,6 +425,56 @@ function lfi_nct_app_head_meta() {
 }
 
 /* ============================================================== *
+ *  RENDU AUTONOME DE LA PAGE /app/ — SANS LE THÈME                 *
+ *                                                                  *
+ *  L'app est une PWA plein écran : elle n'a aucun besoin du thème  *
+ *  (en-tête « France Insoumise », pied de page, CSS du thème…).    *
+ *  Faire passer la page par le thème provoquait des conflits :     *
+ *  en onglet navigateur (hors PWA installée), l'en-tête du thème   *
+ *  s'affichait par-dessus et la mise en forme de l'app sautait     *
+ *  (« écran blanc »). Le hiding du thème était en @media           *
+ *  (display-mode: standalone), donc inactif dans un onglet.        *
+ *                                                                  *
+ *  On rend donc un document HTML COMPLET et autonome (exactement   *
+ *  comme la page de diagnostic, qui s'affiche parfaitement), puis  *
+ *  on sort : le thème n'est jamais invoqué.                        *
+ * ============================================================== */
+add_action('template_redirect', 'lfi_nct_app_render_standalone', 99);
+function lfi_nct_app_render_standalone() {
+    if (!is_singular()) return;
+    $post = get_post();
+    if (!$post || $post->post_name !== LFI_NCT_APP_SLUG) return;
+
+    /* Marge mémoire (au cas où le hook wp n'aurait pas suffi) */
+    if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('lfi_nct_app');
+    @ini_set('memory_limit', '512M');
+    if (function_exists('set_time_limit')) @set_time_limit(120);
+
+    if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+    nocache_headers();
+    if (!headers_sent()) header('Content-Type: text/html; charset=utf-8');
+
+    /* Contenu de l'app (login OU router) — coquille auto-suffisante :
+       le shortcode injecte lui-même ses styles, le Service Worker et le
+       bouton d'urgence. */
+    $content = do_shortcode('[lfi_nct_app]');
+    $title   = get_the_title($post);
+    ?><!doctype html>
+<html <?php language_attributes(); ?>>
+<head>
+<meta charset="<?php echo esc_attr(get_bloginfo('charset')); ?>">
+<?php lfi_nct_app_head_meta(); ?>
+<title><?php echo esc_html($title ?: 'App du GA — LFI Nantes Sud Clos Toreau'); ?></title>
+</head>
+<body class="page-app lfi-standalone">
+<?php echo $content; ?>
+</body>
+</html>
+<?php
+    exit;
+}
+
+/* ============================================================== *
  *  Shortcode [lfi_nct_app] — coquille de la PWA + router          *
  * ============================================================== */
 add_shortcode('lfi_nct_app', 'lfi_nct_app_shortcode');
