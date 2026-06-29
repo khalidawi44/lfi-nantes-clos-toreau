@@ -96,6 +96,56 @@ IV. CE QUE NOUS DEMANDONS
 3) Une réponse écrite sur les moisissures, l’humidité et la demande de relogement au regard du certificat médical.
 À défaut : saisine du Service Communal d’Hygiène et de Santé de Nantes et de l’ARS (art. L.1331-22 et s. du Code de la santé publique), pouvant emporter un arrêté d’insalubrité et l’obligation de relogement (art. L.521-3-1 du CCH), ainsi que la saisine de la juridiction compétente. Préjudice et trouble de jouissance réservés (art. 1231-1 et 1240 du Code civil).
 TXT,
+
+        /* CE QUI A ÉTÉ FAIT — timeline (ordre chronologique). */
+        'timeline' => [
+            ['date' => '2026-06-28', 'fait' => 'Visite et constat du logement par le Groupe d’Action', 'detail' => 'Constat des désordres : moisissures / humidité, et désordres techniques (électricité, fuite d’eau, volet roulant). Photographies datées.'],
+            ['date' => '2026-06-28', 'fait' => 'Certificat médical recueilli', 'detail' => 'Pièce attestant l’impact sanitaire sur un occupant — versée au dossier.'],
+            ['date' => '2026-06-28', 'fait' => 'Ouverture du dossier juridique #1', 'detail' => 'Centralisation des pièces et du suivi.'],
+            ['date' => '2026-06', 'fait' => 'Signalement urgent envoyé à NMH (Agence Goudy, M. Morineau)', 'detail' => 'Démarche amiable : signalement écrit des désordres via le site.'],
+            ['date' => '2026-06', 'fait' => 'Réponse de NMH reçue', 'detail' => 'Réponse d’esquive (voir correspondance ci-dessous) : « pas de signalement », renvoi des désordres au locataire, silence sur les moisissures et la santé.'],
+            ['date' => '2026-06-29', 'fait' => 'Analyse de la réponse de NMH réalisée', 'detail' => 'Réfutation point par point (manquements juridiques + professionnalisme).'],
+        ],
+
+        /* CE QU’IL RESTE À FAIRE — stratégie, priorité à l’amiable. */
+        'prochaines_etapes' => [
+            ['etape' => 'Demander une visite contradictoire', 'echeance' => 'sous 8 jours', 'detail' => 'Par email puis, à défaut de réponse, par LRAR. En présence de la locataire et de l’association. NMH invoque un défaut d’accès : c’est à lui d’organiser la visite.'],
+            ['etape' => 'Faire adhérer la locataire à l’association + mandat écrit', 'echeance' => 'avant tout courrier en son nom', 'detail' => 'Condition pour agir et écrire au nom de la locataire (loi du 6 juillet 1989 ; art. 63-66 loi 71-1130). Générer le bulletin d’adhésion depuis le dossier.'],
+            ['etape' => 'Envoyer la mise en demeure LRAR (réponse argumentée)', 'echeance' => 'semaine en cours', 'detail' => 'Utiliser le document « 📨 Réponse argumentée à NMH » : réfutation point par point + exiger une RECHERCHE DE FUITE et un DIAGNOSTIC électricité/volet à la charge de NMH, un calendrier ferme de travaux, et une réponse écrite sur les moisissures + la demande de relogement.'],
+            ['etape' => 'À défaut de réponse satisfaisante : saisir le SCHS de Nantes et l’ARS', 'echeance' => 'sous 15 jours', 'detail' => 'Documents « 🏥 SCHS » et « 🏛 ARS » du dossier. Une insalubrité confirmée peut emporter un arrêté préfectoral et l’obligation de relogement (L.521-3-1 CCH).'],
+            ['etape' => 'Consulter les avocats (Me … et Me Valet)', 'echeance' => 'en parallèle', 'detail' => 'Voir la « Note pour les avocats » ci-dessous : référé-expertise (art. 145 CPC), action au fond (travaux + dommages-intérêts + réduction de loyer, art. 20-1 loi 89-462), éligibilité à l’aide juridictionnelle.'],
+            ['etape' => 'Documenter en continu', 'echeance' => 'permanent', 'detail' => 'Photos datées, relevés d’humidité, et — de façon anonymisée — les cas similaires dans l’immeuble (pour étayer un défaut collectif du bâti).'],
+        ],
+
+        /* NOTE POUR LES AVOCATS — synthèse de ce qu’on attend d’eux. */
+        'note_avocats' => <<<'AVO'
+À l’attention de Maître …………………… et de Maître Valet
+
+OBJET : logement de Mme Fadiga — appui juridique envisagé (bailleur : Nantes Métropole Habitat).
+
+1. CONTEXTE
+Mme Fadiga est locataire d’un logement social géré par Nantes Métropole Habitat (Agence Goudy, M. Morineau). Le logement présente des désordres affectant la décence et la santé : moisissures et humidité, ainsi que des désordres techniques (électricité, fuite d’eau, volet roulant). Un certificat médical atteste de l’impact sanitaire sur un occupant. La démarche amiable est engagée (signalement écrit) ; la réponse de NMH esquive l’essentiel (voir analyse jointe).
+
+2. CE QUI A DÉJÀ ÉTÉ FAIT
+Constat de visite avec photographies datées ; recueil du certificat médical ; signalement écrit à NMH ; analyse réfutant point par point la réponse du bailleur. À venir : visite contradictoire, mise en demeure LRAR, puis saisine SCHS/ARS si nécessaire.
+
+3. CE QUE NOUS ATTENDONS DE VOUS
+a) Un avis sur la stratégie contentieuse et le séquencement (amiable → référé → fond).
+b) Un éventuel RÉFÉRÉ-EXPERTISE (art. 145 du Code de procédure civile) pour faire constater par expert l’humidité/les moisissures, leur origine (bâti vs usage) et le lien avec la santé.
+c) Une action en EXÉCUTION FORCÉE des travaux (obligations du bailleur, art. 1719-1720 C. civ. ; décret n° 2002-120 sur la décence) assortie de DOMMAGES-INTÉRÊTS pour trouble de jouissance (art. 1231-1 et 1240 C. civ.).
+d) Le cas échéant, une demande de RÉDUCTION DE LOYER et d’injonction de travaux pour non-décence (art. 20-1 de la loi n° 89-462).
+e) L’articulation avec une procédure d’INSALUBRITÉ (SCHS/ARS, art. L.1331-22 et s. CSP) et l’obligation de RELOGEMENT (art. L.521-3-1 CCH).
+f) Une appréciation de la faisabilité d’une ACTION COLLECTIVE (plusieurs locataires, même bailleur, désordres communs du bâti — art. 24-1 de la loi n° 89-462) si plusieurs ménages sont concernés.
+
+4. QUESTIONS PRÉCISES
+- Mme Fadiga est-elle éligible à l’AIDE JURIDICTIONNELLE, et pouvez-vous intervenir à ce titre ?
+- Quel est, selon vous, le levier le plus rapide pour obtenir les travaux (référé-injonction de faire / référé-expertise) ?
+- Quels éléments de preuve devons-nous sécuriser dès maintenant pour solidifier le dossier ?
+- Quelles sont vos modalités et honoraires pour une première consultation ?
+
+5. PIÈCES À VOTRE DISPOSITION
+Constat de visite + photographies datées ; certificat médical ; copie du signalement et de la réponse de NMH ; analyse juridique jointe.
+AVO,
     ],
 
 ];
