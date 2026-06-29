@@ -894,13 +894,26 @@ function lfi_nct_app_view_dossier_recap_nmh() {
     echo '<tr class="total" style="background:#fff3f5"><td colspan="2"><strong>RESTE DÛ PAR NMH</strong></td><td class="num"><strong>' . number_format($total_du, 2, ',', ' ') . ' €</strong></td><td></td></tr>';
     echo '</table>';
 
-    echo '<p style="margin-top:14px">Ces interventions, réalisées en substitution du bailleur défaillant à son obligation d\'entretien (articles 1719 et 1724 du Code civil), sont à la charge de ' . esc_html($bailleur['nom'] ?? 'Nantes Métropole Habitat') . '. Le détail de chaque prestation (facture, photographies avant/après, justificatifs de matériaux) est disponible sur demande.</p>';
+    echo lfi_nct_legal_fondement_block($bailleur['nom'] ?? 'Nantes Métropole Habitat');
     echo '<p><strong>TVA non applicable, art. 293 B du CGI.</strong></p>';
 
     echo '<div class="signature">' . esc_html($presta['nom'] ?? '') . '</div>';
     echo '</div>';
 
     lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
+ *  Bloc "Fondement juridique + conséquences" — imprimé sur les     *
+ *  récaps et factures envoyées à NMH.                              *
+ * ============================================================== */
+function lfi_nct_legal_fondement_block($bailleur_nom) {
+    $h  = '<h2>Fondement juridique de la créance</h2>';
+    $h .= '<p>Les travaux conservatoires figurant ci-dessus ont été réalisés <strong>en remplacement du bailleur</strong>, défaillant à son obligation légale de délivrer et d\'entretenir un logement décent (<strong>articles 1719 et 1724 du Code civil</strong> ; <strong>article 6 de la loi n° 89-462</strong> ; <strong>décret n° 2002-120</strong>), après <strong>mise en demeure restée infructueuse</strong>, en application de l\'<strong>article 1222 du Code civil</strong> (exécution de l\'obligation par un tiers aux frais du débiteur).</p>';
+    $h .= '<p>Le locataire concerné a expressément <strong>mandaté l\'intervenant</strong> et l\'a <strong>subrogé dans ses droits</strong> à l\'encontre du bailleur (<strong>article 1346 du Code civil</strong>). La présente créance est donc réclamée à ' . esc_html($bailleur_nom) . ' au nom et pour le compte du locataire subrogeant.</p>';
+    $h .= '<h2>Conséquences à défaut de paiement</h2>';
+    $h .= '<p>À défaut de règlement dans le délai imparti, la créance sera recouvrée par voie judiciaire : tentative de conciliation préalable devant la <strong>Commission Départementale de Conciliation</strong> (art. 20 loi n° 89-462), puis saisine du <strong>Tribunal Judiciaire de Nantes</strong>, avec demande de condamnation au principal, aux <strong>pénalités de retard</strong> (art. L.441-10 C. com.), à l\'<strong>indemnité forfaitaire de recouvrement de 40 €</strong> (décret 2012-1115), aux <strong>dommages-intérêts pour trouble de jouissance</strong> du locataire (art. 1719 CC) et aux <strong>frais irrépétibles</strong> (art. 700 CPC). Un signalement au <strong>SCHS</strong> et à l\'<strong>ARS</strong> pourra en outre être diligenté.</p>';
+    return $h;
 }
 
 /* ============================================================== *

@@ -639,6 +639,12 @@ function lfi_nct_app_dossier_juridique_form($row) {
         } else {
             $montant_v = $heures_v * $tarif_v;
             echo '<div class="com">Temps de constat + rédaction du rapport, facturé à ' . number_format($tarif_v, 2, ',', ' ') . ' €/h.</div>';
+            echo '<div style="background:#fff8e6;border-left:4px solid #bd8600;padding:10px 12px;border-radius:6px;margin:8px 0;font-size:.85em;line-height:1.5">';
+            echo '⚖️ <strong>Point juridique à connaître.</strong> Une <strong>visite seule</strong> facturée directement à NMH est contestable (« on n\'a rien commandé »). Deux façons de la rendre solide :<br>';
+            echo '• <strong>L\'intégrer au devis des travaux</strong> (déplacement + diagnostic + réparation en une facture) — imparable ;<br>';
+            echo '• OU la <strong>facturer au locataire</strong>, qui la réclamera ensuite à NMH comme préjudice au tribunal.<br>';
+            echo 'La facture reste émise <strong>en ton nom d\'auto-entrepreneur</strong>, jamais au nom du GA. <a href="' . esc_url(lfi_nct_app_url('cadre-juridique')) . '">📖 Comprendre le cadre légal</a>.';
+            echo '</div>';
             echo '<form method="post" class="lfi-app-form" style="margin-top:8px">';
             wp_nonce_field('lfi_dossier_facturer_visite');
             echo '<input type="hidden" name="lfi_dossier_facturer_visite" value="1">';
@@ -1289,6 +1295,55 @@ function lfi_nct_dossier_header_destinataire_nmh($bailleur) {
         if (!empty($bailleur['agence_tel']))     echo ' · Tél. ' . esc_html($bailleur['agence_tel']);
         echo '</div>';
     }
+}
+
+/* ============================================================== *
+ *  ÉCRAN : Cadre juridique de la facturation                       *
+ * ============================================================== */
+function lfi_nct_app_view_cadre_juridique() {
+    if (!lfi_nct_can_use_brigade()) return;
+    lfi_nct_app_screen_open('⚖️ Cadre juridique de la facturation', 'Comment facturer NMH légalement');
+
+    echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';
+    echo '⚠️ <strong>Ceci n\'est pas un avis d\'avocat.</strong> Avant d\'engager des montants importants, fais valider ton montage par l\'<strong>ADIL 44</strong> (consultation juridique logement gratuite — 02 40 89 30 15) ou un avocat. Les règles ci-dessous sont le cadre général ; chaque cas a ses nuances.';
+    echo '</div>';
+
+    $blocks = [
+        ['✅ Les TRAVAUX : facturables à NMH', '#186a3b',
+         'Réparer ce que NMH aurait dû réparer (moisissures, VMC, plomberie…) est <strong>facturable au bailleur</strong> via le mécanisme de substitution :<br><br>'
+         . '<strong>Article 1222 du Code civil</strong> : après mise en demeure, le locataire peut faire exécuter les travaux par un tiers, aux frais du bailleur.<br><br>'
+         . 'La chaîne : (1) le <strong>locataire est ton client</strong> → (2) il signe le <strong>mandat/devis</strong> → (3) <strong>mise en demeure</strong> à NMH → (4) tu fais les travaux, tu factures → (5) <strong>subrogation</strong> (art. 1346 CC) → tu réclames à NMH → (6) tribunal si refus.'],
+
+        ['⚠️ La VISITE seule : fragile', '#bd8600',
+         'Facturer une « visite » directement à NMH est contestable : ils diront « on n\'a rien commandé ». Pour la rendre solide :<br><br>'
+         . '• <strong>L\'intégrer au devis des travaux</strong> (déplacement + diagnostic + réparation en une seule facture) — c\'est ce que fait tout artisan, imparable ;<br>'
+         . '• OU la <strong>facturer au locataire</strong>, qui la réclame ensuite à NMH comme <strong>préjudice</strong> (dommages-intérêts) devant le juge.'],
+
+        ['❌ L\'AIDE AUX DÉMARCHES : attention', '#a30b25',
+         'Rédiger des actes juridiques ou donner des consultations <strong>contre rémunération</strong> est réservé aux professions réglementées (<strong>loi n° 71-1130, art. 54</strong>). Un non-juriste qui facture ça risque l\'<strong>exercice illégal du droit</strong>.<br><br>'
+         . '<strong>La parade :</strong> une <strong>association de défense des locataires</strong> (loi 1901) peut légalement assister ses membres (art. 63-66 loi 71-1130). Si tu veux faire de l\'accompagnement, le bon véhicule est une association dédiée — pas le GA, pas ton statut d\'auto-entrepreneur.'],
+
+        ['❌ Au nom du « GA LFI » : non', '#a30b25',
+         'Un groupe d\'action est un <strong>mouvement politique</strong>, il ne peut pas émettre de factures ni avoir d\'activité commerciale.<br><br>'
+         . 'Toutes tes factures sont émises <strong>en ton nom d\'auto-entrepreneur</strong> (Fabrice Doucet). Le GA, c\'est seulement <strong>comment tu as rencontré</strong> le locataire — jamais l\'émetteur de la facture.'],
+    ];
+
+    foreach ($blocks as $b) {
+        echo '<div style="background:#fff;border-left:4px solid ' . $b[1] . ';border-radius:10px;padding:14px 16px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)">';
+        echo '<div style="font-weight:800;color:' . $b[1] . ';font-size:1.05em;margin-bottom:6px">' . $b[0] . '</div>';
+        echo '<div style="font-size:.92em;line-height:1.6;color:#333">' . $b[2] . '</div>';
+        echo '</div>';
+    }
+
+    echo '<div style="background:#e8f5ea;border-radius:10px;padding:14px 16px;margin:14px 0">';
+    echo '<div style="font-weight:800;color:#186a3b;margin-bottom:6px">📋 En résumé — la règle d\'or</div>';
+    echo '<div style="font-size:.92em;line-height:1.6">';
+    echo '<strong>Facture les TRAVAUX</strong> (à NMH, via substitution, en ton nom d\'auto-entrepreneur, avec mandat + mise en demeure). <strong>Intègre la visite/diagnostic dans le devis des travaux</strong>. Pour l\'aide aux démarches juridiques, passe par une <strong>association de locataires</strong>. Et quand NMH refuse de payer → la chaîne de recouvrement (Conciliation → Tribunal → SCHS/ARS).';
+    echo '</div></div>';
+
+    echo '<div style="margin-top:16px"><a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Retour</a></div>';
+
+    lfi_nct_app_screen_close();
 }
 
 /* ============================================================== *

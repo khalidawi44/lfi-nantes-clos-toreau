@@ -1222,6 +1222,9 @@ function lfi_nct_app_view_facturation_params() {
     echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">';
     echo '🔒 <strong>Ces données ne sont visibles QUE par toi.</strong> Ton IBAN, ton SIRET, ton tarif, ton compteur de facture — chacun a les siens. Quand tu crées une facture, elle est numérotée dans TA série (avec tes initiales) et ne se mélange jamais avec celles des autres membres de la brigade.';
     echo '</div>';
+    echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';
+    echo '⚖️ <strong>Avant de facturer NMH, comprends le cadre légal :</strong> ce qui est facturable au bailleur, ce qui doit passer par le locataire, et pourquoi la facture est en ton nom (pas celui du GA). <a href="' . esc_url(lfi_nct_app_url('cadre-juridique')) . '">📖 Lire le cadre juridique</a>';
+    echo '</div>';
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_fact_params');
