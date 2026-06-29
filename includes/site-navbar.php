@@ -14,7 +14,17 @@
  */
 if (!defined('ABSPATH')) exit;
 
-add_action('wp_body_open', 'lfi_nct_render_site_navbar', 5);
+add_action('wp_body_open', 'lfi_nct_render_site_navbar_safe', 5);
+
+/* Wrapper protégé : un plantage de la navbar ne doit JAMAIS blanchir
+   tout le site (le hook wp_body_open tourne sur chaque page). */
+function lfi_nct_render_site_navbar_safe() {
+    try {
+        lfi_nct_render_site_navbar();
+    } catch (\Throwable $e) {
+        if (function_exists('error_log')) error_log('[LFI navbar] ' . $e->getMessage());
+    }
+}
 
 function lfi_nct_render_site_navbar() {
     if (!is_user_logged_in()) return;
@@ -217,7 +227,16 @@ function lfi_nct_render_site_navbar() {
  *  Permet d'accéder à toutes les vues de l'app en un clic depuis   *
  *  n'importe quelle page de wp-admin (édition d'un article, etc.). *
  * ============================================================== */
-add_action('admin_bar_menu', 'lfi_nct_admin_bar_menu', 30);
+add_action('admin_bar_menu', 'lfi_nct_admin_bar_menu_safe', 30);
+
+/* Wrapper protégé — la barre admin tourne sur tout le site et wp-admin. */
+function lfi_nct_admin_bar_menu_safe($bar) {
+    try {
+        lfi_nct_admin_bar_menu($bar);
+    } catch (\Throwable $e) {
+        if (function_exists('error_log')) error_log('[LFI adminbar] ' . $e->getMessage());
+    }
+}
 
 function lfi_nct_admin_bar_menu($bar) {
     if (!is_user_logged_in()) return;

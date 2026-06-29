@@ -271,12 +271,6 @@ function lfi_nct_app_handle_redirects() {
         exit;
     }
 
-    /* Backward compat : /app/?vue=comptes pour admin */
-    if ($vue === 'comptes' && current_user_can('manage_options')) {
-        wp_safe_redirect(home_url('/app/?vue=comptes-ga'));
-        exit;
-    }
-
     /* Preview set : poser cookie + redirect home */
     if ($vue === 'preview-set' && current_user_can('manage_options')) {
         $uid = isset($_GET['uid']) ? (int) $_GET['uid'] : 0;
@@ -379,6 +373,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_preview_banner($previewed_user);
     }
 
+    try {
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
     } else {
@@ -465,11 +460,37 @@ function lfi_nct_app_shortcode() {
             }
         }
     }
+    } catch (\Throwable $e) {
+        /* FILET DE SÉCURITÉ : plus jamais de page blanche. Si une vue
+           plante (fonction, DB, etc.), on affiche une erreur claire +
+           un retour, au lieu d'un écran vide. */
+        if (function_exists('error_log')) {
+            error_log('[LFI app] Erreur de rendu vue "' . (isset($_GET['vue']) ? sanitize_key($_GET['vue']) : 'dashboard') . '" : ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+        }
+        echo '<div class="lfi-app"><div class="lfi-app-screen">';
+        echo '<div style="background:#fff;border-radius:12px;padding:20px;margin:14px;text-align:center;color:#1a1a1a">';
+        echo '<div style="font-size:2.4em;margin-bottom:8px">😕</div>';
+        echo '<h2 style="color:#c8102e;margin:0 0 8px">Cette page a rencontré un souci</h2>';
+        echo '<p style="color:#555;line-height:1.5">Pas de panique, rien n\'est perdu. Réessaie, ou reviens à l\'accueil.</p>';
+        if (current_user_can('manage_options')) {
+            echo '<p style="font-size:.8em;color:#999;background:#f7f7f7;padding:8px;border-radius:6px;text-align:left;word-break:break-word">' . esc_html($e->getMessage()) . '<br><small>' . esc_html(basename($e->getFile())) . ':' . (int) $e->getLine() . '</small></p>';
+        }
+        echo '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">';
+        echo '<a href="' . esc_url(home_url('/app/')) . '" style="background:#c8102e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">🏠 Accueil</a>';
+        echo '<a href="#" onclick="location.reload();return false;" style="background:#fff;color:#c8102e;border:1.5px solid #c8102e;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">🔄 Réessayer</a>';
+        echo '</div>';
+        echo '</div></div></div>';
+    }
 
-    lfi_nct_app_render_styles();
-    lfi_nct_app_render_register_sw();
-    /* Bouton d'urgence flottant — visible partout sauf sur l'écran de login */
-    if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
+    /* Rendu final protégé : ces 3 fonctions ne doivent jamais blanchir
+       la page si l'une d'elles échoue. */
+    try {
+        lfi_nct_app_render_styles();
+        lfi_nct_app_render_register_sw();
+        if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
+    } catch (\Throwable $e) {
+        if (function_exists('error_log')) error_log('[LFI app] Erreur rendu final : ' . $e->getMessage());
+    }
 
     return ob_get_clean();
 }
