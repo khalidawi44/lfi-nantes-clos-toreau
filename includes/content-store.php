@@ -114,8 +114,7 @@ function lfi_nct_evenements_shortcode($atts = []) {
 
 /**
  * Crée automatiquement (une seule fois) la page publique « Événements »
- * avec le shortcode, pour que l'agenda s'affiche sans aucune manipulation
- * dans WordPress. Adresse : /evenements/.
+ * avec le shortcode, SI elle n'existe pas déjà. Adresse : /evenements/.
  */
 add_action('init', 'lfi_nct_ensure_evenements_page', 20);
 function lfi_nct_ensure_evenements_page() {
@@ -131,6 +130,22 @@ function lfi_nct_ensure_evenements_page() {
         ]);
     }
     update_option('lfi_nct_evenements_page_done', 1, false);
+}
+
+/**
+ * Affiche AUTOMATIQUEMENT les événements sur la page /evenements/ même si
+ * cette page existait déjà (« Mobilisations à venir ») et ne contient pas
+ * le shortcode. On AJOUTE la liste sous le contenu existant, sans le
+ * modifier. Ainsi, dès que Claude pousse un événement, il apparaît.
+ */
+add_filter('the_content', 'lfi_nct_evenements_autoinject', 20);
+function lfi_nct_evenements_autoinject($content) {
+    if (is_admin() || !is_singular()) return $content;
+    $post = get_post();
+    if (!is_a($post, 'WP_Post') || $post->post_name !== 'evenements') return $content;
+    /* Si la page contient déjà le shortcode, ne pas dupliquer. */
+    if (has_shortcode($post->post_content, 'lfi_nct_evenements')) return $content;
+    return $content . lfi_nct_evenements_shortcode([]);
 }
 
 /* ============================================================== *
