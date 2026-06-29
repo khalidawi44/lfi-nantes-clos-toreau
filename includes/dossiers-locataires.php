@@ -623,6 +623,15 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-doc-rapport-visite', ['id' => $row->id])) . '" target="_blank">📄 Ouvrir le rapport de visite</a>';
         echo '</div></div></div>';
 
+        /* Bulletin d'adhésion association — la pièce qui légalise l'accompagnement */
+        $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
+        echo '<div class="lfi-app-list"><div class="lfi-app-card" style="border-left:4px solid #7a0000">';
+        echo '<div class="head"><div class="who">🎫 Bulletin d\'adhésion ' . esc_html($asso['nom']) . '</div></div>';
+        echo '<div class="com">⚖️ <strong>Fais adhérer le locataire AVANT de l\'accompagner.</strong> C\'est ce qui rend légal l\'envoi de courriers en son nom par l\'association (art. 63-66 loi 71-1130). Cotisation : ' . esc_html($asso['cotisation'] ?: '5') . ' €.</div>';
+        echo '<div class="row-actions">';
+        echo '<a class="btn-primary" style="background:#7a0000" href="' . esc_url(lfi_nct_app_url('dossier-doc-adhesion', ['id' => $row->id])) . '" target="_blank">🎫 Générer le bulletin d\'adhésion</a>';
+        echo '</div></div></div>';
+
         /* Facturation de la visite — anti-doublon */
         $deja_iid = (int) ($row->facture_intervention_id ?? 0);
         $deja_ok = $deja_iid ? $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}lfi_nct_interventions WHERE id = %d", $deja_iid)) : 0;
@@ -1319,9 +1328,10 @@ function lfi_nct_app_view_cadre_juridique() {
          . '• <strong>L\'intégrer au devis des travaux</strong> (déplacement + diagnostic + réparation en une seule facture) — c\'est ce que fait tout artisan, imparable ;<br>'
          . '• OU la <strong>facturer au locataire</strong>, qui la réclame ensuite à NMH comme <strong>préjudice</strong> (dommages-intérêts) devant le juge.'],
 
-        ['❌ L\'AIDE AUX DÉMARCHES : attention', '#a30b25',
-         'Rédiger des actes juridiques ou donner des consultations <strong>contre rémunération</strong> est réservé aux professions réglementées (<strong>loi n° 71-1130, art. 54</strong>). Un non-juriste qui facture ça risque l\'<strong>exercice illégal du droit</strong>.<br><br>'
-         . '<strong>La parade :</strong> une <strong>association de défense des locataires</strong> (loi 1901) peut légalement assister ses membres (art. 63-66 loi 71-1130). Si tu veux faire de l\'accompagnement, le bon véhicule est une association dédiée — pas le GA, pas ton statut d\'auto-entrepreneur.'],
+        ['✅ L\'AIDE AUX DÉMARCHES : via ton association', '#186a3b',
+         'Rédiger des courriers ou conseiller <strong>contre rémunération</strong> serait réservé aux professions réglementées (loi n° 71-1130, art. 54). MAIS ton association <strong>' . esc_html((function_exists('lfi_nct_association') ? lfi_nct_association()['nom'] : 'Union des quartiers libres')) . '</strong> peut légalement <strong>assister ses membres</strong> (art. 63-66 loi 71-1130).<br><br>'
+         . '<strong>La clé :</strong> fais <strong>adhérer le locataire</strong> à l\'association (cotisation symbolique) → ensuite l\'asso peut écrire en son nom, monter le dossier, et même agir en justice pour lui.<br><br>'
+         . '<strong>3 conditions :</strong> (1) l\'objet des statuts doit couvrir le logement/cadre de vie ; (2) l\'argent de l\'asso ne va jamais dans ta poche (tu es bénévole) ; (3) transparence sur le fait que tu fais aussi les travaux (le locataire reste libre de choisir un autre artisan).'],
 
         ['❌ Au nom du « GA LFI » : non', '#a30b25',
          'Un groupe d\'action est un <strong>mouvement politique</strong>, il ne peut pas émettre de factures ni avoir d\'activité commerciale.<br><br>'
@@ -1335,15 +1345,60 @@ function lfi_nct_app_view_cadre_juridique() {
         echo '</div>';
     }
 
+    $asso_nom = function_exists('lfi_nct_association') ? lfi_nct_association()['nom'] : 'Union des quartiers libres';
     echo '<div style="background:#e8f5ea;border-radius:10px;padding:14px 16px;margin:14px 0">';
-    echo '<div style="font-weight:800;color:#186a3b;margin-bottom:6px">📋 En résumé — la règle d\'or</div>';
+    echo '<div style="font-weight:800;color:#186a3b;margin-bottom:6px">📋 Ton montage à 2 étages</div>';
     echo '<div style="font-size:.92em;line-height:1.6">';
-    echo '<strong>Facture les TRAVAUX</strong> (à NMH, via substitution, en ton nom d\'auto-entrepreneur, avec mandat + mise en demeure). <strong>Intègre la visite/diagnostic dans le devis des travaux</strong>. Pour l\'aide aux démarches juridiques, passe par une <strong>association de locataires</strong>. Et quand NMH refuse de payer → la chaîne de recouvrement (Conciliation → Tribunal → SCHS/ARS).';
+    echo '<strong>1. L\'association ' . esc_html($asso_nom) . '</strong> → le locataire adhère, puis elle l\'accompagne : courriers, mise en demeure, dossier, saisines, représentation. (Bulletin d\'adhésion générable dans chaque dossier.)<br>';
+    echo '<strong>2. Toi, auto-entrepreneur</strong> → les travaux physiques, facturés à NMH via substitution (art. 1222 CC), avec mandat + mise en demeure. La visite/diagnostic s\'intègre au devis des travaux.<br><br>';
+    echo 'Quand NMH refuse → chaîne de recouvrement (Conciliation → Tribunal → SCHS/ARS).';
     echo '</div></div>';
 
     echo '<div style="margin-top:16px"><a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Retour</a></div>';
 
     lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  BULLETIN D'ADHÉSION à l'association (clé de l'accompagnement)    *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_doc_adhesion() {
+    if (!lfi_nct_can_use_brigade()) return;
+    $ctx = lfi_nct_dossier_doc_open('🎫 Bulletin d\'adhésion');
+    extract($ctx);
+    $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
+
+    echo '<div class="lfi-rec-doc">';
+    echo '<h1>Bulletin d\'adhésion</h1>';
+    echo '<p style="text-align:center;font-weight:700;font-size:1.1em;margin-bottom:6px">' . esc_html($asso['nom']) . '</p>';
+    if (!empty($asso['rna'])) echo '<p style="text-align:center;font-style:italic;margin-bottom:20px">Association loi 1901 — n° RNA ' . esc_html($asso['rna']) . '</p>';
+
+    echo '<p>Je soussigné(e) <strong>' . esc_html($tenant_full ?: '________________________') . '</strong>,';
+    if ($dossier->tenant_adresse) echo ' demeurant ' . esc_html($dossier->tenant_adresse) . ($dossier->tenant_etage ? ', étage ' . esc_html($dossier->tenant_etage) : '') . ',';
+    echo ' déclare adhérer à l\'association <strong>' . esc_html($asso['nom']) . '</strong>';
+    if (!empty($asso['objet'])) echo ', dont l\'objet est : <em>' . esc_html($asso['objet']) . '</em>';
+    echo '.</p>';
+
+    echo '<p>Je verse à ce titre ma cotisation annuelle de <strong>' . esc_html($asso['cotisation'] ?: '5') . ' €</strong> et reconnais avoir pris connaissance des statuts de l\'association.</p>';
+
+    echo '<h2>Demande d\'accompagnement</h2>';
+    echo '<p>En qualité de membre, je sollicite l\'assistance de l\'association dans mes démarches relatives aux désordres affectant mon logement (relations avec le bailleur, courriers, constitution du dossier, saisines administratives), conformément à l\'objet statutaire de l\'association et aux articles 63 à 66 de la loi n° 71-1130 du 31 décembre 1971.</p>';
+
+    echo '<table class="detail">';
+    echo '<tr><td>Téléphone</td><td>' . esc_html($dossier->tenant_tel ?: '________________') . '</td></tr>';
+    echo '<tr><td>Email</td><td>' . esc_html($dossier->tenant_email ?: '________________') . '</td></tr>';
+    echo '<tr><td>Date d\'adhésion</td><td>____ / ____ / 20____</td></tr>';
+    echo '</table>';
+
+    echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
+    echo '<div style="flex:1"><p><strong>Le membre adhérent :</strong></p><p>Signature :</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '<div style="flex:1"><p><strong>Pour l\'association, le/la président·e :</strong></p><p>' . esc_html($asso['president'] ?: '') . '</p><div style="height:50px;border-bottom:1px solid #999;width:80%"></div></div>';
+    echo '</div>';
+
+    echo '<div class="pj"><strong>Important :</strong> cette adhésion ouvre le droit à l\'accompagnement de l\'association. Les éventuels travaux matériels restent réalisés et facturés séparément par un intervenant professionnel choisi librement par l\'adhérent.</div>';
+
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
 }
 
 /* ============================================================== *

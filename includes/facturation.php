@@ -162,6 +162,25 @@ function lfi_nct_fact_delai($uid = null) {
     return (int) ($val !== '' ? $val : 30);
 }
 
+/* Configuration de l'association loi 1901 (véhicule de l'accompagnement
+   juridique des locataires). Globale (une seule asso), éditable par l'admin. */
+function lfi_nct_association() {
+    $data = get_option('lfi_nct_association', '');
+    $defaults = [
+        'nom'       => 'Union des quartiers libres',
+        'rna'       => '',          /* n° W au RNA */
+        'siege'     => '',
+        'cp_ville'  => '44200 Nantes',
+        'president' => '',
+        'email'     => '',
+        'tel'       => '',
+        'objet'     => 'défense des habitants et amélioration des conditions de logement et du cadre de vie dans les quartiers',
+        'cotisation'=> '5',
+    ];
+    if (is_array($data) && !empty($data)) return array_merge($defaults, $data);
+    return $defaults;
+}
+
 function lfi_nct_fact_invoice_prefix_default($uid) {
     $u = $uid ? get_userdata($uid) : null;
     $initials = '';
@@ -1203,6 +1222,16 @@ function lfi_nct_app_view_facturation_params() {
         $prefix_in = sanitize_text_field(wp_unslash($_POST['invoice_prefix'] ?? ''));
         if ($prefix_in !== '') update_user_meta($uid, 'lfi_nct_fact_invoice_prefix', $prefix_in);
 
+        /* Association loi 1901 — globale, admin only */
+        if (current_user_can('manage_options') && isset($_POST['asso_nom'])) {
+            $asso = lfi_nct_association();
+            foreach (['nom', 'rna', 'president', 'siege', 'cp_ville', 'email', 'tel', 'cotisation'] as $k) {
+                $asso[$k] = sanitize_text_field(wp_unslash($_POST['asso_' . $k] ?? ''));
+            }
+            $asso['objet'] = sanitize_textarea_field(wp_unslash($_POST['asso_objet'] ?? ''));
+            update_option('lfi_nct_association', $asso, false);
+        }
+
         wp_safe_redirect(lfi_nct_app_url('facturation-params', ['saved' => 1]));
         exit;
     }
@@ -1259,6 +1288,22 @@ function lfi_nct_app_view_facturation_params() {
     echo '<label>Email du responsable<input type="email" name="bailleur_agence_email" value="' . esc_attr($bailleur['agence_email'] ?? '') . '" placeholder="yvonnic.morineau@nmh.fr"></label>';
     echo '<label>Adresse agence<input type="text" name="bailleur_agence_adresse" value="' . esc_attr($bailleur['agence_adresse'] ?? '') . '" placeholder="ex: 6 rue Goudy, 44200 Nantes"></label>';
     echo '<label>Téléphone agence<input type="tel" name="bailleur_agence_tel" value="' . esc_attr($bailleur['agence_tel'] ?? '') . '"></label>';
+
+    /* === Association loi 1901 (accompagnement juridique) — admin only === */
+    if (current_user_can('manage_options')) {
+        $asso = lfi_nct_association();
+        echo '<h3 style="margin:18px 0 0">🏛 Association loi 1901 (accompagnement)</h3>';
+        echo '<div class="lfi-app-help"><small>L\'association assiste légalement les locataires <strong>adhérents</strong> dans leurs démarches (art. 63-66 loi 71-1130). Les courriers d\'accompagnement peuvent être émis en son nom. Les <strong>travaux</strong> restent facturés en ton nom d\'auto-entrepreneur. <a href="' . esc_url(lfi_nct_app_url('cadre-juridique')) . '">📖 Cadre juridique</a></small></div>';
+        echo '<label>Nom de l\'association<input type="text" name="asso_nom" value="' . esc_attr($asso['nom']) . '"></label>';
+        echo '<label>N° RNA (W…) au Journal officiel<input type="text" name="asso_rna" value="' . esc_attr($asso['rna']) . '" placeholder="W442..."></label>';
+        echo '<label>Président·e<input type="text" name="asso_president" value="' . esc_attr($asso['president']) . '"></label>';
+        echo '<label>Siège social<input type="text" name="asso_siege" value="' . esc_attr($asso['siege']) . '"></label>';
+        echo '<label>Code postal et ville<input type="text" name="asso_cp_ville" value="' . esc_attr($asso['cp_ville']) . '"></label>';
+        echo '<label>Email<input type="email" name="asso_email" value="' . esc_attr($asso['email']) . '"></label>';
+        echo '<label>Téléphone<input type="tel" name="asso_tel" value="' . esc_attr($asso['tel']) . '"></label>';
+        echo '<label>Objet social (extrait des statuts)<textarea name="asso_objet" rows="2">' . esc_textarea($asso['objet']) . '</textarea></label>';
+        echo '<label>Cotisation d\'adhésion (€)<input type="number" name="asso_cotisation" value="' . esc_attr($asso['cotisation']) . '" step="1" min="0"></label>';
+    }
 
     echo '<h3 style="margin:18px 0 0">💶 Tarification</h3>';
     echo '<label>Tarif horaire par défaut (€ HT)<input type="number" name="tarif_defaut" value="' . esc_attr($tarif) . '" step="0.50" min="0" required></label>';
