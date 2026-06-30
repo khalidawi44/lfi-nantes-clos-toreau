@@ -318,7 +318,10 @@ function lfi_nct_brigade_owner_id() {
         $puid = function_exists('lfi_nct_app_preview_uid_from_cookie') ? lfi_nct_app_preview_uid_from_cookie() : 0;
         if ($puid) return (int) $puid;
     }
-    return (int) get_current_user_id();
+    $base = (int) get_current_user_id();
+    /* Cloisonnement multi-GA (repli sur $base si rien n'est configuré). */
+    if (function_exists('lfi_nct_ga_owner_resolve')) return (int) lfi_nct_ga_owner_resolve($base);
+    return $base;
 }
 
 /* ============================================================== *
