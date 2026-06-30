@@ -239,6 +239,7 @@ function lfi_nct_fact_total_smart($mode, $prix_tache, $duree, $tarif, $materiaux
  * ============================================================== */
 function lfi_nct_app_view_interventions() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     $owner = (int) lfi_nct_fact_owner_id();
@@ -407,10 +408,12 @@ function lfi_nct_app_view_interventions() {
  * ============================================================== */
 function lfi_nct_app_view_intervention_add() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     lfi_nct_app_intervention_form(null);
 }
 function lfi_nct_app_view_intervention_edit() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
     $t = $wpdb->prefix . 'lfi_nct_interventions';
@@ -1233,6 +1236,7 @@ function lfi_nct_app_intervention_form($row) {
  * ============================================================== */
 function lfi_nct_app_view_facture() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
 

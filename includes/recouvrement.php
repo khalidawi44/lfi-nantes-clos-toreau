@@ -554,6 +554,7 @@ function lfi_nct_rec_interventions_by_facture($numero) {
  * ============================================================== */
 function lfi_nct_app_view_recouvrements() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     global $wpdb;
     $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
