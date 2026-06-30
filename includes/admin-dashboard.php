@@ -200,6 +200,71 @@ function lfi_nct_purge_notice() {
 }
 
 /* ============================================================== *
+ *  2bis. SUPPRESSION DU DIAGNOSTIC « MU-plugin LFI v3 »            *
+ *                                                                  *
+ *  Ce tableau « Diagnostic ag_evenement » est injecté par un       *
+ *  must-use plugin externe (wp-content/mu-plugins/), PAS par ce    *
+ *  plugin. Comme il n'est pas dans le dépôt et qu'on ne veut pas   *
+ *  toucher au serveur, on le retire côté navigateur : on cherche   *
+ *  le bloc par son texte distinctif et on l'enlève. Garde-fou :    *
+ *  on ne supprime jamais un bloc contenant notre propre hub.       *
+ * ============================================================== */
+add_action('admin_footer', 'lfi_nct_strip_muplugin_diag', 99);
+function lfi_nct_strip_muplugin_diag() {
+    if (!is_admin()) return;
+    ?>
+    <script>
+    (function () {
+        function clean() {
+            var needles = ['Diagnostic ag_evenement', 'MU-plugin LFI'];
+            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+            var hits = [], n;
+            while ((n = walker.nextNode())) {
+                var v = n.nodeValue || '';
+                if (needles.some(function (k) { return v.indexOf(k) > -1; })) hits.push(n);
+            }
+            hits.forEach(function (t) {
+                var el = t.parentElement;
+                if (!el) return;
+                /* On remonte vers un bloc qui englobe aussi un <table>. */
+                var block = el, up = 0;
+                while (block && up < 6) {
+                    if (block.querySelector && block.querySelector('table')) break;
+                    block = block.parentElement; up++;
+                }
+                var safe = function (node) {
+                    if (!node || node === document.body) return false;
+                    var txt = node.textContent || '';
+                    if (txt.indexOf('Centre de contrôle') > -1) return false;   // notre hub
+                    if (node.querySelector && node.querySelector('a.button-hero')) return false;
+                    if (node.id === 'wpbody' || node.id === 'wpbody-content' || node.id === 'wpcontent') return false;
+                    return true;
+                };
+                if (block && block.querySelector && block.querySelector('table') && safe(block)) {
+                    block.remove();
+                    return;
+                }
+                /* Repli : on enlève le titre puis les frères jusqu'au tableau inclus. */
+                var sib = el.nextElementSibling;
+                el.remove();
+                while (sib) {
+                    var next = sib.nextElementSibling;
+                    var tag = sib.tagName ? sib.tagName.toLowerCase() : '';
+                    sib.remove();
+                    if (tag === 'table') break;
+                    sib = next;
+                }
+            });
+        }
+        if (document.readyState !== 'loading') clean();
+        else document.addEventListener('DOMContentLoaded', clean);
+        setTimeout(clean, 400); /* re-passe après que WP ait déplacé les notices */
+    })();
+    </script>
+    <?php
+}
+
+/* ============================================================== *
  *  3. NETTOYAGE DU DASHBOARD WORDPRESS                              *
  *                                                                   *
  *  Suppression des widgets et notices inutiles ou promotionnels.   *

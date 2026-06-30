@@ -7,7 +7,7 @@ if (!defined('ABSPATH')) exit;
 
 function lfi_nct_render_form() {
     ob_start(); ?>
-    <form method="POST" id="lfi-nct-form" class="lfi-survey lfi-survey-simple">
+    <form method="POST" id="lfi-nct-form" class="lfi-survey lfi-survey-simple" enctype="multipart/form-data">
         <?php wp_nonce_field('lfi_nct_submit_nonce', 'lfi_nct_nonce'); ?>
 
         <div class="lfi-print-bar">
@@ -116,6 +116,45 @@ function lfi_nct_render_form() {
                 <span class="lfi-label">Citation / déclaration (verbatim)</span>
                 <textarea name="eau_chaude_citation" rows="2" placeholder="Notez tel que dit, sans rien changer"></textarea>
             </label>
+        </fieldset>
+
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">📸 Photos du logement (facultatif)</legend>
+            <p class="lfi-help">
+                Si la personne vous <strong>invite à entrer</strong> et accepte, vous pouvez prendre
+                <strong>plusieurs photos</strong> (fuites, moisissures, dégâts, chauffage…).
+                Elles sont <strong>horodatées automatiquement</strong> (date et heure d'enregistrement)
+                et restent <strong>strictement internes</strong> au Groupe d'Action — jamais transmises à Nantes Habitat.
+            </p>
+            <label class="lfi-field">
+                <span class="lfi-label">Ajouter des photos</span>
+                <input type="file" name="enquete_photos[]" accept="image/*" multiple class="lfi-photo-input" id="lfi-enquete-photos">
+            </label>
+            <p class="lfi-help">Sur iPhone : « Photothèque » pour en choisir plusieurs d'un coup, ou « Prendre une photo » pour la caméra. Vous pouvez en ajouter autant que nécessaire.</p>
+            <div id="lfi-enquete-photos-preview" class="lfi-photos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+            <script>
+            (function(){
+                var inp = document.getElementById('lfi-enquete-photos');
+                var box = document.getElementById('lfi-enquete-photos-preview');
+                if(!inp || !box) return;
+                inp.addEventListener('change', function(){
+                    box.innerHTML = '';
+                    var files = inp.files || [];
+                    if(!files.length) return;
+                    var info = document.createElement('div');
+                    info.style.cssText='width:100%;font-size:.9em;color:#186a3b;font-weight:700';
+                    info.textContent = '📸 ' + files.length + ' photo(s) prête(s) — horodatée(s) à l\'enregistrement.';
+                    box.appendChild(info);
+                    Array.prototype.forEach.call(files, function(f){
+                        if(!/^image\//.test(f.type)) return;
+                        var img = document.createElement('img');
+                        img.style.cssText='width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #ccc';
+                        img.src = URL.createObjectURL(f);
+                        box.appendChild(img);
+                    });
+                });
+            })();
+            </script>
         </fieldset>
 
         <fieldset class="lfi-fieldset">
@@ -256,6 +295,26 @@ function lfi_nct_render_submission_summary($id) {
                     <li><strong>Déclaration :</strong> «&nbsp;<?php echo esc_html($ec_cit); ?>&nbsp;»</li>
                 <?php endif; ?>
             </ul>
+        <?php endif; ?>
+
+        <?php
+        $photos = (array) ($data['photos'] ?? []);
+        if ($photos): ?>
+            <h3>📸 Photos du logement (horodatées)</h3>
+            <p class="lfi-help"><?php echo count($photos); ?> photo(s) enregistrée(s) — internes au Groupe d'Action.</p>
+            <div class="lfi-photos-grid" style="display:flex;flex-wrap:wrap;gap:8px">
+                <?php foreach ($photos as $ph):
+                    $pid = (int) ($ph['id'] ?? 0);
+                    if (!$pid) continue;
+                    $thumb = wp_get_attachment_image_url($pid, 'medium');
+                    $full  = wp_get_attachment_url($pid);
+                    if (!$thumb) continue; ?>
+                    <a href="<?php echo esc_url($full); ?>" target="_blank" rel="noopener" style="text-decoration:none">
+                        <img src="<?php echo esc_url($thumb); ?>" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #ccc">
+                        <span style="display:block;font-size:.72em;color:#666;text-align:center;margin-top:2px"><?php echo esc_html($ph['date'] ?? ''); ?></span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
         <?php endif; ?>
 
         <h3>Suivi</h3>

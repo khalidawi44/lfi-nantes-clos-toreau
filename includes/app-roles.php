@@ -637,6 +637,10 @@ function lfi_nct_app_role_dispatch(&$handled) {
         switch ($vue) {
             case 'reunion':         lfi_nct_app_view_reunion();    break;
             case 'membres':         lfi_nct_app_view_membres();    break;
+            /* Gestion des comptes du GA (binôme admin uniquement — la vue se
+               protège elle-même via lfi_nct_is_ga_admin). Permet d'ajouter
+               des membres/admins depuis le répertoire du téléphone. */
+            case 'comptes-ga':      lfi_nct_app_view_comptes_ga(); break;
             case 'evenements':      lfi_nct_app_view_evenements(); break;
             case 'sms':             lfi_nct_app_view_sms();        break;
             case 'email':           lfi_nct_app_view_email();      break;
@@ -802,6 +806,23 @@ function lfi_nct_app_view_ga_dashboard() {
                 </a>
             <?php endforeach; ?>
         </div>
+
+        <?php if (function_exists('lfi_nct_is_ga_admin') && lfi_nct_is_ga_admin()): ?>
+        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">👥 Gestion du GA <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 6px;border-radius:4px;margin-left:6px">ADMIN DU GROUPE</span></h3>
+        <div class="lfi-app-help" style="margin:0 0 10px;font-size:.9em">Tu es <strong>admin de ton groupe d'action</strong>. Ajoute tes membres et co-admins — depuis le <strong>répertoire de ton téléphone</strong> (carte de contacts) ou à la main. Chaque GA gère ses propres comptes ; ils n'ont jamais accès à WordPress.</div>
+        <div class="lfi-app-grid">
+            <a class="lfi-app-tile" href="<?php echo esc_url(lfi_nct_app_url('comptes-ga')); ?>">
+                <div class="ico">📇</div>
+                <div class="tit">Comptes & membres</div>
+                <div class="sub">Ajouter depuis le répertoire</div>
+            </a>
+            <a class="lfi-app-tile" href="<?php echo esc_url(lfi_nct_app_url('membres')); ?>">
+                <div class="ico">👥</div>
+                <div class="tit">Adhérents du GA</div>
+                <div class="sub">Liste · ajout · suppression</div>
+            </a>
+        </div>
+        <?php endif; ?>
 
         <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>
         <div class="lfi-app-grid">
@@ -1474,8 +1495,36 @@ function lfi_nct_app_comptes_tabs($current) {
  *  - Création manuelle d'un membre GA                              *
  *  - Liste + reset password                                        *
  * ============================================================== */
+/** Parse un ou plusieurs vCard (.vcf) → [['prenom','nom','tel','email'], …]. */
+function lfi_nct_parse_vcards($text) {
+    $out = [];
+    $cards = preg_split('/BEGIN:VCARD/i', (string) $text);
+    foreach ($cards as $c) {
+        if (trim($c) === '') continue;
+        $prenom = $nom = $tel = $email = '';
+        if (preg_match('/[\r\n]N[;:]([^\r\n]*)/i', $c, $m)) {
+            $val = trim(substr($m[1], strrpos($m[1], ':') !== false ? strrpos($m[1], ':') + 1 : 0));
+            $parts = explode(';', $val);
+            $nom    = trim($parts[0] ?? '');
+            $prenom = trim($parts[1] ?? '');
+        }
+        if ((!$prenom && !$nom) && preg_match('/[\r\n]FN[;:]([^\r\n]*)/i', $c, $m)) {
+            $fn = trim(substr($m[1], strrpos($m[1], ':') !== false ? strrpos($m[1], ':') + 1 : 0));
+            $sp = explode(' ', $fn, 2);
+            $prenom = trim($sp[0] ?? ''); $nom = trim($sp[1] ?? '');
+        }
+        if (preg_match('/[\r\n]TEL[^:\r\n]*:([^\r\n]+)/i', $c, $m))   $tel   = trim($m[1]);
+        if (preg_match('/[\r\n]EMAIL[^:\r\n]*:([^\r\n]+)/i', $c, $m)) $email = trim($m[1]);
+        if ($prenom || $nom || $tel || $email) {
+            $out[] = ['prenom' => $prenom, 'nom' => $nom, 'tel' => $tel, 'email' => $email];
+        }
+    }
+    return $out;
+}
+
 function lfi_nct_app_view_comptes_ga() {
-    if (!current_user_can('manage_options')) return;
+    $can = function_exists('lfi_nct_is_ga_admin') ? lfi_nct_is_ga_admin() : current_user_can('manage_options');
+    if (!$can) return;
     global $wpdb;
 
     /* Le « registre des adhérents » (import CSV) appartient au GA d'origine.
@@ -1513,6 +1562,52 @@ function lfi_nct_app_view_comptes_ga() {
                 $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
             }
         }
+    }
+
+    /* Import depuis le RÉPERTOIRE TÉLÉPHONE : fiches contact (.vcf) +
+       sélecteur de contacts natif (Android). Crée des comptes GA rattachés
+       au GA en cours. */
+    if (!empty($_POST['lfi_app_import_vcards']) && check_admin_referer('lfi_app_import_vcards')) {
+        $cards = [];
+        if (!empty($_FILES['vcards']['name'][0])) {
+            $n = count((array) $_FILES['vcards']['name']);
+            for ($i = 0; $i < $n; $i++) {
+                if (empty($_FILES['vcards']['tmp_name'][$i])) continue;
+                $txt = @file_get_contents($_FILES['vcards']['tmp_name'][$i]);
+                if ($txt) $cards = array_merge($cards, lfi_nct_parse_vcards($txt));
+            }
+        }
+        /* Contact unique remonté par le sélecteur natif (champs cachés). */
+        $cp = [
+            'prenom' => sanitize_text_field(wp_unslash($_POST['cp_prenom'] ?? '')),
+            'nom'    => sanitize_text_field(wp_unslash($_POST['cp_nom'] ?? '')),
+            'tel'    => sanitize_text_field(wp_unslash($_POST['cp_tel'] ?? '')),
+            'email'  => sanitize_email(wp_unslash($_POST['cp_email'] ?? '')),
+        ];
+        if ($cp['prenom'] || $cp['nom'] || $cp['tel'] || $cp['email']) $cards[] = $cp;
+
+        $batch = [];
+        $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+        foreach ($cards as $c) {
+            $prenom = (string) $c['prenom']; $nom = (string) $c['nom'];
+            if ($prenom === '' && $nom === '' && empty($c['tel'])) continue;
+            $login = lfi_nct_app_make_username($prenom, $nom);
+            $pwd   = lfi_nct_app_make_password();
+            $uid   = wp_insert_user([
+                'user_login' => $login, 'user_pass' => $pwd,
+                'user_email' => lfi_nct_app_clean_email((string) $c['email']),
+                'first_name' => $prenom, 'last_name' => $nom,
+                'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+                'role' => LFI_NCT_ROLE_GA,
+            ]);
+            if (is_wp_error($uid)) continue;
+            if (!empty($c['tel'])) update_user_meta($uid, 'lfi_nct_tel', $c['tel']);
+            if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
+            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $c['tel'] ?? '', 'name' => trim($prenom . ' ' . $nom) ?: $login];
+        }
+        if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
+        wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['batched' => count($batch)]));
+        exit;
     }
 
     /* Import membre adhérent → compte GA (par ligne) — réservé au GA d'origine */
@@ -1597,7 +1692,8 @@ function lfi_nct_app_view_comptes_ga() {
     /* Reset password */
     if (!empty($_POST['lfi_app_reset_pwd']) && check_admin_referer('lfi_app_reset_pwd')) {
         $uid = (int) $_POST['uid'];
-        if ($uid && get_userdata($uid)) {
+        $allowed = current_user_can('manage_options') || !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($uid && $allowed && get_userdata($uid)) {
             $pwd = lfi_nct_app_make_password();
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
@@ -1717,6 +1813,37 @@ function lfi_nct_app_view_comptes_ga() {
         }
         echo '</div></details>';
     }
+
+    /* Section : Ajouter depuis le RÉPERTOIRE TÉLÉPHONE */
+    echo '<h3 style="margin:16px 0 4px">📇 Ajouter depuis mon téléphone</h3>';
+    echo '<div class="lfi-app-help"><small>Crée des comptes à partir de tes contacts. Le compte est rattaché à <strong>ce GA</strong>. Sur Android, le bouton « Choisir un contact » ouvre ton répertoire. Sur iPhone, partage une fiche contact (.vcf) depuis l\'app Contacts puis sélectionne-la ci-dessous.</small></div>';
+    echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form" id="lfi-vcard-form">';
+    wp_nonce_field('lfi_app_import_vcards');
+    echo '<input type="hidden" name="lfi_app_import_vcards" value="1">';
+    echo '<input type="hidden" name="cp_prenom" id="cp_prenom"><input type="hidden" name="cp_nom" id="cp_nom"><input type="hidden" name="cp_tel" id="cp_tel"><input type="hidden" name="cp_email" id="cp_email">';
+    echo '<button type="button" class="btn-primary" id="lfi-cp-btn" style="display:none" onclick="lfiPickContact()">📱 Choisir un contact (Android)</button>';
+    echo '<label>Ou importer une/des fiche(s) contact (.vcf)<input type="file" name="vcards[]" accept=".vcf,text/vcard,text/x-vcard" multiple></label>';
+    echo '<button type="submit" class="btn-primary">📇 Créer le(s) compte(s)</button>';
+    echo '</form>';
+    ?>
+    <script>
+    (function(){ if ('contacts' in navigator && 'ContactsManager' in window) { var b=document.getElementById('lfi-cp-btn'); if(b) b.style.display='inline-block'; } })();
+    async function lfiPickContact(){
+        try{
+            var props=['name','email','tel'];
+            var contacts=await navigator.contacts.select(props,{multiple:false});
+            if(!contacts||!contacts.length)return;
+            var c=contacts[0];
+            var full=(c.name&&c.name[0])||''; var sp=full.split(' ');
+            document.getElementById('cp_prenom').value=sp.shift()||'';
+            document.getElementById('cp_nom').value=sp.join(' ')||'';
+            document.getElementById('cp_tel').value=(c.tel&&c.tel[0])||'';
+            document.getElementById('cp_email').value=(c.email&&c.email[0])||'';
+            document.getElementById('lfi-vcard-form').submit();
+        }catch(e){ alert('Sélection de contact annulée ou non disponible.'); }
+    }
+    </script>
+    <?php
 
     /* Section : Créer manuellement */
     echo '<details class="lfi-app-collapse"><summary>+ Créer un membre GA manuellement</summary>';
@@ -1891,7 +2018,8 @@ function lfi_nct_app_view_comptes_locataires() {
     /* Reset password */
     if (!empty($_POST['lfi_app_reset_pwd']) && check_admin_referer('lfi_app_reset_pwd')) {
         $uid = (int) $_POST['uid'];
-        if ($uid && get_userdata($uid)) {
+        $allowed = current_user_can('manage_options') || !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($uid && $allowed && get_userdata($uid)) {
             $pwd = lfi_nct_app_make_password();
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
