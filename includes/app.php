@@ -659,6 +659,7 @@ function lfi_nct_app_shortcode() {
                     case 'modules-params':        lfi_nct_app_view_modules_params();         break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
+                    case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
                     default:                lfi_nct_app_render_dashboard();
@@ -862,6 +863,7 @@ function lfi_nct_app_render_dashboard() {
             <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Adhérents</span></div>
         </div>
 
+        <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
 
         <?php foreach ($sections as $section_title => $tiles): ?>
