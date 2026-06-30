@@ -572,6 +572,13 @@ function lfi_nct_app_view_prefecture_email() {
     echo '<label>Mot d\'intro (optionnel)<textarea name="email_intro" rows="2" placeholder="Optionnel"></textarea></label>';
     echo '<label>Message<textarea name="email_body" id="lfi-email-body" rows="12" required>' . esc_textarea($body) . '</textarea></label>';
 
+    /* Pièce jointe : aucun lien de composition (Gmail/Apple) ne peut joindre
+       un fichier automatiquement (limite du système). On rend l'étape simple :
+       un bouton ouvre le rapport à enregistrer en PDF puis à joindre. */
+    if ($type === 'prefecture') {
+        echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00">📎 <strong>Pièce jointe (rapport anonyme) — étape manuelle obligatoire.</strong> Aucun bouton « écrire un email » ne peut joindre un fichier tout seul. Fais : <a href="' . esc_url(lfi_nct_app_url('prefecture-rapport')) . '" target="_blank" rel="noopener" style="font-weight:700">①&nbsp;Ouvrir le rapport</a> → Imprimer → « Enregistrer au format PDF » → puis, dans Gmail, appuie sur le trombone 📎 pour joindre le PDF.</div>';
+    }
+
     lfi_nct_render_gmail_opener($from, $sig, 'lfi_pref_gmail_log', '📨 Ouvrir dans Gmail (' . $from . ')');
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>' . esc_html($help) . ' Sur iPhone, ça ouvre l\'app Gmail avec le message prêt. L\'envoi est aussitôt consigné dans le suivi.</small></div>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('prefecture')) . '">← Retour au volet Préfecture</a>';
@@ -651,6 +658,20 @@ function lfi_nct_app_view_prefecture_rapport() {
 
     /* Réutilise le style document + bouton imprimer du module recouvrement. */
     if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+    /* Le document est calibré pour une page A4 (800px) : sur mobile, certaines
+       lignes/bordures débordaient et cassaient l'affichage. On le rend
+       responsive à l'écran (l'impression PDF garde la pleine largeur). */
+    ?>
+    <style>
+    @media (max-width: 640px) {
+        .lfi-rec-doc { padding: 16px !important; max-width: 100% !important; box-sizing: border-box; }
+        .lfi-rec-doc .destinataire { margin-left: 0 !important; text-align: left !important; }
+        .lfi-rec-doc table.detail { table-layout: fixed; width: 100%; }
+    }
+    .lfi-rec-doc { overflow-x: hidden; }
+    .lfi-rec-doc table.detail td { word-break: break-word; overflow-wrap: anywhere; }
+    </style>
+    <?php
 
     echo '<div class="lfi-rec-doc">';
 
