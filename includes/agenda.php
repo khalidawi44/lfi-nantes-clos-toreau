@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_AGENDA_DBVER_KEY = 'lfi_nct_agenda_db_ver';
-const LFI_NCT_AGENDA_DBVER_VAL = '1';
+const LFI_NCT_AGENDA_DBVER_VAL = '2';
 
 /* ============================================================== *
  *  DB Setup                                                         *
@@ -31,6 +31,7 @@ function lfi_nct_agenda_db_setup() {
     $t = $wpdb->prefix . 'lfi_nct_rdv';
     dbDelta("CREATE TABLE $t (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        owner_user_id BIGINT UNSIGNED DEFAULT NULL,
         tenant_user_id BIGINT UNSIGNED DEFAULT NULL,
         tenant_name VARCHAR(120) DEFAULT '',
         tenant_tel VARCHAR(40) DEFAULT '',
@@ -47,10 +48,18 @@ function lfi_nct_agenda_db_setup() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
+        KEY owner_user_id (owner_user_id),
         KEY tenant_user_id (tenant_user_id),
         KEY date_rdv (date_rdv),
         KEY statut (statut)
     ) $charset;");
+
+    /* MULTI-GA : colonne propriétaire pour cloisonner l'agenda par GA. */
+    $has_owner = $wpdb->get_var("SHOW COLUMNS FROM $t LIKE 'owner_user_id'");
+    if (!$has_owner) {
+        $wpdb->query("ALTER TABLE $t ADD COLUMN owner_user_id BIGINT UNSIGNED DEFAULT NULL AFTER id");
+        $wpdb->query("ALTER TABLE $t ADD INDEX owner_user_id (owner_user_id)");
+    }
 
     update_option(LFI_NCT_AGENDA_DBVER_KEY, LFI_NCT_AGENDA_DBVER_VAL, false);
 }
@@ -129,13 +138,18 @@ function lfi_nct_app_view_agenda() {
     $period = isset($_GET['p']) ? sanitize_key($_GET['p']) : 'upcoming';
     $today  = current_time('Y-m-d');
 
+    /* Cloisonnement par propriétaire (GA) : sur l'espace d'un autre GA on ne
+       voit JAMAIS ses propres RDV/interventions. */
+    $own_rdv = function_exists('lfi_nct_owner_clause') ? lfi_nct_owner_clause('owner_user_id') : '';
+    $own_int = function_exists('lfi_nct_owner_clause') ? lfi_nct_owner_clause('owner_user_id') : '';
+
     if ($period === 'past') {
-        $where_rdv  = $wpdb->prepare("date_rdv < %s", $today);
-        $where_int  = $wpdb->prepare("date_intervention < %s", $today);
+        $where_rdv  = $wpdb->prepare("date_rdv < %s", $today) . $own_rdv;
+        $where_int  = $wpdb->prepare("date_intervention < %s", $today) . $own_int;
         $order = 'DESC';
     } else {
-        $where_rdv  = $wpdb->prepare("date_rdv >= %s AND statut NOT IN ('annule')", $today);
-        $where_int  = $wpdb->prepare("date_intervention >= %s AND statut IN ('planifie', 'realise')", $today);
+        $where_rdv  = $wpdb->prepare("date_rdv >= %s AND statut NOT IN ('annule')", $today) . $own_rdv;
+        $where_int  = $wpdb->prepare("date_intervention >= %s AND statut IN ('planifie', 'realise')", $today) . $own_int;
         $order = 'ASC';
     }
 
@@ -244,7 +258,8 @@ function lfi_nct_app_view_rdv_edit() {
     if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
     $id = (int) ($_GET['id'] ?? 0);
-    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_rdv WHERE id = %d", $id)) : null;
+    $own = function_exists('lfi_nct_owner_clause') ? lfi_nct_owner_clause('owner_user_id') : '';
+    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_rdv WHERE id = %d" . $own, $id)) : null;
     if (!$row) {
         lfi_nct_app_screen_open('RDV introuvable');
         echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('agenda')) . '">← Retour à l\'agenda</a></div>';
@@ -288,6 +303,8 @@ function lfi_nct_agenda_rdv_form($row) {
             $wpdb->update($t, $data, ['id' => $row->id]);
             wp_safe_redirect(lfi_nct_app_url('rdv-edit', ['id' => $row->id, 'saved' => 1]));
         } else {
+            /* Rattache le RDV au propriétaire (GA) courant → cloisonnement agenda. */
+            $data['owner_user_id'] = function_exists('lfi_nct_brigade_owner_id') ? lfi_nct_brigade_owner_id() : get_current_user_id();
             $wpdb->insert($t, $data);
             $new_id = (int) $wpdb->insert_id;
             wp_safe_redirect(lfi_nct_app_url('rdv-edit', ['id' => $new_id, 'created' => 1]));
