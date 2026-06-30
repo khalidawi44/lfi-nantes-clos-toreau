@@ -1338,6 +1338,102 @@ function lfi_nct_ga_gmail() {
     return $opt ?: 'nantessudclostoreau@gmail.com';
 }
 
+/** Adresse Gmail PERSO de Fabrice (pour « mon dossier à moi »). */
+function lfi_nct_perso_gmail() {
+    $opt = get_option('lfi_nct_perso_gmail', '');
+    return $opt ?: 'fabrice.doucet44@gmail.com';
+}
+
+/**
+ * Marqueur HTML + script partagé pour OUVRIR GMAIL de façon fiable depuis un
+ * formulaire d'email (champs email_to / email_cc / email_subject / email_intro
+ * / email_body). Sur iPhone, on ouvre directement l'APPLICATION Gmail via son
+ * lien « googlegmail:// » (le lien web tombait sur la boîte de réception sans
+ * fenêtre de rédaction). Liens de secours toujours proposés (app / web / autre
+ * appli mail) pour ne jamais rester bloqué. L'envoi est journalisé en
+ * arrière-plan (iframe cachée) via le champ caché indiqué par data-log-field.
+ *
+ * À placer UNE fois par formulaire. Le <script> n'est émis qu'une fois.
+ */
+function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $button_label = '📨 Ouvrir dans Gmail') {
+    echo '<input type="hidden" name="' . esc_attr($log_field) . '" value="">';
+    echo '<iframe name="lfiLogFrame" id="lfiLogFrame" style="display:none" title="journal"></iframe>';
+    echo '<button type="button" class="btn-primary big" onclick="lfiNctOpenGmail(this)" '
+        . 'data-gmail-user="' . esc_attr($gmail_user) . '" '
+        . 'data-gmail-sig="' . esc_attr($signature) . '" '
+        . 'data-log-field="' . esc_attr($log_field) . '">' . esc_html($button_label) . '</button>';
+    echo '<div id="lfiGmailFallback" style="display:none;margin-top:8px" class="lfi-app-help">'
+        . '✅ <strong>Email ajouté au dossier.</strong> Si Gmail ne s\'ouvre pas tout seul, appuie ici : '
+        . '<a id="lfiGmailApp" href="#" style="font-weight:700">📱 app Gmail</a> · '
+        . '<a id="lfiGmailWeb" href="#" target="_blank" rel="noopener" style="font-weight:700">🌐 Gmail web</a> · '
+        . '<a id="lfiGmailMailto" href="#" style="font-weight:700">✉️ autre appli mail</a></div>';
+
+    static $script_done = false;
+    if ($script_done) return;
+    $script_done = true;
+    ?>
+    <script>
+    function lfiNctHtmlToPlain(html){
+        var t = String(html||'');
+        t = t.replace(/<\s*br\s*\/?>/gi, "\n");
+        t = t.replace(/<\s*li[^>]*>/gi, "• ");
+        t = t.replace(/<\/\s*(p|h1|h2|h3|li|div|tr)\s*>/gi, "\n");
+        var d = document.createElement('div');
+        d.innerHTML = t;
+        t = d.textContent || d.innerText || '';
+        return t.replace(/\n{3,}/g, "\n\n").trim();
+    }
+    function lfiNctOpenGmail(btn){
+        var form = btn.form;
+        var user = btn.getAttribute('data-gmail-user') || '';
+        var sig  = btn.getAttribute('data-gmail-sig')  || '';
+        var logf = btn.getAttribute('data-log-field')  || '';
+        var to   = (form.email_to    && form.email_to.value)    || '';
+        var cc   = (form.email_cc    && form.email_cc.value)    || '';
+        var su   = (form.email_subject && form.email_subject.value) || '';
+        var intro= (form.email_intro && form.email_intro.value) || '';
+        var body = (form.email_body  && form.email_body.value)  || '';
+        var plain = ((intro ? intro + "\n\n" : '') + lfiNctHtmlToPlain(body) + (sig || '')).trim();
+
+        var webUrl = 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
+            + (user ? '&authuser=' + encodeURIComponent(user) : '')
+            + '&to=' + encodeURIComponent(to)
+            + (cc ? '&cc=' + encodeURIComponent(cc) : '')
+            + '&su=' + encodeURIComponent(su)
+            + '&body=' + encodeURIComponent(plain);
+        var appUrl = 'googlegmail:///co?to=' + encodeURIComponent(to)
+            + (cc ? '&cc=' + encodeURIComponent(cc) : '')
+            + '&subject=' + encodeURIComponent(su)
+            + '&body=' + encodeURIComponent(plain);
+        var mailto = 'mailto:' + encodeURIComponent(to)
+            + '?' + (cc ? 'cc=' + encodeURIComponent(cc) + '&' : '')
+            + 'subject=' + encodeURIComponent(su)
+            + '&body=' + encodeURIComponent(plain);
+
+        /* Journalise en arrière-plan, sans quitter l'écran (iframe cachée). */
+        if (logf) { var h = form.querySelector('input[name="' + logf + '"]'); if (h) h.value = '1'; }
+        try { form.target = 'lfiLogFrame'; form.submit(); form.target = '_self'; } catch(e){}
+
+        /* Prépare et affiche les liens de secours. */
+        var fb = document.getElementById('lfiGmailFallback');
+        var la = document.getElementById('lfiGmailApp'), lw = document.getElementById('lfiGmailWeb'), lm = document.getElementById('lfiGmailMailto');
+        if (la) la.href = appUrl; if (lw) lw.href = webUrl; if (lm) lm.href = mailto;
+        if (fb) fb.style.display = 'block';
+
+        /* Ouvre Gmail : l'APP sur iPhone (sinon on retombe sur le web). */
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIOS) {
+            window.location.href = appUrl;
+            setTimeout(function(){ if (!document.hidden) { window.location.href = webUrl; } }, 1200);
+        } else {
+            window.open(webUrl, '_blank');
+        }
+    }
+    </script>
+    <?php
+}
+
 /** Convertit un corps HTML simple en texte brut (pour le compose Gmail). */
 function lfi_nct_html_to_plain($html) {
     $t = (string) $html;
@@ -1492,59 +1588,11 @@ function lfi_nct_app_view_dossier_send_email() {
     echo '<label>Lettre / corps du mail (HTML autorisé)<textarea name="email_body" id="lfi-email-body" rows="14" required>' . esc_textarea($default_body) . '</textarea></label>';
     echo '<div class="lfi-app-help"><small>Tu peux modifier librement le texte. Les balises HTML simples (&lt;p&gt; &lt;strong&gt; &lt;br&gt; &lt;ul&gt; &lt;li&gt;) sont conservées.</small></div>';
 
-    /* Bouton Gmail : ouvre la fenêtre de RÉDACTION Gmail (compose) dans un
-       nouvel onglet, pré-remplie depuis les champs (avec tes éventuelles
-       modifications), puis journalise l'email dans le dossier. */
-    echo '<input type="hidden" name="lfi_send_gmail_log" value="">';
-    /* Lien caché : on ouvre Gmail via un VRAI clic de lien (target=_blank).
-       Bien plus fiable que window.open sur iOS/Safari, et sans limite de
-       longueur d'URL (les longues lettres SCHS passent sans problème). */
-    echo '<a id="lfiGmailLink" href="#" target="_blank" rel="noopener" style="display:none">Gmail</a>';
+    /* Bouton Gmail robuste (ouvre l'app Gmail sur iPhone) + journalisation. */
     $gmail_signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
-    echo '<button type="button" class="btn-primary big" onclick="lfiNctOpenGmail(this.form)" data-gmail-user="' . esc_attr(lfi_nct_ga_gmail()) . '" data-gmail-sig="' . esc_attr($gmail_signature) . '">📨 Ouvrir dans mon Gmail (' . esc_html(lfi_nct_ga_gmail()) . ')</button>';
-    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Ça ouvre <strong>ton</strong> Gmail (' . esc_html(lfi_nct_ga_gmail()) . ') dans un nouvel onglet, avec le destinataire, l\'objet et le texte déjà remplis — tu n\'as plus qu\'à cliquer « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong> de la locataire.</small></div>';
-    ?>
-    <script>
-    function lfiNctHtmlToPlain(html){
-        var t = String(html||'');
-        t = t.replace(/<\s*br\s*\/?>/gi, "\n");
-        t = t.replace(/<\s*li[^>]*>/gi, "• ");
-        t = t.replace(/<\/\s*(p|h1|h2|h3|li|div|tr)\s*>/gi, "\n");
-        var d = document.createElement('div');
-        d.innerHTML = t;
-        t = d.textContent || d.innerText || '';
-        return t.replace(/\n{3,}/g, "\n\n").trim();
-    }
-    function lfiNctOpenGmail(form){
-        var btn = form.querySelector('[data-gmail-user]');
-        var user = btn ? btn.getAttribute('data-gmail-user') : '';
-        var sig  = btn ? btn.getAttribute('data-gmail-sig')  : '';
-        var to   = (form.email_to    && form.email_to.value)    || '';
-        var cc   = (form.email_cc    && form.email_cc.value)    || '';
-        var su   = (form.email_subject && form.email_subject.value) || '';
-        var intro= (form.email_intro && form.email_intro.value) || '';
-        var body = (form.email_body  && form.email_body.value)  || '';
-        var plain = (intro ? intro + "\n\n" : '') + lfiNctHtmlToPlain(body) + (sig || '');
-        plain = plain.trim();
-        var url = 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
-            + (user ? '&authuser=' + encodeURIComponent(user) : '')
-            + '&to=' + encodeURIComponent(to)
-            + (cc ? '&cc=' + encodeURIComponent(cc) : '')
-            + '&su=' + encodeURIComponent(su)
-            + '&body=' + encodeURIComponent(plain);
-        /* Ouvre Gmail via le lien caché (clic réel = geste utilisateur,
-           non bloqué, supporte les URL longues). Repli sur window.open. */
-        var opened = false;
-        var a = document.getElementById('lfiGmailLink');
-        if (a) { a.setAttribute('href', url); try { a.click(); opened = true; } catch(e){} }
-        if (!opened) { window.open(url, '_blank'); }
-        /* Journalise l'envoi dans le dossier (navigation de l'onglet courant). */
-        var h = form.querySelector('input[name="lfi_send_gmail_log"]');
-        if (h) h.value = '1';
-        setTimeout(function(){ form.submit(); }, 120);
-    }
-    </script>
-    <?php
+    lfi_nct_render_gmail_opener(lfi_nct_ga_gmail(), $gmail_signature, 'lfi_send_gmail_log', '📨 Ouvrir dans mon Gmail (' . lfi_nct_ga_gmail() . ')');
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Sur iPhone, ça ouvre <strong>l\'application Gmail</strong> avec le message déjà rempli — tu n\'as plus qu\'à appuyer sur « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong>. (Si rien ne s\'ouvre, utilise les liens de secours qui apparaissent.)</small></div>';
+
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#666;font-size:.9em">Ou envoyer directement depuis le site (sans Gmail)</summary>';
     echo '<button type="submit" name="lfi_send_wpmail" value="1" class="btn-ghost" style="margin-top:8px">📧 Envoyer depuis le site (wp_mail)</button>';
     echo '<div class="lfi-app-help"><small>À n\'utiliser que si l\'envoi par mail du site est bien configuré.</small></div></details>';

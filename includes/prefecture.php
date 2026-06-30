@@ -24,7 +24,35 @@ function lfi_nct_prefecture_contact() {
         'nom'       => '',
         'fonction'  => '',
         'email'     => '',
+        /* 2ᵉ interlocutrice : Gwenaëlle Gourdien */
+        'nom2'      => 'Gwenaëlle Gourdien',
+        'fonction2' => '',
+        'email2'    => '',
     ], $d);
+}
+
+/** Liste des emails préfecture renseignés (déléguée + Gwenaëlle). */
+function lfi_nct_prefecture_emails() {
+    $c = lfi_nct_prefecture_contact();
+    $out = [];
+    foreach ([$c['email'], $c['email2']] as $e) {
+        $e = trim((string) $e);
+        if ($e !== '' && strpos($e, '@') !== false) $out[] = $e;
+    }
+    return $out;
+}
+
+/** Journal des correspondances avec la préfecture (envoyées + reçues). */
+function lfi_nct_prefecture_corr() {
+    $d = get_option('lfi_nct_prefecture_corr', []);
+    if (!is_array($d)) $d = [];
+    return ['sent' => $d['sent'] ?? [], 'recu' => $d['recu'] ?? []];
+}
+function lfi_nct_prefecture_corr_save($corr) {
+    update_option('lfi_nct_prefecture_corr', [
+        'sent' => array_values($corr['sent'] ?? []),
+        'recu' => array_values($corr['recu'] ?? []),
+    ], false);
 }
 
 /** Libellés lisibles des catégories de problèmes (ordre d'affichage). */
@@ -220,16 +248,48 @@ function lfi_nct_prefecture_totaux($agg) {
 function lfi_nct_app_view_prefecture() {
     if (!lfi_nct_app_guard_brigade()) return;
 
-    /* Enregistrement du contact préfecture */
+    /* Enregistrement des contacts préfecture + mon Gmail perso */
     if (!empty($_POST['lfi_prefecture_save']) && check_admin_referer('lfi_prefecture_save')) {
         $contact = [
             'organisme' => sanitize_text_field(wp_unslash($_POST['pref_organisme'] ?? '')),
             'nom'       => sanitize_text_field(wp_unslash($_POST['pref_nom'] ?? '')),
             'fonction'  => sanitize_text_field(wp_unslash($_POST['pref_fonction'] ?? '')),
             'email'     => sanitize_email(wp_unslash($_POST['pref_email'] ?? '')),
+            'nom2'      => sanitize_text_field(wp_unslash($_POST['pref_nom2'] ?? '')),
+            'fonction2' => sanitize_text_field(wp_unslash($_POST['pref_fonction2'] ?? '')),
+            'email2'    => sanitize_email(wp_unslash($_POST['pref_email2'] ?? '')),
         ];
         update_option('lfi_nct_prefecture_contact', $contact, false);
+        $perso = sanitize_email(wp_unslash($_POST['pref_perso_gmail'] ?? ''));
+        if ($perso !== '') update_option('lfi_nct_perso_gmail', $perso, false);
         wp_safe_redirect(lfi_nct_app_url('prefecture', ['saved' => 1]));
+        exit;
+    }
+
+    /* Enregistrer une correspondance REÇUE de la préfecture */
+    if (!empty($_POST['lfi_pref_recu']) && check_admin_referer('lfi_pref_recu')) {
+        $corr  = lfi_nct_prefecture_corr();
+        $de    = sanitize_text_field(wp_unslash($_POST['pref_recu_de'] ?? ''));
+        $objet = sanitize_text_field(wp_unslash($_POST['pref_recu_objet'] ?? ''));
+        $corps = sanitize_textarea_field(wp_unslash($_POST['pref_recu_corps'] ?? ''));
+        if ($de !== '' || $objet !== '' || $corps !== '') {
+            $corr['recu'][] = ['de' => $de, 'objet' => $objet, 'corps' => $corps, 'date' => current_time('Y-m-d H:i')];
+            lfi_nct_prefecture_corr_save($corr);
+        }
+        wp_safe_redirect(lfi_nct_app_url('prefecture', ['corr_ok' => 1]));
+        exit;
+    }
+
+    /* Supprimer une entrée de correspondance */
+    if (!empty($_POST['lfi_pref_corr_del']) && check_admin_referer('lfi_pref_corr_del')) {
+        $sens = (($_POST['del_sens'] ?? '') === 'recu') ? 'recu' : 'sent';
+        $idx  = (int) ($_POST['del_idx'] ?? -1);
+        $corr = lfi_nct_prefecture_corr();
+        if ($idx >= 0 && isset($corr[$sens][$idx])) {
+            array_splice($corr[$sens], $idx, 1);
+            lfi_nct_prefecture_corr_save($corr);
+        }
+        wp_safe_redirect(lfi_nct_app_url('prefecture', ['corr_del' => 1]));
         exit;
     }
 
@@ -239,7 +299,9 @@ function lfi_nct_app_view_prefecture() {
 
     lfi_nct_app_screen_open('🏛️ Préfecture', 'Partage anonyme des données du porte-à-porte');
 
-    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Contact préfecture enregistré.');
+    if (!empty($_GET['saved']))    lfi_nct_app_flash('✅ Contacts enregistrés.');
+    if (!empty($_GET['corr_ok']))  lfi_nct_app_flash('📨 Correspondance enregistrée.');
+    if (!empty($_GET['corr_del'])) lfi_nct_app_flash('🗑 Entrée supprimée.');
 
     /* Garantie d'anonymat */
     echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">';
@@ -281,42 +343,157 @@ function lfi_nct_app_view_prefecture() {
 
         echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">';
         echo '<a class="btn-primary big" href="' . esc_url(lfi_nct_app_url('prefecture-rapport')) . '">📄 Rapport anonyme à imprimer / PDF</a>';
-        if ($contact['email']) {
-            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_prefecture_gmail_url($contact)) . '" target="_blank" rel="noopener">📨 Préparer l\'email à la préfecture</a>';
-        }
         echo '</div>';
-        echo '<div class="lfi-app-help"><small>Le rapport s\'ouvre en page imprimable : « Imprimer » → « Enregistrer au format PDF », puis tu joins le PDF à ton email. L\'email Gmail s\'ouvre pré-rempli (le PDF est à joindre manuellement).</small></div>';
+        echo '<div class="lfi-app-help"><small>Le rapport s\'ouvre en page imprimable : « Imprimer » → « Enregistrer au format PDF », puis tu joins le PDF à ton email.</small></div>';
     }
 
-    /* Contact préfecture (éditable) */
-    echo '<h3 style="margin:22px 0 6px">Interlocutrice à la préfecture</h3>';
+    /* ===== Boutons d'envoi (avec suivi des correspondances) ===== */
+    echo '<h3 style="margin:22px 0 6px">📨 Écrire (avec suivi)</h3>';
+    echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">';
+    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('prefecture-email', ['type' => 'prefecture'])) . '">✉️ Écrire à la préfecture</a>';
+    echo '<a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('prefecture-email', ['type' => 'nmh'])) . '">🏢 Écrire à NMH (préfecture en copie)</a>';
+    echo '</div>';
+    echo '<div class="lfi-app-help"><small>« Écrire à la préfecture » part de l\'association. « Écrire à NMH » part de <strong>ton</strong> Gmail perso (' . esc_html(lfi_nct_perso_gmail()) . ') avec la préfecture (' . esc_html(implode(', ', lfi_nct_prefecture_emails()) ?: 'à renseigner ci-dessous') . ') + l\'archive de l\'association en copie.</small></div>';
+
+    /* ===== Suivi des correspondances (envoyées + reçues) ===== */
+    $corr = lfi_nct_prefecture_corr();
+    $timeline = [];
+    foreach ($corr['sent'] as $i => $e) { $e['sens'] = 'sent'; $e['_idx'] = $i; $timeline[] = $e; }
+    foreach ($corr['recu'] as $i => $e) { $e['sens'] = 'recu'; $e['_idx'] = $i; $timeline[] = $e; }
+    usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
+
+    echo '<h3 style="margin:22px 0 6px;color:#c8102e">📨 Correspondances avec la préfecture</h3>';
+    if (empty($timeline)) {
+        echo '<div class="lfi-app-help">Aucune correspondance pour l\'instant. Tes envois (boutons ci-dessus) sont archivés ici, et tu peux coller un email reçu.</div>';
+    } else {
+        echo '<ul class="lfi-app-list">';
+        foreach ($timeline as $e) {
+            $is_recu = ($e['sens'] === 'recu');
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
+            echo '<div class="head"><div class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</div>';
+            echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
+            echo '<div class="meta">';
+            if ($is_recu && !empty($e['de'])) echo '<span class="meta-chip">de ' . esc_html($e['de']) . '</span>';
+            if (!$is_recu && !empty($e['to'])) echo '<span class="meta-chip">à ' . esc_html($e['to']) . '</span>';
+            if (!$is_recu && !empty($e['cc'])) echo '<span class="meta-chip">cc ' . esc_html($e['cc']) . '</span>';
+            echo '</div>';
+            if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
+            if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
+            echo '<form method="post" onsubmit="return confirm(\'Supprimer cette entrée ?\')" style="margin-top:8px">';
+            wp_nonce_field('lfi_pref_corr_del');
+            echo '<input type="hidden" name="lfi_pref_corr_del" value="1">';
+            echo '<input type="hidden" name="del_sens" value="' . esc_attr($e['sens']) . '">';
+            echo '<input type="hidden" name="del_idx" value="' . (int) $e['_idx'] . '">';
+            echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 10px;font-size:.85em">🗑 Supprimer cette entrée</button>';
+            echo '</form>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Coller un email reçu de la préfecture */
+    echo '<details style="margin-top:10px;background:#e8f0ff;border-radius:8px;padding:10px 14px">';
+    echo '<summary style="cursor:pointer;font-weight:700;color:#0066a3">📥 Enregistrer un email reçu de la préfecture</summary>';
+    echo '<form method="post" class="lfi-app-form" style="margin-top:10px">';
+    wp_nonce_field('lfi_pref_recu');
+    echo '<input type="hidden" name="lfi_pref_recu" value="1">';
+    echo '<label>De (expéditeur)<input type="text" name="pref_recu_de" placeholder="prenom.nom@loire-atlantique.gouv.fr"></label>';
+    echo '<label>Objet<input type="text" name="pref_recu_objet"></label>';
+    echo '<label>Contenu<textarea name="pref_recu_corps" rows="5" placeholder="Colle ici le texte de l\'email reçu…"></textarea></label>';
+    echo '<button type="submit" class="btn-primary">📥 Enregistrer</button>';
+    echo '</form></details>';
+
+    /* ===== Contacts éditables (déléguée + Gwenaëlle + mon Gmail perso) ===== */
+    echo '<h3 style="margin:22px 0 6px">Interlocutrices à la préfecture</h3>';
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_prefecture_save');
     echo '<input type="hidden" name="lfi_prefecture_save" value="1">';
     echo '<label>Organisme<input type="text" name="pref_organisme" value="' . esc_attr($contact['organisme']) . '" placeholder="Préfecture de la Loire-Atlantique"></label>';
-    echo '<label>Nom de l\'interlocutrice<input type="text" name="pref_nom" value="' . esc_attr($contact['nom']) . '" placeholder="Mme …"></label>';
-    echo '<label>Fonction<input type="text" name="pref_fonction" value="' . esc_attr($contact['fonction']) . '" placeholder="ex : déléguée du préfet / chargée de quartier"></label>';
+    echo '<div style="border-left:3px solid #c8102e;padding-left:10px;margin:8px 0">';
+    echo '<label>Déléguée — nom<input type="text" name="pref_nom" value="' . esc_attr($contact['nom']) . '" placeholder="Mme …"></label>';
+    echo '<label>Fonction<input type="text" name="pref_fonction" value="' . esc_attr($contact['fonction']) . '" placeholder="ex : déléguée du préfet / cheffe de projet quartier"></label>';
     echo '<label>Email<input type="email" name="pref_email" value="' . esc_attr($contact['email']) . '" placeholder="prenom.nom@loire-atlantique.gouv.fr"></label>';
-    echo '<button type="submit" class="btn-primary">💾 Enregistrer le contact</button>';
+    echo '</div>';
+    echo '<div style="border-left:3px solid #0066a3;padding-left:10px;margin:8px 0">';
+    echo '<label>2ᵉ interlocutrice — nom<input type="text" name="pref_nom2" value="' . esc_attr($contact['nom2']) . '" placeholder="Gwenaëlle Gourdien"></label>';
+    echo '<label>Fonction<input type="text" name="pref_fonction2" value="' . esc_attr($contact['fonction2']) . '"></label>';
+    echo '<label>Email<input type="email" name="pref_email2" value="' . esc_attr($contact['email2']) . '" placeholder="prenom.nom@…gouv.fr"></label>';
+    echo '</div>';
+    echo '<label>Mon Gmail perso (pour « écrire à NMH » sur mon dossier)<input type="email" name="pref_perso_gmail" value="' . esc_attr(lfi_nct_perso_gmail()) . '" placeholder="fabrice.doucet44@gmail.com"></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
     echo '</form>';
 
     lfi_nct_app_screen_close();
 }
 
-/** Construit l'URL de rédaction Gmail (compose) pré-remplie pour la préfecture. */
-function lfi_nct_prefecture_gmail_url($contact) {
-    $user = function_exists('lfi_nct_ga_gmail') ? lfi_nct_ga_gmail() : '';
-    $su = 'Données anonymisées du porte-à-porte logement — Clos Toreau (Nantes Sud)';
-    $body = "Madame,\n\n"
-        . "Comme convenu, vous trouverez ci-joint le récapitulatif ANONYME des signalements recueillis lors de notre porte-à-porte dans le quartier, présenté par bâtiment.\n\n"
-        . "Conformément à notre engagement auprès des habitant·es, ce document ne comporte aucune donnée nominative : ni numéro de porte, ni nom, ni coordonnées. Il ne fait apparaître que les problématiques agrégées par immeuble.\n\n"
-        . "Je reste à votre disposition pour en échanger.\n\n"
-        . "Cordialement,\nFabrice Doucet — Association Union des Quartiers Libres";
-    return 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
-        . ($user ? '&authuser=' . rawurlencode($user) : '')
-        . '&to=' . rawurlencode($contact['email'])
-        . '&su=' . rawurlencode($su)
-        . '&body=' . rawurlencode($body);
+/* ============================================================== *
+ *  VUE : Composer un email préfecture / NMH (avec suivi)          *
+ * ============================================================== */
+function lfi_nct_app_view_prefecture_email() {
+    if (!lfi_nct_app_guard_brigade()) return;
+
+    $type    = (($_GET['type'] ?? '') === 'nmh') ? 'nmh' : 'prefecture';
+    $contact = lfi_nct_prefecture_contact();
+    $pref_em = lfi_nct_prefecture_emails();
+    $ga      = lfi_nct_ga_gmail();
+    $perso   = lfi_nct_perso_gmail();
+    $bailleur = function_exists('lfi_nct_fact_bailleur') ? lfi_nct_fact_bailleur() : [];
+
+    /* HANDLER : journalise l'envoi (posté en arrière-plan par l'opener Gmail). */
+    if (!empty($_POST['lfi_pref_gmail_log']) && check_admin_referer('lfi_pref_email_send')) {
+        $to = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
+        $cc = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
+        $su = sanitize_text_field(wp_unslash($_POST['email_subject'] ?? ''));
+        $corr = lfi_nct_prefecture_corr();
+        $corr['sent'][] = ['to' => $to, 'cc' => $cc, 'objet' => $su, 'date' => current_time('Y-m-d H:i'), 'type' => $type];
+        lfi_nct_prefecture_corr_save($corr);
+        wp_safe_redirect(lfi_nct_app_url('prefecture', ['corr_ok' => 1]));
+        exit;
+    }
+
+    if ($type === 'nmh') {
+        $from    = $perso;
+        $to      = trim($bailleur['email'] ?? '') ?: trim($bailleur['agence_email'] ?? '');
+        $cc      = trim(implode(', ', array_values(array_unique(array_filter(array_merge($pref_em, [$ga]))))));
+        $title   = 'Écrire à NMH — préfecture en copie';
+        $subject = 'Mon logement — demande / signalement';
+        $sig     = "\n\n—\nFabrice Doucet";
+        $body    = "Madame, Monsieur,\n\n[Décris ici ta demande ou ton signalement concernant ton logement.]\n\nDans l'attente de votre retour, je vous prie d'agréer mes salutations distinguées.";
+        $help    = 'Part de ton Gmail perso. La préfecture (' . (implode(', ', $pref_em) ?: 'à renseigner') . ') et l\'archive de l\'association sont en copie, pour qu\'elles aient toute la correspondance.';
+    } else {
+        $from    = $ga;
+        $to      = implode(', ', $pref_em);
+        $cc      = $ga;
+        $title   = 'Écrire à la préfecture';
+        $subject = 'Logement social — Clos Toreau (Nantes Sud)';
+        $sig     = "\n\n—\nFabrice Doucet — Association Union des Quartiers Libres";
+        $body    = "Madame,\n\n[Ton message à la préfecture.]\n\nJe reste à votre disposition pour en échanger.";
+        $help    = 'Part du Gmail de l\'association, avec l\'archive en copie. Destinataires : la déléguée et Gwenaëlle (si renseignées).';
+    }
+
+    lfi_nct_app_screen_open('📧 ' . $title, 'Suivi automatique dans le volet Préfecture');
+
+    if ($type === 'nmh' && $to === '') {
+        echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ L\'email de NMH n\'est pas renseigné. Renseigne-le dans <a href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">Paramètres facturation → Bailleur</a>, ou saisis-le ci-dessous.</small></div>';
+    }
+    if (empty($pref_em)) {
+        echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ Aucun email préfecture renseigné. Ajoute la déléguée et/ou Gwenaëlle dans le <a href="' . esc_url(lfi_nct_app_url('prefecture')) . '">volet Préfecture</a>.</small></div>';
+    }
+
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_pref_email_send');
+    echo '<label>Destinataire(s)<input type="text" name="email_to" value="' . esc_attr($to) . '" required></label>';
+    echo '<label>Copie (CC)<input type="text" name="email_cc" value="' . esc_attr($cc) . '"></label>';
+    echo '<label>Objet<input type="text" name="email_subject" value="' . esc_attr($subject) . '" required></label>';
+    echo '<label>Mot d\'intro (optionnel)<textarea name="email_intro" rows="2" placeholder="Optionnel"></textarea></label>';
+    echo '<label>Message<textarea name="email_body" id="lfi-email-body" rows="12" required>' . esc_textarea($body) . '</textarea></label>';
+
+    lfi_nct_render_gmail_opener($from, $sig, 'lfi_pref_gmail_log', '📨 Ouvrir dans Gmail (' . $from . ')');
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>' . esc_html($help) . ' Sur iPhone, ça ouvre l\'app Gmail avec le message prêt. L\'envoi est aussitôt consigné dans le suivi.</small></div>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('prefecture')) . '">← Retour au volet Préfecture</a>';
+    echo '</form>';
+
+    lfi_nct_app_screen_close();
 }
 
 /* ============================================================== *
