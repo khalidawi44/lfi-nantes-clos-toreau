@@ -134,14 +134,12 @@ function lfi_nct_render_admin_hub() {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
             <?php
             $quick = [
-                ['🔧', 'Mes interventions',      'Brigade travaux — facturation', lfi_nct_app_url('interventions')],
-                ['📁', 'Dossiers juridiques',    'LRAR + relogement + SCHS',      lfi_nct_app_url('dossiers-juridiques')],
-                ['⚖️', 'Recouvrement NMH',       'Forcer NMH à payer',            lfi_nct_app_url('recouvrements')],
-                ['🛠', 'Tutoriels',              '22 guides brigade',             lfi_nct_app_url('tutoriels')],
-                ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve',  lfi_nct_app_url('outils')],
-                ['📋', 'Faire passer enquête',   'Formulaire public',             home_url('/enquete-logement-clos-toreau/')],
-                ['🗂', 'Réponses enquête (admin)','Voir les remontées',           lfi_nct_app_url('dossiers')],
-                ['🔥', 'Forcer la synchro',      'Purger cache + SW',             admin_url('admin-post.php?action=lfi_nct_purge_all')],
+                ['🚨', 'Dossiers locataires urgents', 'Suivi prioritaire',            lfi_nct_app_url('dossiers-juridiques')],
+                ['⏰', 'Relances à faire',            'Courriers sans réponse',       lfi_nct_app_url('')],
+                ['📋', 'Faire une enquête',           'Formulaire porte-à-porte',     home_url('/enquete-logement-clos-toreau/')],
+                ['🗺️', 'Les autres groupes d\'action','Réseau des GA du réseau',      lfi_nct_app_url('groupes')],
+                ['🏠', 'Ouvrir l\'application',       'Tableau de bord interactif',   lfi_nct_app_url('')],
+                ['🔥', 'Forcer la synchro',           'Purger cache + SW',            admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ];
             foreach ($quick as $q) {
                 if (!current_user_can('manage_options') && strpos($q[1], 'admin') !== false) continue;
