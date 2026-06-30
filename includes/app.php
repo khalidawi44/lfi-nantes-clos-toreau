@@ -654,6 +654,9 @@ function lfi_nct_app_shortcode() {
                     case 'prefecture':            lfi_nct_app_view_prefecture();             break;
                     case 'prefecture-rapport':    lfi_nct_app_view_prefecture_rapport();     break;
                     case 'prefecture-email':      lfi_nct_app_view_prefecture_email();       break;
+                    case 'reussites':             lfi_nct_app_view_reussites();              break;
+                    case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
+                    case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
@@ -1482,6 +1485,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📁', 'Dossiers juridiques',    'LRAR · relogement · SCHS/ARS',        lfi_nct_app_url('dossiers-juridiques')],
             ['⚖️', 'Cadre juridique',        'Ce qui est facturable, par qui',      lfi_nct_app_url('cadre-juridique')],
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
+            ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '⚙️ SYSTÈME' => [
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],

@@ -776,6 +776,9 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<option value="' . esc_attr($k) . '" ' . selected($r->statut, $k, false) . '>' . esc_html($lbl) . '</option>';
     }
     echo '</select></label>';
+    if (($r->statut ?? '') === 'abouti') {
+        echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">🏆 <strong>Dossier abouti !</strong> Tu peux en tirer une <strong>fiche réussite anonyme</strong> (méthode + leviers, sans aucun nom). <a class="btn-primary" style="margin-top:6px;display:inline-block" href="' . esc_url(lfi_nct_app_url('reussite-edit', ['from_dossier' => $r->id])) . '">Créer la fiche réussite</a></div>';
+    }
     /* Notes : on ne montre PAS le JSON brut si des logs y sont stockés */
     $notes_raw = $r->notes ?? '';
     $notes_decoded = json_decode($notes_raw, true);
@@ -968,6 +971,19 @@ function lfi_nct_app_dossier_juridique_form($row) {
         foreach ($sent as $i => $e) { $e['sens'] = 'envoye'; $e['_idx'] = $i; $timeline[] = $e; }
         foreach ($recu as $i => $e) { $e['sens'] = 'recu';   $e['_idx'] = $i; $timeline[] = $e; }
         usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
+
+        /* Relance : dernier message = un ENVOI sans réponse depuis 8 j+. */
+        if (!empty($timeline)) {
+            $last = end($timeline);
+            if (($last['sens'] ?? '') === 'envoye') {
+                $age = (int) floor(((int) current_time('timestamp') - strtotime($last['date'] ?? '')) / 86400);
+                if ($age >= 8) {
+                    $rl = sanitize_key($last['letter'] ?? '');
+                    $url = lfi_nct_app_url('dossier-send-email', array_filter(['id' => $row->id, 'letter' => $rl, 'relance' => 1]));
+                    echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00">⏰ <strong>Dernier courrier envoyé il y a ' . $age . ' jours, sans réponse.</strong>' . ($rl ? ' <a class="btn-primary" style="margin-top:6px;display:inline-block" href="' . esc_url($url) . '">Relancer</a>' : '') . '</div>';
+                }
+            }
+        }
 
         if (empty($timeline)) {
             echo '<div class="lfi-app-help">Aucun email conservé pour l\'instant. Les emails que tu envoies (bouton « 📧 Envoyer par email ») sont archivés ici. Tu peux aussi coller un email REÇU ci-dessous.</div>';
@@ -1413,13 +1429,16 @@ function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $butto
     <script>
     function lfiNctHtmlToPlain(html){
         var t = String(html||'');
+        /* Saut de ligne AVANT les blocs (titres, paragraphes) pour bien
+           séparer les sections, et APRÈS leur fermeture. */
+        t = t.replace(/<\s*(h1|h2|h3|p|div|tr)[^>]*>/gi, "\n");
         t = t.replace(/<\s*br\s*\/?>/gi, "\n");
-        t = t.replace(/<\s*li[^>]*>/gi, "• ");
+        t = t.replace(/<\s*li[^>]*>/gi, "\n• ");
         t = t.replace(/<\/\s*(p|h1|h2|h3|li|div|tr)\s*>/gi, "\n");
         var d = document.createElement('div');
         d.innerHTML = t;
         t = d.textContent || d.innerText || '';
-        return t.replace(/\n{3,}/g, "\n\n").trim();
+        return t.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     }
     function lfiNctOpenGmail(btn){
         var form = btn.form;
@@ -1503,6 +1522,12 @@ function lfi_nct_app_view_dossier_send_email() {
     /* Sujet + destinataires par type de lettre */
     $defaults = lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur);
     $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
+
+    /* Relance (lien « Relancer ») : préfixe l'objet et l'intro. */
+    if (!empty($_GET['relance'])) {
+        $defaults['subject'] = 'Relance — ' . ($defaults['subject'] ?? '');
+        $defaults['intro']   = "Madame, Monsieur,\n\nSauf erreur de ma part, je n'ai pas eu de retour à mon précédent courrier. Je me permets de vous relancer ci-dessous.\n\n" . ($defaults['intro'] ?? '');
+    }
 
     /* HANDLER POST : JOURNALISER l'envoi Gmail dans le dossier.
        La fenêtre de rédaction Gmail est ouverte côté navigateur (JS, nouvel
@@ -1682,7 +1707,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
                 'to'     => $bailleur_to,
                 'cc'     => $ga_archive,
                 'subject'=> 'RE: ' . ($tenant_full ?: 'logement') . ($logement ? ' — ' . $logement : ''),
-                'intro'  => 'Monsieur Morineau,\n\nNous accusons réception de votre message et y répondons point par point ci-dessous. La version papier suit par lettre recommandée.',
+                'intro'  => "Monsieur Morineau,\n\nNous accusons réception de votre message et y répondons point par point ci-dessous. La version papier suit par lettre recommandée.",
             ];
         case 'lrar_travaux':
             return [
@@ -1690,7 +1715,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
                 'to'     => $bailleur_to,
                 'cc'     => $ga_archive,
                 'subject'=> 'Mise en demeure de travaux urgents — ' . ($tenant_full ?: 'logement') . ($logement ? ' · ' . $logement : ''),
-                'intro'  => 'Madame, Monsieur,\n\nJe vous fais parvenir formellement par la présente la mise en demeure ci-après concernant le logement de ' . ($tenant_full ?: '[locataire]') . '. La version papier de ce courrier vous sera également adressée par lettre recommandée avec accusé de réception.',
+                'intro'  => "Madame, Monsieur,\n\nJe vous fais parvenir formellement par la présente la mise en demeure ci-après concernant le logement de " . ($tenant_full ?: '[locataire]') . ". La version papier de ce courrier vous sera également adressée par lettre recommandée avec accusé de réception.",
             ];
         case 'lrar_relogement':
             return [
@@ -1698,7 +1723,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
                 'to'     => $bailleur_to,
                 'cc'     => $ga_archive,
                 'subject'=> '🆘 URGENT — Relogement médical de ' . ($tenant_full ?: 'locataire') . ($logement ? ' · ' . $logement : ''),
-                'intro'  => 'Madame, Monsieur,\n\nCompte tenu de l\'urgence sanitaire attestée, je sollicite votre traitement prioritaire de la demande de relogement de ' . ($tenant_full ?: '[locataire]') . ' formalisée dans le courrier ci-dessous. La LRAR vous sera également remise.',
+                'intro'  => "Madame, Monsieur,\n\nCompte tenu de l'urgence sanitaire attestée, je sollicite votre traitement prioritaire de la demande de relogement de " . ($tenant_full ?: '[locataire]') . " formalisée dans le courrier ci-dessous. La LRAR vous sera également remise.",
             ];
         case 'schs':
             return [
@@ -1706,7 +1731,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
                 'to'     => 'Julien.LEJEUNE@nantesmetropole.fr',
                 'cc'     => $ga_archive,
                 'subject'=> 'Signalement d\'insalubrité — ' . $logement,
-                'intro'  => 'Madame, Monsieur,\n\nJe vous saisis par la présente d\'une situation d\'insalubrité documentée. La LRAR papier suit, le présent email étant adressé en parallèle pour célérité.',
+                'intro'  => "Madame, Monsieur,\n\nJe vous saisis par la présente d'une situation d'insalubrité documentée. La LRAR papier suit, le présent email étant adressé en parallèle pour célérité.",
             ];
         case 'ars':
             return [
@@ -1714,7 +1739,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
                 'to'     => 'ars-pdl-contact@ars.sante.fr',
                 'cc'     => $ga_archive,
                 'subject'=> 'Signalement d\'un risque sanitaire en logement social — ' . $logement,
-                'intro'  => 'Madame, Monsieur,\n\nJe vous saisis d\'un risque sanitaire dans un logement social, documenté ci-après. La LRAR papier suit ; le présent email vise la célérité de prise en charge.',
+                'intro'  => "Madame, Monsieur,\n\nJe vous saisis d'un risque sanitaire dans un logement social, documenté ci-après. La LRAR papier suit ; le présent email vise la célérité de prise en charge.",
             ];
     }
     return ['title' => '', 'to' => '', 'cc' => $ga_archive, 'subject' => '', 'intro' => ''];
