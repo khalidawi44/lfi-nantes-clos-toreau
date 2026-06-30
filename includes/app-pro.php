@@ -1127,6 +1127,13 @@ function lfi_nct_app_view_carte($force_all = false) {
     $center_lng  = defined('LFI_NCT_MAP_CENTER_LNG')  ? (float) LFI_NCT_MAP_CENTER_LNG  : -1.5380;
     $center_zoom = defined('LFI_NCT_MAP_CENTER_ZOOM') ? (int)   LFI_NCT_MAP_CENTER_ZOOM : 16;
 
+    /* Centre la carte sur la zone du GA affiché (Port-Boyer, Rezé…), sauf en
+       mode réseau cumulé où l'on garde Clos Toreau comme point de départ. */
+    if (!$force_all && function_exists('lfi_nct_ga_geo') && function_exists('lfi_nct_scope_ga_slug')) {
+        $geo = lfi_nct_ga_geo(lfi_nct_scope_ga_slug());
+        if (!empty($geo['centre'])) { $center_lat = (float) $geo['centre'][0]; $center_lng = (float) $geo['centre'][1]; }
+    }
+
     lfi_nct_app_screen_open($force_all ? '🌐 Carte cumulée du réseau' : '🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
 
     if ($force_all) {
@@ -1171,10 +1178,8 @@ function lfi_nct_app_view_carte($force_all = false) {
             if (el) el.innerHTML = '<div style="padding:30px;text-align:center;color:#777">Carte 3D indisponible.</div>';
             return;
         }
-        if (!markers.length) {
-            el.innerHTML = '<div style="padding:30px;text-align:center;color:#777">Aucune adresse géocodée. Clique sur « Géocoder » au-dessus.</div>';
-            return;
-        }
+        /* Même sans aucune enquête géocodée, on affiche quand même la carte 3D
+           du quartier (rues + immeubles) centrée sur le GA, avec un petit avis. */
         var center = [<?php echo (float) $center_lng; ?>, <?php echo (float) $center_lat; ?>];
         function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
         function parseFloor(s){ if(!s) return 0; var m=String(s).match(/(\d+)/); return m?parseInt(m[1],10):0; }
@@ -1217,6 +1222,15 @@ function lfi_nct_app_view_carte($force_all = false) {
         });
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
         map.addControl(new maplibregl.ScaleControl({ maxWidth: 100 }));
+
+        /* Avis discret quand il n'y a encore aucune enquête géolocalisée. */
+        if (!markers.length) {
+            el.style.position = 'relative';
+            var note = document.createElement('div');
+            note.style.cssText = 'position:absolute;z-index:5;left:8px;right:8px;top:8px;background:rgba(255,255,255,.93);border:1px solid #d8d8d8;border-radius:8px;padding:8px 10px;font-size:.82em;color:#555;text-align:center;pointer-events:none';
+            note.innerHTML = 'Carte du quartier affichée. Aucune enquête géolocalisée pour l\'instant — clique sur « 🌍 Géocoder » au-dessus pour y placer tes enquêtes.';
+            el.appendChild(note);
+        }
 
         var bounds = new maplibregl.LngLatBounds();
         var FLOOR_M = 3, CUBE_M = 4;

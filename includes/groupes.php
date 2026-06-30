@@ -22,6 +22,31 @@ function lfi_nct_groupes_archived() {
     return is_array($a) ? $a : [];
 }
 
+/** Config géographique d'un GA (pour géocoder/centrer la carte au bon endroit). */
+function lfi_nct_ga_geo($slug) {
+    $slug = (string) $slug;
+    $default = ['ville' => 'Nantes', 'cp' => '44200', 'centre' => [47.1933, -1.5380], 'hint' => 'Clos Toreau, Nantes'];
+    if ($slug === '' || $slug === 'clos-toreau') return $default;
+    foreach (lfi_nct_groupes(true) as $g) {
+        if ($g['slug'] !== $slug) continue;
+        $centre = (isset($g['centre']) && is_array($g['centre']) && count($g['centre']) === 2)
+            ? [(float) $g['centre'][0], (float) $g['centre'][1]] : $default['centre'];
+        return [
+            'ville'  => $g['ville'] ?? 'Nantes',
+            'cp'     => $g['cp'] ?? '',
+            'centre' => $centre,
+            'hint'   => $g['geo_hint'] ?? ($g['secteur'] ?? ''),
+        ];
+    }
+    return $default;
+}
+
+/** Config géo correspondant au GA d'un utilisateur (auteur d'une enquête). */
+function lfi_nct_geo_for_user($uid) {
+    $slug = $uid ? (string) get_user_meta((int) $uid, 'lfi_nct_ga', true) : '';
+    return lfi_nct_ga_geo($slug);
+}
+
 /** Nom affichable d'un GA à partir de son slug ('' / clos-toreau = espace home). */
 function lfi_nct_ga_nom($slug) {
     $slug = (string) $slug;

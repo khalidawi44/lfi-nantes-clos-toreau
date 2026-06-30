@@ -20,43 +20,54 @@ if (!defined('LFI_NCT_MAP_CENTER_ZOOM')) define('LFI_NCT_MAP_CENTER_ZOOM', 16);
  *   2) Sans le numéro initial (« 12 bis rue X » → « rue X »)
  *   3) Avec code postal 44200 (Clos Toreau / Nantes Sud)
  */
-function lfi_nct_address_variants($address) {
+function lfi_nct_address_variants($address, $geo = null) {
     $base = trim((string) $address);
     if ($base === '') return [];
+    $ville = $geo['ville'] ?? 'Nantes';
+    $cp    = (string) ($geo['cp'] ?? '');
+    $hint  = (string) ($geo['hint'] ?? '');
     $variants = [];
 
-    $v1 = $base;
-    if (stripos($v1, 'nantes') === false) $v1 .= ', Nantes';
-    if (stripos($v1, 'france') === false) $v1 .= ', France';
-    $variants[] = $v1;
+    $add = function ($a) use (&$variants, $ville) {
+        if (stripos($a, $ville) === false) $a .= ', ' . $ville;
+        if (stripos($a, 'france') === false) $a .= ', France';
+        $variants[] = $a;
+    };
 
+    $add($base);
+
+    /* Sans le numéro initial (« 12 bis rue X » → « rue X »). */
     $no_num = preg_replace('/^\s*\d+\s*(bis|ter|quater)?\s*/iu', '', $base);
-    if ($no_num && $no_num !== $base) {
-        $v2 = $no_num;
-        if (stripos($v2, 'nantes') === false) $v2 .= ', Nantes';
-        if (stripos($v2, 'france') === false) $v2 .= ', France';
-        $variants[] = $v2;
-    }
+    if ($no_num && $no_num !== $base) $add($no_num);
 
-    if (stripos($base, '44200') === false) {
-        $variants[] = $base . ', 44200 Nantes, France';
+    /* Avec le code postal du GA. */
+    if ($cp !== '' && stripos($base, $cp) === false) {
+        $variants[] = $base . ', ' . $cp . ' ' . $ville . ', France';
+    }
+    /* Avec l'indice de quartier du GA (ex. « Port-Boyer », « Château de Rezé »). */
+    if ($hint !== '' && stripos($base, $hint) === false) {
+        $variants[] = $base . ', ' . $hint . ', France';
     }
 
     return array_values(array_unique($variants));
 }
 
 /**
- * Une seule requête Nominatim, biaisée autour du Clos Toreau via viewbox.
+ * Une seule requête Nominatim, biaisée autour du centre du GA via viewbox.
  */
-function lfi_nct_geocode_query($query) {
-    $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+function lfi_nct_geocode_query($query, $geo = null) {
+    $params = [
         'q'            => $query,
         'format'       => 'json',
         'limit'        => 1,
         'countrycodes' => 'fr',
-        'viewbox'      => '-1.560,47.205,-1.520,47.180',
         'bounded'      => 0,
-    ]);
+    ];
+    /* Viewbox ~±0.035° autour du centre du GA (Clos Toreau par défaut). */
+    $centre = (!empty($geo['centre']) && is_array($geo['centre'])) ? $geo['centre'] : [47.1933, -1.5380];
+    $lat = (float) $centre[0]; $lng = (float) $centre[1]; $d = 0.035;
+    $params['viewbox'] = ($lng - $d) . ',' . ($lat + $d) . ',' . ($lng + $d) . ',' . ($lat - $d);
+    $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query($params);
     $resp = wp_remote_get($url, [
         'timeout' => 12,
         'headers' => [
@@ -76,13 +87,13 @@ function lfi_nct_geocode_query($query) {
  * Géocode une adresse libre via Nominatim avec plusieurs tentatives. Renvoie [lat, lng] ou null.
  * Respect des CGU Nominatim : User-Agent identifié + ~1 req/sec.
  */
-function lfi_nct_geocode($address) {
-    $variants = lfi_nct_address_variants($address);
+function lfi_nct_geocode($address, $geo = null) {
+    $variants = lfi_nct_address_variants($address, $geo);
     $first = true;
     foreach ($variants as $q) {
         if (!$first) usleep(1100000); // 1.1s entre essais
         $first = false;
-        $coords = lfi_nct_geocode_query($q);
+        $coords = lfi_nct_geocode_query($q, $geo);
         if ($coords) return $coords;
     }
     return null;
@@ -96,7 +107,7 @@ function lfi_nct_geocode_pending($limit = 10) {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT id, adresse FROM $table
+        "SELECT id, adresse, militant_user_id FROM $table
          WHERE lat IS NULL AND adresse IS NOT NULL AND adresse != ''
                AND deleted_at IS NULL
          ORDER BY id ASC LIMIT %d", $limit
@@ -104,7 +115,10 @@ function lfi_nct_geocode_pending($limit = 10) {
 
     $done = 0;
     foreach ($rows as $r) {
-        $coords = lfi_nct_geocode($r->adresse);
+        /* Chaque enquête est géocodée dans la zone de SON GA (Clos Toreau,
+           Port-Boyer, Rezé…) : Nominatim est biaisé autour du bon quartier. */
+        $geo = function_exists('lfi_nct_geo_for_user') ? lfi_nct_geo_for_user((int) $r->militant_user_id) : null;
+        $coords = lfi_nct_geocode($r->adresse, $geo);
         if ($coords) {
             $wpdb->update($table, ['lat' => $coords[0], 'lng' => $coords[1]], ['id' => $r->id]);
             $done++;
