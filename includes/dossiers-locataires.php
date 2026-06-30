@@ -328,6 +328,7 @@ function lfi_nct_app_view_dossiers_juridiques() {
 
     echo '<div class="lfi-app-bulk-row">';
     echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-juridique-add')) . '">+ Nouveau dossier locataire</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-synthese')) . '">📂 Fiches de synthèse (gérées par Claude)</a>';
     echo '</div>';
 
     if (empty($rows)) {

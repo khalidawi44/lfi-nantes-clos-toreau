@@ -261,6 +261,132 @@ function lfi_nct_content_nmh_for_dossier($dossier_id) {
 }
 
 /* ============================================================== *
+ *  DOSSIERS LOCATAIRES (fiche maître par locataire, gérée code)   *
+ * ============================================================== */
+
+/** Charge la fiche maître d'un locataire : content/dossiers/{slug}.php */
+function lfi_nct_content_dossier($slug) {
+    $slug = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $slug));
+    if ($slug === '') return [];
+    return lfi_nct_content_load('dossiers/' . $slug . '.php');
+}
+
+/** Liste des fiches dossiers disponibles (slugs). */
+function lfi_nct_content_dossiers_list() {
+    $dir = lfi_nct_content_dir() . 'dossiers/';
+    if (!is_dir($dir)) return [];
+    $out = [];
+    foreach ((array) glob($dir . '*.php') as $f) {
+        $out[] = basename($f, '.php');
+    }
+    sort($out);
+    return $out;
+}
+
+/** Vue imprimable : synthèse complète d'un dossier locataire (depuis le fichier). */
+function lfi_nct_app_view_dossier_synthese() {
+    if (function_exists('lfi_nct_app_guard_brigade') && !lfi_nct_app_guard_brigade()) return;
+    $slug = isset($_GET['slug']) ? sanitize_key($_GET['slug']) : '';
+    $d = $slug ? lfi_nct_content_dossier($slug) : [];
+
+    if (empty($d)) {
+        lfi_nct_app_screen_open('📂 Dossier locataire');
+        echo '<div class="lfi-app-help">Choisis un dossier locataire géré par le code :</div><ul class="lfi-app-list">';
+        foreach (lfi_nct_content_dossiers_list() as $s) {
+            echo '<li class="lfi-app-card"><div class="head"><div class="who">📂 ' . esc_html(ucfirst($s)) . '</div></div>';
+            echo '<div class="row-actions"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-synthese', ['slug' => $s])) . '">Ouvrir la fiche</a></div></li>';
+        }
+        echo '</ul>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    $nom = trim(($d['civilite'] ?? '') . ' ' . ($d['prenom'] ?? '') . ' ' . ($d['nom'] ?? ''));
+    lfi_nct_app_screen_open('📂 Dossier — ' . $nom, 'Fiche de synthèse (gérée par le code)');
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+
+    echo '<div class="lfi-rec-doc">';
+    if (!empty($d['confidentiel'])) {
+        echo '<p style="background:#7a0000;color:#fff;font-weight:700;text-align:center;padding:5px;border-radius:4px;font-size:.85em">DOCUMENT CONFIDENTIEL — réservé à l\'avocat · Ne pas communiquer à Nantes Métropole Habitat</p>';
+    }
+    echo '<h1>Dossier de synthèse — ' . esc_html($nom) . '</h1>';
+    if (!empty($d['rdv'])) echo '<p style="text-align:center">Rendez-vous : ' . esc_html($d['rdv']) . '</p>';
+
+    /* 1. Identité */
+    echo '<h2>1. Identité et logement</h2><table class="detail">';
+    $logement = trim(($d['adresse'] ?? '') . ($d['etage'] ? ' — étage ' . $d['etage'] : '') . ($d['appartement'] ? ', appt ' . $d['appartement'] : ''));
+    echo '<tr><td><strong>Locataire</strong></td><td>' . esc_html($nom ?: '—') . '</td></tr>';
+    echo '<tr><td><strong>Logement</strong></td><td>' . esc_html($logement) . '</td></tr>';
+    if (!empty($d['anciennete']))       echo '<tr><td><strong>Ancienneté</strong></td><td>' . esc_html($d['anciennete']) . '</td></tr>';
+    if (!empty($d['bailleur']))         echo '<tr><td><strong>Bailleur</strong></td><td>' . esc_html($d['bailleur']) . '</td></tr>';
+    if (!empty($d['bailleur_contact'])) echo '<tr><td><strong>Contact bailleur</strong></td><td>' . esc_html($d['bailleur_contact']) . '</td></tr>';
+    if (!empty($d['medical']))          echo '<tr><td><strong>Élément médical</strong></td><td>' . esc_html($d['medical']) . '</td></tr>';
+    echo '</table>';
+
+    /* 2. Objectif */
+    if (!empty($d['objectif_locataire']) || !empty($d['objectifs_ga'])) {
+        echo '<h2>2. L\'objectif — ce que demande la locataire</h2>';
+        echo '<div class="citations" style="border-left-color:#0066a3">';
+        if (!empty($d['objectif_locataire'])) echo '<p><strong>' . esc_html($d['objectif_locataire']) . '</strong></p>';
+        if (!empty($d['objectifs_ga'])) {
+            echo '<p>En complément, le Groupe d\'Action porte :</p><ul>';
+            foreach ($d['objectifs_ga'] as $o) echo '<li>' . esc_html($o) . '</li>';
+            echo '</ul>';
+        }
+        echo '</div>';
+    }
+
+    /* 3. Désordres */
+    if (!empty($d['desordres'])) {
+        echo '<h2>3. Les désordres et la position de NMH</h2>';
+        echo '<table class="detail"><tr><td><strong>Désordre</strong></td><td><strong>Position de NMH</strong></td><td><strong>Notre observation</strong></td></tr>';
+        foreach ($d['desordres'] as $dz) {
+            echo '<tr><td>' . esc_html($dz['nom'] ?? '') . '</td><td><em>' . esc_html($dz['nmh'] ?? '') . '</em></td><td>' . esc_html($dz['obs'] ?? '') . '</td></tr>';
+        }
+        echo '</table>';
+    }
+
+    /* 4. Conversation */
+    echo '<h2>4. La conversation avec NMH</h2>';
+    if (!empty($d['email_envoye'])) {
+        $e = $d['email_envoye'];
+        echo '<h3>Notre email envoyé</h3>';
+        if (!empty($e['objet'])) echo '<p><strong>Objet :</strong> ' . esc_html($e['objet']) . '</p>';
+        echo '<div class="citations">' . nl2br(esc_html($e['corps'] ?? '')) . '</div>';
+    }
+    if (!empty($d['email_recu'])) {
+        $r = $d['email_recu'];
+        echo '<h3>La réponse de NMH' . (!empty($r['de']) ? ' (' . esc_html($r['de']) . ')' : '') . '</h3>';
+        echo '<div class="citations">' . nl2br(esc_html($r['corps'] ?? '')) . '</div>';
+    }
+
+    /* 5. Enquête */
+    if (!empty($d['enquete'])) {
+        $q = $d['enquete'];
+        echo '<h2>5. Une situation qui n\'est pas isolée — enquête de voisinage (interne)</h2>';
+        echo '<p>' . (int) ($q['reponses'] ?? 0) . ' réponses · ' . esc_html($q['logements'] ?? '') . ' · gravité ' . esc_html($q['gravite'] ?? '') . '.</p>';
+        if (!empty($q['eau_chaude'])) echo '<p><strong>Eau chaude :</strong> ' . esc_html($q['eau_chaude']) . '</p>';
+        if (!empty($q['problemes'])) {
+            echo '<table class="detail"><tr><td><strong>Problème recensé</strong></td><td><strong>Ménages</strong></td><td><strong>Part</strong></td></tr>';
+            foreach ($q['problemes'] as $p) echo '<tr><td>' . esc_html($p['type'] ?? '') . '</td><td>' . esc_html($p['n'] ?? '') . '</td><td>' . esc_html($p['pct'] ?? '') . '</td></tr>';
+            echo '</table>';
+        }
+        if (!empty($q['immeuble'])) echo '<p class="small">' . esc_html($q['immeuble']) . '</p>';
+    }
+
+    /* 6. Pièces */
+    if (!empty($d['pieces'])) {
+        echo '<h2>6. Pièces disponibles</h2><ul>';
+        foreach ($d['pieces'] as $p) echo '<li>' . esc_html($p) . '</li>';
+        echo '</ul>';
+    }
+
+    echo '<div class="pj">Fiche établie par le Groupe d\'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres' . (!empty($d['maj']) ? ' — mise à jour le ' . esc_html($d['maj']) : '') . '. La stratégie juridique relève de l\'avocat.</div>';
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
  *  STRATÉGIE AVOCATS (note générale, gérée par le code)           *
  * ============================================================== */
 function lfi_nct_content_strategie_avocats() {
