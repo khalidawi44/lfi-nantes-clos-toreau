@@ -890,25 +890,32 @@ function lfi_nct_app_render_dashboard() {
 }
 
 function lfi_nct_app_quick_stats() {
-    /* Cache transient 60s : les 4 COUNT(*) tournaient à chaque page load
-       du dashboard, de la barre flottante home, et des deux pages comptes. */
-    $cached = get_transient('lfi_nct_app_quick_stats');
+    /* Cache transient 60s, AVEC une clé PAR GA affiché (sinon les chiffres
+       d'un GA fuiraient sur un autre). Les compteurs sont cloisonnés : un
+       autre GA voit SES chiffres (0 tant qu'il n'a rien). */
+    $scope   = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $is_home = ($scope === '' || $scope === 'clos-toreau');
+    $ckey    = 'lfi_nct_app_quick_stats_' . ($scope !== '' ? $scope : 'home');
+    $cached = get_transient($ckey);
     if (is_array($cached)) return $cached;
     global $wpdb;
-    $reunion = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_reunion_rsvp");
-    $surveys = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses");
-    $membres = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres");
-    $events  = (int) $wpdb->get_var($wpdb->prepare(
+    $resp_clause = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+    $surveys = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses WHERE deleted_at IS NULL" . $resp_clause);
+    /* Inscrits réunion / adhérents / événements : propres au GA d'origine ;
+       0 pour les autres GA (à eux de créer les leurs). */
+    $reunion = $is_home ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_reunion_rsvp") : 0;
+    $membres = $is_home ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres") : 0;
+    $events  = $is_home ? (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN (%s, %s)",
         'ag_evenement', 'lfi_evenement'
-    ));
+    )) : 0;
     $stats = [
         'reunion' => max(0, $reunion),
         'surveys' => max(0, $surveys),
         'membres' => max(0, $membres),
         'events'  => max(0, $events),
     ];
-    set_transient('lfi_nct_app_quick_stats', $stats, 60);
+    set_transient($ckey, $stats, 60);
     return $stats;
 }
 
