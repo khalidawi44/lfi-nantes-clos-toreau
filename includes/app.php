@@ -659,6 +659,7 @@ function lfi_nct_app_shortcode() {
                     case 'modules-params':        lfi_nct_app_view_modules_params();         break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
+                    case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
@@ -1603,6 +1604,12 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['⚖️', 'Cadre juridique',        'Ce qui est facturable, par qui',      lfi_nct_app_url('cadre-juridique')],
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
+        ],
+        '🌐 ESPACE AUTRES GROUPES D\'ACTION' => [
+            ['🌐', 'Tableau de bord du réseau', 'Tous les GA, regroupé',              lfi_nct_app_url('reseau-ga')],
+            ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
+            ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
+            ['📊', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
         ],
         '⚙️ SYSTÈME' => [
             ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
