@@ -418,6 +418,30 @@ function lfi_nct_app_view_dossier() {
         echo '</div></div>';
     }
 
+    /* Photos prises pendant l'enquête (horodatées) — stockées dans le JSON de
+       la réponse. Strictement internes. */
+    if ($row && $row->data) {
+        $rdata = json_decode($row->data, true);
+        $enq_photos = is_array($rdata) ? (array) ($rdata['photos'] ?? []) : [];
+        if ($enq_photos) {
+            echo '<div class="lfi-app-card" style="margin-top:14px">';
+            echo '<div class="head"><div class="who">📸 Photos de l\'enquête</div><div class="badge">' . count($enq_photos) . ' · horodatées</div></div>';
+            echo '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">';
+            foreach ($enq_photos as $ph) {
+                $pid = (int) ($ph['id'] ?? 0);
+                if (!$pid) continue;
+                $thumb = wp_get_attachment_image_url($pid, 'medium');
+                $full  = wp_get_attachment_url($pid);
+                if (!$thumb) continue;
+                echo '<a href="' . esc_url($full) . '" target="_blank" rel="noopener" style="text-decoration:none">';
+                echo '<img src="' . esc_url($thumb) . '" alt="" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #ccc">';
+                echo '<span style="display:block;font-size:.72em;color:#666;text-align:center;margin-top:2px">' . esc_html($ph['date'] ?? '') . '</span>';
+                echo '</a>';
+            }
+            echo '</div></div>';
+        }
+    }
+
     /* === HUB D'ACTIONS — tout ce que je peux faire pour ce locataire === */
     $shortcut = [
         'tenant_uid'     => $u->ID,

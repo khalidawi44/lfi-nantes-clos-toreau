@@ -20,7 +20,7 @@ const LFI_NCT_MEMBRES_DBVER  = 'lfi_nct_membres_db_ver';
 
 add_action('init', 'lfi_nct_membres_db_setup', 5);
 function lfi_nct_membres_db_setup() {
-    if (get_option(LFI_NCT_MEMBRES_DBVER) === '2') return;
+    if (get_option(LFI_NCT_MEMBRES_DBVER) === '3') return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_membres';
     $charset = $wpdb->get_charset_collate();
@@ -40,6 +40,7 @@ function lfi_nct_membres_db_setup() {
         jetable TINYINT(1) DEFAULT 0,
         unsubscribe_token VARCHAR(64) DEFAULT '',
         source VARCHAR(40) DEFAULT 'action_populaire',
+        ga VARCHAR(60) DEFAULT '',
         notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -47,8 +48,19 @@ function lfi_nct_membres_db_setup() {
         KEY email_idx (email),
         KEY statut (statut),
         KEY abonne_emails (abonne_emails),
-        KEY jetable (jetable)
+        KEY jetable (jetable),
+        KEY ga (ga)
     ) $charset;");
+
+    /* MULTI-GA : colonne `ga` pour cloisonner les adhérents par groupe
+       d'action. Ajout explicite au cas où dbDelta ne l'aurait pas créée
+       (anciennes installations). Les adhérents existants restent `''`
+       = espace Clos Toreau (home), ce qui est le bon comportement. */
+    $has_ga = $wpdb->get_var("SHOW COLUMNS FROM $table LIKE 'ga'");
+    if (!$has_ga) {
+        $wpdb->query("ALTER TABLE $table ADD COLUMN ga VARCHAR(60) DEFAULT '' AFTER source");
+        $wpdb->query("ALTER TABLE $table ADD INDEX ga (ga)");
+    }
 
     // Upgrade : retire l'index UNIQUE sur email pour permettre plusieurs contacts
     // ajoutés à la main sans email (= ''). MySQL accepte plusieurs '' tant que
@@ -58,7 +70,7 @@ function lfi_nct_membres_db_setup() {
         $wpdb->query("ALTER TABLE $table DROP INDEX email");
         $wpdb->query("ALTER TABLE $table ADD INDEX email_idx (email)");
     }
-    update_option(LFI_NCT_MEMBRES_DBVER, '2', false);
+    update_option(LFI_NCT_MEMBRES_DBVER, '3', false);
 }
 
 /**

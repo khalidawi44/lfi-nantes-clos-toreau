@@ -72,6 +72,23 @@ function lfi_nct_ga_owner_resolve($base) {
     return $base;
 }
 
+/** Peut gérer les comptes de SON GA : super-admin, ou membre du binôme du GA. */
+function lfi_nct_is_ga_admin() {
+    if (current_user_can('manage_options')) return true;
+    $ga = lfi_nct_user_ga();
+    if ($ga === '') return false;
+    $pair = function_exists('lfi_nct_ga_admin_pair') ? lfi_nct_ga_admin_pair($ga) : ['f' => 0, 'h' => 0];
+    $uid = (int) get_current_user_id();
+    return ($uid === (int) $pair['f'] || $uid === (int) $pair['h']);
+}
+
+/** Vrai si l'utilisateur $uid appartient au GA actuellement en vigueur. */
+function lfi_nct_uid_in_scope($uid) {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug === '') return true; // vue « tout » : tout est permis
+    return (string) get_user_meta((int) $uid, 'lfi_nct_ga', true) === $slug;
+}
+
 /** GA effectivement « en vigueur » ('' = tout, pour le super-admin sans bascule). */
 function lfi_nct_scope_ga_slug() {
     if (lfi_nct_super_admin()) {

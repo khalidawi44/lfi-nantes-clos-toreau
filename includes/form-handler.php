@@ -76,6 +76,45 @@ function lfi_nct_handle_submission() {
         $data['adresse_brute'] = $adresse_raw;
     }
 
+    /* On ne garde pas le champ fichier brut dans le JSON */
+    unset($data['enquete_photos']);
+
+    /* === PHOTOS DU LOGEMENT (multiples, horodatées) ===
+       Prises pendant la visite quand la personne nous invite à entrer.
+       Chaque photo est rattachée à la médiathèque et stockée avec la
+       date/heure d'enregistrement (horodatage serveur, fiable) dans le
+       JSON de la réponse — pas de migration de schéma. Strictement interne. */
+    $photos = [];
+    if (!empty($_FILES['enquete_photos']) && !empty($_FILES['enquete_photos']['name'][0])) {
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $f     = $_FILES['enquete_photos'];
+        $count = is_array($f['name']) ? count($f['name']) : 0;
+        $stamp = current_time('mysql');
+        for ($i = 0; $i < $count; $i++) {
+            if (empty($f['name'][$i]) || !empty($f['error'][$i])) continue;
+            $type = (string) ($f['type'][$i] ?? '');
+            if (strpos($type, 'image/') !== 0) continue; // images uniquement
+            $_FILES['lfi_nct_enquete_photo_one'] = [
+                'name'     => $f['name'][$i],
+                'type'     => $type,
+                'tmp_name' => $f['tmp_name'][$i],
+                'error'    => $f['error'][$i],
+                'size'     => $f['size'][$i],
+            ];
+            $aid = media_handle_upload('lfi_nct_enquete_photo_one', 0);
+            if (!is_wp_error($aid)) {
+                $photos[] = ['id' => (int) $aid, 'date' => $stamp];
+            }
+        }
+        unset($_FILES['lfi_nct_enquete_photo_one']);
+    }
+    if ($photos) {
+        $data['photos'] = $photos;
+        $data['photos_count'] = count($photos);
+    }
+
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
     $insert = $wpdb->insert($table, [

@@ -1756,15 +1756,21 @@ function lfi_nct_app_view_reunion() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_reunion_rsvp';
 
-    if (!empty($_POST['lfi_app_del']) && check_admin_referer('lfi_app_reunion_del')) {
+    /* MULTI-GA : cette réunion (26 juin) est propre à Clos Toreau. Les autres
+       GA ne voient PAS ces inscriptions (espace vide tant qu'ils n'ont pas la
+       leur). On considère « home » = super-admin sur son espace OU Clos Toreau. */
+    $is_home_ga = !function_exists('lfi_nct_scope_ga_slug')
+        || in_array(lfi_nct_scope_ga_slug(), ['', 'clos-toreau'], true);
+
+    if ($is_home_ga && !empty($_POST['lfi_app_del']) && check_admin_referer('lfi_app_reunion_del')) {
         $wpdb->delete($table, ['id' => (int) $_POST['lfi_app_del']]);
         wp_safe_redirect(lfi_nct_app_url('reunion', ['deleted' => 1]));
         exit;
     }
 
-    $rows  = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 200") ?: [];
+    $rows  = $is_home_ga ? ($wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 200") ?: []) : [];
     $total = count($rows);
-    $pers  = (int) $wpdb->get_var("SELECT COALESCE(SUM(avec_qui),0) FROM $table");
+    $pers  = $is_home_ga ? (int) $wpdb->get_var("SELECT COALESCE(SUM(avec_qui),0) FROM $table") : 0;
 
     lfi_nct_app_screen_open('📣 Réunion 26 juin', $total . ' inscription(s) · ' . $pers . ' personne(s) annoncée(s)');
 
@@ -1816,6 +1822,7 @@ function lfi_nct_app_view_membres() {
                 'statut' => $statut, 'prenom' => $prenom, 'nom' => $nom,
                 'email' => $email, 'tel' => $tel,
                 'abonne_emails' => 1, 'source' => 'app',
+                'ga' => function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '',
                 'unsubscribe_token' => function_exists('lfi_nct_make_unsub_token') ? lfi_nct_make_unsub_token() : bin2hex(random_bytes(20)),
                 'membre_depuis' => current_time('mysql'),
             ]);
@@ -1823,9 +1830,13 @@ function lfi_nct_app_view_membres() {
             exit;
         }
     }
-    // Suppression
+    /* MULTI-GA : cloisonnement des adhérents par groupe d'action. Chaque GA
+       ne voit QUE ses adhérents ; l'espace home (Clos Toreau) = ga ''. */
+    $gac = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
+
+    // Suppression — bornée au GA en vigueur (on ne supprime pas l'adhérent d'un autre GA)
     if (!empty($_POST['lfi_app_del']) && check_admin_referer('lfi_app_membre_del')) {
-        $wpdb->delete($table, ['id' => (int) $_POST['lfi_app_del']]);
+        $wpdb->query($wpdb->prepare("DELETE FROM $table WHERE id = %d" . $gac, (int) $_POST['lfi_app_del']));
         wp_safe_redirect(lfi_nct_app_url('membres', ['deleted' => 1]));
         exit;
     }
@@ -1834,13 +1845,13 @@ function lfi_nct_app_view_membres() {
     if ($q) {
         $like = '%' . $wpdb->esc_like($q) . '%';
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table WHERE prenom LIKE %s OR nom LIKE %s OR email LIKE %s OR tel LIKE %s ORDER BY created_at DESC LIMIT 200",
+            "SELECT * FROM $table WHERE (prenom LIKE %s OR nom LIKE %s OR email LIKE %s OR tel LIKE %s)" . $gac . " ORDER BY created_at DESC LIMIT 200",
             $like, $like, $like, $like
         )) ?: [];
     } else {
-        $rows = $wpdb->get_results("SELECT * FROM $table ORDER BY created_at DESC LIMIT 200") ?: [];
+        $rows = $wpdb->get_results("SELECT * FROM $table WHERE 1=1" . $gac . " ORDER BY created_at DESC LIMIT 200") ?: [];
     }
-    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE 1=1" . $gac);
 
     lfi_nct_app_screen_open('👥 Adhérents', $total . ' adhérent(s) au total');
 
@@ -1977,8 +1988,9 @@ function lfi_nct_app_view_sms() {
         $body = $tpl_row->body;
     }
 
+    $gac       = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
     $templates = $wpdb->get_results("SELECT * FROM $tpl ORDER BY categorie, nom") ?: [];
-    $membres   = $wpdb->get_results("SELECT id, prenom, nom, tel FROM $mem WHERE tel <> '' ORDER BY prenom, nom LIMIT 300") ?: [];
+    $membres   = $wpdb->get_results("SELECT id, prenom, nom, tel FROM $mem WHERE tel <> ''" . $gac . " ORDER BY prenom, nom LIMIT 300") ?: [];
 
     lfi_nct_app_screen_open('📱 Envoyer un SMS', 'Choisis un membre + un modèle, puis ouvre ton appli SMS');
 
@@ -2037,6 +2049,8 @@ function lfi_nct_app_view_email() {
     global $wpdb;
     $mem = $wpdb->prefix . 'lfi_nct_membres';
 
+    $gac = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
+
     if (!empty($_POST['lfi_app_email_send']) && check_admin_referer('lfi_app_email_send')) {
         $sujet = sanitize_text_field(wp_unslash($_POST['sujet'] ?? ''));
         $body  = wp_kses_post(wp_unslash($_POST['body']  ?? ''));
@@ -2044,7 +2058,7 @@ function lfi_nct_app_view_email() {
         if ($sujet && $body) {
             $recipients = $wpdb->get_results(
                 "SELECT id, prenom, email, unsubscribe_token FROM $mem
-                 WHERE email <> '' AND abonne_emails = 1 AND jetable = 0"
+                 WHERE email <> '' AND abonne_emails = 1 AND jetable = 0" . $gac
             ) ?: [];
             $sent = 0; $errs = 0;
             add_filter('wp_mail_content_type', '__return_html');
@@ -2063,7 +2077,7 @@ function lfi_nct_app_view_email() {
         }
     }
 
-    $abonnes = (int) $wpdb->get_var("SELECT COUNT(*) FROM $mem WHERE email <> '' AND abonne_emails = 1 AND jetable = 0");
+    $abonnes = (int) $wpdb->get_var("SELECT COUNT(*) FROM $mem WHERE email <> '' AND abonne_emails = 1 AND jetable = 0" . $gac);
 
     lfi_nct_app_screen_open('✉️ Email à tous', $abonnes . ' destinataire(s) abonné(s)');
 
