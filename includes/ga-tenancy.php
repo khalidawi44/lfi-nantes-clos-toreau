@@ -176,6 +176,24 @@ function lfi_nct_responses_scope_clause($col = 'militant_user_id') {
 }
 
 /**
+ * meta_query pour cloisonner les ÉVÉNEMENTS (CPT ag_evenement) par GA.
+ * Home (Clos Toreau) → événements sans rattachement ou « clos-toreau ».
+ * Autre GA → seulement SES événements (vide tant qu'il n'en a pas).
+ */
+function lfi_nct_events_ga_meta_query() {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug === '' || $slug === 'clos-toreau') {
+        return [[
+            'relation' => 'OR',
+            ['key' => '_lfi_evt_ga', 'compare' => 'NOT EXISTS'],
+            ['key' => '_lfi_evt_ga', 'value' => '',            'compare' => '='],
+            ['key' => '_lfi_evt_ga', 'value' => 'clos-toreau', 'compare' => '='],
+        ]];
+    }
+    return [['key' => '_lfi_evt_ga', 'value' => $slug, 'compare' => '=']];
+}
+
+/**
  * Ajoute le filtre GA à un get_users.
  *  - Sur l'espace d'un autre GA : uniquement ses membres (meta = slug).
  *  - Sur l'espace home (Clos Toreau) : on EXCLUT les membres rattachés à un

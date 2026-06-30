@@ -938,12 +938,25 @@ function lfi_nct_app_quick_stats() {
     /* Adhérents : cloisonnés par GA (chaque GA compte LES SIENS). */
     $mem_clause = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
     $membres = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres WHERE 1=1" . $mem_clause);
-    /* Réunion du 26 juin = propre à Clos Toreau. Événements = annonces globales. */
+    /* Réunion du 26 juin = propre à Clos Toreau. */
     $reunion = $is_home ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_reunion_rsvp") : 0;
-    $events  = (int) $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN (%s, %s)",
-        'ag_evenement', 'lfi_evenement'
-    ));
+    /* Événements : cloisonnés par GA via le rattachement _lfi_evt_ga. */
+    if ($is_home) {
+        $events = (int) $wpdb->get_var(
+            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+             LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_lfi_evt_ga'
+             WHERE p.post_status = 'publish' AND p.post_type IN ('ag_evenement','lfi_evenement')
+                   AND (m.meta_value IS NULL OR m.meta_value = '' OR m.meta_value = 'clos-toreau')"
+        );
+    } else {
+        $events = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = '_lfi_evt_ga'
+             WHERE p.post_status = 'publish' AND p.post_type IN ('ag_evenement','lfi_evenement')
+                   AND m.meta_value = %s",
+            $scope
+        ));
+    }
     $stats = [
         'reunion' => max(0, $reunion),
         'surveys' => max(0, $surveys),
@@ -1960,6 +1973,16 @@ function lfi_nct_app_view_evenements() {
         return;
     }
     $events = get_posts(['post_type' => $cpts, 'post_status' => 'publish', 'posts_per_page' => 100, 'orderby' => 'meta_value', 'meta_key' => '_ag_event_date', 'order' => 'ASC']);
+    /* Cloisonnement par GA : chaque GA ne voit QUE ses événements (filtre simple
+       et sûr sur le rattachement _lfi_evt_ga, sans toucher au tri). */
+    if (function_exists('lfi_nct_scope_ga_slug')) {
+        $ev_slug = lfi_nct_scope_ga_slug();
+        $ev_home = ($ev_slug === '' || $ev_slug === 'clos-toreau');
+        $events = array_values(array_filter($events, function ($p) use ($ev_slug, $ev_home) {
+            $g = (string) get_post_meta($p->ID, '_lfi_evt_ga', true);
+            return $ev_home ? ($g === '' || $g === 'clos-toreau') : ($g === $ev_slug);
+        }));
+    }
     $total = count($events);
     lfi_nct_app_screen_open('📅 Événements', $total . ' événement(s)');
 
