@@ -105,6 +105,29 @@ function lfi_nct_responses_scope_clause($col = 'militant_user_id') {
     return ' AND ' . $col . ' IN (' . implode(',', array_map('intval', $ids)) . ')';
 }
 
+/** Ajoute le filtre GA à un get_users (vide = tous, pour le super-admin). */
+function lfi_nct_users_ga_query($args = []) {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug !== '') {
+        $mq = $args['meta_query'] ?? [];
+        $mq[] = ['key' => 'lfi_nct_ga', 'value' => $slug];
+        $args['meta_query'] = $mq;
+    }
+    return $args;
+}
+
+/** GA à attribuer aux comptes/adhérents créés ('' = espace home, pas d'attribution). */
+function lfi_nct_creation_ga() {
+    return lfi_nct_scope_ga_slug();
+}
+
+/** Clause SQL pour cloisonner la table des adhérents par GA (colonne `ga`). */
+function lfi_nct_membres_ga_clause($col = 'ga') {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug === '') return '';
+    return " AND $col = '" . esc_sql($slug) . "'";
+}
+
 /* ============================================================== *
  *  Bascule de GA (super-admin) : ?vue=voir-ga&ga=slug             *
  * ============================================================== */
