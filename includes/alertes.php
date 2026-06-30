@@ -105,6 +105,7 @@ function lfi_nct_alertes_all() {
 
 /** Bandeau « À faire » en haut de l'accueil. */
 function lfi_nct_render_home_alerts() {
+    if (function_exists('lfi_nct_module_enabled') && !lfi_nct_module_enabled('alertes')) return;
     $alertes = lfi_nct_alertes_all();
     if (empty($alertes)) return;
     echo '<div class="lfi-app-alertes" style="background:#fff;border:2px solid #c8102e;border-radius:12px;padding:10px 12px;margin:12px 0">';
