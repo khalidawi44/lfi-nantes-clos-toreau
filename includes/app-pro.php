@@ -1046,10 +1046,15 @@ function lfi_nct_app_view_signatures() {
  *  (même rendu que la page wp-admin /lfi-nct-map)                  *
  * ============================================================== */
 
-function lfi_nct_app_view_carte() {
+function lfi_nct_app_view_carte($force_all = false) {
     if (!current_user_can('manage_options')) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
+
+    /* Cloisonnement : sur l'espace d'un GA, on ne montre que ses signalements.
+       En mode « réseau » ($force_all), on montre TOUT (carte cumulée). */
+    $scope = (!$force_all && function_exists('lfi_nct_responses_scope_clause'))
+        ? lfi_nct_responses_scope_clause('militant_user_id') : '';
 
     if (!empty($_POST['lfi_app_geocode']) && check_admin_referer('lfi_app_geocode')) {
         @set_time_limit(120);
@@ -1066,7 +1071,7 @@ function lfi_nct_app_view_carte() {
     $rows = $wpdb->get_results(
         "SELECT id, adresse, etage, data, lat, lng, submitted_at
          FROM $table
-         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL
+         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL" . $scope . "
          ORDER BY submitted_at DESC LIMIT 500"
     ) ?: [];
     $pending = (int) $wpdb->get_var(
@@ -1122,7 +1127,11 @@ function lfi_nct_app_view_carte() {
     $center_lng  = defined('LFI_NCT_MAP_CENTER_LNG')  ? (float) LFI_NCT_MAP_CENTER_LNG  : -1.5380;
     $center_zoom = defined('LFI_NCT_MAP_CENTER_ZOOM') ? (int)   LFI_NCT_MAP_CENTER_ZOOM : 16;
 
-    lfi_nct_app_screen_open('🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
+    lfi_nct_app_screen_open($force_all ? '🌐 Carte cumulée du réseau' : '🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
+
+    if ($force_all) {
+        echo '<div class="lfi-app-help" style="background:#eef4ff;border-left:4px solid #0066a3"><strong>Carte cumulée de tout le réseau</strong> : tous les signalements de tous les groupes d\'action, sur une seule carte 3D. Vue réservée au super-admin.</div>';
+    }
 
     if (isset($_GET['geo_traitees'])) {
         lfi_nct_app_flash(sprintf('Géocodage : %d traité(s), %d réussi(s), %d restant(s).', (int) $_GET['geo_traitees'], (int) $_GET['geo_ok'], (int) $_GET['geo_remain']));

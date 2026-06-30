@@ -660,6 +660,8 @@ function lfi_nct_app_shortcode() {
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
+                    case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
+                    case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
