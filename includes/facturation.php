@@ -443,11 +443,35 @@ function lfi_nct_bailleurs_sociaux() {
     ];
 }
 
+/** Identifiants des photos (constat) d'une intervention. */
+function lfi_nct_interv_photos($id) {
+    $all = get_option('lfi_nct_interv_photos', []);
+    $ids = (is_array($all) && !empty($all[$id])) ? (array) $all[$id] : [];
+    return array_values(array_filter(array_map('intval', $ids)));
+}
+function lfi_nct_interv_photos_set($id, $ids) {
+    $all = get_option('lfi_nct_interv_photos', []);
+    if (!is_array($all)) $all = [];
+    $ids = array_values(array_filter(array_map('intval', (array) $ids)));
+    if ($ids) $all[(int) $id] = $ids; else unset($all[(int) $id]);
+    update_option('lfi_nct_interv_photos', $all, false);
+}
+
 function lfi_nct_app_intervention_form($row) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
     $is_edit = !empty($row);
     $err = null;
+
+    /* Handler SUPPRESSION d'une photo du constat */
+    if ($is_edit && !empty($_POST['lfi_interv_photo_del']) && check_admin_referer('lfi_interv_photo_del')) {
+        $pid = (int) ($_POST['photo_id'] ?? 0);
+        $ids = array_values(array_diff(lfi_nct_interv_photos($row->id), [$pid]));
+        lfi_nct_interv_photos_set($row->id, $ids);
+        if ($pid && get_post_meta($pid, '_lfi_interv_photo', true)) wp_delete_attachment($pid, true);
+        wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $row->id, 'photo_del' => 1]));
+        exit;
+    }
 
     /* Handler ANNULATION rapide : 1 clic, sans repasser par le formulaire */
     if ($is_edit && !empty($_POST['lfi_app_intervention_cancel']) && check_admin_referer('lfi_app_intervention_cancel')) {
@@ -538,6 +562,29 @@ function lfi_nct_app_intervention_form($row) {
             $data['owner_user_id'] = (int) lfi_nct_fact_owner_id();
             $wpdb->insert($t, $data);
             $interv_id = (int) $wpdb->insert_id;
+        }
+
+        /* PHOTOS DU CONSTAT : téléversement (rétroactif — fonctionne aussi en
+           édition). On les stocke comme pièces jointes WordPress et on garde
+           leurs identifiants par intervention. */
+        if ($interv_id && !empty($_FILES['interv_photos']) && !empty($_FILES['interv_photos']['name'][0])) {
+            require_once ABSPATH . 'wp-admin/includes/image.php';
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            require_once ABSPATH . 'wp-admin/includes/media.php';
+            $files = $_FILES['interv_photos'];
+            $ids   = lfi_nct_interv_photos($interv_id);
+            $n     = count((array) $files['name']);
+            for ($i = 0; $i < $n; $i++) {
+                if (empty($files['name'][$i]) || (int) $files['error'][$i] !== 0) continue;
+                $_FILES['interv_photo_one'] = [
+                    'name' => $files['name'][$i], 'type' => $files['type'][$i],
+                    'tmp_name' => $files['tmp_name'][$i], 'error' => $files['error'][$i], 'size' => $files['size'][$i],
+                ];
+                $att = media_handle_upload('interv_photo_one', 0);
+                if (!is_wp_error($att)) { update_post_meta((int) $att, '_lfi_interv_photo', $interv_id); $ids[] = (int) $att; }
+            }
+            unset($_FILES['interv_photo_one']);
+            lfi_nct_interv_photos_set($interv_id, array_values(array_unique(array_map('intval', $ids))));
         }
 
         /* ENCHAÎNEMENT : intervention planifiée + service choisi → email pré-rempli
@@ -667,7 +714,17 @@ function lfi_nct_app_intervention_form($row) {
     if (!empty($_GET['saved']))   lfi_nct_app_flash('✅ Intervention enregistrée.');
     if (!empty($_GET['created'])) lfi_nct_app_flash('✅ Intervention créée.');
 
-    echo '<form method="post" class="lfi-app-form">';
+    /* Form de suppression de photo (séparé du formulaire principal pour ne
+       pas l'imbriquer), déclenché par les boutons « × » des vignettes. */
+    if ($is_edit) {
+        echo '<form id="lfi-interv-photo-del-form" method="post" style="display:none">';
+        wp_nonce_field('lfi_interv_photo_del');
+        echo '<input type="hidden" name="lfi_interv_photo_del" value="1"><input type="hidden" name="photo_id" id="lfi-interv-photo-del-id" value="">';
+        echo '</form>';
+        echo '<script>function lfiDelIntervPhoto(id){if(!confirm("Supprimer cette photo ?"))return;var f=document.getElementById("lfi-interv-photo-del-form");document.getElementById("lfi-interv-photo-del-id").value=id;f.submit();}</script>';
+    }
+
+    echo '<form method="post" class="lfi-app-form" enctype="multipart/form-data">';
     wp_nonce_field('lfi_app_intervention_save');
     echo '<input type="hidden" name="lfi_app_intervention_save" value="1">';
 
@@ -724,6 +781,29 @@ function lfi_nct_app_intervention_form($row) {
 
     echo '<label>Description détaillée (ce qui sera repris dans la facture)<textarea name="description" id="lfi-desc-interv" rows="4" placeholder="Ex : Démontage et évacuation des plaques de plâtre infestées de moisissures sur 4 m² au mur de la cuisine, ponçage du support, rebouchage à l\'enduit, repose de placo BA13 hydro, enduit de finition.">' . esc_textarea($r->description) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-desc-interv" data-label="Dicter la description"></div>';
+
+    /* === PHOTOS DU CONSTAT (versées au rapport) === */
+    echo '<h3 style="margin:16px 0 4px">📷 Photos du constat</h3>';
+    echo '<div class="lfi-app-help"><small>Prends des photos des défaillances (moisissures, fuites, nuisibles…). Elles sont <strong>versées au rapport</strong> et conservées dans l\'intervention. Tu peux en ajouter à tout moment, même en modifiant plus tard.</small></div>';
+    echo '<label>Ajouter des photos<input type="file" name="interv_photos[]" accept="image/*" capture="environment" multiple></label>';
+    if (!empty($_GET['photo_del'])) lfi_nct_app_flash('🗑 Photo supprimée.');
+    if ($is_edit) {
+        $photos = lfi_nct_interv_photos($row->id);
+        if ($photos) {
+            echo '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0">';
+            foreach ($photos as $pid) {
+                $url = wp_get_attachment_image_url($pid, 'medium') ?: wp_get_attachment_url($pid);
+                if (!$url) continue;
+                echo '<div style="position:relative;width:96px">';
+                echo '<a href="' . esc_url(wp_get_attachment_url($pid)) . '" target="_blank" rel="noopener"><img src="' . esc_url($url) . '" alt="constat" loading="lazy" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #ccc"></a>';
+                echo '<button type="button" onclick="lfiDelIntervPhoto(' . (int) $pid . ')" title="Supprimer" style="position:absolute;top:-6px;right:-6px;background:#c8102e;color:#fff;border:0;border-radius:50%;width:22px;height:22px;cursor:pointer;font-weight:700">×</button>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+    } else {
+        echo '<div class="lfi-app-help"><small>Tu pourras aussi ajouter/voir les photos après l\'enregistrement, en rouvrant l\'intervention.</small></div>';
+    }
 
     /* === MODE DE FACTURATION === */
     $current_mode = (string) ($r->tarif_mode ?? 'tache');
