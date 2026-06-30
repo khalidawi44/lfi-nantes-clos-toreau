@@ -891,9 +891,6 @@ function lfi_nct_app_dossier_juridique_form($row) {
             ['schs',            '🏥 Saisine SCHS Nantes — insalubrité',
              'Service Communal d\'Hygiène et Santé : déclenche enquête + arrêté préfectoral si confirmé.',
              'dossier-doc-schs',            $row->schs_date],
-            ['ars',             '🏛 Saisine ARS Pays de la Loire',
-             'Agence Régionale de Santé : risque sanitaire avéré, surtout si enfant + certificat médical.',
-             'dossier-doc-ars',             $row->ars_date],
         ];
 
         echo '<ul class="lfi-app-list">';
@@ -1309,6 +1306,25 @@ function lfi_nct_render_voice_helper() {
  *   - Signature claire mentionnant le mandat du locataire            *
  *   - HTML = exactement la lettre, plus quelques mots d'intro         *
  * ============================================================== */
+/** Adresse Gmail du Groupe d'Action (depuis laquelle on envoie les courriers). */
+function lfi_nct_ga_gmail() {
+    $opt = get_option('lfi_nct_ga_gmail', '');
+    return $opt ?: 'nantessudclostoreau@gmail.com';
+}
+
+/** Convertit un corps HTML simple en texte brut (pour le compose Gmail). */
+function lfi_nct_html_to_plain($html) {
+    $t = (string) $html;
+    $t = preg_replace('#<\s*br\s*/?>#i', "\n", $t);
+    $t = preg_replace('#</\s*(p|h1|h2|h3|li|div|tr)\s*>#i', "\n", $t);
+    $t = preg_replace('#<\s*li[^>]*>#i', "• ", $t);
+    $t = wp_strip_all_tags($t);
+    $t = html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $t = preg_replace("/[ \t]+\n/", "\n", $t);
+    $t = preg_replace("/\n{3,}/", "\n\n", $t);
+    return trim($t);
+}
+
 function lfi_nct_app_view_dossier_send_email() {
     if (!lfi_nct_app_guard_brigade()) return;
     global $wpdb;
@@ -1328,8 +1344,40 @@ function lfi_nct_app_view_dossier_send_email() {
     $defaults = lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur);
     $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
 
-    /* HANDLER POST : envoi */
-    if (!empty($_POST['lfi_dossier_email_send']) && check_admin_referer('lfi_dossier_email_send')) {
+    /* HANDLER POST : OUVRIR DANS GMAIL (le GA envoie depuis son propre Gmail).
+       On journalise l'email dans le dossier, puis on ouvre Gmail pré-rempli. */
+    if (!empty($_POST['lfi_send_gmail']) && check_admin_referer('lfi_dossier_email_send')) {
+        $to      = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
+        $cc      = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
+        $subject = sanitize_text_field(wp_unslash($_POST['email_subject'] ?? ''));
+        $body_raw= wp_kses_post(wp_unslash($_POST['email_body'] ?? ''));
+        $intro   = sanitize_textarea_field(wp_unslash($_POST['email_intro'] ?? ''));
+
+        $signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
+        $plain = trim(($intro !== '' ? $intro . "\n\n" : '') . lfi_nct_html_to_plain($body_raw) . $signature);
+
+        /* Journalise dans le dossier */
+        $logs = json_decode($dossier->notes ?? '', true);
+        if (!is_array($logs)) $logs = ['__notes' => $dossier->notes ?? ''];
+        $logs['email_log'] = $logs['email_log'] ?? [];
+        $logs['email_log'][] = ['letter' => $letter_key, 'to' => $to, 'cc' => $cc, 'date' => current_time('Y-m-d H:i'), 'via' => 'gmail'];
+        $wpdb->update($wpdb->prefix . 'lfi_nct_dossiers_locataires',
+            ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)],
+            ['id' => $dossier->id, 'owner_user_id' => (int) lfi_nct_dossier_owner_id()]
+        );
+
+        /* Ouvre Gmail (compose) pré-rempli sur le compte du GA */
+        $gmail = 'https://mail.google.com/mail/u/?authuser=' . rawurlencode(lfi_nct_ga_gmail()) . '&view=cm&fs=1&tf=1'
+            . '&to=' . rawurlencode($to)
+            . ($cc !== '' ? '&cc=' . rawurlencode($cc) : '')
+            . '&su=' . rawurlencode($subject)
+            . '&body=' . rawurlencode($plain);
+        wp_redirect($gmail);
+        exit;
+    }
+
+    /* HANDLER POST : envoi via le site (wp_mail) */
+    if (!empty($_POST['lfi_send_wpmail']) && check_admin_referer('lfi_dossier_email_send')) {
         $to        = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
         $cc        = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
         $bcc_self  = !empty($_POST['email_bcc_self']);
@@ -1342,7 +1390,7 @@ function lfi_nct_app_view_dossier_send_email() {
         if ($intro) $html .= '<p style="margin-bottom:20px">' . nl2br(esc_html($intro)) . '</p><hr style="margin:20px 0;border:0;border-top:1px solid #ccc">';
         $html .= $body_raw;
         $html .= '<hr style="margin:24px 0;border:0;border-top:1px solid #ccc">';
-        $html .= '<p style="font-size:12px;color:#666">Cet email est adressé au nom de <strong>' . esc_html($tenant_full ?: 'la locataire') . '</strong>, par l\'intermédiaire du <strong>Groupe d\'Action de la France Insoumise — Nantes Sud / Clos Toreau</strong>, avec le mandat de la personne concernée pour agir auprès du bailleur. Pour toute réponse merci d\'utiliser l\'adresse en Reply-To.</p>';
+        $html .= '<p style="font-size:12px;color:#666">Ce courrier est établi avec l\'appui du <strong>Groupe d\'Action de la France Insoumise — Nantes Sud / Clos Toreau</strong>, à la demande et avec l\'accord de <strong>' . esc_html($tenant_full ?: 'la locataire') . '</strong>, dans le cadre de notre action d\'accompagnement des habitant·es (aide à la rédaction et à la transmission). Pour toute réponse, merci d\'utiliser l\'adresse en Reply-To.</p>';
         $html .= '</div>';
 
         /* Headers */
@@ -1406,7 +1454,7 @@ function lfi_nct_app_view_dossier_send_email() {
     if (!empty($send_error)) echo '<div class="lfi-error"><strong>Erreur :</strong> ' . esc_html($send_error) . '</div>';
 
     echo '<div class="lfi-app-help" style="background:#e8f5ea;border-left:4px solid #186a3b">';
-    echo '🤝 <strong>Tu envoies cet email au nom du Groupe d\'Action LFI</strong>, en représentation de ' . esc_html($tenant_full ?: 'la locataire') . ' qui t\'a mandaté à cet effet. Le destinataire pourra te répondre directement (Reply-To = ton email). Une mention en bas du mail rappelle ce contexte juridique.';
+    echo '🤝 <strong>Tu aides ' . esc_html($tenant_full ?: 'la locataire') . ' à transmettre ce courrier.</strong> Le Groupe d\'Action <strong>accompagne</strong> (aide à la rédaction et à l\'envoi) — il ne représente pas juridiquement la locataire. Le destinataire pourra te répondre directement (Reply-To = ton email).';
     echo '</div>';
 
     echo '<form method="post" class="lfi-app-form">';
@@ -1428,7 +1476,11 @@ function lfi_nct_app_view_dossier_send_email() {
     echo '<label>Lettre / corps du mail (HTML autorisé)<textarea name="email_body" id="lfi-email-body" rows="14" required>' . esc_textarea($default_body) . '</textarea></label>';
     echo '<div class="lfi-app-help"><small>Tu peux modifier librement le texte. Les balises HTML simples (&lt;p&gt; &lt;strong&gt; &lt;br&gt; &lt;ul&gt; &lt;li&gt;) sont conservées.</small></div>';
 
-    echo '<button type="submit" class="btn-primary big">📧 Envoyer le mail maintenant</button>';
+    echo '<button type="submit" name="lfi_send_gmail" value="1" class="btn-primary big">📨 Ouvrir dans mon Gmail (' . esc_html(lfi_nct_ga_gmail()) . ')</button>';
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Ça ouvre <strong>ton</strong> Gmail avec le destinataire, l\'objet et le texte déjà remplis — tu n\'as plus qu\'à cliquer « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong> de la locataire.</small></div>';
+    echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#666;font-size:.9em">Ou envoyer directement depuis le site (sans Gmail)</summary>';
+    echo '<button type="submit" name="lfi_send_wpmail" value="1" class="btn-ghost" style="margin-top:8px">📧 Envoyer depuis le site (wp_mail)</button>';
+    echo '<div class="lfi-app-help"><small>À n\'utiliser que si l\'envoi par mail du site est bien configuré.</small></div></details>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id])) . '">← Annuler</a>';
 
     echo '</form>';
@@ -1719,7 +1771,7 @@ function lfi_nct_app_view_cadre_juridique() {
     echo '<div style="background:#e8f5ea;border-radius:10px;padding:14px 16px;margin:14px 0">';
     echo '<div style="font-weight:800;color:#186a3b;margin-bottom:6px">📋 Ton montage à 2 étages</div>';
     echo '<div style="font-size:.92em;line-height:1.6">';
-    echo '<strong>1. L\'association ' . esc_html($asso_nom) . '</strong> → le locataire adhère, puis elle l\'accompagne : courriers, mise en demeure, dossier, saisines, représentation. (Bulletin d\'adhésion générable dans chaque dossier.)<br>';
+    echo '<strong>1. L\'association ' . esc_html($asso_nom) . '</strong> → le locataire adhère, puis elle l\'<strong>accompagne</strong> : aide à la rédaction des courriers, mise en demeure, montage du dossier, saisines. <em>(Accompagnement — pas de représentation juridique : c\'est l\'avocat qui représente et plaide.)</em> Bulletin d\'adhésion générable dans chaque dossier.<br>';
     echo '<strong>2. Toi, auto-entrepreneur</strong> → les travaux physiques, facturés à NMH via substitution (art. 1222 CC), avec mandat + mise en demeure. La visite/diagnostic s\'intègre au devis des travaux.<br><br>';
     echo 'Quand NMH refuse → chaîne de recouvrement (Conciliation → Tribunal → SCHS/ARS).';
     echo '</div></div>';
@@ -2271,7 +2323,7 @@ function lfi_nct_app_view_dossier_doc_reponse_nmh() {
     echo '<em>Association de défense des locataires (loi du 6 juillet 1989)</em><br>';
     if (!empty($asso['siege']))  echo esc_html(trim($asso['siege'] . ' ' . ($asso['cp_ville'] ?? ''))) . '<br>';
     if (!empty($asso['email']))  echo 'Mél. : ' . esc_html($asso['email']) . '<br>';
-    echo 'Agissant sur mandat de ' . esc_html($tenant_full ?: 'la locataire') . '</div>';
+    echo 'Courrier établi avec l\'accord et à la demande de ' . esc_html($tenant_full ?: 'la locataire') . '</div>';
 
     lfi_nct_dossier_header_destinataire_nmh($bailleur);
 
@@ -2310,7 +2362,7 @@ function lfi_nct_app_view_dossier_doc_reponse_nmh() {
 
     echo '<div class="signature">Pour ' . esc_html($asso['nom']) . '<br>' . esc_html($asso['president'] ?: '') . ', président</div>';
 
-    echo '<div class="pj"><strong>Pièces jointes :</strong> certificat médical' . (!empty($dossier->certificat_medecin) ? ' (' . esc_html($dossier->certificat_medecin) . ')' : '') . ' · photographies datées des désordres · mandat de la locataire.</div>';
+    echo '<div class="pj"><strong>Pièces jointes :</strong> certificat médical' . (!empty($dossier->certificat_medecin) ? ' (' . esc_html($dossier->certificat_medecin) . ')' : '') . ' · photographies datées des désordres · accord écrit de la locataire.</div>';
 
     echo '</div>';
     lfi_nct_app_screen_close(false);

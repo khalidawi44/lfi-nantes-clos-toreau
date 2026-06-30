@@ -528,7 +528,7 @@ function lfi_nct_dossier_render_parcours($u) {
     /* Suggestions rapides (dropdown) — le parcours type d'un dossier */
     $suggestions = [
         'Passer chez le locataire pour constater',
-        'Faire signer le mandat de représentation',
+        'Faire signer l\'accord d\'accompagnement de la locataire',
         'Envoyer la mise en demeure travaux à NMH',
         'Appeler NMH (agence Goudy / M. Morineau)',
         'Attendre la réponse de M. Morineau (NMH)',
