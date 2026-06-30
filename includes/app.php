@@ -711,7 +711,7 @@ function lfi_nct_app_screen_open($title, $subtitle = '') {
     ?>
     <div class="lfi-app lfi-app-screen">
         <div class="lfi-app-navbar">
-            <a class="lfi-app-back" href="<?php echo esc_url(lfi_nct_app_url()); ?>" aria-label="Retour à l'accueil">←</a>
+            <a class="lfi-app-back" href="<?php echo esc_url(lfi_nct_app_url()); ?>" onclick="if(window.history.length>1){history.back();return false;}" aria-label="Revenir en arrière">←</a>
             <div class="lfi-app-screen-title">
                 <div class="t"><?php echo esc_html($title); ?></div>
                 <?php if ($subtitle): ?><div class="s"><?php echo esc_html($subtitle); ?></div><?php endif; ?>
@@ -740,6 +740,54 @@ function lfi_nct_app_screen_close($more_tiles = true) {
 function lfi_nct_app_flash($msg, $type = 'ok') {
     $class = $type === 'ok' ? 'lfi-app-flash ok' : 'lfi-app-flash err';
     echo '<div class="' . esc_attr($class) . '">' . esc_html($msg) . '</div>';
+}
+
+/**
+ * Transforme les sections (titres h2/h3) de l'écran courant en blocs
+ * REPLIABLES (accordéon), pour les pages trop longues/fouillis. Tout reste
+ * accessible mais on ouvre/ferme chaque section d'un appui. Côté client :
+ * regroupe le contenu situé entre deux titres et le rend pliable. La première
+ * section est ouverte par défaut.
+ */
+function lfi_nct_render_section_accordion_js($open_first = true) {
+    $of = $open_first ? 'true' : 'false';
+    ?>
+    <script>
+    (function(){
+        var bodies = document.querySelectorAll('.lfi-app-screen-body');
+        var body = bodies[bodies.length - 1];
+        if (!body || body.getAttribute('data-acc')) return;
+        body.setAttribute('data-acc', '1');
+        var kids = Array.prototype.slice.call(body.children);
+        var groups = [], cur = null;
+        kids.forEach(function(n){
+            if (/^H[23]$/.test(n.tagName)) { cur = { head: n, items: [] }; groups.push(cur); }
+            else if (cur) { cur.items.push(n); }
+        });
+        if (groups.length < 2) return;
+        groups.forEach(function(g, i){
+            var wrap = document.createElement('div');
+            wrap.className = 'lfi-acc-body';
+            g.items.forEach(function(it){ wrap.appendChild(it); });
+            g.head.parentNode.insertBefore(wrap, g.head.nextSibling);
+            g.head.style.cursor = 'pointer';
+            g.head.style.userSelect = 'none';
+            var open = (i === 0 && <?php echo $of; ?>);
+            wrap.style.display = open ? '' : 'none';
+            var ar = document.createElement('span');
+            ar.textContent = '▾';
+            ar.style.cssText = 'float:right;transition:transform .15s ease;' + (open ? '' : 'transform:rotate(-90deg);');
+            g.head.insertBefore(ar, g.head.firstChild);
+            g.head.addEventListener('click', function(e){
+                if (e.target.closest('a,button,input,textarea,select,label')) return;
+                var vis = wrap.style.display !== 'none';
+                wrap.style.display = vis ? 'none' : '';
+                ar.style.transform = vis ? 'rotate(-90deg)' : '';
+            });
+        });
+    })();
+    </script>
+    <?php
 }
 
 function lfi_nct_app_render_login() {

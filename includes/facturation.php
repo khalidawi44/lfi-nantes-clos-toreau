@@ -175,10 +175,10 @@ function lfi_nct_association() {
         'email'     => 'quartierlibre44@proton.me',
         'tel'       => '06 23 52 60 74',
         'objet'     => 'défense des intérêts des habitants des quartiers populaires dans les domaines social, économique, environnemental et culturel — notamment le logement, le cadre de vie, la sécurité, les services publics, l\'accès aux droits et la protection des droits collectifs (association de locataires)',
-        'cotisation'=> '5',
+        'cotisation'=> '0',   /* 0 = adhésion gratuite */
         'secretaire'    => 'Gwenaëlle Gourdien',   /* nom du/de la secrétaire */
         'president_adresse'  => '14 rue de Saint-Jean-de-Luz, 44200 Nantes',
-        'secretaire_adresse' => '14 rue de Saint-Jean-de-Luz, 44230',
+        'secretaire_adresse' => '14 rue de Saint-Jean-de-Luz, 44200 Nantes',
         'age_date'      => '',   /* date de l'AGE (texte) — vide = date du jour */
         'sig_president' => 0,    /* attachment ID signature président */
         'sig_secretaire'=> 0,    /* attachment ID signature secrétaire */
@@ -1422,7 +1422,7 @@ function lfi_nct_app_view_facturation_params() {
         echo '<label>Email<input type="email" name="asso_email" value="' . esc_attr($asso['email']) . '"></label>';
         echo '<label>Téléphone<input type="tel" name="asso_tel" value="' . esc_attr($asso['tel']) . '"></label>';
         echo '<label>Objet social (extrait des statuts)<textarea name="asso_objet" rows="2">' . esc_textarea($asso['objet']) . '</textarea></label>';
-        echo '<label>Cotisation d\'adhésion (€)<input type="number" name="asso_cotisation" value="' . esc_attr($asso['cotisation']) . '" step="1" min="0"></label>';
+        echo '<label>Cotisation d\'adhésion (€) — <strong>0 = adhésion gratuite</strong><input type="number" name="asso_cotisation" value="' . esc_attr($asso['cotisation']) . '" step="1" min="0"></label>';
 
         /* === SIGNATURES MANUSCRITES (scannées) === */
         echo '<h4 style="margin:14px 0 4px;color:#7a0000">✍️ Signatures manuscrites (pour les statuts/PV)</h4>';

@@ -579,7 +579,7 @@ function lfi_nct_app_view_prefecture_email() {
         echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00">📎 <strong>Pièce jointe (rapport anonyme) — étape manuelle obligatoire.</strong> Aucun bouton « écrire un email » ne peut joindre un fichier tout seul. Fais : <a href="' . esc_url(lfi_nct_app_url('prefecture-rapport')) . '" target="_blank" rel="noopener" style="font-weight:700">①&nbsp;Ouvrir le rapport</a> → Imprimer → « Enregistrer au format PDF » → puis, dans Gmail, appuie sur le trombone 📎 pour joindre le PDF.</div>';
     }
 
-    lfi_nct_render_gmail_opener($from, $sig, 'lfi_pref_gmail_log', '📨 Ouvrir dans Gmail (' . $from . ')');
+    lfi_nct_render_gmail_opener($from, $sig, 'lfi_pref_gmail_log', '📨 Ouvrir dans Gmail (' . $from . ')', lfi_nct_app_url('prefecture', ['corr_ok' => 1]));
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>' . esc_html($help) . ' Sur iPhone, ça ouvre l\'app Gmail avec le message prêt. L\'envoi est aussitôt consigné dans le suivi.</small></div>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('prefecture')) . '">← Retour au volet Préfecture</a>';
     echo '</form>';

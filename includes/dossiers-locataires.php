@@ -880,7 +880,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
         $asso = function_exists('lfi_nct_association') ? lfi_nct_association() : ['nom' => 'Union des quartiers libres'];
         echo '<div class="lfi-app-list"><div class="lfi-app-card" style="border-left:4px solid #7a0000">';
         echo '<div class="head"><div class="who">🎫 Bulletin d\'adhésion ' . esc_html($asso['nom']) . '</div></div>';
-        echo '<div class="com">⚖️ <strong>Fais adhérer le locataire AVANT de l\'accompagner.</strong> C\'est ce qui rend légal l\'envoi de courriers en son nom par l\'association (art. 63-66 loi 71-1130). Cotisation : ' . esc_html($asso['cotisation'] ?: '5') . ' €.</div>';
+        echo '<div class="com">⚖️ <strong>Fais adhérer le locataire AVANT de l\'accompagner.</strong> C\'est ce qui rend légal l\'envoi de courriers en son nom par l\'association (art. 63-66 loi 71-1130). <strong>Adhésion gratuite.</strong></div>';
         echo '<div class="row-actions">';
         echo '<a class="btn-primary" style="background:#7a0000" href="' . esc_url(lfi_nct_app_url('dossier-doc-adhesion', ['id' => $row->id])) . '" target="_blank">🎫 Générer le bulletin d\'adhésion</a>';
         echo '</div></div></div>';
@@ -1065,6 +1065,9 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
     /* Helper voice — injecté ici, partagé avec l'intervention */
     lfi_nct_render_voice_helper();
+
+    /* Sections repliables (page longue) : ouvrir/fermer chaque bloc. */
+    lfi_nct_render_section_accordion_js();
 
     lfi_nct_app_screen_close();
 }
@@ -1409,12 +1412,13 @@ function lfi_nct_perso_gmail() {
  *
  * À placer UNE fois par formulaire. Le <script> n'est émis qu'une fois.
  */
-function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $button_label = '📨 Ouvrir dans Gmail') {
+function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $button_label = '📨 Ouvrir dans Gmail', $redirect_url = '') {
     echo '<input type="hidden" name="' . esc_attr($log_field) . '" value="">';
     echo '<iframe name="lfiLogFrame" id="lfiLogFrame" style="display:none" title="journal"></iframe>';
     echo '<button type="button" class="btn-primary big" onclick="lfiNctOpenGmail(this)" '
         . 'data-gmail-user="' . esc_attr($gmail_user) . '" '
         . 'data-gmail-sig="' . esc_attr($signature) . '" '
+        . 'data-redirect="' . esc_attr($redirect_url) . '" '
         . 'data-log-field="' . esc_attr($log_field) . '">' . esc_html($button_label) . '</button>';
     echo '<div id="lfiGmailFallback" style="display:none;margin-top:8px" class="lfi-app-help">'
         . '✅ <strong>Email ajouté au dossier.</strong> Si Gmail ne s\'ouvre pas tout seul, appuie ici : '
@@ -1487,14 +1491,28 @@ function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $butto
         if (la) la.href = appUrl; if (lw) lw.href = webUrl; if (lm) lm.href = mailto;
         if (fb) fb.style.display = 'block';
 
+        /* Page de confirmation à rejoindre après l'envoi (pour CONSTATER que
+           l'email est bien consigné). */
+        var redirect = btn.getAttribute('data-redirect') || '';
+
         /* Ouvre Gmail : l'APP sur iPhone (sinon on retombe sur le web). */
         var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
             || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         if (isIOS) {
             window.location.href = appUrl;
-            setTimeout(function(){ if (!document.hidden) { window.location.href = webUrl; } }, 1200);
+            var done = false;
+            /* Quand l'utilisateur revient de Gmail (page de nouveau visible),
+               on l'amène sur la page de confirmation. */
+            if (redirect) {
+                document.addEventListener('visibilitychange', function onv(){
+                    if (!document.hidden && !done) { done = true; document.removeEventListener('visibilitychange', onv); window.location.href = redirect; }
+                });
+            }
+            /* App Gmail absente : après un délai, on ouvre Gmail web. */
+            setTimeout(function(){ if (!document.hidden && !done) { window.location.href = webUrl; } }, 1500);
         } else {
             window.open(webUrl, '_blank');
+            if (redirect) window.location.href = redirect;
         }
     }
     </script>
@@ -1674,7 +1692,7 @@ function lfi_nct_app_view_dossier_send_email() {
 
     /* Bouton Gmail robuste (ouvre l'app Gmail sur iPhone) + journalisation. */
     $gmail_signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
-    lfi_nct_render_gmail_opener(lfi_nct_ga_gmail(), $gmail_signature, 'lfi_send_gmail_log', '📨 Ouvrir dans mon Gmail (' . lfi_nct_ga_gmail() . ')');
+    lfi_nct_render_gmail_opener(lfi_nct_ga_gmail(), $gmail_signature, 'lfi_send_gmail_log', '📨 Ouvrir dans mon Gmail (' . lfi_nct_ga_gmail() . ')', lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'gmail_open' => 1]));
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Sur iPhone, ça ouvre <strong>l\'application Gmail</strong> avec le message déjà rempli — tu n\'as plus qu\'à appuyer sur « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong>. (Si rien ne s\'ouvre, utilise les liens de secours qui apparaissent.)</small></div>';
 
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#666;font-size:.9em">Ou envoyer directement depuis le site (sans Gmail)</summary>';
@@ -1953,7 +1971,7 @@ function lfi_nct_app_view_cadre_juridique() {
 
         ['✅ L\'AIDE AUX DÉMARCHES : via ton association', '#186a3b',
          'Rédiger des courriers ou conseiller <strong>contre rémunération</strong> serait réservé aux professions réglementées (loi n° 71-1130, art. 54). MAIS ton association <strong>' . esc_html((function_exists('lfi_nct_association') ? lfi_nct_association()['nom'] : 'Union des quartiers libres')) . '</strong> peut légalement <strong>assister ses membres</strong> (art. 63-66 loi 71-1130).<br><br>'
-         . '<strong>La clé :</strong> fais <strong>adhérer le locataire</strong> à l\'association (cotisation symbolique) → ensuite l\'asso peut écrire en son nom, monter le dossier, et même agir en justice pour lui.<br><br>'
+         . '<strong>La clé :</strong> fais <strong>adhérer le locataire</strong> à l\'association (adhésion gratuite) → ensuite l\'asso peut écrire en son nom, monter le dossier, et même agir en justice pour lui.<br><br>'
          . '<strong>3 conditions :</strong> (1) l\'objet des statuts doit couvrir le logement/cadre de vie ; (2) l\'argent de l\'asso ne va jamais dans ta poche (tu es bénévole) ; (3) transparence sur le fait que tu fais aussi les travaux (le locataire reste libre de choisir un autre artisan).'],
 
         ['❌ Au nom du « GA LFI » : non', '#a30b25',
@@ -2449,7 +2467,13 @@ function lfi_nct_app_view_dossier_doc_adhesion() {
     if (!empty($asso['objet'])) echo ', dont l\'objet est : <em>' . esc_html($asso['objet']) . '</em>';
     echo '.</p>';
 
-    echo '<p>Je verse à ce titre ma cotisation annuelle de <strong>' . esc_html($asso['cotisation'] ?: '5') . ' €</strong> et reconnais avoir pris connaissance des statuts de l\'association.</p>';
+    $cot = trim((string) ($asso['cotisation'] ?? ''));
+    $cot_free = ($cot === '' || (float) $cot == 0);
+    if ($cot_free) {
+        echo '<p>L\'adhésion à l\'association est <strong>gratuite</strong>. Je reconnais avoir pris connaissance des statuts et de l\'objet de l\'association, et y adhérer librement.</p>';
+    } else {
+        echo '<p>Je verse à ce titre ma cotisation annuelle de <strong>' . esc_html($cot) . ' €</strong> et reconnais avoir pris connaissance des statuts de l\'association.</p>';
+    }
 
     echo '<h2>Demande d\'accompagnement</h2>';
     echo '<p>En qualité de membre, je sollicite l\'assistance de l\'association dans mes démarches relatives aux désordres affectant mon logement (relations avec le bailleur, courriers, constitution du dossier, saisines administratives), conformément à l\'objet statutaire de l\'association et aux articles 63 à 66 de la loi n° 71-1130 du 31 décembre 1971.</p>';
@@ -2457,7 +2481,8 @@ function lfi_nct_app_view_dossier_doc_adhesion() {
     echo '<table class="detail">';
     echo '<tr><td>Téléphone</td><td>' . esc_html($dossier->tenant_tel ?: '________________') . '</td></tr>';
     echo '<tr><td>Email</td><td>' . esc_html($dossier->tenant_email ?: '________________') . '</td></tr>';
-    echo '<tr><td>Date d\'adhésion</td><td>____ / ____ / 20____</td></tr>';
+    echo '<tr><td>Date de naissance</td><td>____ / ____ / ________</td></tr>';
+    echo '<tr><td>Date d\'adhésion</td><td><strong>' . esc_html(wp_date('j F Y')) . '</strong></td></tr>';
     echo '</table>';
 
     echo '<div style="margin-top:40px;display:flex;gap:40px;justify-content:space-between">';
@@ -2466,6 +2491,8 @@ function lfi_nct_app_view_dossier_doc_adhesion() {
     echo '</div>';
 
     echo '<div class="pj"><strong>Important :</strong> cette adhésion ouvre le droit à l\'accompagnement de l\'association. Les éventuels travaux matériels restent réalisés et facturés séparément par un intervenant professionnel choisi librement par l\'adhérent.</div>';
+
+    echo '<div class="pj" style="font-size:.85em;margin-top:10px"><strong>Protection des données (RGPD).</strong> Les informations recueillies sur ce bulletin sont enregistrées par l\'association ' . esc_html($asso['nom']) . ' pour la seule gestion de votre adhésion et de votre accompagnement. Elles sont destinées au bureau de l\'association, conservées pour la durée de l\'adhésion, et ne sont jamais cédées à des tiers. Conformément au RGPD (règlement UE 2016/679) et à la loi « Informatique et Libertés », vous disposez d\'un droit d\'accès, de rectification et de suppression de vos données' . (!empty($asso['email']) ? ', en écrivant à ' . esc_html($asso['email']) : '') . '. <br>☐ J\'accepte que mes données soient traitées à ces fins. &nbsp;&nbsp; Signature : ____________________</div>';
 
     echo '</div>';
     lfi_nct_app_screen_close(false);
