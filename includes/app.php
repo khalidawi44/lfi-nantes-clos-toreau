@@ -859,6 +859,8 @@ function lfi_nct_app_render_dashboard() {
             <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Adhérents</span></div>
         </div>
 
+        <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+
         <?php foreach ($sections as $section_title => $tiles): ?>
             <div class="lfi-app-section">
                 <div class="lfi-app-section-title"><?php echo esc_html($section_title); ?></div>
