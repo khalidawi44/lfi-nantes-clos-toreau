@@ -800,7 +800,6 @@ function lfi_nct_app_intervention_form($row) {
     $services_email = [
         ''                => '— aucun, je gère l\'intervention seul —',
         'schs'            => '🏥 Service d\'Hygiène / SCHS Ville de Nantes (insalubrité)',
-        'ars'             => '🏛 ARS Pays de la Loire (risque sanitaire)',
         'lrar_travaux'    => '🔧 NMH — mise en demeure travaux',
         'lrar_relogement' => '🏥 NMH — demande de relogement médical',
         'reponse_nmh'     => '📨 NMH — réponse argumentée',
