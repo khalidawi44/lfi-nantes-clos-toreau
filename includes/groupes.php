@@ -274,7 +274,7 @@ function lfi_nct_app_view_groupes() {
     }
 
     lfi_nct_app_screen_open('🗺️ Groupes d\'action', 'Le réseau — ' . count($groupes) . ' GA');
-    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Comptes pivots enregistrés.');
+    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Responsables du GA enregistrés.');
 
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3">Voici les groupes d\'action du réseau. Chacun a <strong>son espace</strong> dans la même application (mêmes outils, choisis par chaque GA), totalement <strong>cloisonné</strong> : un nouveau GA démarre <strong>vide</strong>, sans aucune donnée des autres. Toi seul vois l\'ensemble et peux additionner les chiffres.</div>';
 
@@ -328,7 +328,7 @@ function lfi_nct_app_view_groupes() {
         echo '<label>Téléphone<input type="tel" name="animh_tel" placeholder="06 12 34 56 78"></label>';
         echo '<label>Email<input type="email" name="animh_email" placeholder="exemple@email.fr"></label>';
         echo '</div>';
-        echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Renseigne au moins un·e responsable. Le « coffre » des données du GA est rattaché à l\'animatrice (ou à l\'animateur si l\'animatrice n\'est pas renseignée).</small></div>';
+        echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Renseigne au moins un·e responsable. <strong>Ce sont eux qui géreront ce GA</strong> (ajouter des membres, nommer d\'autres admins). Leur espace démarre vide et cloisonné.</small></div>';
         echo '<button type="submit" class="btn-primary" style="background:#186a3b;border-color:#155f34">✅ Créer le groupe + ses responsables</button>';
         echo '</form>';
         echo '</details>';
@@ -388,39 +388,47 @@ function lfi_nct_app_view_groupes() {
     }
     echo '</ul>';
 
-    /* --- Binôme paritaire d'admins par GA (super-admin) --- */
+    /* --- Désigner les admins de chaque GA, PARMI SES PROPRES MEMBRES --- */
     if ($is_super) {
-        /* Uniquement des comptes ÉLIGIBLES (membres GA + admins) — JAMAIS de
-           locataires : un binôme ne se choisit pas parmi les locataires. */
-        $roles_admin = ['administrator'];
-        if (defined('LFI_NCT_ROLE_GA')) $roles_admin[] = LFI_NCT_ROLE_GA;
-        $users  = get_users(['role__in' => $roles_admin, 'orderby' => 'display_name', 'number' => 500]);
-        $opts   = function ($cur) use ($users) {
+        /* Options = uniquement les membres de CE GA (jamais ceux d'un autre GA
+           ni des locataires). Si le GA n'a pas encore de membre, on invite à les
+           créer d'abord (via « ➕ Créer un groupe d'action » ou ses Comptes). */
+        $opts_for = function ($slug, $cur) {
+            $members = get_users([
+                'meta_key' => 'lfi_nct_ga', 'meta_value' => $slug,
+                'orderby' => 'display_name', 'number' => 500,
+            ]);
             $h = '<option value="0">— aucun —</option>';
-            foreach ($users as $u) {
+            foreach ($members as $u) {
+                if (defined('LFI_NCT_ROLE_TENANT') && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) continue;
                 $h .= '<option value="' . (int) $u->ID . '" ' . selected($cur, $u->ID, false) . '>' . esc_html($u->display_name . ' (' . $u->user_login . ')') . '</option>';
             }
-            return $h;
+            return [$h, count($members)];
         };
-        echo '<h3 style="margin:22px 0 6px">👥 Admins du GA — binôme paritaire</h3>';
-        echo '<div class="lfi-app-help"><small><strong>2 admins par GA</strong> : une <strong>animatrice</strong> et un <strong>animateur</strong>. Tous deux gèrent l\'espace de leur GA et partagent ses données. Crée d\'abord leurs comptes dans <a href="' . esc_url(lfi_nct_app_url('comptes-ga')) . '">Comptes GA</a> (sans accès WordPress), puis désigne-les ici. Le « coffre » de données du GA est rattaché à l\'animatrice (ou à l\'animateur si l\'animatrice n\'est pas renseignée).</small></div>';
+        echo '<h3 style="margin:22px 0 6px">👥 Admins de chaque GA</h3>';
+        echo '<div class="lfi-app-help"><small>Tu désignes ici les <strong>responsables (admins)</strong> d\'un GA <strong>parmi les membres de ce GA</strong>. Ensuite, <strong>ce sont eux qui gèrent leur groupe</strong> : ils ajoutent des membres et peuvent nommer d\'autres admins depuis leurs <em>Comptes</em>. Pour créer un GA et ses premiers responsables d\'un coup, utilise « ➕ Créer un groupe d\'action » plus haut.</small></div>';
         echo '<form method="post" class="lfi-app-form">';
         wp_nonce_field('lfi_ga_admins_save');
         echo '<input type="hidden" name="lfi_ga_admins_save" value="1">';
         foreach ($groupes as $g) {
             if (!empty($g['actuel'])) continue;
             $pair = function_exists('lfi_nct_ga_admin_pair') ? lfi_nct_ga_admin_pair($g['slug']) : ['f' => 0, 'h' => 0];
+            list($opt_f, $nb_members) = $opts_for($g['slug'], $pair['f']);
+            list($opt_h)              = $opts_for($g['slug'], $pair['h']);
             echo '<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin:8px 0">';
             echo '<div style="font-weight:700;margin-bottom:4px">' . esc_html($g['nom']) . '</div>';
-            echo '<label>👩 Animatrice (femme)<select name="adminf[' . esc_attr($g['slug']) . ']">' . $opts($pair['f']) . '</select></label>';
-            echo '<label>👨 Animateur (homme)<select name="adminh[' . esc_attr($g['slug']) . ']">' . $opts($pair['h']) . '</select></label>';
+            if ($nb_members === 0) {
+                echo '<div class="lfi-app-help" style="margin:4px 0"><small>Aucun membre dans ce GA pour l\'instant. Crée d\'abord ses comptes (« ➕ Créer un groupe d\'action » ou via ses Comptes), puis désigne les admins ici.</small></div>';
+            }
+            echo '<label>1er·e responsable<select name="adminf[' . esc_attr($g['slug']) . ']">' . $opt_f . '</select></label>';
+            echo '<label>2e responsable (facultatif)<select name="adminh[' . esc_attr($g['slug']) . ']">' . $opt_h . '</select></label>';
             echo '</div>';
         }
-        echo '<button type="submit" class="btn-primary">💾 Enregistrer les binômes</button>';
+        echo '<button type="submit" class="btn-primary">💾 Enregistrer les responsables</button>';
         echo '</form>';
     }
 
-    echo '<div class="lfi-app-help"><small>✅ Le cloisonnement marche par <strong>compte pivot</strong> (chaque GA voit ses données, toi tu vois tout et tu bascules avec le sélecteur « 👁 Espace affiché » de l\'accueil). ✅ Personne n\'a accès à WordPress : les comptes GA sont <strong>redirigés vers l\'app</strong>. Reste à créer les comptes des autres GA et à les affecter ci-dessus.</small></div>';
+    echo '<div class="lfi-app-help"><small>✅ Chaque GA ne voit que <strong>ses</strong> données ; toi seul vois tout et tu bascules avec le sélecteur « 👁 Espace affiché » de l\'accueil. ✅ Personne n\'a accès à WordPress : les comptes des GA sont <strong>redirigés vers l\'app</strong>.</small></div>';
 
     lfi_nct_app_screen_close();
 }
@@ -547,7 +555,7 @@ function lfi_nct_app_view_reseau_ga() {
         echo '<span class="meta-chip">🏠 ' . (int) $r['enq'] . ' enquête(s)</span>';
         echo '<span class="meta-chip">⚠️ ' . (int) $r['prob'] . ' avec problème</span>';
         echo '<span class="meta-chip">👥 ' . (int) $r['adh'] . ' adhérent(s)</span>';
-        echo '<span class="meta-chip">' . ($r['pivot'] ? '🔒 cloisonné' : '⚙️ pivot à configurer') . '</span>';
+        echo '<span class="meta-chip">' . ($r['pivot'] ? '🔒 cloisonné' : '⚙️ responsable à désigner') . '</span>';
         echo '</div>';
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
         echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('voir-ga', ['ga' => $r['slug']])) . '">👁 Entrer dans cet espace</a>';
