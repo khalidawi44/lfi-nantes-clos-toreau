@@ -1952,6 +1952,7 @@ function lfi_nct_app_view_montage_financier() {
 
 function lfi_nct_app_view_cadre_juridique() {
     if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
     lfi_nct_app_screen_open('⚖️ Cadre juridique de la facturation', 'Comment facturer NMH légalement');
 
     echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600">';

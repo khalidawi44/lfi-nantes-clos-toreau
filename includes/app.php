@@ -1471,9 +1471,53 @@ function lfi_nct_app_render_register_sw() {
  *  Tuiles d'admin partagées : utilisées par /app/ ET la barre     *
  *  flottante en haut de la home pour les admins connectés.        *
  * ============================================================== */
+/* ============================================================== *
+ *  MODULES PAR GROUPE (déploiement « une app par GA »)            *
+ *  Le volet « travaux » (interventions, facturation, recouvrement,*
+ *  cadre facturable) est ACTIF par défaut. Pour une app sans      *
+ *  travaux (ex. groupe d'Irina), il suffit, sur le site concerné, *
+ *  d'ajouter dans wp-config.php : define('LFI_NCT_DISABLE_TRAVAUX',*
+ *  true);  — ou de poser l'option lfi_nct_disable_travaux.         *
+ * ============================================================== */
+function lfi_nct_travaux_enabled() {
+    if (defined('LFI_NCT_DISABLE_TRAVAUX') && LFI_NCT_DISABLE_TRAVAUX) return false;
+    if (get_option('lfi_nct_disable_travaux')) return false;
+    return true;
+}
+/** Routes masquées quand le volet travaux est désactivé. */
+function lfi_nct_module_hidden_routes() {
+    if (lfi_nct_travaux_enabled()) return [];
+    return ['interventions', 'intervention-add', 'intervention-edit', 'facture', 'recouvrements', 'recouvrement-dossier', 'cadre-juridique'];
+}
+function lfi_nct_module_filter_tiles($tiles) {
+    $hidden = lfi_nct_module_hidden_routes();
+    if (!$hidden) return $tiles;
+    return array_values(array_filter((array) $tiles, function ($t) use ($hidden) {
+        foreach ($hidden as $r) { if (strpos((string) ($t[3] ?? ''), 'vue=' . $r) !== false) return false; }
+        return true;
+    }));
+}
+function lfi_nct_module_filter_sections($sections) {
+    if (lfi_nct_travaux_enabled()) return $sections;
+    $out = [];
+    foreach ((array) $sections as $title => $tiles) {
+        $f = lfi_nct_module_filter_tiles($tiles);
+        if ($f) $out[$title] = $f;
+    }
+    return $out;
+}
+/** Garde-fou en tête des vues du volet travaux. */
+function lfi_nct_travaux_guard() {
+    if (lfi_nct_travaux_enabled()) return true;
+    lfi_nct_app_screen_open('Volet désactivé');
+    echo '<div class="lfi-app-help">Le volet « travaux » (interventions, facturation, recouvrement) n\'est pas activé pour ce groupe.</div>';
+    lfi_nct_app_screen_close(false);
+    return false;
+}
+
 function lfi_nct_admin_get_tiles($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
-    return [
+    return lfi_nct_module_filter_tiles([
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
         ['📊', 'Stats enquête',             'Problèmes, adresses, gravité',        lfi_nct_app_url('stats-enquete')],
@@ -1491,7 +1535,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['📰', 'Articles',                  'Édition WP',                          admin_url('edit.php')],
         ['📝', 'Pages',                     'Édition WP',                          admin_url('edit.php?post_type=page')],
         ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/'))],
-    ];
+    ]);
 }
 
 /**
@@ -1500,7 +1544,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
  */
 function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
-    return [
+    return lfi_nct_module_filter_sections([
         '🟣 ESPACE GROUPE D\'ACTION' => [
             ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
             ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
@@ -1548,7 +1592,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📝', 'Pages',                  'Édition WP',                          admin_url('edit.php?post_type=page')],
             ['🚪', 'Se déconnecter',         '',                                    wp_logout_url(home_url('/'))],
         ],
-    ];
+    ]);
 }
 
 /* ============================================================== *
