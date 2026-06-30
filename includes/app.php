@@ -2203,7 +2203,10 @@ function lfi_nct_app_view_enquetes() {
     /* Filtre : par défaut on ne montre que ceux qui ACCEPTENT le recontact (RGPD) */
     $filter = isset($_GET['f']) ? sanitize_key($_GET['f']) : 'recontact';
 
-    $where = "WHERE deleted_at IS NULL";
+    /* Cloisonnement par GA (chaque GA ne voit que ses propres réponses). */
+    $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+
+    $where = "WHERE deleted_at IS NULL" . $sc;
     switch ($filter) {
         case 'tel':       $where .= " AND contact_tel <> '' AND contact_tel IS NOT NULL"; break;
         case 'email':     $where .= " AND contact_email <> '' AND contact_email IS NOT NULL"; break;
@@ -2218,10 +2221,10 @@ function lfi_nct_app_view_enquetes() {
          ORDER BY submitted_at DESC LIMIT 300"
     ) ?: [];
 
-    $total       = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL");
-    $with_tel    = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL AND contact_tel <> ''   AND contact_tel   IS NOT NULL AND contact_recontact = 1");
-    $with_email  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL AND contact_email <> '' AND contact_email IS NOT NULL AND contact_recontact = 1");
-    $with_recont = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL AND contact_recontact = 1");
+    $total       = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc);
+    $with_tel    = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_tel <> ''   AND contact_tel   IS NOT NULL AND contact_recontact = 1");
+    $with_email  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_email <> '' AND contact_email IS NOT NULL AND contact_recontact = 1");
+    $with_recont = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_recontact = 1");
 
     lfi_nct_app_screen_open('🏠 Enquêtes logement', $total . ' réponse(s) · ' . $with_recont . ' acceptent recontact');
 

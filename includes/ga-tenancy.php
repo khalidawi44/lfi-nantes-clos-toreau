@@ -62,6 +62,39 @@ function lfi_nct_ga_owner_resolve($base) {
     return $base;
 }
 
+/** GA effectivement « en vigueur » ('' = tout, pour le super-admin sans bascule). */
+function lfi_nct_scope_ga_slug() {
+    if (lfi_nct_super_admin()) {
+        $vg = lfi_nct_view_ga();
+        return ($vg !== '' && $vg !== '__all__') ? $vg : '';
+    }
+    return lfi_nct_user_ga();
+}
+
+/** Identifiants des militants d'un GA (membres + compte pivot). */
+function lfi_nct_ga_member_ids($slug) {
+    if ($slug === '') return null;
+    $ids = [];
+    $piv = lfi_nct_ga_pivot_uid($slug);
+    if ($piv) $ids[] = (int) $piv;
+    $us = get_users(['meta_key' => 'lfi_nct_ga', 'meta_value' => $slug, 'fields' => ['ID'], 'number' => 1000]);
+    foreach ((array) $us as $u) $ids[] = (int) (is_object($u) ? $u->ID : $u);
+    return array_values(array_unique(array_filter($ids)));
+}
+
+/**
+ * Fragment SQL pour cloisonner les réponses d'enquête par GA.
+ * '' (super-admin, vue « tout ») → aucun filtre. GA sans membre → ne montre rien.
+ * Les identifiants sont des entiers assainis : concaténation SQL sûre.
+ */
+function lfi_nct_responses_scope_clause($col = 'militant_user_id') {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug === '') return '';
+    $ids = lfi_nct_ga_member_ids($slug);
+    if (empty($ids)) return ' AND 1=0';
+    return ' AND ' . $col . ' IN (' . implode(',', array_map('intval', $ids)) . ')';
+}
+
 /* ============================================================== *
  *  Bascule de GA (super-admin) : ?vue=voir-ga&ga=slug             *
  * ============================================================== */

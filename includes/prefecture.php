@@ -181,7 +181,8 @@ function lfi_nct_prefecture_aggregate_by_building() {
     $table  = $wpdb->prefix . 'lfi_nct_responses';
     $labels = lfi_nct_prefecture_type_labels();
 
-    $rows = $wpdb->get_results("SELECT adresse, data FROM $table WHERE deleted_at IS NULL");
+    $scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+    $rows = $wpdb->get_results("SELECT adresse, data FROM $table WHERE deleted_at IS NULL" . $scope);
     $buildings = [];
     $foyers_total = 0;
 
