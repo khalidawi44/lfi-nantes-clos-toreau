@@ -28,6 +28,16 @@ function lfi_nct_ga_pivot_uid($slug) {
     return isset($p[$slug]) ? (int) $p[$slug] : 0;
 }
 
+/** Binôme paritaire d'admins par GA : [slug => ['f' => uid, 'h' => uid]]. */
+function lfi_nct_ga_admins() {
+    $a = get_option('lfi_nct_ga_admins', []);
+    return is_array($a) ? $a : [];
+}
+function lfi_nct_ga_admin_pair($slug) {
+    $a = lfi_nct_ga_admins();
+    return ['f' => (int) ($a[$slug]['f'] ?? 0), 'h' => (int) ($a[$slug]['h'] ?? 0)];
+}
+
 /** GA d'un utilisateur (membre) — user_meta lfi_nct_ga. */
 function lfi_nct_user_ga($uid = null) {
     $uid = $uid ?: get_current_user_id();
