@@ -1478,6 +1478,11 @@ function lfi_nct_app_view_comptes_ga() {
     if (!current_user_can('manage_options')) return;
     global $wpdb;
 
+    /* Le « registre des adhérents » (import CSV) appartient au GA d'origine.
+       Pour un autre GA, on ne propose AUCUN adhérent à importer (c'est à eux
+       d'ajouter les leurs). */
+    $is_home_ga = !function_exists('lfi_nct_scope_ga_slug') || in_array(lfi_nct_scope_ga_slug(), ['', 'clos-toreau'], true);
+
     $created     = null;
     $created_err = null;
 
@@ -1503,13 +1508,15 @@ function lfi_nct_app_view_comptes_ga() {
                 $created_err = 'Erreur création compte GA : ' . $uid->get_error_message();
             } else {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+                if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
                 $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
             }
         }
     }
 
-    /* Import membre adhérent → compte GA (par ligne) */
-    if (!empty($_POST['lfi_app_import_membre']) && check_admin_referer('lfi_app_import_membre')) {
+    /* Import membre adhérent → compte GA (par ligne) — réservé au GA d'origine */
+    if ($is_home_ga && !empty($_POST['lfi_app_import_membre']) && check_admin_referer('lfi_app_import_membre')) {
         $mid = (int) $_POST['membre_id'];
         $row = $mid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_membres WHERE id = %d", $mid)) : null;
         if (!$row) {
@@ -1533,13 +1540,15 @@ function lfi_nct_app_view_comptes_ga() {
             } else {
                 update_user_meta($uid, 'lfi_nct_membre_id', $mid);
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+                if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
                 $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
             }
         }
     }
 
-    /* Import en masse */
-    if (!empty($_POST['lfi_app_import_all_membres']) && check_admin_referer('lfi_app_import_all_membres')) {
+    /* Import en masse — réservé au GA d'origine */
+    if ($is_home_ga && !empty($_POST['lfi_app_import_all_membres']) && check_admin_referer('lfi_app_import_all_membres')) {
         @set_time_limit(0);
         if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('admin');
         if (function_exists('ignore_user_abort'))     ignore_user_abort(true);
@@ -1571,6 +1580,8 @@ function lfi_nct_app_view_comptes_ga() {
             if (is_wp_error($uid)) { $skipped++; continue; }
             update_user_meta($uid, 'lfi_nct_membre_id', $row->id);
             if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+            $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+            if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
             $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'name' => trim($prenom . ' ' . $nom) ?: $login];
         }
         if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
@@ -1599,22 +1610,30 @@ function lfi_nct_app_view_comptes_ga() {
     $count = lfi_nct_app_count_users_cached();
     $n_ga  = $count['avail_roles'][LFI_NCT_ROLE_GA] ?? 0;
 
-    /* Adhérents non encore importés */
-    $linked_mids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
-    $linked_in   = $linked_mids ? '(' . implode(',', array_map('intval', $linked_mids)) . ')' : '(0)';
-    $unlinked_total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres WHERE jetable = 0 AND id NOT IN $linked_in");
-    $unlinked_membres = $wpdb->get_results(
-        "SELECT id, prenom, nom, pseudo, email, tel, statut FROM {$wpdb->prefix}lfi_nct_membres
-         WHERE jetable = 0 AND id NOT IN $linked_in
-         ORDER BY prenom, nom LIMIT 30"
-    ) ?: [];
+    /* Adhérents non encore importés — uniquement pour le GA d'origine. */
+    $unlinked_total = 0;
+    $unlinked_membres = [];
+    if ($is_home_ga) {
+        $linked_mids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_membre_id'") ?: [];
+        $linked_in   = $linked_mids ? '(' . implode(',', array_map('intval', $linked_mids)) . ')' : '(0)';
+        $unlinked_total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres WHERE jetable = 0 AND id NOT IN $linked_in");
+        $unlinked_membres = $wpdb->get_results(
+            "SELECT id, prenom, nom, pseudo, email, tel, statut FROM {$wpdb->prefix}lfi_nct_membres
+             WHERE jetable = 0 AND id NOT IN $linked_in
+             ORDER BY prenom, nom LIMIT 30"
+        ) ?: [];
+    }
 
-    /* Liste des comptes GA */
-    $users_ga = get_users([
+    /* Liste des comptes GA — cloisonnée par GA (un autre GA n'affiche QUE ses
+       propres membres ; vide tant qu'il n'en a pas ajouté). */
+    $ga_args = [
         'role' => LFI_NCT_ROLE_GA,
         'fields' => ['ID', 'user_login', 'display_name', 'user_email'],
-        'number' => 50, 'orderby' => 'registered', 'order' => 'DESC',
-    ]);
+        'number' => 200, 'orderby' => 'registered', 'order' => 'DESC',
+    ];
+    if (function_exists('lfi_nct_users_ga_query')) $ga_args = lfi_nct_users_ga_query($ga_args);
+    $users_ga = get_users($ga_args);
+    if (!$is_home_ga) $n_ga = count($users_ga);
 
     lfi_nct_app_screen_open('🪪 Comptes', (int) $n_ga . ' membre(s) GA · ' . $unlinked_total . ' adhérent(s) à importer');
 

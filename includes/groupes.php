@@ -77,7 +77,11 @@ function lfi_nct_app_view_groupes() {
 
     /* --- Binôme paritaire d'admins par GA (super-admin) --- */
     if ($is_super) {
-        $users  = get_users(['orderby' => 'display_name', 'number' => 500]);
+        /* Uniquement des comptes ÉLIGIBLES (membres GA + admins) — JAMAIS de
+           locataires : un binôme ne se choisit pas parmi les locataires. */
+        $roles_admin = ['administrator'];
+        if (defined('LFI_NCT_ROLE_GA')) $roles_admin[] = LFI_NCT_ROLE_GA;
+        $users  = get_users(['role__in' => $roles_admin, 'orderby' => 'display_name', 'number' => 500]);
         $opts   = function ($cur) use ($users) {
             $h = '<option value="0">— aucun —</option>';
             foreach ($users as $u) {
