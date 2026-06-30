@@ -329,35 +329,37 @@ function lfi_nct_app_view_dossier_synthese() {
         echo '<div class="citations" style="border-left-color:#0066a3">';
         if (!empty($d['objectif_locataire'])) echo '<p><strong>' . esc_html($d['objectif_locataire']) . '</strong></p>';
         if (!empty($d['objectifs_ga'])) {
-            echo '<p>En complément, le Groupe d\'Action porte :</p><ul>';
+            echo '<p>Dans le cadre de l\'accompagnement par l\'association Union des Quartiers Libres, points que nous soumettons à votre appréciation pour ce dossier :</p><ul>';
             foreach ($d['objectifs_ga'] as $o) echo '<li>' . esc_html($o) . '</li>';
             echo '</ul>';
         }
         echo '</div>';
     }
 
-    /* 3. Désordres */
+    /* 3. La conversation (les emails D'ABORD) */
+    if (!empty($d['email_envoye']) || !empty($d['email_recu'])) {
+        echo '<h2>3. La conversation avec NMH</h2>';
+        if (!empty($d['email_envoye'])) {
+            $e = $d['email_envoye'];
+            echo '<h3>Notre email envoyé</h3>';
+            if (!empty($e['objet'])) echo '<p><strong>Objet :</strong> ' . esc_html($e['objet']) . '</p>';
+            echo '<div class="citations">' . nl2br(esc_html($e['corps'] ?? '')) . '</div>';
+        }
+        if (!empty($d['email_recu'])) {
+            $r = $d['email_recu'];
+            echo '<h3>La réponse de NMH' . (!empty($r['de']) ? ' (' . esc_html($r['de']) . ')' : '') . '</h3>';
+            echo '<div class="citations">' . nl2br(esc_html($r['corps'] ?? '')) . '</div>';
+        }
+    }
+
+    /* 4. L'analyse (APRÈS les emails) */
     if (!empty($d['desordres'])) {
-        echo '<h2>3. Les désordres et la position de NMH</h2>';
+        echo '<h2>4. Notre analyse — désordres et position de NMH</h2>';
         echo '<table class="detail"><tr><td><strong>Désordre</strong></td><td><strong>Position de NMH</strong></td><td><strong>Notre observation</strong></td></tr>';
         foreach ($d['desordres'] as $dz) {
             echo '<tr><td>' . esc_html($dz['nom'] ?? '') . '</td><td><em>' . esc_html($dz['nmh'] ?? '') . '</em></td><td>' . esc_html($dz['obs'] ?? '') . '</td></tr>';
         }
         echo '</table>';
-    }
-
-    /* 4. Conversation */
-    echo '<h2>4. La conversation avec NMH</h2>';
-    if (!empty($d['email_envoye'])) {
-        $e = $d['email_envoye'];
-        echo '<h3>Notre email envoyé</h3>';
-        if (!empty($e['objet'])) echo '<p><strong>Objet :</strong> ' . esc_html($e['objet']) . '</p>';
-        echo '<div class="citations">' . nl2br(esc_html($e['corps'] ?? '')) . '</div>';
-    }
-    if (!empty($d['email_recu'])) {
-        $r = $d['email_recu'];
-        echo '<h3>La réponse de NMH' . (!empty($r['de']) ? ' (' . esc_html($r['de']) . ')' : '') . '</h3>';
-        echo '<div class="citations">' . nl2br(esc_html($r['corps'] ?? '')) . '</div>';
     }
 
     /* 5. Enquête */
@@ -381,7 +383,7 @@ function lfi_nct_app_view_dossier_synthese() {
         echo '</ul>';
     }
 
-    echo '<div class="pj">Fiche établie par le Groupe d\'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres' . (!empty($d['maj']) ? ' — mise à jour le ' . esc_html($d['maj']) : '') . '. La stratégie juridique relève de l\'avocat.</div>';
+    echo '<div class="pj">Fiche établie par l\'<strong>association Union des Quartiers Libres</strong> (accompagnement des locataires)' . (!empty($d['maj']) ? ' — mise à jour le ' . esc_html($d['maj']) : '') . '. La représentation et la stratégie juridique relèvent de l\'avocat.</div>';
     echo '</div>';
     lfi_nct_app_screen_close(false);
 }

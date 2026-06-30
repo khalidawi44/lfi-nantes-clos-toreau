@@ -25,7 +25,7 @@ return [
     'adresse'     => '8 rue de Saint-Jean-de-Luz, 44200 Nantes',
     'etage'       => '8',
     'appartement' => '130',
-    'anciennete'  => 'Locataire depuis ~10 ans (selon NMH)',
+    'anciennete'  => 'Locataire depuis plus de 10 ans (selon la locataire ; date d\'entrée exacte à préciser)',
     'bailleur'        => 'Nantes Métropole Habitat — Agence Goudy',
     'bailleur_contact'=> 'M. Yvonnic Morineau — yvonnic.morineau@nmh.fr',
     'medical'     => 'Certificat du Dr Aubeau — impact sanitaire sur un occupant (enfant)',
@@ -34,8 +34,8 @@ return [
     /* --- Objectif (ce que vise le dossier) --- */
     'objectif_locataire' => "Être RELOGÉE. Mme Fadiga demande à déménager — ni travaux, ni maintien dans le logement. Seul un relogement répond à sa situation.",
     'objectifs_ga' => [
-        "Indemnisation de l'ensemble des préjudices subis (trouble de jouissance, préjudice moral et, surtout, préjudice de santé).",
-        "Reconnaissance du lien de causalité entre l'humidité du logement et la grave maladie de sa fille (les moyens probatoires — expertise médicale et technique — relèvent de l'avocat).",
+        "L'indemnisation des préjudices subis (trouble de jouissance, préjudice moral, atteinte à la santé).",
+        "La question d'un éventuel lien entre l'humidité du logement et l'état de santé de sa fille — à établir (les moyens, dont l'expertise médicale et technique, relèvent de l'avocat).",
     ],
 
     /* --- Désordres + position de NMH + notre observation --- */
