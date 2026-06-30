@@ -210,18 +210,28 @@ function lfi_nct_prefecture_aggregate_by_building() {
         $data = json_decode($r->data ?? '', true);
         if (!is_array($data)) continue;
 
-        if (($data['problemes_presence'] ?? '') === 'oui') {
-            $buildings[$key]['foyers_problemes']++;
-        }
+        /* Signaux de problème pour CE foyer. */
+        $types_here = [];
         foreach ((array) ($data['problemes_types'] ?? []) as $t) {
-            if (isset($buildings[$key]['types'][$t])) $buildings[$key]['types'][$t]++;
+            if (isset($buildings[$key]['types'][$t])) $types_here[] = $t;
         }
-        $g = (int) ($data['problemes_gravite'] ?? 0);
-        if ($g > 0) { $buildings[$key]['gravite_sum'] += $g; $buildings[$key]['gravite_n']++; }
-
+        $g     = (int) ($data['problemes_gravite'] ?? 0);
         $ec_nb = trim((string) ($data['eau_chaude_nb_par_an'] ?? ''));
         $ec_du = trim((string) ($data['eau_chaude_duree_max'] ?? ''));
-        if ($ec_nb !== '' || $ec_du !== '') $buildings[$key]['eau_chaude']++;
+        $has_eau = ($ec_nb !== '' || $ec_du !== '');
+
+        /* COHÉRENCE : un foyer « a au moins un problème » dès qu'UN signal
+           existe (présence, type coché, gravité notée, ou coupure d'eau
+           chaude). Ainsi gravité/types/eau chaude sont toujours des
+           sous-ensembles de « foyers avec problème » — jamais de gravité
+           ou de type affiché alors que ce compteur serait à 0. */
+        $has_problem = (($data['problemes_presence'] ?? '') === 'oui')
+            || !empty($types_here) || $g > 0 || $has_eau;
+        if ($has_problem) $buildings[$key]['foyers_problemes']++;
+
+        foreach ($types_here as $t) $buildings[$key]['types'][$t]++;
+        if ($g > 0) { $buildings[$key]['gravite_sum'] += $g; $buildings[$key]['gravite_n']++; }
+        if ($has_eau) $buildings[$key]['eau_chaude']++;
     }
 
     $out = [];
@@ -380,6 +390,19 @@ function lfi_nct_app_view_prefecture() {
     usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
 
     echo '<h3 style="margin:22px 0 6px;color:#c8102e">📨 Correspondances avec la préfecture</h3>';
+
+    /* Relance : si le dernier message est un ENVOI sans réponse depuis 8 j+. */
+    if (!empty($timeline)) {
+        $last = end($timeline);
+        if (($last['sens'] ?? '') === 'sent') {
+            $age = (int) floor(((int) current_time('timestamp') - strtotime($last['date'] ?? '')) / 86400);
+            if ($age >= 8) {
+                $rtype = ($last['type'] ?? 'prefecture') === 'nmh' ? 'nmh' : 'prefecture';
+                echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00">⏰ <strong>Dernier courrier envoyé il y a ' . $age . ' jours, sans réponse.</strong> <a class="btn-primary" style="margin-top:6px;display:inline-block" href="' . esc_url(lfi_nct_app_url('prefecture-email', ['type' => $rtype, 'relance' => 1])) . '">Relancer</a></div>';
+            }
+        }
+    }
+
     if (empty($timeline)) {
         echo '<div class="lfi-app-help">Aucune correspondance pour l\'instant. Tes envois (boutons ci-dessus) sont archivés ici, et tu peux coller un email reçu.</div>';
     } else {
@@ -514,6 +537,12 @@ function lfi_nct_app_view_prefecture_email() {
         $help    = 'Part du Gmail de l\'association, avec l\'archive en copie. Destinataires : la déléguée et Gwenaëlle (si renseignées).';
     }
 
+    /* Relance : pré-remplit un message de relance (lien « Relancer »). */
+    if (!empty($_GET['relance'])) {
+        $subject = 'Relance — ' . $subject;
+        $body = "Madame, Monsieur,\n\nSauf erreur de ma part, je n'ai pas eu de retour à mon précédent message. Je me permets de vous relancer.\n\n" . $body;
+    }
+
     lfi_nct_app_screen_open('📧 ' . $title, 'Suivi automatique dans le volet Préfecture');
 
     if ($type === 'nmh' && $to === '') {
@@ -523,8 +552,20 @@ function lfi_nct_app_view_prefecture_email() {
         echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ Aucun email préfecture renseigné. Ajoute la déléguée et/ou Gwenaëlle dans le <a href="' . esc_url(lfi_nct_app_url('prefecture')) . '">volet Préfecture</a>.</small></div>';
     }
 
+    /* Modèles prêts à l'emploi (remplissent objet + message). */
+    $tpls = lfi_nct_prefecture_email_templates($type);
+
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_pref_email_send');
+
+    if ($tpls) {
+        echo '<label>📝 Modèle prêt à l\'emploi<select id="lfi-pref-tpl" onchange="lfiNctPrefTpl(this)">';
+        echo '<option value="">— Choisir un modèle (optionnel) —</option>';
+        foreach ($tpls as $k => $tp) echo '<option value="' . esc_attr($k) . '">' . esc_html($tp['label']) . '</option>';
+        echo '</select></label>';
+        echo '<div class="lfi-app-help"><small>Choisis un modèle pour pré-remplir l\'objet et le message — tu peux ensuite tout modifier.</small></div>';
+    }
+
     echo '<label>Destinataire(s)<input type="text" name="email_to" value="' . esc_attr($to) . '" required></label>';
     echo '<label>Copie (CC)<input type="text" name="email_cc" value="' . esc_attr($cc) . '"></label>';
     echo '<label>Objet<input type="text" name="email_subject" value="' . esc_attr($subject) . '" required></label>';
@@ -536,7 +577,62 @@ function lfi_nct_app_view_prefecture_email() {
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('prefecture')) . '">← Retour au volet Préfecture</a>';
     echo '</form>';
 
+    if ($tpls) {
+        $tpl_json = wp_json_encode($tpls);
+        ?>
+        <script>
+        var LFI_PREF_TPL = <?php echo $tpl_json; ?>;
+        function lfiNctPrefTpl(sel){
+            var t = LFI_PREF_TPL[sel.value]; if (!t) return;
+            var f = sel.form;
+            if (f.email_subject) f.email_subject.value = t.subject || '';
+            if (f.email_body) f.email_body.value = t.body || '';
+        }
+        </script>
+        <?php
+    }
+
     lfi_nct_app_screen_close();
+}
+
+/** Modèles d'emails prêts à l'emploi pour la préfecture / NMH. */
+function lfi_nct_prefecture_email_templates($type) {
+    if ($type === 'nmh') {
+        return [
+            'travaux' => [
+                'label'   => 'Demande de travaux / signalement',
+                'subject' => 'Mon logement — demande de travaux',
+                'body'    => "Madame, Monsieur,\n\nJe vous signale des désordres dans mon logement nécessitant votre intervention : [décris les désordres].\n\nConformément à vos obligations d'entretien (art. 1719 et 1720 du Code civil), je vous demande d'y remédier dans les meilleurs délais et de me proposer une date de visite.\n\nDans l'attente de votre retour, je vous prie d'agréer mes salutations distinguées.",
+            ],
+            'relogement' => [
+                'label'   => 'Demande de relogement',
+                'subject' => 'Mon logement — demande de relogement',
+                'body'    => "Madame, Monsieur,\n\nCompte tenu de l'état de mon logement et de son impact sur mes conditions de vie, je sollicite mon relogement dans un logement décent et adapté.\n\nJe vous remercie de m'indiquer la procédure et les délais.\n\nSalutations distinguées.",
+            ],
+            'relance' => [
+                'label'   => 'Relance (sans réponse)',
+                'subject' => 'Relance — mon logement',
+                'body'    => "Madame, Monsieur,\n\nSauf erreur de ma part, je n'ai pas eu de retour à mon précédent message concernant mon logement. Je me permets de vous relancer et reste à votre disposition.\n\nSalutations distinguées.",
+            ],
+        ];
+    }
+    return [
+        'rapport' => [
+            'label'   => 'Transmettre le rapport anonyme',
+            'subject' => 'Données anonymisées du porte-à-porte logement — Clos Toreau (Nantes Sud)',
+            'body'    => "Madame,\n\nComme convenu, vous trouverez ci-joint le récapitulatif ANONYME des signalements recueillis lors de notre porte-à-porte dans le quartier, présenté par bâtiment.\n\nConformément à notre engagement auprès des habitant·es, ce document ne comporte aucune donnée nominative : ni numéro de porte, ni nom, ni coordonnées. Il ne fait apparaître que les problématiques agrégées par immeuble.\n\nJe reste à votre disposition pour en échanger.\n\nCordialement,",
+        ],
+        'urgence' => [
+            'label'   => 'Signaler une urgence sur un immeuble',
+            'subject' => 'Situation préoccupante — logement social, Clos Toreau',
+            'body'    => "Madame,\n\nJe souhaite appeler votre attention sur une situation préoccupante concernant un immeuble du quartier : [décris la situation, sans nom de locataire].\n\nPlusieurs foyers sont concernés. Compte tenu de l'impact sur les conditions de vie et la santé, je sollicite votre appui auprès des services compétents.\n\nJe reste à votre disposition pour vous transmettre les éléments anonymisés.\n\nCordialement,",
+        ],
+        'suivi' => [
+            'label'   => 'Demander un point de suivi',
+            'subject' => 'Demande de point de suivi — logement, Clos Toreau',
+            'body'    => "Madame,\n\nJe me permets de solliciter un point de suivi sur les situations de logement que nous vous avons signalées dans le quartier.\n\nSeriez-vous disponible pour un échange ? Je reste à votre disposition.\n\nCordialement,",
+        ],
+    ];
 }
 
 /* ============================================================== *
