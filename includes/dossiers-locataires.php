@@ -651,6 +651,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['created']))    lfi_nct_app_flash('✅ Dossier créé. Tu peux maintenant générer les lettres.');
     if (!empty($_GET['marked']))     lfi_nct_app_flash('📨 Étape marquée comme envoyée (date du jour).');
     if (!empty($_GET['email_sent']))     lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
+    if (!empty($_GET['gmail_open']))     lfi_nct_app_flash('📨 Email consigné dans le dossier. Termine l\'envoi dans l\'onglet Gmail qui vient de s\'ouvrir.');
     if (!empty($_GET['email_recu_ok']))  lfi_nct_app_flash('📥 Email reçu enregistré dans le dossier.');
     if (!empty($_GET['analyse_ok']))     lfi_nct_app_flash('📑 Analyse enregistrée dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
@@ -1344,17 +1345,13 @@ function lfi_nct_app_view_dossier_send_email() {
     $defaults = lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur);
     $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
 
-    /* HANDLER POST : OUVRIR DANS GMAIL (le GA envoie depuis son propre Gmail).
-       On journalise l'email dans le dossier, puis on ouvre Gmail pré-rempli. */
-    if (!empty($_POST['lfi_send_gmail']) && check_admin_referer('lfi_dossier_email_send')) {
+    /* HANDLER POST : JOURNALISER l'envoi Gmail dans le dossier.
+       La fenêtre de rédaction Gmail est ouverte côté navigateur (JS, nouvel
+       onglet) au moment du clic ; ce handler ne fait QUE consigner l'email
+       dans le dossier puis revenir sur la fiche. */
+    if (!empty($_POST['lfi_send_gmail_log']) && check_admin_referer('lfi_dossier_email_send')) {
         $to      = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
         $cc      = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
-        $subject = sanitize_text_field(wp_unslash($_POST['email_subject'] ?? ''));
-        $body_raw= wp_kses_post(wp_unslash($_POST['email_body'] ?? ''));
-        $intro   = sanitize_textarea_field(wp_unslash($_POST['email_intro'] ?? ''));
-
-        $signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
-        $plain = trim(($intro !== '' ? $intro . "\n\n" : '') . lfi_nct_html_to_plain($body_raw) . $signature);
 
         /* Journalise dans le dossier */
         $logs = json_decode($dossier->notes ?? '', true);
@@ -1366,13 +1363,7 @@ function lfi_nct_app_view_dossier_send_email() {
             ['id' => $dossier->id, 'owner_user_id' => (int) lfi_nct_dossier_owner_id()]
         );
 
-        /* Ouvre Gmail (compose) pré-rempli sur le compte du GA */
-        $gmail = 'https://mail.google.com/mail/u/?authuser=' . rawurlencode(lfi_nct_ga_gmail()) . '&view=cm&fs=1&tf=1'
-            . '&to=' . rawurlencode($to)
-            . ($cc !== '' ? '&cc=' . rawurlencode($cc) : '')
-            . '&su=' . rawurlencode($subject)
-            . '&body=' . rawurlencode($plain);
-        wp_redirect($gmail);
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'gmail_open' => 1]));
         exit;
     }
 
@@ -1476,8 +1467,50 @@ function lfi_nct_app_view_dossier_send_email() {
     echo '<label>Lettre / corps du mail (HTML autorisé)<textarea name="email_body" id="lfi-email-body" rows="14" required>' . esc_textarea($default_body) . '</textarea></label>';
     echo '<div class="lfi-app-help"><small>Tu peux modifier librement le texte. Les balises HTML simples (&lt;p&gt; &lt;strong&gt; &lt;br&gt; &lt;ul&gt; &lt;li&gt;) sont conservées.</small></div>';
 
-    echo '<button type="submit" name="lfi_send_gmail" value="1" class="btn-primary big">📨 Ouvrir dans mon Gmail (' . esc_html(lfi_nct_ga_gmail()) . ')</button>';
-    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Ça ouvre <strong>ton</strong> Gmail avec le destinataire, l\'objet et le texte déjà remplis — tu n\'as plus qu\'à cliquer « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong> de la locataire.</small></div>';
+    /* Bouton Gmail : ouvre la fenêtre de RÉDACTION Gmail (compose) dans un
+       nouvel onglet, pré-remplie depuis les champs (avec tes éventuelles
+       modifications), puis journalise l'email dans le dossier. */
+    echo '<input type="hidden" name="lfi_send_gmail_log" value="">';
+    $gmail_signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
+    echo '<button type="button" class="btn-primary big" onclick="lfiNctOpenGmail(this.form)" data-gmail-user="' . esc_attr(lfi_nct_ga_gmail()) . '" data-gmail-sig="' . esc_attr($gmail_signature) . '">📨 Ouvrir dans mon Gmail (' . esc_html(lfi_nct_ga_gmail()) . ')</button>';
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Ça ouvre <strong>ton</strong> Gmail (' . esc_html(lfi_nct_ga_gmail()) . ') dans un nouvel onglet, avec le destinataire, l\'objet et le texte déjà remplis — tu n\'as plus qu\'à cliquer « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong> de la locataire.</small></div>';
+    ?>
+    <script>
+    function lfiNctHtmlToPlain(html){
+        var t = String(html||'');
+        t = t.replace(/<\s*br\s*\/?>/gi, "\n");
+        t = t.replace(/<\s*li[^>]*>/gi, "• ");
+        t = t.replace(/<\/\s*(p|h1|h2|h3|li|div|tr)\s*>/gi, "\n");
+        var d = document.createElement('div');
+        d.innerHTML = t;
+        t = d.textContent || d.innerText || '';
+        return t.replace(/\n{3,}/g, "\n\n").trim();
+    }
+    function lfiNctOpenGmail(form){
+        var btn = form.querySelector('[data-gmail-user]');
+        var user = btn ? btn.getAttribute('data-gmail-user') : '';
+        var sig  = btn ? btn.getAttribute('data-gmail-sig')  : '';
+        var to   = (form.email_to    && form.email_to.value)    || '';
+        var cc   = (form.email_cc    && form.email_cc.value)    || '';
+        var su   = (form.email_subject && form.email_subject.value) || '';
+        var intro= (form.email_intro && form.email_intro.value) || '';
+        var body = (form.email_body  && form.email_body.value)  || '';
+        var plain = (intro ? intro + "\n\n" : '') + lfiNctHtmlToPlain(body) + (sig || '');
+        plain = plain.trim();
+        var url = 'https://mail.google.com/mail/?view=cm&fs=1&tf=1'
+            + (user ? '&authuser=' + encodeURIComponent(user) : '')
+            + '&to=' + encodeURIComponent(to)
+            + (cc ? '&cc=' + encodeURIComponent(cc) : '')
+            + '&su=' + encodeURIComponent(su)
+            + '&body=' + encodeURIComponent(plain);
+        window.open(url, '_blank', 'noopener');
+        /* Journalise l'envoi dans le dossier */
+        var h = form.querySelector('input[name="lfi_send_gmail_log"]');
+        if (h) h.value = '1';
+        form.submit();
+    }
+    </script>
+    <?php
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#666;font-size:.9em">Ou envoyer directement depuis le site (sans Gmail)</summary>';
     echo '<button type="submit" name="lfi_send_wpmail" value="1" class="btn-ghost" style="margin-top:8px">📧 Envoyer depuis le site (wp_mail)</button>';
     echo '<div class="lfi-app-help"><small>À n\'utiliser que si l\'envoi par mail du site est bien configuré.</small></div></details>';
@@ -1496,31 +1529,43 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
     $tenant_full = trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom);
     $logement = trim($dossier->tenant_adresse . ($dossier->tenant_etage ? ', ét. ' . $dossier->tenant_etage : ''));
 
-    $to_nmh   = trim($bailleur['email'] ?? '');
+    $to_nmh    = trim($bailleur['email'] ?? '');
     $cc_agence = trim($bailleur['agence_email'] ?? 'yvonnic.morineau@nmh.fr');
+
+    /* La COPIE (CC) part TOUJOURS vers notre propre archive Gmail, jamais
+       vers le bailleur : NMH/Morineau n'a pas à connaître nos correspondances
+       (en particulier la saisine du service d'hygiène ou de l'ARS). Quand le
+       courrier est ADRESSÉ au bailleur, l'agence est mise dans le « À »,
+       pas en copie. */
+    $ga_archive = lfi_nct_ga_gmail();
+
+    /* Destinataires « bailleur » : on regroupe l'adresse générale NMH et
+       l'agence (Morineau) dans le « À ». */
+    $bailleur_to = trim(implode(', ', array_unique(array_filter([$to_nmh, $cc_agence]))));
+    if ($bailleur_to === '') $bailleur_to = $cc_agence ?: $to_nmh;
 
     switch ($letter_key) {
         case 'reponse_nmh':
             return [
                 'title'  => 'Réponse argumentée',
-                'to'     => $cc_agence ?: $to_nmh,
-                'cc'     => $to_nmh && $cc_agence && $to_nmh !== $cc_agence ? $to_nmh : '',
+                'to'     => $bailleur_to,
+                'cc'     => $ga_archive,
                 'subject'=> 'RE: ' . ($tenant_full ?: 'logement') . ($logement ? ' — ' . $logement : ''),
                 'intro'  => 'Monsieur Morineau,\n\nNous accusons réception de votre message et y répondons point par point ci-dessous. La version papier suit par lettre recommandée.',
             ];
         case 'lrar_travaux':
             return [
                 'title'  => 'Mise en demeure travaux urgents',
-                'to'     => $to_nmh ?: $cc_agence,
-                'cc'     => $to_nmh && $cc_agence ? $cc_agence : '',
+                'to'     => $bailleur_to,
+                'cc'     => $ga_archive,
                 'subject'=> 'Mise en demeure de travaux urgents — ' . ($tenant_full ?: 'logement') . ($logement ? ' · ' . $logement : ''),
                 'intro'  => 'Madame, Monsieur,\n\nJe vous fais parvenir formellement par la présente la mise en demeure ci-après concernant le logement de ' . ($tenant_full ?: '[locataire]') . '. La version papier de ce courrier vous sera également adressée par lettre recommandée avec accusé de réception.',
             ];
         case 'lrar_relogement':
             return [
                 'title'  => 'Demande de relogement d\'urgence médicale',
-                'to'     => $to_nmh ?: $cc_agence,
-                'cc'     => $to_nmh && $cc_agence ? $cc_agence : '',
+                'to'     => $bailleur_to,
+                'cc'     => $ga_archive,
                 'subject'=> '🆘 URGENT — Relogement médical de ' . ($tenant_full ?: 'locataire') . ($logement ? ' · ' . $logement : ''),
                 'intro'  => 'Madame, Monsieur,\n\nCompte tenu de l\'urgence sanitaire attestée, je sollicite votre traitement prioritaire de la demande de relogement de ' . ($tenant_full ?: '[locataire]') . ' formalisée dans le courrier ci-dessous. La LRAR vous sera également remise.',
             ];
@@ -1528,7 +1573,7 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
             return [
                 'title'  => 'Saisine du service d\'hygiène — Nantes Métropole',
                 'to'     => 'Julien.LEJEUNE@nantesmetropole.fr',
-                'cc'     => $cc_agence,
+                'cc'     => $ga_archive,
                 'subject'=> 'Signalement d\'insalubrité — ' . $logement,
                 'intro'  => 'Madame, Monsieur,\n\nJe vous saisis par la présente d\'une situation d\'insalubrité documentée. La LRAR papier suit, le présent email étant adressé en parallèle pour célérité.',
             ];
@@ -1536,12 +1581,12 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
             return [
                 'title'  => 'Saisine ARS Pays de la Loire',
                 'to'     => 'ars-pdl-contact@ars.sante.fr',
-                'cc'     => $cc_agence,
+                'cc'     => $ga_archive,
                 'subject'=> 'Signalement d\'un risque sanitaire en logement social — ' . $logement,
                 'intro'  => 'Madame, Monsieur,\n\nJe vous saisis d\'un risque sanitaire dans un logement social, documenté ci-après. La LRAR papier suit ; le présent email vise la célérité de prise en charge.',
             ];
     }
-    return ['title' => '', 'to' => '', 'cc' => '', 'subject' => '', 'intro' => ''];
+    return ['title' => '', 'to' => '', 'cc' => $ga_archive, 'subject' => '', 'intro' => ''];
 }
 
 /* Corps du mail (HTML court) pour chaque type — l'utilisateur peut éditer */

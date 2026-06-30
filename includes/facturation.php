@@ -422,6 +422,24 @@ function lfi_nct_app_view_intervention_edit() {
     lfi_nct_app_intervention_form($row);
 }
 
+/** Liste des bailleurs sociaux de Nantes / Loire-Atlantique (menu déroulant). */
+function lfi_nct_bailleurs_sociaux() {
+    return [
+        'Nantes Métropole Habitat',
+        'La Nantaise d\'Habitations',
+        'Atlantique Habitations',
+        'CISN Atlantique Habitations',
+        'Habitat 44',
+        'Harmonie Habitat',
+        'CDC Habitat',
+        'Vilogia',
+        'ICF Habitat Atlantique',
+        'Espacil Habitat',
+        'Le Logement Familial de Loire-Atlantique',
+        'Coopérative Logis Atlantique',
+    ];
+}
+
 function lfi_nct_app_intervention_form($row) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
@@ -467,7 +485,11 @@ function lfi_nct_app_intervention_form($row) {
             'tenant_etage'      => sanitize_text_field(wp_unslash($_POST['tenant_etage'] ?? '')),
             'tenant_appartement'=> sanitize_text_field(wp_unslash($_POST['tenant_appartement'] ?? '')),
             'tenant_tel'        => sanitize_text_field(wp_unslash($_POST['tenant_tel'] ?? '')),
-            'bailleur'          => sanitize_text_field(wp_unslash($_POST['bailleur'] ?? 'Nantes Métropole Habitat')),
+            'bailleur'          => (static function () {
+                $b = sanitize_text_field(wp_unslash($_POST['bailleur'] ?? ''));
+                if ($b === '__autre__') $b = sanitize_text_field(wp_unslash($_POST['bailleur_autre'] ?? ''));
+                return $b !== '' ? $b : 'Nantes Métropole Habitat';
+            })(),
             'date_intervention' => sanitize_text_field(wp_unslash($_POST['date_intervention'] ?? '')) ?: null,
             'duree_heures'      => (float) ($_POST['duree_heures'] ?? 0),
             'type_travaux_key'  => sanitize_key($_POST['type_travaux_key'] ?? ''),
@@ -664,7 +686,16 @@ function lfi_nct_app_intervention_form($row) {
 
     /* Travaux */
     echo '<h3 style="margin:18px 0 0">🔧 Travaux</h3>';
-    echo '<label>Bailleur à facturer<input type="text" name="bailleur" value="' . esc_attr($r->bailleur) . '" required></label>';
+    $bailleurs = lfi_nct_bailleurs_sociaux();
+    $cur_b = (string) $r->bailleur;
+    $in_list = in_array($cur_b, $bailleurs, true);
+    echo '<label>Bailleur à facturer<select name="bailleur" onchange="var w=document.getElementById(\'lfi-bailleur-autre\');if(w)w.style.display=(this.value===\'__autre__\'?\'block\':\'none\');">';
+    echo '<optgroup label="Bailleurs sociaux — Nantes / Loire-Atlantique">';
+    foreach ($bailleurs as $b) echo '<option value="' . esc_attr($b) . '" ' . selected($in_list && $cur_b === $b, true, false) . '>' . esc_html($b) . '</option>';
+    echo '</optgroup>';
+    echo '<option value="__autre__" ' . selected(!$in_list && $cur_b !== '', true, false) . '>✏️ Autre / bailleur privé (saisie manuelle)</option>';
+    echo '</select></label>';
+    echo '<div id="lfi-bailleur-autre" style="display:' . ((!$in_list && $cur_b !== '') ? 'block' : 'none') . '"><label>Nom du bailleur (saisie manuelle)<input type="text" name="bailleur_autre" value="' . esc_attr(!$in_list ? $cur_b : '') . '" placeholder="Ex : SCI / propriétaire privé…"></label></div>';
     echo '<label>Date d\'intervention<input type="date" name="date_intervention" value="' . esc_attr($r->date_intervention) . '" required></label>';
 
     /* Catalogue classifié : bailleur / gris / locataire */
