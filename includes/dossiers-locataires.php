@@ -1474,8 +1474,8 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
             ];
         case 'schs':
             return [
-                'title'  => 'Saisine SCHS Nantes',
-                'to'     => 'schs@mairie-nantes.fr',
+                'title'  => 'Saisine du service d\'hygiène — Nantes Métropole',
+                'to'     => 'Julien.LEJEUNE@nantesmetropole.fr',
                 'cc'     => $cc_agence,
                 'subject'=> 'Signalement d\'insalubrité — ' . $logement,
                 'intro'  => 'Madame, Monsieur,\n\nJe vous saisis par la présente d\'une situation d\'insalubrité documentée. La LRAR papier suit, le présent email étant adressé en parallèle pour célérité.',
