@@ -1432,31 +1432,56 @@ function lfi_nct_app_clean_email($email) {
 /* Helper : affichage des credentials créés + bouton SMS
  * - Vouvoiement systématique pour tous les destinataires
  * - Grandes respirations entre login et mot de passe pour la lisibilité */
+/**
+ * Bouton « Copier » fiable : le texte (avec sauts de ligne, accents, « »…) est
+ * stocké dans un attribut data-copy échappé pour l'HTML, et lu au clic. Évite
+ * le bug d'un JSON injecté dans onclick (guillemets qui cassent l'attribut).
+ */
+function lfi_nct_copy_button($text, $label = '📋 Copier le message') {
+    return '<button type="button" class="btn-ghost" data-copy="' . esc_attr($text) . '" '
+         . 'onclick="(function(b){var t=b.getAttribute(\'data-copy\');'
+         . 'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);}'
+         . 'else{var a=document.createElement(\'textarea\');a.value=t;a.style.position=\'fixed\';a.style.opacity=0;'
+         . 'document.body.appendChild(a);a.focus();a.select();try{document.execCommand(\'copy\');}catch(e){}document.body.removeChild(a);}'
+         . 'b.textContent=\'✓ Copié\';})(this)">' . esc_html($label) . '</button>';
+}
+
+/**
+ * Construit le message d'accès (identifiants) pour un GA donné.
+ * $ga_label = nom lisible du groupe d'action (ex. « GA Port-Boyer »).
+ */
+function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes Sud Clos Toreau') {
+    $site_app = home_url('/app/');
+    return "Bonjour,\n\n"
+         . "Vos accès à l'app du groupe d'action « " . $ga_label . " » :\n\n"
+         . "📲 Installez l'app en ouvrant ce lien :\n"
+         . $site_app . "\n\n"
+         . "→ iPhone : ouvrez le lien dans Safari, puis Partager > « Sur l'écran d'accueil ».\n"
+         . "→ Android : ouvrez le lien dans Chrome, un bouton « Installer » apparaît.\n\n"
+         . "🪪 Identifiant : " . $login . "\n"
+         . "🔑 Mot de passe : " . $pwd . "\n\n"
+         . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
+}
+
 function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte créé') {
     $login = $created['login']; $pwd = $created['pwd']; $tel = $created['tel'] ?? '';
     $site_app = home_url('/app/');
-    $sms_body = "Bonjour,\n\n"
-              . "Vos accès à l'app du GA LFI Nantes Sud Clos Toreau :\n\n"
-              . "📲 Installez l'app en ouvrant ce lien :\n"
-              . $site_app . "\n\n"
-              . "→ iPhone : ouvrez dans Safari puis Partager > Sur l'écran d'accueil\n"
-              . "→ Android : ouvrez dans Chrome, un bouton « Installer » apparaît\n\n"
-              . "🪪 Identifiant : " . $login . "\n\n"
-              . "🔑 Mot de passe : " . $pwd . "\n\n"
-              . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
-    $sms_url = $tel ? 'sms:' . preg_replace('/[^\d+]/', '', $tel) . '?body=' . rawurlencode($sms_body) : '';
+    $ga_label = $created['ga_nom']
+        ?? (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($created['ga'] ?? '') : 'LFI Nantes Sud Clos Toreau');
+    $sms_body = lfi_nct_app_credentials_message($login, $pwd, $ga_label);
+    $sms_url  = $tel ? 'sms:' . preg_replace('/[^\d+]/', '', $tel) . '?body=' . rawurlencode($sms_body) : '';
     echo '<div class="lfi-app-flash ok">';
-    echo '<strong>✅ ' . esc_html($screen_label) . '</strong><br>';
+    echo '<strong>✅ ' . esc_html($screen_label) . '</strong> — groupe : <strong>' . esc_html($ga_label) . '</strong><br>';
     echo '<table style="margin:10px 0;border-collapse:collapse;width:100%">';
     echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🌐 URL</small></td><td style="padding:6px 8px"><code>' . esc_html($site_app) . '</code></td></tr>';
-    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.05em;background:#fff;padding:2px 6px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code></td></tr>';
-    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🔑 Mot de passe</small></td><td style="padding:6px 8px"><code style="font-size:1.05em;background:#fff;padding:2px 6px;border-radius:4px;border:1px solid #ddd;letter-spacing:.05em">' . esc_html($pwd) . '</code></td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.1em;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code></td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🔑 Mot de passe</small></td><td style="padding:6px 8px"><code style="font-size:1.25em;font-weight:700;background:#fff8e6;padding:4px 10px;border-radius:4px;border:1px solid #e0c200;letter-spacing:.08em">' . esc_html($pwd) . '</code></td></tr>';
     echo '</table>';
     echo '<div class="row-actions">';
-    if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 SMS les identifiants</a>';
-    echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(' . wp_json_encode($sms_body) . ');this.textContent=\'✓ Copié\';">📋 Copier le message</button>';
+    if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 Envoyer par SMS</a>';
+    echo lfi_nct_copy_button($sms_body, '📋 Copier le message');
     echo '</div>';
-    echo '<div style="margin-top:8px"><small>⚠️ Ce mot de passe ne sera plus affiché. Notez-le ou envoyez-le maintenant.</small></div>';
+    echo '<div style="margin-top:8px"><small>⚠️ Ce mot de passe ne sera plus affiché. Pour le retrouver plus tard, utilise « 🔑 Réinitialiser &amp; renvoyer » sur la fiche du membre.</small></div>';
     echo '</div>';
 }
 
@@ -1559,7 +1584,7 @@ function lfi_nct_app_view_comptes_ga() {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
                 if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga];
             }
         }
     }
@@ -1603,7 +1628,7 @@ function lfi_nct_app_view_comptes_ga() {
             if (is_wp_error($uid)) continue;
             if (!empty($c['tel'])) update_user_meta($uid, 'lfi_nct_tel', $c['tel']);
             if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $c['tel'] ?? '', 'name' => trim($prenom . ' ' . $nom) ?: $login];
+            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $c['tel'] ?? '', 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga];
         }
         if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
         wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['batched' => count($batch)]));
@@ -1637,7 +1662,7 @@ function lfi_nct_app_view_comptes_ga() {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
                 if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga];
             }
         }
     }
@@ -1677,7 +1702,7 @@ function lfi_nct_app_view_comptes_ga() {
             if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
             $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
             if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'name' => trim($prenom . ' ' . $nom) ?: $login];
+            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga];
         }
         if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
 
@@ -1698,7 +1723,7 @@ function lfi_nct_app_view_comptes_ga() {
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
             $tel = (string) get_user_meta($uid, 'lfi_nct_tel', true);
-            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true];
+            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true)];
         }
     }
 
@@ -1729,12 +1754,26 @@ function lfi_nct_app_view_comptes_ga() {
     ];
     if (function_exists('lfi_nct_users_ga_query')) $ga_args = lfi_nct_users_ga_query($ga_args);
     $users_ga = get_users($ga_args);
-    if (!$is_home_ga) $n_ga = count($users_ga);
+    /* Le compteur reflète l'espace affiché (liste cloisonnée) — y compris le
+       home, qui ne compte plus les membres rattachés à un autre GA. */
+    $n_ga = count($users_ga);
 
-    lfi_nct_app_screen_open('🪪 Comptes', (int) $n_ga . ' membre(s) GA · ' . $unlinked_total . ' adhérent(s) à importer');
+    /* Quel GA est en cours d'édition ? (pour bien rattacher les comptes créés) */
+    $scope_slug = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $ga_label   = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($scope_slug) : 'LFI Nantes Sud Clos Toreau';
+
+    lfi_nct_app_screen_open('🪪 Comptes — ' . $ga_label, (int) $n_ga . ' membre(s) GA' . ($is_home_ga ? ' · ' . $unlinked_total . ' adhérent(s) à importer' : ''));
 
     /* Onglets en haut */
     lfi_nct_app_comptes_tabs('ga');
+
+    /* Bandeau : à quel groupe d'action seront rattachés les comptes créés ici. */
+    echo '<div class="lfi-app-help" style="background:#eef4ff;border-left:4px solid #0066a3;display:flex;flex-wrap:wrap;gap:6px;align-items:center">';
+    echo '<span>📍 Les comptes créés ici sont rattachés à : <strong>' . esc_html($ga_label) . '</strong>.</span>';
+    if (function_exists('lfi_nct_super_admin') && lfi_nct_super_admin()) {
+        echo '<a href="' . esc_url(lfi_nct_app_url('reseau-ga')) . '" style="font-weight:700">Changer de groupe →</a>';
+    }
+    echo '</div>';
 
     /* Flash erreur */
     if ($created_err) lfi_nct_app_flash('❌ ' . $created_err, 'err');
@@ -1743,20 +1782,20 @@ function lfi_nct_app_view_comptes_ga() {
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
     if (!empty($_GET['batched']) && is_array($batch)) {
         delete_transient('lfi_nct_pwd_batch_' . get_current_user_id());
-        $site_app = home_url('/app/');
-        echo '<div class="lfi-app-flash ok"><strong>✅ ' . count($batch) . ' compte(s) créé(s).</strong> SMS les identifiants maintenant (mot de passe non ré-affiché après).</div>';
+        echo '<div class="lfi-app-flash ok"><strong>✅ ' . count($batch) . ' compte(s) créé(s).</strong> Envoie les identifiants maintenant (le mot de passe n\'est plus ré-affiché ensuite).</div>';
         echo '<ul class="lfi-app-list">';
         foreach ($batch as $b) {
-            $sms_body  = "Salut ! Accès app GA LFI Nantes Sud Clos Toreau :\n$site_app\nIdentifiant : " . $b['login'] . "\nMot de passe : " . $b['pwd'];
+            $ga_label  = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($b['ga'] ?? '') : 'LFI Nantes Sud Clos Toreau';
+            $sms_body  = lfi_nct_app_credentials_message($b['login'], $b['pwd'], $ga_label);
             $tel_clean = preg_replace('/[^\d+]/', '', (string) ($b['tel'] ?? ''));
             $sms_url   = $tel_clean ? 'sms:' . $tel_clean . '?body=' . rawurlencode($sms_body) : '';
             echo '<li class="lfi-app-card">';
             echo '<div class="head"><div class="who">' . esc_html($b['name']) . '</div><div class="badge">nouveau</div></div>';
-            echo '<div class="meta"><span class="meta-chip">@' . esc_html($b['login']) . '</span>';
-            echo '<span class="meta-chip"><code>' . esc_html($b['pwd']) . '</code></span></div>';
+            echo '<div class="meta"><span class="meta-chip">🪪 @' . esc_html($b['login']) . '</span>';
+            echo '<span class="meta-chip">🔑 <code style="font-weight:700;letter-spacing:.05em">' . esc_html($b['pwd']) . '</code></span></div>';
             echo '<div class="row-actions">';
             if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 SMS</a>';
-            echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(' . wp_json_encode($sms_body) . ');this.textContent=\'✓ Copié\';">📋 Copier</button>';
+            echo lfi_nct_copy_button($sms_body, '📋 Copier');
             echo '</div></li>';
         }
         echo '</ul>';
@@ -1874,7 +1913,7 @@ function lfi_nct_app_view_comptes_ga() {
             wp_nonce_field('lfi_app_reset_pwd');
             echo '<input type="hidden" name="lfi_app_reset_pwd" value="1">';
             echo '<input type="hidden" name="uid" value="' . (int) $u->ID . '">';
-            echo '<button type="submit" class="btn-ghost">🔑 Réinitialiser mot de passe</button>';
+            echo '<button type="submit" class="btn-ghost" onclick="return confirm(\'Générer un nouveau mot de passe pour ' . esc_js($u->display_name) . ' ? Tu pourras le renvoyer juste après.\');">🔑 Réinitialiser &amp; renvoyer</button>';
             echo '</form></li>';
         }
         echo '</ul>';
@@ -2024,7 +2063,7 @@ function lfi_nct_app_view_comptes_locataires() {
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
             $tel = (string) get_user_meta($uid, 'lfi_nct_tel', true);
-            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true];
+            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true)];
         }
     }
 

@@ -391,7 +391,9 @@ function lfi_nct_inscription_render_success($credentials, $type) {
     echo '</table>';
     echo '<div class="row-actions">';
     if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 Me les SMSer</a>';
-    echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(' . wp_json_encode($sms_body) . ');this.textContent=\'✓ Copié\';">📋 Copier</button>';
+    echo function_exists('lfi_nct_copy_button')
+        ? lfi_nct_copy_button($sms_body, '📋 Copier')
+        : '<button type="button" class="btn-ghost" data-copy="' . esc_attr($sms_body) . '" onclick="navigator.clipboard.writeText(this.getAttribute(\'data-copy\'));this.textContent=\'✓ Copié\';">📋 Copier</button>';
     echo '</div>';
     echo '<div style="margin-top:8px"><small>⚠ Notez votre mot de passe maintenant. Vous pourrez le changer dans « Mon profil ».</small></div>';
     echo '</div>';
