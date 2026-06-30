@@ -10,26 +10,59 @@ function lfi_nct_groupes_custom() {
     return is_array($c) ? $c : [];
 }
 
+/** Surcharges d'édition par slug : [slug => ['nom','secteur','travaux']]. */
+function lfi_nct_groupes_overrides() {
+    $o = get_option('lfi_nct_ga_overrides', []);
+    return is_array($o) ? $o : [];
+}
+
+/** GA archivés (masqués des listes actives) : [slug => 1]. */
+function lfi_nct_groupes_archived() {
+    $a = get_option('lfi_nct_ga_archived', []);
+    return is_array($a) ? $a : [];
+}
+
 /**
  * Liste des GA déclarés : ceux du dépôt (content/groupes.php) PLUS ceux créés
  * depuis l'application (option lfi_nct_ga_custom). Les slugs restent uniques :
  * un GA du dépôt n'est jamais écrasé par un GA personnalisé du même slug.
+ *
+ * Les surcharges d'édition (renommage, secteur, travaux) et l'état « archivé »
+ * sont appliqués à la volée. Par défaut, $include_archived = false : les GA
+ * archivés sont exclus des listes actives (switcher, cartes, stats…).
  */
-function lfi_nct_groupes() {
-    $list = function_exists('lfi_nct_content_load') ? lfi_nct_content_load('groupes.php') : [];
+function lfi_nct_groupes($include_archived = false) {
+    $list      = function_exists('lfi_nct_content_load') ? lfi_nct_content_load('groupes.php') : [];
+    $overrides = lfi_nct_groupes_overrides();
+    $archived  = lfi_nct_groupes_archived();
     $out  = [];
     $seen = [];
+
+    $apply = function ($g, $custom) use ($overrides, $archived) {
+        $slug = $g['slug'];
+        if (isset($overrides[$slug]) && is_array($overrides[$slug])) {
+            foreach (['nom', 'secteur', 'travaux'] as $k) {
+                if (array_key_exists($k, $overrides[$slug])) $g[$k] = $overrides[$slug][$k];
+            }
+        }
+        $g['ap_url']   = !empty($g['uuid']) ? 'https://actionpopulaire.fr/groupes/' . $g['uuid'] . '/' : '';
+        $g['custom']   = $custom;
+        $g['archived'] = !empty($archived[$slug]);
+        return $g;
+    };
+
     foreach ((array) $list as $g) {
         if (!is_array($g) || empty($g['slug']) || empty($g['nom'])) continue;
-        $g['ap_url'] = !empty($g['uuid']) ? 'https://actionpopulaire.fr/groupes/' . $g['uuid'] . '/' : '';
+        $g = $apply($g, false);
+        if (!$include_archived && !empty($g['archived'])) { $seen[$g['slug']] = true; continue; }
         $out[] = $g;
         $seen[$g['slug']] = true;
     }
     foreach (lfi_nct_groupes_custom() as $g) {
         if (!is_array($g) || empty($g['slug']) || empty($g['nom'])) continue;
         if (!empty($seen[$g['slug']])) continue;
-        $g['ap_url'] = !empty($g['uuid']) ? 'https://actionpopulaire.fr/groupes/' . $g['uuid'] . '/' : '';
-        $g['custom'] = true;
+        $g = $apply($g, true);
+        if (!$include_archived && !empty($g['archived'])) { $seen[$g['slug']] = true; continue; }
         $out[] = $g;
         $seen[$g['slug']] = true;
     }
@@ -41,8 +74,9 @@ function lfi_nct_groupes() {
  * ============================================================== */
 function lfi_nct_app_view_groupes() {
     if (!lfi_nct_app_guard_brigade()) return;
-    $groupes = lfi_nct_groupes();
     $is_super = function_exists('lfi_nct_super_admin') && lfi_nct_super_admin();
+    /* Le super-admin voit aussi les GA archivés (pour pouvoir les réactiver). */
+    $groupes = lfi_nct_groupes($is_super);
 
     /* ---------------------------------------------------------------- *
      *  CRÉATION d'un groupe d'action depuis l'app (super-admin).        *
@@ -123,6 +157,62 @@ function lfi_nct_app_view_groupes() {
                 exit;
             }
         }
+    }
+
+    /* ---------------------------------------------------------------- *
+     *  MODIFIER / ARCHIVER / SUPPRIMER un groupe d'action (super-admin). *
+     * ---------------------------------------------------------------- */
+    if ($is_super && !empty($_POST['lfi_ga_edit']) && check_admin_referer('lfi_ga_edit')) {
+        $slug   = sanitize_title(wp_unslash($_POST['edit_slug'] ?? ''));
+        $action = sanitize_key($_POST['edit_action'] ?? 'save');
+        /* On ne touche jamais au GA « actuel » (Clos Toreau, ce site). */
+        $is_actuel = false;
+        foreach ($groupes as $g) { if ($g['slug'] === $slug && !empty($g['actuel'])) $is_actuel = true; }
+
+        if ($slug !== '' && !$is_actuel) {
+            if ($action === 'save') {
+                $overrides = lfi_nct_groupes_overrides();
+                $overrides[$slug] = [
+                    'nom'     => sanitize_text_field(wp_unslash($_POST['edit_nom'] ?? '')),
+                    'secteur' => sanitize_text_field(wp_unslash($_POST['edit_secteur'] ?? '')),
+                    'travaux' => !empty($_POST['edit_travaux']) ? 1 : 0,
+                ];
+                if ($overrides[$slug]['nom'] === '') unset($overrides[$slug]['nom']); // garde le nom d'origine si vidé
+                update_option('lfi_nct_ga_overrides', $overrides, false);
+                wp_safe_redirect(lfi_nct_app_url('groupes', ['saved' => 1]));
+                exit;
+            }
+            if ($action === 'archive' || $action === 'unarchive') {
+                $arch = lfi_nct_groupes_archived();
+                if ($action === 'archive') $arch[$slug] = 1; else unset($arch[$slug]);
+                update_option('lfi_nct_ga_archived', $arch, false);
+                wp_safe_redirect(lfi_nct_app_url('groupes', ['saved' => 1]));
+                exit;
+            }
+            if ($action === 'delete') {
+                /* Suppression réservée aux GA créés dans l'app (jamais ceux du dépôt). */
+                $custom = lfi_nct_groupes_custom();
+                if (isset($custom[$slug])) {
+                    unset($custom[$slug]);
+                    update_option('lfi_nct_ga_custom', $custom, false);
+                    $admins = function_exists('lfi_nct_ga_admins') ? lfi_nct_ga_admins() : [];
+                    $pivots = function_exists('lfi_nct_ga_pivots') ? lfi_nct_ga_pivots() : [];
+                    unset($admins[$slug], $pivots[$slug]);
+                    update_option('lfi_nct_ga_admins', $admins, false);
+                    update_option('lfi_nct_ga_pivots', $pivots, false);
+                    $ov = lfi_nct_groupes_overrides(); unset($ov[$slug]); update_option('lfi_nct_ga_overrides', $ov, false);
+                    $ar = lfi_nct_groupes_archived();  unset($ar[$slug]); update_option('lfi_nct_ga_archived', $ar, false);
+                    /* Les comptes restent (on ne supprime pas d'utilisateurs), mais
+                       on les détache du GA pour ne pas garder un rattachement orphelin. */
+                    $members = get_users(['meta_key' => 'lfi_nct_ga', 'meta_value' => $slug, 'fields' => ['ID'], 'number' => 1000]);
+                    foreach ((array) $members as $m) { delete_user_meta((int) (is_object($m) ? $m->ID : $m), 'lfi_nct_ga'); }
+                }
+                wp_safe_redirect(lfi_nct_app_url('groupes', ['deleted_ga' => 1]));
+                exit;
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('groupes'));
+        exit;
     }
 
     /* Enregistrement du binôme paritaire d'admins (femme + homme) par GA. */
@@ -209,11 +299,15 @@ function lfi_nct_app_view_groupes() {
         echo '</details>';
     }
 
+    if (!empty($_GET['deleted_ga'])) lfi_nct_app_flash('🗑 Groupe d\'action supprimé.');
+
     echo '<ul class="lfi-app-list">';
     foreach ($groupes as $g) {
-        $border = !empty($g['actuel']) ? '#c8102e' : '#186a3b';
-        echo '<li class="lfi-app-card" style="border-left:4px solid ' . $border . '">';
+        $is_archived = !empty($g['archived']);
+        $border = !empty($g['actuel']) ? '#c8102e' : ($is_archived ? '#999' : '#186a3b');
+        echo '<li class="lfi-app-card" style="border-left:4px solid ' . $border . ($is_archived ? ';opacity:.7' : '') . '">';
         $tag = !empty($g['actuel']) ? ' <span style="font-size:.8em;color:#c8102e">(ce site)</span>' : (!empty($g['custom']) ? ' <span style="font-size:.8em;color:#186a3b">(créé ici)</span>' : '');
+        if ($is_archived) $tag .= ' <span style="font-size:.8em;color:#999">(archivé)</span>';
         echo '<div class="com"><strong>' . esc_html($g['nom']) . '</strong>' . $tag . '</div>';
         echo '<div class="meta" style="color:#555;font-size:.9em">' . esc_html($g['secteur']) . '</div>';
         echo '<div class="meta" style="font-size:.85em;margin-top:4px">';
@@ -229,6 +323,32 @@ function lfi_nct_app_view_groupes() {
         if (!empty($g['ap_url'])) {
             echo '<a class="btn-ghost" style="margin-top:6px;display:inline-block;padding:4px 10px;font-size:.85em" href="' . esc_url($g['ap_url']) . '" target="_blank" rel="noopener">Voir sur Action Populaire →</a>';
         }
+
+        /* --- Modifier / archiver / supprimer (super-admin, hors « ce site ») --- */
+        if ($is_super && empty($g['actuel'])) {
+            $sl = esc_attr($g['slug']);
+            echo '<details class="lfi-app-collapse" style="margin-top:8px">';
+            echo '<summary style="cursor:pointer;color:#0066a3;font-size:.9em">✏️ Modifier / archiver</summary>';
+            echo '<form method="post" class="lfi-app-form" style="margin-top:6px">';
+            wp_nonce_field('lfi_ga_edit');
+            echo '<input type="hidden" name="lfi_ga_edit" value="1">';
+            echo '<input type="hidden" name="edit_slug" value="' . $sl . '">';
+            echo '<label>Nom<input type="text" name="edit_nom" value="' . esc_attr($g['nom']) . '"></label>';
+            echo '<label>Secteur<input type="text" name="edit_secteur" value="' . esc_attr($g['secteur'] ?? '') . '"></label>';
+            echo '<label class="lfi-app-checkbox-row" style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="edit_travaux" value="1" ' . checked(!empty($g['travaux']), true, false) . '> 🔧 Volet travaux</label>';
+            echo '<button type="submit" name="edit_action" value="save" class="btn-primary">💾 Enregistrer</button>';
+            if ($is_archived) {
+                echo '<button type="submit" name="edit_action" value="unarchive" class="btn-ghost" style="margin-top:6px">♻️ Réactiver</button>';
+            } else {
+                echo '<button type="submit" name="edit_action" value="archive" class="btn-ghost" style="margin-top:6px" onclick="return confirm(\'Archiver ce GA ? Il disparaîtra des listes actives (réversible).\');">📦 Archiver</button>';
+            }
+            if (!empty($g['custom'])) {
+                echo '<button type="submit" name="edit_action" value="delete" class="btn-del" style="margin-top:6px" onclick="return confirm(\'Supprimer définitivement ce GA créé dans l\\\'app ? Les comptes restent mais sont détachés. Action irréversible.\');">🗑 Supprimer</button>';
+            }
+            echo '</form>';
+            echo '</details>';
+        }
+
         echo '</li>';
     }
     echo '</ul>';
@@ -357,6 +477,7 @@ function lfi_nct_app_view_reseau_ga() {
 
     /* --- Outils regroupés --- */
     $tiles = [
+        ['🌐', 'Carte cumulée du réseau', 'Tous les GA sur une carte 3D',   lfi_nct_app_url('reseau-carte')],
         ['🗺️', 'Annuaire & créer un GA',  'Liste, création, binôme',        lfi_nct_app_url('groupes')],
         ['➕', 'Créer un groupe d\'action','Nom + 2 responsables',           lfi_nct_app_url('groupes')],
         ['🪪', 'Comptes du GA affiché',    'Créer · importer · reset',       lfi_nct_app_url('comptes-ga')],
@@ -402,7 +523,10 @@ function lfi_nct_app_view_reseau_ga() {
     echo '</ul>';
 
     /* --- Tableau cumulé (toutes les colonnes additionnées) --- */
-    echo '<h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📊 Statistiques cumulées</h3>';
+    echo '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:24px 0 8px">';
+    echo '<h3 style="margin:0;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📊 Statistiques cumulées</h3>';
+    echo '<a class="btn-ghost" style="padding:6px 12px" href="' . esc_url(lfi_nct_app_url('reseau-ga-pdf')) . '" target="_blank" rel="noopener">📄 Export PDF</a>';
+    echo '</div>';
     $t_enq = 0; $t_prob = 0; $t_adh = 0;
     foreach ($rows as $r) { $t_enq += (int) $r['enq']; $t_prob += (int) $r['prob']; $t_adh += (int) $r['adh']; }
     echo '<div style="overflow-x:auto">';
@@ -429,4 +553,49 @@ function lfi_nct_app_view_reseau_ga() {
     echo '<div class="lfi-app-help"><small>Les chiffres « Mon espace » regroupent tout ce qui n\'appartient à aucun autre GA (ton Clos Toreau). Chaque autre GA n\'affiche que ses propres données.</small></div>';
 
     lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  VUE PDF : tableau cumulé du réseau, imprimable (→ PDF iPhone). *
+ * ============================================================== */
+function lfi_nct_app_view_reseau_ga_pdf() {
+    if (!function_exists('lfi_nct_super_admin') || !lfi_nct_super_admin()) {
+        wp_safe_redirect(lfi_nct_app_url());
+        exit;
+    }
+    $rows  = lfi_nct_ga_overview_rows();
+    $t_enq = 0; $t_prob = 0; $t_adh = 0;
+    foreach ($rows as $r) { $t_enq += (int) $r['enq']; $t_prob += (int) $r['prob']; $t_adh += (int) $r['adh']; }
+
+    lfi_nct_app_screen_open('📄 Export — réseau des GA', 'Statistiques cumulées');
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+    ?>
+    <style>
+    .lfi-rec-doc table.detail th { border-bottom: 2px solid #c8102e; padding: 6px 8px; text-align: left; font-size: .9em; }
+    .lfi-rec-doc table.detail td.num { text-align: right; }
+    </style>
+    <?php
+    echo '<div class="lfi-rec-doc">';
+    echo '<div class="expediteur"><strong>Association Union des Quartiers Libres</strong><br>Réseau des Groupes d\'Action — Nantes</div>';
+    echo '<div class="lieu-date">À Nantes, le ' . esc_html(wp_date('j F Y')) . '</div>';
+    echo '<h1>Statistiques cumulées du réseau des groupes d\'action</h1>';
+    echo '<p>État récapitulatif des chiffres par groupe d\'action : nombre d\'enquêtes réalisées, foyers déclarant au moins un problème, et adhérents. Document interne.</p>';
+
+    echo '<table class="detail">';
+    echo '<thead><tr><th>Groupe d\'action</th><th>Enquêtes</th><th>Avec problème</th><th>Adhérents</th></tr></thead><tbody>';
+    foreach ($rows as $r) {
+        echo '<tr>';
+        echo '<td>' . esc_html($r['nom']) . (!empty($r['binome']) ? '<br><span style="font-size:.85em;color:#555">' . esc_html($r['binome']) . '</span>' : '') . '</td>';
+        echo '<td class="num">' . (int) $r['enq'] . '</td>';
+        echo '<td class="num">' . (int) $r['prob'] . '</td>';
+        echo '<td class="num">' . (int) $r['adh'] . '</td>';
+        echo '</tr>';
+    }
+    echo '<tr class="total"><td>TOTAL réseau</td><td class="num">' . (int) $t_enq . '</td><td class="num">' . (int) $t_prob . '</td><td class="num">' . (int) $t_adh . '</td></tr>';
+    echo '</tbody></table>';
+
+    echo '<p class="pj">Données agrégées par l\'association Union des Quartiers Libres. La ligne « Mon espace — Clos Toreau » regroupe tout ce qui n\'appartient à aucun autre groupe d\'action.</p>';
+    echo '</div>'; // .lfi-rec-doc
+
+    lfi_nct_app_screen_close(false);
 }
