@@ -51,8 +51,22 @@ function lfi_nct_view_ga() {
 }
 
 /**
+ * Propriétaire « fantôme » propre à un GA sans pivot : un identifiant haut et
+ * UNIQUE par slug (au-dessus de tout vrai user_id). Ainsi l'espace d'un GA non
+ * configuré est vide en lecture, et si on y saisit des données elles restent à
+ * CE GA (pas de mélange entre deux GA non configurés).
+ */
+function lfi_nct_ga_phantom_owner($slug) {
+    return 1000000000 + (abs(crc32((string) $slug)) % 900000000);
+}
+
+/**
  * Résout l'identifiant propriétaire en tenant compte du GA.
- * Repli systématique sur $base (= comportement actuel) si rien n'est configuré.
+ *
+ * IMPORTANT : quand le super-admin « regarde » un autre GA, il ne doit JAMAIS
+ * voir ses propres données. Si ce GA n'a pas encore de compte pivot (binôme non
+ * désigné), on renvoie un propriétaire fantôme → son espace est VIDE, au lieu de
+ * retomber sur les données du super-admin.
  */
 function lfi_nct_ga_owner_resolve($base) {
     $base = (int) $base;
@@ -60,9 +74,9 @@ function lfi_nct_ga_owner_resolve($base) {
         $vg = lfi_nct_view_ga();
         if ($vg !== '' && $vg !== '__all__') {
             $p = lfi_nct_ga_pivot_uid($vg);
-            if ($p) return $p;
+            return $p ? (int) $p : lfi_nct_ga_phantom_owner($vg); // autre GA → pivot, sinon espace vide propre à ce GA
         }
-        return $base; // « tout » / non configuré → ton propre espace
+        return $base; // « tout » / mon espace → mes données
     }
     $ga = lfi_nct_user_ga($base);
     if ($ga !== '') {
@@ -70,6 +84,19 @@ function lfi_nct_ga_owner_resolve($base) {
         if ($p) return $p;
     }
     return $base;
+}
+
+/**
+ * Clause SQL pour cloisonner par PROPRIÉTAIRE (agenda RDV, etc.).
+ * Sur l'espace home (Clos Toreau / mon espace), on inclut aussi les
+ * enregistrements historiques sans propriétaire (NULL/0) pour ne rien perdre.
+ */
+function lfi_nct_owner_clause($col = 'owner_user_id') {
+    $owner = function_exists('lfi_nct_brigade_owner_id') ? (int) lfi_nct_brigade_owner_id() : (int) get_current_user_id();
+    $slug  = lfi_nct_scope_ga_slug();
+    $is_home = ($slug === '' || $slug === 'clos-toreau');
+    if ($is_home) return " AND ($col = $owner OR $col IS NULL OR $col = 0)";
+    return " AND $col = $owner";
 }
 
 /** Admins supplémentaires d'un GA (promus par un admin du GA) : [slug => [uid,…]]. */
