@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) exit;
 function lfi_nct_prefecture_contact() {
     $d = get_option('lfi_nct_prefecture_contact', []);
     if (!is_array($d)) $d = [];
-    return array_merge([
+    $c = array_merge([
         'organisme' => 'Préfecture de la Loire-Atlantique',
         'nom'       => '',
         'fonction'  => '',
@@ -29,6 +29,12 @@ function lfi_nct_prefecture_contact() {
         'fonction2' => '',
         'email2'    => '',
     ], $d);
+    /* Coordonnées connues de la déléguée du Préfet (remplies par défaut si
+       rien n'est saisi en base ; toute valeur saisie dans le volet prime). */
+    if ($c['nom'] === '')      $c['nom']      = 'Mélanie LAURINE';
+    if ($c['fonction'] === '') $c['fonction'] = 'Déléguée du Préfet';
+    if ($c['email'] === '')    $c['email']    = 'melanie.laurine@loire-atlantique.gouv.fr';
+    return $c;
 }
 
 /** Liste des emails préfecture renseignés (déléguée + Gwenaëlle). */
@@ -280,15 +286,26 @@ function lfi_nct_app_view_prefecture() {
         exit;
     }
 
-    /* Supprimer une entrée de correspondance */
+    /* Supprimer une entrée de correspondance (sélection multiple) */
     if (!empty($_POST['lfi_pref_corr_del']) && check_admin_referer('lfi_pref_corr_del')) {
-        $sens = (($_POST['del_sens'] ?? '') === 'recu') ? 'recu' : 'sent';
-        $idx  = (int) ($_POST['del_idx'] ?? -1);
         $corr = lfi_nct_prefecture_corr();
-        if ($idx >= 0 && isset($corr[$sens][$idx])) {
-            array_splice($corr[$sens], $idx, 1);
-            lfi_nct_prefecture_corr_save($corr);
+        $sel  = (array) ($_POST['del'] ?? []);
+        if (empty($sel) && isset($_POST['del_idx'])) {           // compat. suppression unitaire
+            $sens0 = (($_POST['del_sens'] ?? '') === 'recu') ? 'recu' : 'sent';
+            $sel = [$sens0 . ':' . (int) $_POST['del_idx']];
         }
+        $rm = ['sent' => [], 'recu' => []];
+        foreach ($sel as $s) {
+            list($sens, $idx) = array_pad(explode(':', (string) $s, 2), 2, '');
+            $key = ($sens === 'recu') ? 'recu' : 'sent';
+            $rm[$key][] = (int) $idx;
+        }
+        foreach ($rm as $key => $idxs) {
+            if (empty($idxs)) continue;
+            rsort($idxs);
+            foreach ($idxs as $i) { if (isset($corr[$key][$i])) array_splice($corr[$key], $i, 1); }
+        }
+        lfi_nct_prefecture_corr_save($corr);
         wp_safe_redirect(lfi_nct_app_url('prefecture', ['corr_del' => 1]));
         exit;
     }
@@ -366,11 +383,19 @@ function lfi_nct_app_view_prefecture() {
     if (empty($timeline)) {
         echo '<div class="lfi-app-help">Aucune correspondance pour l\'instant. Tes envois (boutons ci-dessus) sont archivés ici, et tu peux coller un email reçu.</div>';
     } else {
+        echo '<form method="post" id="lfi-prefcorr-form" onsubmit="return lfiNctPrefCorrDel(this)">';
+        wp_nonce_field('lfi_pref_corr_del');
+        echo '<input type="hidden" name="lfi_pref_corr_del" value="1">';
+        echo '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0">';
+        echo '<label style="display:flex;align-items:center;gap:6px;font-size:.9em;cursor:pointer"><input type="checkbox" onclick="lfiNctPrefCorrAll(this)"> Tout sélectionner</label>';
+        echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 12px;font-size:.85em">🗑 Supprimer la sélection</button>';
+        echo '</div>';
         echo '<ul class="lfi-app-list">';
         foreach ($timeline as $e) {
             $is_recu = ($e['sens'] === 'recu');
             echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
-            echo '<div class="head"><div class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</div>';
+            echo '<div class="head" style="align-items:center">';
+            echo '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="lfi-prefcorr-cb" name="del[]" value="' . esc_attr($e['sens'] . ':' . (int) $e['_idx']) . '"> <span class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</span></label>';
             echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
             echo '<div class="meta">';
             if ($is_recu && !empty($e['de'])) echo '<span class="meta-chip">de ' . esc_html($e['de']) . '</span>';
@@ -379,16 +404,23 @@ function lfi_nct_app_view_prefecture() {
             echo '</div>';
             if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
             if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
-            echo '<form method="post" onsubmit="return confirm(\'Supprimer cette entrée ?\')" style="margin-top:8px">';
-            wp_nonce_field('lfi_pref_corr_del');
-            echo '<input type="hidden" name="lfi_pref_corr_del" value="1">';
-            echo '<input type="hidden" name="del_sens" value="' . esc_attr($e['sens']) . '">';
-            echo '<input type="hidden" name="del_idx" value="' . (int) $e['_idx'] . '">';
-            echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 10px;font-size:.85em">🗑 Supprimer cette entrée</button>';
-            echo '</form>';
             echo '</li>';
         }
         echo '</ul>';
+        echo '</form>';
+        ?>
+        <script>
+        function lfiNctPrefCorrAll(master){
+            var cbs = document.querySelectorAll('#lfi-prefcorr-form .lfi-prefcorr-cb');
+            for (var i=0;i<cbs.length;i++) cbs[i].checked = master.checked;
+        }
+        function lfiNctPrefCorrDel(form){
+            var n = form.querySelectorAll('.lfi-prefcorr-cb:checked').length;
+            if (n === 0) { alert('Coche au moins une entrée à supprimer.'); return false; }
+            return confirm('Supprimer définitivement ' + n + ' entrée(s) ?');
+        }
+        </script>
+        <?php
     }
 
     /* Coller un email reçu de la préfecture */
@@ -445,8 +477,19 @@ function lfi_nct_app_view_prefecture_email() {
         $cc = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
         $su = sanitize_text_field(wp_unslash($_POST['email_subject'] ?? ''));
         $corr = lfi_nct_prefecture_corr();
-        $corr['sent'][] = ['to' => $to, 'cc' => $cc, 'objet' => $su, 'date' => current_time('Y-m-d H:i'), 'type' => $type];
-        lfi_nct_prefecture_corr_save($corr);
+        /* Anti-doublon : on n'ajoute pas si le même envoi (destinataire + objet)
+           a déjà été consigné il y a moins de 5 min. */
+        $is_dup = false;
+        $now_ts = (int) current_time('timestamp');
+        foreach (array_reverse($corr['sent']) as $prev) {
+            $pt = isset($prev['date']) ? strtotime($prev['date']) : 0;
+            if (!$pt || ($now_ts - $pt) > 300) break;
+            if (($prev['to'] ?? '') === $to && ($prev['objet'] ?? '') === $su) { $is_dup = true; break; }
+        }
+        if (!$is_dup) {
+            $corr['sent'][] = ['to' => $to, 'cc' => $cc, 'objet' => $su, 'date' => current_time('Y-m-d H:i'), 'type' => $type];
+            lfi_nct_prefecture_corr_save($corr);
+        }
         wp_safe_redirect(lfi_nct_app_url('prefecture', ['corr_ok' => 1]));
         exit;
     }

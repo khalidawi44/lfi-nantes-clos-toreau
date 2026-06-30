@@ -554,6 +554,29 @@ function lfi_nct_app_dossier_juridique_form($row) {
         exit;
     }
 
+    /* Suppression MULTIPLE (cases à cocher) d'entrées de correspondance. */
+    if ($is_edit && !empty($_POST['lfi_dossier_email_delmulti']) && check_admin_referer('lfi_dossier_email_del')) {
+        $sel  = (array) ($_POST['del'] ?? []);
+        $logs = json_decode($row->notes ?? '', true);
+        if (is_array($logs) && $sel) {
+            $rm = ['email_log' => [], 'email_recu' => []];
+            foreach ($sel as $s) {
+                list($sens, $idx) = array_pad(explode(':', (string) $s, 2), 2, '');
+                $key = ($sens === 'recu') ? 'email_recu' : 'email_log';
+                $rm[$key][] = (int) $idx;
+            }
+            foreach ($rm as $key => $idxs) {
+                if (empty($idxs) || !isset($logs[$key]) || !is_array($logs[$key])) continue;
+                rsort($idxs); // décroissant : les splices ne décalent pas les index suivants
+                foreach ($idxs as $i) { if (isset($logs[$key][$i])) array_splice($logs[$key], $i, 1); }
+                $logs[$key] = array_values($logs[$key]);
+            }
+            $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $row->id, 'owner_user_id' => $owner]);
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'email_del_ok' => 1]));
+        exit;
+    }
+
     /* Enregistrer / mettre à jour l'analyse juridique de la réponse NMH */
     if ($is_edit && isset($_POST['lfi_dossier_analyse_nmh']) && check_admin_referer('lfi_dossier_analyse_nmh')) {
         $analyse = sanitize_textarea_field(wp_unslash($_POST['analyse_nmh'] ?? ''));
@@ -949,11 +972,20 @@ function lfi_nct_app_dossier_juridique_form($row) {
         if (empty($timeline)) {
             echo '<div class="lfi-app-help">Aucun email conservé pour l\'instant. Les emails que tu envoies (bouton « 📧 Envoyer par email ») sont archivés ici. Tu peux aussi coller un email REÇU ci-dessous.</div>';
         } else {
+            /* Liste avec cases à cocher → suppression multiple en un clic. */
+            echo '<form method="post" id="lfi-corr-form" onsubmit="return lfiNctCorrDel(this)">';
+            wp_nonce_field('lfi_dossier_email_del');
+            echo '<input type="hidden" name="lfi_dossier_email_delmulti" value="1">';
+            echo '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0">';
+            echo '<label style="display:flex;align-items:center;gap:6px;font-size:.9em;cursor:pointer"><input type="checkbox" onclick="lfiNctCorrAll(this)"> Tout sélectionner</label>';
+            echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 12px;font-size:.85em">🗑 Supprimer la sélection</button>';
+            echo '</div>';
             echo '<ul class="lfi-app-list">';
             foreach ($timeline as $e) {
                 $is_recu = ($e['sens'] === 'recu');
                 echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
-                echo '<div class="head"><div class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</div>';
+                echo '<div class="head" style="align-items:center">';
+                echo '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="lfi-corr-cb" name="del[]" value="' . esc_attr($e['sens'] . ':' . (int) $e['_idx']) . '"> <span class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</span></label>';
                 echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
                 echo '<div class="meta">';
                 if ($is_recu && !empty($e['de'])) echo '<span class="meta-chip">de ' . esc_html($e['de']) . '</span>';
@@ -961,17 +993,23 @@ function lfi_nct_app_dossier_juridique_form($row) {
                 echo '</div>';
                 if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
                 if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
-                /* Bouton supprimer cette entrée */
-                echo '<form method="post" onsubmit="return confirm(\'Supprimer définitivement cette entrée de la correspondance ?\')" style="margin-top:8px">';
-                wp_nonce_field('lfi_dossier_email_del');
-                echo '<input type="hidden" name="lfi_dossier_email_del" value="1">';
-                echo '<input type="hidden" name="del_sens" value="' . esc_attr($e['sens']) . '">';
-                echo '<input type="hidden" name="del_idx" value="' . (int) $e['_idx'] . '">';
-                echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 10px;font-size:.85em">🗑 Supprimer cette entrée</button>';
-                echo '</form>';
                 echo '</li>';
             }
             echo '</ul>';
+            echo '</form>';
+            ?>
+            <script>
+            function lfiNctCorrAll(master){
+                var cbs = document.querySelectorAll('#lfi-corr-form .lfi-corr-cb');
+                for (var i=0;i<cbs.length;i++) cbs[i].checked = master.checked;
+            }
+            function lfiNctCorrDel(form){
+                var n = form.querySelectorAll('.lfi-corr-cb:checked').length;
+                if (n === 0) { alert('Coche au moins une entrée à supprimer.'); return false; }
+                return confirm('Supprimer définitivement ' + n + ' entrée(s) ?');
+            }
+            </script>
+            <?php
         }
 
         /* Formulaire : coller un email reçu */
@@ -1474,15 +1512,26 @@ function lfi_nct_app_view_dossier_send_email() {
         $to      = sanitize_text_field(wp_unslash($_POST['email_to'] ?? ''));
         $cc      = sanitize_text_field(wp_unslash($_POST['email_cc'] ?? ''));
 
-        /* Journalise dans le dossier */
+        /* Journalise dans le dossier — sauf si on vient de consigner le MÊME
+           email (même destinataire + même lettre) il y a moins de 5 min :
+           ça évite les doublons quand on reclique (ex. si Gmail tarde). */
         $logs = json_decode($dossier->notes ?? '', true);
         if (!is_array($logs)) $logs = ['__notes' => $dossier->notes ?? ''];
         $logs['email_log'] = $logs['email_log'] ?? [];
-        $logs['email_log'][] = ['letter' => $letter_key, 'to' => $to, 'cc' => $cc, 'date' => current_time('Y-m-d H:i'), 'via' => 'gmail'];
-        $wpdb->update($wpdb->prefix . 'lfi_nct_dossiers_locataires',
-            ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)],
-            ['id' => $dossier->id, 'owner_user_id' => (int) lfi_nct_dossier_owner_id()]
-        );
+        $is_dup = false;
+        $now_ts = (int) current_time('timestamp');
+        foreach (array_reverse($logs['email_log']) as $prev) {
+            $pt = isset($prev['date']) ? strtotime($prev['date']) : 0;
+            if (!$pt || ($now_ts - $pt) > 300) break; // entrées plus anciennes : on s'arrête
+            if (($prev['to'] ?? '') === $to && ($prev['letter'] ?? '') === $letter_key) { $is_dup = true; break; }
+        }
+        if (!$is_dup) {
+            $logs['email_log'][] = ['letter' => $letter_key, 'to' => $to, 'cc' => $cc, 'date' => current_time('Y-m-d H:i'), 'via' => 'gmail'];
+            $wpdb->update($wpdb->prefix . 'lfi_nct_dossiers_locataires',
+                ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)],
+                ['id' => $dossier->id, 'owner_user_id' => (int) lfi_nct_dossier_owner_id()]
+            );
+        }
 
         wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'gmail_open' => 1]));
         exit;
