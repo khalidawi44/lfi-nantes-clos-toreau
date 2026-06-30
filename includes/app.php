@@ -658,6 +658,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-wizard':        lfi_nct_app_view_dossier_wizard();         break;
                     case 'modules-params':        lfi_nct_app_view_modules_params();         break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
+                    case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
                     default:                lfi_nct_app_render_dashboard();
@@ -1595,6 +1596,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '⚙️ SYSTÈME' => [
+            ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
             ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],
