@@ -491,13 +491,20 @@ function lfi_nct_app_dossier_juridique_form($row) {
 
         if ($is_edit) {
             $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
-            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'saved' => 1]));
+            $saved_id = (int) $row->id;
         } else {
             $data['owner_user_id'] = $owner;
             $wpdb->insert($t, $data);
-            $new_id = (int) $wpdb->insert_id;
-            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $new_id, 'created' => 1]));
+            $saved_id = (int) $wpdb->insert_id;
         }
+        /* Enchaînement depuis une intervention planifiée : aller directement à
+           l'email pré-rempli pour le service choisi. */
+        $next_service = sanitize_key($_POST['next_service'] ?? '');
+        if ($saved_id && in_array($next_service, ['schs', 'ars', 'lrar_travaux', 'lrar_relogement', 'reponse_nmh'], true)) {
+            wp_safe_redirect(lfi_nct_app_url('dossier-send-email', ['id' => $saved_id, 'letter' => $next_service]));
+            exit;
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $saved_id, $is_edit ? 'saved' : 'created' => 1]));
         exit;
     }
 
@@ -651,6 +658,11 @@ function lfi_nct_app_dossier_juridique_form($row) {
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_dossier_save');
     echo '<input type="hidden" name="lfi_dossier_save" value="1">';
+    /* Enchaînement depuis une intervention planifiée : on conserve le service à prévenir. */
+    if (!empty($_GET['next_service'])) {
+        echo '<input type="hidden" name="next_service" value="' . esc_attr(sanitize_key($_GET['next_service'])) . '">';
+        echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>📧 Après création du dossier, tu seras redirigé vers l\'email pré-rempli pour le service choisi.</small></div>';
+    }
 
     /* Champ caché qui PRÉSERVE le lien au compte locataire — bug fix
        majeur : sans ça, la liaison se perdait à la sauvegarde. */
@@ -1526,11 +1538,13 @@ function lfi_nct_dossier_email_body_text($letter_key, $dossier, $bailleur, $tena
             break;
         case 'schs':
             $html .= '<h3 style="color:#c8102e">Demande</h3>';
-            $html .= '<p>Conformément aux articles L.1331-22 et suivants du Code de la santé publique, je sollicite la diligence d\'une visite d\'enquête par les agents assermentés du SCHS, l\'établissement d\'un rapport circonstancié, et le cas échéant la saisine de Monsieur le Préfet aux fins d\'arrêté d\'insalubrité.</p>';
+            $html .= '<p>Conformément aux articles L.1331-22 et suivants du Code de la santé publique, je sollicite la diligence d\'une <strong>visite d\'enquête sur place par les agents assermentés du SCHS, dans les meilleurs délais</strong>, l\'établissement d\'un rapport circonstancié, et le cas échéant la saisine de Monsieur le Préfet aux fins d\'arrêté d\'insalubrité.</p>';
+            $html .= '<p><strong>L\'urgence est caractérisée</strong> par la présence d\'un occupant vulnérable dont la santé est affectée (certificat médical) et par des désordres portant atteinte à la salubrité du logement. Je vous remercie de bien vouloir programmer une intervention au logement le plus rapidement possible.</p>';
             break;
         case 'ars':
             $html .= '<h3 style="color:#c8102e">Demande</h3>';
-            $html .= '<p>Conformément aux articles L.1311-2 et L.1331-22 du Code de la santé publique, je sollicite l\'évaluation sanitaire du logement, le cas échéant la saisine du Préfet, l\'orientation médicale de l\'occupant exposé, et la coordination avec le SCHS et Nantes Métropole Habitat.</p>';
+            $html .= '<p>Conformément aux articles L.1311-2 et L.1331-22 du Code de la santé publique, je sollicite, <strong>dans les meilleurs délais</strong>, l\'évaluation sanitaire du logement, le cas échéant la saisine du Préfet, l\'orientation médicale de l\'occupant exposé, et la coordination avec le SCHS et Nantes Métropole Habitat.</p>';
+            $html .= '<p><strong>L\'urgence sanitaire est caractérisée</strong> (occupant vulnérable, santé affectée — certificat médical). Je vous remercie de programmer une intervention au logement le plus rapidement possible.</p>';
             break;
     }
 

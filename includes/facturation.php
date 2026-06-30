@@ -507,14 +507,36 @@ function lfi_nct_app_intervention_form($row) {
         if ($is_edit) {
             $owner = (int) lfi_nct_fact_owner_id();
             $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $owner]);
-            wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $row->id, 'saved' => 1]));
+            $interv_id = (int) $row->id;
         } else {
             /* Estampille du créateur = owner immuable */
             $data['owner_user_id'] = (int) lfi_nct_fact_owner_id();
             $wpdb->insert($t, $data);
-            $new_id = (int) $wpdb->insert_id;
-            wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $new_id, 'created' => 1]));
+            $interv_id = (int) $wpdb->insert_id;
         }
+
+        /* ENCHAÎNEMENT : intervention planifiée + service choisi → email pré-rempli
+           pour ce service, sur le dossier juridique de la locataire (ajouté
+           automatiquement au dossier à l'envoi). */
+        $service = sanitize_key($_POST['service_email'] ?? '');
+        $services_ok = ['schs', 'ars', 'lrar_travaux', 'lrar_relogement', 'reponse_nmh'];
+        if ($data['statut'] === 'planifie' && in_array($service, $services_ok, true)) {
+            $tuid = (int) $data['tenant_user_id'];
+            $dossier = ($tuid && function_exists('lfi_nct_dossier_find_for_tenant'))
+                ? lfi_nct_dossier_find_for_tenant($tuid) : null;
+            if ($dossier) {
+                wp_safe_redirect(lfi_nct_app_url('dossier-send-email', ['id' => (int) $dossier->id, 'letter' => $service, 'from_interv' => $interv_id]));
+                exit;
+            }
+            /* Pas de dossier : on emmène créer le dossier (pré-rempli), puis l'email. */
+            $args = ['next_service' => $service];
+            if ($tuid) $args['tenant_uid'] = $tuid;
+            else { $args['tenant_nom'] = $data['tenant_nom']; $args['tenant_adresse'] = $data['tenant_adresse']; }
+            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-add', $args));
+            exit;
+        }
+
+        wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $interv_id, $is_edit ? 'saved' : 'created' => 1]));
         exit;
     }
 
@@ -772,6 +794,22 @@ function lfi_nct_app_intervention_form($row) {
         echo '<option value="' . esc_attr($k) . '" ' . selected($r->statut, $k, false) . '>' . esc_html($lbl) . '</option>';
     }
     echo '</select></label>';
+
+    /* Enchaînement : prévenir un service par email pré-rempli (si planifié). */
+    echo '<label>📧 Prévenir un service par email <small style="color:#888;font-weight:400">(si l\'action est planifiée)</small><select name="service_email">';
+    $services_email = [
+        ''                => '— aucun, je gère l\'intervention seul —',
+        'schs'            => '🏥 Service d\'Hygiène / SCHS Ville de Nantes (insalubrité)',
+        'ars'             => '🏛 ARS Pays de la Loire (risque sanitaire)',
+        'lrar_travaux'    => '🔧 NMH — mise en demeure travaux',
+        'lrar_relogement' => '🏥 NMH — demande de relogement médical',
+        'reponse_nmh'     => '📨 NMH — réponse argumentée',
+    ];
+    foreach ($services_email as $k => $lbl) {
+        echo '<option value="' . esc_attr($k) . '">' . esc_html($lbl) . '</option>';
+    }
+    echo '</select></label>';
+    echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>💡 Si tu choisis un service <strong>et</strong> que le statut est « Planifié », on t\'emmène directement à un <strong>email pré-rempli</strong> pour ce service (à partir des constatations du dossier), demandant une intervention rapide — et il est <strong>ajouté automatiquement au dossier de la locataire</strong> à l\'envoi. <em>(Nécessite un dossier juridique ouvert pour cette locataire.)</em></small></div>';
 
     echo '<label>Notes privées (ne figure pas sur la facture)<textarea name="notes" id="lfi-notes-interv" rows="2">' . esc_textarea($r->notes) . '</textarea></label>';
     echo '<div class="lfi-voice-zone" data-target="lfi-notes-interv" data-label="Dicter mes notes"></div>';
