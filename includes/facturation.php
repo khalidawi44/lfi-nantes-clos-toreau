@@ -516,24 +516,51 @@ function lfi_nct_app_intervention_form($row) {
         }
 
         /* ENCHAÎNEMENT : intervention planifiée + service choisi → email pré-rempli
-           pour ce service, sur le dossier juridique de la locataire (ajouté
-           automatiquement au dossier à l'envoi). */
+           pour ce service, sur le dossier juridique de la locataire. On TROUVE
+           le dossier (compte, nom ou adresse) ; à défaut on en CRÉE un
+           automatiquement depuis l'intervention — puis on va DIRECTEMENT à
+           l'email (plus de passage par « créer / lier un dossier »). */
         $service = sanitize_key($_POST['service_email'] ?? '');
-        $services_ok = ['schs', 'ars', 'lrar_travaux', 'lrar_relogement', 'reponse_nmh'];
+        $services_ok = ['schs', 'lrar_travaux', 'lrar_relogement', 'reponse_nmh'];
         if ($data['statut'] === 'planifie' && in_array($service, $services_ok, true)) {
+            $td   = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+            $own  = (int) lfi_nct_fact_owner_id();
             $tuid = (int) $data['tenant_user_id'];
-            $dossier = ($tuid && function_exists('lfi_nct_dossier_find_for_tenant'))
-                ? lfi_nct_dossier_find_for_tenant($tuid) : null;
+            $nom  = (string) $data['tenant_nom'];
+            $adr  = (string) $data['tenant_adresse'];
+
+            $dossier = null;
+            if ($tuid) {
+                $dossier = $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE owner_user_id=%d AND tenant_user_id=%d ORDER BY updated_at DESC LIMIT 1", $own, $tuid));
+            }
+            if (!$dossier && ($nom !== '' || $adr !== '')) {
+                $dossier = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM $td WHERE owner_user_id=%d AND ( (%s<>'' AND LOWER(tenant_nom)=LOWER(%s)) OR (%s<>'' AND LOWER(tenant_adresse)=LOWER(%s)) ) ORDER BY updated_at DESC LIMIT 1",
+                    $own, $nom, $nom, $adr, $adr
+                ));
+            }
+            if (!$dossier) {
+                /* Crée un dossier minimal pré-rempli depuis l'intervention. */
+                $wpdb->insert($td, [
+                    'owner_user_id'      => $own,
+                    'tenant_user_id'     => $tuid ?: null,
+                    'tenant_prenom'      => $data['tenant_prenom'],
+                    'tenant_nom'         => $nom,
+                    'tenant_adresse'     => $adr,
+                    'tenant_etage'       => $data['tenant_etage'],
+                    'tenant_appartement' => $data['tenant_appartement'],
+                    'tenant_tel'         => $data['tenant_tel'],
+                    'constatations'      => $data['description'] ?: ($data['type_travaux'] ?? ''),
+                    'statut'             => 'ouvert',
+                    'demandes'           => '[]',
+                ]);
+                $did = (int) $wpdb->insert_id;
+                if ($did) $dossier = (object) ['id' => $did];
+            }
             if ($dossier) {
                 wp_safe_redirect(lfi_nct_app_url('dossier-send-email', ['id' => (int) $dossier->id, 'letter' => $service, 'from_interv' => $interv_id]));
                 exit;
             }
-            /* Pas de dossier : on emmène créer le dossier (pré-rempli), puis l'email. */
-            $args = ['next_service' => $service];
-            if ($tuid) $args['tenant_uid'] = $tuid;
-            else { $args['tenant_nom'] = $data['tenant_nom']; $args['tenant_adresse'] = $data['tenant_adresse']; }
-            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-add', $args));
-            exit;
         }
 
         wp_safe_redirect(lfi_nct_app_url('intervention-edit', ['id' => $interv_id, $is_edit ? 'saved' : 'created' => 1]));
