@@ -653,6 +653,7 @@ function lfi_nct_app_shortcode() {
                     case 'ga-liste':              lfi_nct_app_view_ga_liste();               break;
                     case 'prefecture':            lfi_nct_app_view_prefecture();             break;
                     case 'prefecture-rapport':    lfi_nct_app_view_prefecture_rapport();     break;
+                    case 'prefecture-email':      lfi_nct_app_view_prefecture_email();       break;
                     default:                lfi_nct_app_render_dashboard();
                 }
             }
