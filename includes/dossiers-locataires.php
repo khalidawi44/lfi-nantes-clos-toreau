@@ -538,6 +538,22 @@ function lfi_nct_app_dossier_juridique_form($row) {
         exit;
     }
 
+    /* Supprimer une entrée de la correspondance (email envoyé OU reçu).
+       Utile notamment pour retirer les faux « Envoyé » créés quand Gmail
+       ne s'ouvrait pas et qu'on a cliqué plusieurs fois. */
+    if ($is_edit && !empty($_POST['lfi_dossier_email_del']) && check_admin_referer('lfi_dossier_email_del')) {
+        $sens = (($_POST['del_sens'] ?? '') === 'recu') ? 'recu' : 'envoye';
+        $idx  = (int) ($_POST['del_idx'] ?? -1);
+        $key  = ($sens === 'recu') ? 'email_recu' : 'email_log';
+        $logs = json_decode($row->notes ?? '', true);
+        if (is_array($logs) && isset($logs[$key]) && is_array($logs[$key]) && $idx >= 0 && isset($logs[$key][$idx])) {
+            array_splice($logs[$key], $idx, 1);
+            $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $row->id, 'owner_user_id' => $owner]);
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'email_del_ok' => 1]));
+        exit;
+    }
+
     /* Enregistrer / mettre à jour l'analyse juridique de la réponse NMH */
     if ($is_edit && isset($_POST['lfi_dossier_analyse_nmh']) && check_admin_referer('lfi_dossier_analyse_nmh')) {
         $analyse = sanitize_textarea_field(wp_unslash($_POST['analyse_nmh'] ?? ''));
@@ -653,6 +669,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['email_sent']))     lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
     if (!empty($_GET['gmail_open']))     lfi_nct_app_flash('📨 Email consigné dans le dossier. Termine l\'envoi dans l\'onglet Gmail qui vient de s\'ouvrir.');
     if (!empty($_GET['email_recu_ok']))  lfi_nct_app_flash('📥 Email reçu enregistré dans le dossier.');
+    if (!empty($_GET['email_del_ok']))   lfi_nct_app_flash('🗑 Entrée de correspondance supprimée.');
     if (!empty($_GET['analyse_ok']))     lfi_nct_app_flash('📑 Analyse enregistrée dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
 
@@ -923,10 +940,10 @@ function lfi_nct_app_dossier_juridique_form($row) {
         $logs = json_decode($row->notes ?? '', true);
         $sent = (is_array($logs) && !empty($logs['email_log'])) ? $logs['email_log'] : [];
         $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
-        /* Fusion chronologique */
+        /* Fusion chronologique (on garde l'index source pour pouvoir supprimer) */
         $timeline = [];
-        foreach ($sent as $e) { $e['sens'] = 'envoye'; $timeline[] = $e; }
-        foreach ($recu as $e) { $e['sens'] = 'recu';   $timeline[] = $e; }
+        foreach ($sent as $i => $e) { $e['sens'] = 'envoye'; $e['_idx'] = $i; $timeline[] = $e; }
+        foreach ($recu as $i => $e) { $e['sens'] = 'recu';   $e['_idx'] = $i; $timeline[] = $e; }
         usort($timeline, function ($a, $b) { return strcmp($a['date'] ?? '', $b['date'] ?? ''); });
 
         if (empty($timeline)) {
@@ -944,6 +961,14 @@ function lfi_nct_app_dossier_juridique_form($row) {
                 echo '</div>';
                 if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
                 if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
+                /* Bouton supprimer cette entrée */
+                echo '<form method="post" onsubmit="return confirm(\'Supprimer définitivement cette entrée de la correspondance ?\')" style="margin-top:8px">';
+                wp_nonce_field('lfi_dossier_email_del');
+                echo '<input type="hidden" name="lfi_dossier_email_del" value="1">';
+                echo '<input type="hidden" name="del_sens" value="' . esc_attr($e['sens']) . '">';
+                echo '<input type="hidden" name="del_idx" value="' . (int) $e['_idx'] . '">';
+                echo '<button type="submit" class="btn-ghost" style="color:#c8102e;border-color:#c8102e;padding:4px 10px;font-size:.85em">🗑 Supprimer cette entrée</button>';
+                echo '</form>';
                 echo '</li>';
             }
             echo '</ul>';
@@ -1471,6 +1496,10 @@ function lfi_nct_app_view_dossier_send_email() {
        nouvel onglet, pré-remplie depuis les champs (avec tes éventuelles
        modifications), puis journalise l'email dans le dossier. */
     echo '<input type="hidden" name="lfi_send_gmail_log" value="">';
+    /* Lien caché : on ouvre Gmail via un VRAI clic de lien (target=_blank).
+       Bien plus fiable que window.open sur iOS/Safari, et sans limite de
+       longueur d'URL (les longues lettres SCHS passent sans problème). */
+    echo '<a id="lfiGmailLink" href="#" target="_blank" rel="noopener" style="display:none">Gmail</a>';
     $gmail_signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
     echo '<button type="button" class="btn-primary big" onclick="lfiNctOpenGmail(this.form)" data-gmail-user="' . esc_attr(lfi_nct_ga_gmail()) . '" data-gmail-sig="' . esc_attr($gmail_signature) . '">📨 Ouvrir dans mon Gmail (' . esc_html(lfi_nct_ga_gmail()) . ')</button>';
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Ça ouvre <strong>ton</strong> Gmail (' . esc_html(lfi_nct_ga_gmail()) . ') dans un nouvel onglet, avec le destinataire, l\'objet et le texte déjà remplis — tu n\'as plus qu\'à cliquer « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong> de la locataire.</small></div>';
@@ -1503,11 +1532,16 @@ function lfi_nct_app_view_dossier_send_email() {
             + (cc ? '&cc=' + encodeURIComponent(cc) : '')
             + '&su=' + encodeURIComponent(su)
             + '&body=' + encodeURIComponent(plain);
-        window.open(url, '_blank', 'noopener');
-        /* Journalise l'envoi dans le dossier */
+        /* Ouvre Gmail via le lien caché (clic réel = geste utilisateur,
+           non bloqué, supporte les URL longues). Repli sur window.open. */
+        var opened = false;
+        var a = document.getElementById('lfiGmailLink');
+        if (a) { a.setAttribute('href', url); try { a.click(); opened = true; } catch(e){} }
+        if (!opened) { window.open(url, '_blank'); }
+        /* Journalise l'envoi dans le dossier (navigation de l'onglet courant). */
         var h = form.querySelector('input[name="lfi_send_gmail_log"]');
         if (h) h.value = '1';
-        form.submit();
+        setTimeout(function(){ form.submit(); }, 120);
     }
     </script>
     <?php
