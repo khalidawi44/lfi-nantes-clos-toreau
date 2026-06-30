@@ -116,7 +116,8 @@ function lfi_nct_label($field, $value) {
 function lfi_nct_compute_stats() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
-    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL");
+    $scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $scope);
 
     $stats = [
         'total' => $total,
@@ -146,7 +147,7 @@ function lfi_nct_compute_stats() {
 
     if ($total === 0) return $stats;
 
-    $responses = $wpdb->get_results("SELECT data, contact_recontact FROM $table WHERE deleted_at IS NULL");
+    $responses = $wpdb->get_results("SELECT data, contact_recontact FROM $table WHERE deleted_at IS NULL" . $scope);
     foreach ($responses as $r) {
         $data = json_decode($r->data, true);
         if (!is_array($data)) continue;
@@ -195,7 +196,7 @@ function lfi_nct_compute_stats() {
         $stats['gravite_moyenne'] = round($stats['gravite_sum'] / $stats['gravite_count'], 1);
     }
 
-    $top = $wpdb->get_results("SELECT adresse, COUNT(*) as nb FROM $table WHERE deleted_at IS NULL GROUP BY adresse ORDER BY nb DESC LIMIT 10");
+    $top = $wpdb->get_results("SELECT adresse, COUNT(*) as nb FROM $table WHERE deleted_at IS NULL" . $scope . " GROUP BY adresse ORDER BY nb DESC LIMIT 10");
     $stats['top_immeubles'] = $top ?: [];
 
     return $stats;
@@ -208,13 +209,14 @@ function lfi_nct_get_filtered_responses($filter) {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 
+    $scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
     // Filtres SQL purs (colonnes structurées)
     if ($filter === 'recontact') {
-        return $wpdb->get_results("SELECT * FROM $table WHERE contact_recontact = 1 AND deleted_at IS NULL ORDER BY submitted_at DESC");
+        return $wpdb->get_results("SELECT * FROM $table WHERE contact_recontact = 1 AND deleted_at IS NULL" . $scope . " ORDER BY submitted_at DESC");
     }
 
     // Filtres sur le champ JSON 'data' : on récupère tout puis on filtre en PHP
-    $all = $wpdb->get_results("SELECT * FROM $table WHERE deleted_at IS NULL ORDER BY submitted_at DESC");
+    $all = $wpdb->get_results("SELECT * FROM $table WHERE deleted_at IS NULL" . $scope . " ORDER BY submitted_at DESC");
     $filtered = [];
 
     foreach ($all as $r) {

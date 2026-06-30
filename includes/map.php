@@ -156,10 +156,13 @@ function lfi_nct_map_page() {
         );
     }
 
+    /* Cloisonnement par GA : chaque GA ne voit QUE ses adresses sondées ;
+       le super-admin (vue « tout ») voit la carte en totalité. */
+    $scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
     $rows = $wpdb->get_results(
         "SELECT id, adresse, etage, data, lat, lng, submitted_at
          FROM $table
-         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL
+         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL" . $scope . "
          ORDER BY submitted_at DESC"
     );
 
