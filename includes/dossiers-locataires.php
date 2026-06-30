@@ -1467,9 +1467,19 @@ function lfi_nct_render_gmail_opener($gmail_user, $signature, $log_field, $butto
             + 'subject=' + encodeURIComponent(su)
             + '&body=' + encodeURIComponent(plain);
 
-        /* Journalise en arrière-plan, sans quitter l'écran (iframe cachée). */
+        /* Journalise de façon FIABLE, même quand on bascule vers l'app Gmail
+           (la page Safari se ferme). sendBeacon est conçu pour survivre à la
+           navigation ; repli sur l'iframe cachée si indisponible. */
         if (logf) { var h = form.querySelector('input[name="' + logf + '"]'); if (h) h.value = '1'; }
-        try { form.target = 'lfiLogFrame'; form.submit(); form.target = '_self'; } catch(e){}
+        var logged = false;
+        try {
+            if (navigator.sendBeacon) {
+                var fd = new FormData(form);
+                if (logf) fd.set(logf, '1');
+                logged = navigator.sendBeacon(window.location.href, fd);
+            }
+        } catch(e){}
+        if (!logged) { try { form.target = 'lfiLogFrame'; form.submit(); form.target = '_self'; } catch(e){} }
 
         /* Prépare et affiche les liens de secours. */
         var fb = document.getElementById('lfiGmailFallback');

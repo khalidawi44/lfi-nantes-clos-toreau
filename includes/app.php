@@ -655,6 +655,7 @@ function lfi_nct_app_shortcode() {
                     case 'prefecture-rapport':    lfi_nct_app_view_prefecture_rapport();     break;
                     case 'prefecture-email':      lfi_nct_app_view_prefecture_email();       break;
                     case 'reussites':             lfi_nct_app_view_reussites();              break;
+                    case 'dossier-wizard':        lfi_nct_app_view_dossier_wizard();         break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
                     default:                lfi_nct_app_render_dashboard();
@@ -1466,6 +1467,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['➕', 'Saisir une réponse',     'Porte-à-porte / papier',             lfi_nct_app_url('temoignage-add')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
+            ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
             ['📥', 'Importer un email',      'Colle l\'email → bon dossier auto',    lfi_nct_app_url('email-import')],
