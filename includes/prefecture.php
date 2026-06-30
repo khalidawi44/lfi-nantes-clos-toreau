@@ -50,9 +50,90 @@ function lfi_nct_prefecture_type_labels() {
  * dans la colonne `etage`, que l'on ne lit jamais ici).
  */
 function lfi_nct_prefecture_clean_building($addr) {
-    $a = trim(preg_replace('/\s+/u', ' ', (string) $addr));
-    $a = preg_replace('/[,\s]*(appartements?|appart\.?|apt\.?|porte|étages?|etages?|esc\.?|escalier|b[âa]t\.?|b[âa]timent)\s*:?\s*n?°?\s*[0-9A-Za-z°\/]+/iu', '', $a);
-    return trim($a, " ,;-");
+    $a = (string) $addr;
+    /* Anonymat : on retire tout ce qui pourrait identifier une personne, même
+       si un·e enquêteur·rice l'a saisi par erreur dans le champ adresse.
+       On enchaîne plusieurs filets de sécurité. */
+
+    /* 1) Emails */
+    $a = preg_replace('/[^\s@]+@[^\s@]+\.[^\s@]+/u', ' ', $a);
+    /* 2) Contenu entre parenthèses (souvent un nom / commentaire) */
+    $a = preg_replace('/\([^)]*\)/u', ' ', $a);
+    /* 3) Tout ce qui SUIT un mot « danger » (un nom/numéro suit en général) */
+    $a = preg_replace('/\b(contacts?|t[ée]l[ée]?phones?|t[ée]ls?|portables?|mobiles?|gsm|mails?|e-?mails?|interphones?|sonnettes?|chez|locataires?|nom\s*:|occupants?)\b.*$/iu', ' ', $a);
+    /* 4) Civilité + nom propre (Mme Traoré, M. Ba, Monsieur Dupont…) */
+    $a = preg_replace('/\b(mr|mme|mlle|mle|m|monsieur|madame|mademoiselle)\b\.?\s*\p{Lu}[\p{L}\'\-]*/u', ' ', $a);
+    /* 5) Numéros de téléphone : séquences d'au moins 9 chiffres */
+    $a = preg_replace_callback('/[0-9][0-9 .\-]{7,}[0-9]/u', function ($m) {
+        return preg_match_all('/[0-9]/', $m[0]) >= 9 ? ' ' : $m[0];
+    }, $a);
+    /* 6) Appartement / porte / étage / bâtiment (le n° de porte vit dans la
+          colonne `etage`, jamais lue ici) */
+    $a = preg_replace('/[,\s]*(appartements?|apparts?\.?|appts?\.?|apt\.?|logements?|logt\.?|porte|étages?|etages?|esc\.?|escalier|b[âa]t\.?|b[âa]timent)\s*:?\s*n?°?\s*[0-9A-Za-z°\/]+/iu', '', $a);
+    /* 7) Filet final : si un code postal est présent, on coupe tout ce qui
+          suit la ville (au plus 3 mots), pour éliminer un nom résiduel. */
+    if (preg_match('/\b\d{5}\b/u', $a, $mm, PREG_OFFSET_CAPTURE)) {
+        $pos   = $mm[0][1];
+        $after = substr($a, $pos);
+        if (preg_match('/^\d{5}[ ,]*(?:\p{L}[\p{L}\'\-]*[ ,]*){0,3}/u', $after, $cm)) {
+            $a = substr($a, 0, $pos) . $cm[0];
+        }
+    }
+    $a = preg_replace('/\s+/u', ' ', $a);
+    return trim($a, " ,;-.");
+}
+
+/**
+ * Clé canonique d'un IMMEUBLE, pour regrouper toutes les orthographes d'une
+ * même adresse (« 14 rue de Saint-Jean-de-Luz », « 14 rue St Jean de Luz »,
+ * « 14 rue Saint-Jean-de-luz »… → une seule case). On normalise : minuscules,
+ * accents, abréviations (St→saint), et on retire les mots de liaison (de, du,
+ * la…) et le code postal / la ville. Le numéro de rue reste distinctif
+ * (14 ≠ 12 ≠ 2 : ce sont des immeubles différents).
+ */
+function lfi_nct_prefecture_addr_key($addr) {
+    $a = lfi_nct_prefecture_clean_building($addr);
+    $a = function_exists('mb_strtolower') ? mb_strtolower($a, 'UTF-8') : strtolower($a);
+    $a = strtr($a, [
+        'à'=>'a','á'=>'a','â'=>'a','ä'=>'a','é'=>'e','è'=>'e','ê'=>'e','ë'=>'e',
+        'í'=>'i','î'=>'i','ï'=>'i','ó'=>'o','ô'=>'o','ö'=>'o','ú'=>'u','ù'=>'u',
+        'û'=>'u','ü'=>'u','ç'=>'c','ñ'=>'n',
+    ]);
+    $a = preg_replace('/[^a-z0-9]+/', ' ', $a);
+    $abbr = [
+        'st'=>'saint','ste'=>'sainte','av'=>'avenue','ave'=>'avenue','bd'=>'boulevard',
+        'bld'=>'boulevard','blvd'=>'boulevard','pl'=>'place','imp'=>'impasse','sq'=>'square',
+        'rte'=>'route','che'=>'chemin','crs'=>'cours','ste'=>'sainte',
+    ];
+    $filler = ['de'=>1,'du'=>1,'des'=>1,'d'=>1,'la'=>1,'le'=>1,'les'=>1,'l'=>1,'et'=>1,'au'=>1,'aux'=>1,'a'=>1,'nantes'=>1];
+    $out = [];
+    foreach (explode(' ', trim($a)) as $t) {
+        if ($t === '') continue;
+        if (preg_match('/^\d{5}$/', $t)) continue;     // code postal
+        if (isset($abbr[$t])) $t = $abbr[$t];
+        if (isset($filler[$t])) continue;              // mots de liaison
+        $out[] = $t;
+    }
+    $key = implode(' ', $out);
+    return $key !== '' ? $key : '__adresse_non_precisee__';
+}
+
+/**
+ * Choisit, parmi plusieurs orthographes d'une même adresse, celle à afficher :
+ * la mieux formée (le plus de tirets, puis de majuscules, puis la plus longue).
+ */
+function lfi_nct_prefecture_pick_display($candidates) {
+    $best = '';
+    $best_score = [-1, -1, -1];
+    foreach ($candidates as $c) {
+        $score = [substr_count($c, '-'), preg_match_all('/[A-ZÀ-Ý]/u', $c), function_exists('mb_strlen') ? mb_strlen($c) : strlen($c)];
+        if ($score[0] > $best_score[0]
+            || ($score[0] === $best_score[0] && $score[1] > $best_score[1])
+            || ($score[0] === $best_score[0] && $score[1] === $best_score[1] && $score[2] > $best_score[2])) {
+            $best = $c; $best_score = $score;
+        }
+    }
+    return $best;
 }
 
 /**
@@ -73,11 +154,12 @@ function lfi_nct_prefecture_aggregate_by_building() {
     foreach ((array) $rows as $r) {
         $addr = lfi_nct_prefecture_clean_building($r->adresse);
         if ($addr === '') $addr = 'Adresse non précisée';
-        $key = function_exists('mb_strtolower') ? mb_strtolower($addr) : strtolower($addr);
+        $key = lfi_nct_prefecture_addr_key($r->adresse);
 
         if (!isset($buildings[$key])) {
             $buildings[$key] = [
                 'adresse'          => $addr,
+                '_disp'            => [],   // toutes les orthographes vues (choix d'affichage)
                 'foyers'           => 0,
                 'foyers_problemes' => 0,
                 'gravite_sum'      => 0,
@@ -86,6 +168,7 @@ function lfi_nct_prefecture_aggregate_by_building() {
                 'types'            => array_fill_keys(array_keys($labels), 0),
             ];
         }
+        $buildings[$key]['_disp'][$addr] = true;
 
         $buildings[$key]['foyers']++;
         $foyers_total++;
@@ -109,6 +192,9 @@ function lfi_nct_prefecture_aggregate_by_building() {
 
     $out = [];
     foreach ($buildings as $b) {
+        $cands = array_keys($b['_disp']);
+        if (count($cands) > 1) $b['adresse'] = lfi_nct_prefecture_pick_display($cands);
+        unset($b['_disp']);
         $b['gravite_moyenne'] = $b['gravite_n'] ? round($b['gravite_sum'] / $b['gravite_n'], 1) : 0;
         $out[] = $b;
     }
