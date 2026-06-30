@@ -177,6 +177,9 @@ function lfi_nct_association() {
         'objet'     => 'défense des intérêts des habitants des quartiers populaires dans les domaines social, économique, environnemental et culturel — notamment le logement, le cadre de vie, la sécurité, les services publics, l\'accès aux droits et la protection des droits collectifs (association de locataires)',
         'cotisation'=> '5',
         'secretaire'    => 'Gwenaëlle Gourdien',   /* nom du/de la secrétaire */
+        'president_adresse'  => '14 rue de Saint-Jean-de-Luz, 44200 Nantes',
+        'secretaire_adresse' => '14 rue de Saint-Jean-de-Luz, 44230',
+        'age_date'      => '',   /* date de l'AGE (texte) — vide = date du jour */
         'sig_president' => 0,    /* attachment ID signature président */
         'sig_secretaire'=> 0,    /* attachment ID signature secrétaire */
     ];
@@ -1328,7 +1331,7 @@ function lfi_nct_app_view_facturation_params() {
         /* Association loi 1901 — globale, admin only */
         if (current_user_can('manage_options') && isset($_POST['asso_nom'])) {
             $asso = lfi_nct_association();
-            foreach (['nom', 'rna', 'president', 'siege', 'cp_ville', 'email', 'tel', 'cotisation', 'secretaire'] as $k) {
+            foreach (['nom', 'rna', 'president', 'siege', 'cp_ville', 'email', 'tel', 'cotisation', 'secretaire', 'president_adresse', 'secretaire_adresse', 'age_date'] as $k) {
                 $asso[$k] = sanitize_text_field(wp_unslash($_POST['asso_' . $k] ?? ''));
             }
             $asso['objet'] = sanitize_textarea_field(wp_unslash($_POST['asso_objet'] ?? ''));
@@ -1425,7 +1428,10 @@ function lfi_nct_app_view_facturation_params() {
         echo '<h4 style="margin:14px 0 4px;color:#7a0000">✍️ Signatures manuscrites (pour les statuts/PV)</h4>';
         echo '<div class="lfi-app-help"><small>La préfecture exige des signatures <strong>manuscrites</strong>. Signe sur papier blanc, prends en photo (ou scanne), et téléverse l\'image ici. Elle s\'insérera automatiquement dans le PV et les statuts.</small></div>';
 
-        echo '<label>Nom du/de la secrétaire<input type="text" name="asso_secretaire" value="' . esc_attr($asso['secretaire'] ?? '') . '" placeholder="ex: Gwenaël Gourdien"></label>';
+        echo '<label>Nom du/de la secrétaire<input type="text" name="asso_secretaire" value="' . esc_attr($asso['secretaire'] ?? '') . '" placeholder="ex: Gwenaëlle Gourdien"></label>';
+        echo '<label>Adresse du président (pour les statuts)<input type="text" name="asso_president_adresse" value="' . esc_attr($asso['president_adresse'] ?? '') . '" placeholder="14 rue de Saint-Jean-de-Luz, 44200 Nantes"></label>';
+        echo '<label>Adresse du/de la secrétaire (pour les statuts)<input type="text" name="asso_secretaire_adresse" value="' . esc_attr($asso['secretaire_adresse'] ?? '') . '" placeholder="adresse personnelle de la secrétaire"></label>';
+        echo '<label>Date de l\'AGE (laisser vide = date du jour)<input type="text" name="asso_age_date" value="' . esc_attr($asso['age_date'] ?? '') . '" placeholder="ex: 30 juin 2026"></label>';
 
         echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">';
         /* Président */

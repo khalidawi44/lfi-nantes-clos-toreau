@@ -2185,6 +2185,10 @@ function lfi_nct_app_view_asso_statuts() {
     $siege = trim(($asso['siege'] ?? '') . ' ' . ($asso['cp_ville'] ?? ''));
     $pres = $asso['president'] ?: '[Nom du président]';
     $secr = $asso['secretaire'] ?? '';
+    $pres_adr = trim($asso['president_adresse'] ?? '') ?: ($siege ?: '14 rue de Saint-Jean-de-Luz, 44200 Nantes');
+    $secr_adr = trim($asso['secretaire_adresse'] ?? '');
+    /* Date de l'AGE / de signature : celle saisie, sinon la date du jour. */
+    $age_date_disp = trim($asso['age_date'] ?? '') ?: wp_date('j F Y');
     /* IMPORTANT : version REDIMENSIONNÉE (medium) des signatures, jamais la
        pleine résolution — une photo de signature en plein format sature la
        mémoire de Safari iOS et fait disparaître la page. */
@@ -2252,7 +2256,7 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<p>En ma qualité de président de l\'association <strong>' . esc_html($nom) . '</strong>, j\'ai l\'honneur de vous convoquer à l\'<strong>Assemblée Générale Extraordinaire</strong> qui se tiendra :</p>';
 
     echo '<table class="detail">';
-    echo '<tr><td><strong>Date</strong></td><td>____ / ____ / 20____ à ____ h ____</td></tr>';
+    echo '<tr><td><strong>Date</strong></td><td><strong>' . esc_html($age_date_disp) . '</strong> à ____ h ____</td></tr>';
     echo '<tr><td><strong>Lieu</strong></td><td>' . esc_html($siege ?: '__________________________') . '</td></tr>';
     echo '</table>';
 
@@ -2289,7 +2293,7 @@ function lfi_nct_app_view_asso_statuts() {
     if ($siege) echo '<br>Siège : ' . esc_html($siege);
     echo '</p>';
 
-    echo '<p>Le ____ / ____ / 20____, à ____ h ____, les membres de l\'association <strong>' . esc_html($nom) . '</strong> se sont réunis en Assemblée Générale Extraordinaire au siège de l\'association, sur convocation du président, à l\'effet de délibérer sur l\'ordre du jour suivant :</p>';
+    echo '<p>Le <strong>' . esc_html($age_date_disp) . '</strong>, à ____ h ____, les membres de l\'association <strong>' . esc_html($nom) . '</strong> se sont réunis en Assemblée Générale Extraordinaire au siège de l\'association, sur convocation du président, à l\'effet de délibérer sur l\'ordre du jour suivant :</p>';
     echo '<ul><li>Modification de l\'objet social ;</li><li>Ajout d\'un article relatif aux moyens d\'action et à la capacité d\'ester en justice ;</li><li>Mise à jour des statuts ;</li><li>Pouvoirs pour les formalités de déclaration.</li></ul>';
     echo '<p>L\'assemblée, après en avoir délibéré, adopte les résolutions suivantes :</p>';
 
@@ -2327,7 +2331,7 @@ function lfi_nct_app_view_asso_statuts() {
     echo $sig_block('Le Secrétaire', $secr, $sig_secr_url);
     echo '</div>';
 
-    echo '<div class="pj"><strong>À joindre à la déclaration en préfecture :</strong> le présent procès-verbal daté et signé + un exemplaire des statuts mis à jour, daté et signé, portant la mention « Statuts modifiés par l\'AGE du ____ ».</div>';
+    echo '<div class="pj"><strong>À joindre à la déclaration en préfecture :</strong> le présent procès-verbal daté et signé + un exemplaire des statuts mis à jour, daté et signé, portant la mention « Statuts modifiés par l\'AGE du ' . esc_html($age_date_disp) . ' ».</div>';
 
     echo '</div>';
 
@@ -2338,7 +2342,7 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<div class="lfi-rec-doc">';
 
     echo '<h1>Statuts de l\'association « ' . esc_html($nom) . ' »</h1>';
-    echo '<p style="text-align:center;font-style:italic">Statuts mis à jour par l\'Assemblée Générale Extraordinaire du ____ / ____ / 20____</p>';
+    echo '<p style="text-align:center;font-style:italic">Statuts mis à jour par l\'Assemblée Générale Extraordinaire du ' . esc_html($age_date_disp) . '</p>';
 
     echo '<h2>Article 1 — Dénomination</h2>';
     echo '<p>Il est fondé, entre les adhérent·es aux présents statuts, une association régie par la loi du 1<sup>er</sup> juillet 1901 et le décret du 16 août 1901, ayant pour titre : <strong>' . esc_html($nom) . '</strong>.</p>';
@@ -2387,8 +2391,8 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<h2>Article 10 — Bureau</h2>';
     echo '<p>L\'association est dirigée par un bureau composé au minimum de 2 personnes. Les membres du bureau sont élus à main levée (ou à bulletin secret si demandé) pour une durée illimitée. Le bureau actuel est composé de :</p>';
     echo '<ul>';
-    echo '<li><strong>Président :</strong> ' . esc_html($pres) . ', domicilié au 14 rue de Saint-Jean-de-Luz, 44200 Nantes ;</li>';
-    echo '<li><strong>Secrétaire :</strong> ' . esc_html($secr ?: 'Gwenaëlle Gourdien') . ', domiciliée à la même adresse.</li>';
+    echo '<li><strong>Président :</strong> ' . esc_html($pres) . ', domicilié au ' . esc_html($pres_adr) . ' ;</li>';
+    echo '<li><strong>Secrétaire :</strong> ' . esc_html($secr ?: 'Gwenaëlle Gourdien') . ', domiciliée au ' . esc_html($secr_adr ?: $pres_adr) . '.</li>';
     echo '</ul>';
     echo '<p>Le bureau peut être élargi à d\'autres membres sur décision de l\'Assemblée Générale. Les fonctions des membres du bureau sont bénévoles.</p>';
 
@@ -2405,7 +2409,7 @@ function lfi_nct_app_view_asso_statuts() {
     echo '<h2>Article 13 — Dissolution</h2>';
     echo '<p>En cas de dissolution, l\'Assemblée Générale désigne un ou plusieurs liquidateurs et attribue l\'actif à une structure poursuivant un but analogue, conformément à la loi.</p>';
 
-    echo '<p style="margin-top:30px">Fait à Nantes, le ____ / ____ / 20____</p>';
+    echo '<p style="margin-top:30px">Fait à Nantes, le <strong>' . esc_html($age_date_disp) . '</strong></p>';
     echo '<div style="margin-top:10px;display:flex;gap:40px;justify-content:space-between">';
     echo $sig_block('Le Président', $pres, $sig_pres_url);
     echo $sig_block('Le Secrétaire', $secr, $sig_secr_url);
