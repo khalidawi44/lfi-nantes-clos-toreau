@@ -570,11 +570,24 @@ function lfi_nct_app_shortcode() {
             lfi_nct_app_role_dispatch($handled);
         }
         if (!$handled) {
-            /* Admin path */
-            if (!current_user_can('manage_options')) {
+            /* Routeur « admin » : ouvert au super-admin ET aux admins de GA
+               (binôme + promus). Les données sont cloisonnées par GA dans
+               chaque vue. Certaines routes restent réservées au super-admin. */
+            $can_admin = function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
+            if (!$can_admin) {
                 echo '<div class="lfi-app"><div class="lfi-app-error">Console réservée. <a href="' . esc_url(wp_logout_url(home_url('/app/'))) . '">Se déconnecter</a>.</div></div>';
             } else {
                 $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+                /* Routes RÉSERVÉES au super-admin (réseau des GA, système). Un
+                   admin de GA qui les vise est renvoyé vers son tableau de bord. */
+                $super_only = [
+                    'groupes', 'reseau-ga', 'reseau-carte', 'reseau-ga-pdf', 'voir-ga',
+                    'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
+                ];
+                if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
+                    wp_safe_redirect(lfi_nct_app_url());
+                    exit;
+                }
                 switch ($vue) {
                     case 'reunion':         lfi_nct_app_view_reunion();         break;
                     case 'membres':         lfi_nct_app_view_membres();         break;
@@ -842,7 +855,8 @@ function lfi_nct_app_render_login() {
 }
 
 function lfi_nct_app_render_dashboard() {
-    if (!current_user_can('manage_options')) {
+    $can_admin = function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
+    if (!$can_admin) {
         echo '<div class="lfi-app"><div class="lfi-app-error">Cette console est réservée aux administrateurs du GA. <a href="' . esc_url(wp_logout_url(home_url('/' . LFI_NCT_APP_SLUG . '/'))) . '">Se déconnecter</a>.</div></div>';
         return;
     }
@@ -850,6 +864,23 @@ function lfi_nct_app_render_dashboard() {
     $user = wp_get_current_user();
     $stats = lfi_nct_app_quick_stats();
     $sections = lfi_nct_admin_get_tiles_sections($stats);
+
+    /* « Vrai » super-admin sur SON espace (pas en train de regarder un GA) :
+       lui seul voit l'espace réseau et les outils système. Pour un admin de GA
+       — et pour le super-admin quand il regarde un autre GA — on retire ces
+       sections (création de GA, bascule, système avancé). */
+    $is_super_home = current_user_can('manage_options')
+        && (!function_exists('lfi_nct_scope_ga_slug') || lfi_nct_scope_ga_slug() === '');
+    if (!$is_super_home) {
+        unset($sections['🌐 ESPACE AUTRES GROUPES D\'ACTION']);
+        /* Section système réduite aux outils utiles à un GA. */
+        $sections['⚙️ SYSTÈME'] = [
+            ['📖', 'Guide d\'utilisation', 'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
+            ['📈', 'Statistiques',        'Les compteurs de mon GA',             lfi_nct_app_url('stats')],
+            ['🔄', 'Synchroniser',        'Forcer la maj sur mes appareils',     admin_url('admin-post.php?action=lfi_nct_purge_all')],
+            ['🚪', 'Se déconnecter',      '',                                    wp_logout_url(home_url('/'))],
+        ];
+    }
     ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
@@ -904,14 +935,15 @@ function lfi_nct_app_quick_stats() {
     global $wpdb;
     $resp_clause = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
     $surveys = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses WHERE deleted_at IS NULL" . $resp_clause);
-    /* Inscrits réunion / adhérents / événements : propres au GA d'origine ;
-       0 pour les autres GA (à eux de créer les leurs). */
+    /* Adhérents : cloisonnés par GA (chaque GA compte LES SIENS). */
+    $mem_clause = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
+    $membres = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres WHERE 1=1" . $mem_clause);
+    /* Réunion du 26 juin = propre à Clos Toreau. Événements = annonces globales. */
     $reunion = $is_home ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_reunion_rsvp") : 0;
-    $membres = $is_home ? (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_membres") : 0;
-    $events  = $is_home ? (int) $wpdb->get_var($wpdb->prepare(
+    $events  = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN (%s, %s)",
         'ag_evenement', 'lfi_evenement'
-    )) : 0;
+    ));
     $stats = [
         'reunion' => max(0, $reunion),
         'surveys' => max(0, $surveys),
@@ -2349,11 +2381,12 @@ function lfi_nct_app_view_enquetes_sms() {
         exit;
     }
 
+    $enq_scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
     $contacts = $wpdb->get_results(
         "SELECT id, contact_prenom, contact_nom, contact_tel, data
          FROM $rep
          WHERE deleted_at IS NULL AND contact_tel <> '' AND contact_tel IS NOT NULL
-               AND contact_recontact = 1
+               AND contact_recontact = 1" . $enq_scope . "
          ORDER BY submitted_at DESC"
     ) ?: [];
     $n = count($contacts);
@@ -2486,12 +2519,13 @@ function lfi_nct_app_view_enquetes_email() {
         $personalize   = !empty($_POST['personalize']);
         $signature_key = sanitize_key($_POST['signature'] ?? 'collectif');
         if ($sujet && $body) {
+            $enq_scope_s = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
             $recipients = $wpdb->get_results(
                 "SELECT contact_prenom, contact_email, data
                  FROM $rep
                  WHERE deleted_at IS NULL
                        AND contact_email <> '' AND contact_email IS NOT NULL
-                       AND contact_recontact = 1"
+                       AND contact_recontact = 1" . $enq_scope_s
             ) ?: [];
 
             $event_post = null;
@@ -2552,7 +2586,7 @@ function lfi_nct_app_view_enquetes_email() {
         "SELECT COUNT(*) FROM $rep
          WHERE deleted_at IS NULL
                AND contact_email <> '' AND contact_email IS NOT NULL
-               AND contact_recontact = 1"
+               AND contact_recontact = 1" . (function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '')
     );
 
     /* Mode de pré-remplissage */

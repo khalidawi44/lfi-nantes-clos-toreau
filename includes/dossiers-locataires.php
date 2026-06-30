@@ -2203,9 +2203,9 @@ function lfi_nct_app_view_association() {
  *  À déposer en préfecture. Imprimable / PDF.                       *
  * ============================================================== */
 function lfi_nct_app_view_asso_statuts() {
-    if (!current_user_can('manage_options')) {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
         lfi_nct_app_screen_open('📜 Statuts');
-        echo '<div class="lfi-app-empty">Cette page est réservée à l\'administrateur. Si tu es en mode aperçu, reviens en mode admin. <a href="' . esc_url(lfi_nct_app_url('')) . '">← Accueil</a></div>';
+        echo '<div class="lfi-app-empty">Cette page est réservée aux administrateurs du groupe. Si tu es en mode aperçu, reviens en mode admin. <a href="' . esc_url(lfi_nct_app_url('')) . '">← Accueil</a></div>';
         lfi_nct_app_screen_close(false);
         return;
     }
