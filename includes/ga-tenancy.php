@@ -122,14 +122,28 @@ function lfi_nct_responses_scope_clause($col = 'militant_user_id') {
     return ' AND ' . $col . ' IN (' . implode(',', array_map('intval', $ids)) . ')';
 }
 
-/** Ajoute le filtre GA à un get_users (vide = tous, pour le super-admin). */
+/**
+ * Ajoute le filtre GA à un get_users.
+ *  - Sur l'espace d'un autre GA : uniquement ses membres (meta = slug).
+ *  - Sur l'espace home (Clos Toreau) : on EXCLUT les membres rattachés à un
+ *    autre GA (sinon le super-admin verrait, dans SON espace, les membres
+ *    qu'il a créés pour les autres GA). On garde ceux sans rattachement,
+ *    vides, ou explicitement « clos-toreau ».
+ */
 function lfi_nct_users_ga_query($args = []) {
     $slug = lfi_nct_scope_ga_slug();
+    $mq   = (isset($args['meta_query']) && is_array($args['meta_query'])) ? $args['meta_query'] : [];
     if ($slug !== '') {
-        $mq = $args['meta_query'] ?? [];
         $mq[] = ['key' => 'lfi_nct_ga', 'value' => $slug];
-        $args['meta_query'] = $mq;
+    } else {
+        $mq[] = [
+            'relation' => 'OR',
+            ['key' => 'lfi_nct_ga', 'compare' => 'NOT EXISTS'],
+            ['key' => 'lfi_nct_ga', 'value' => '',            'compare' => '='],
+            ['key' => 'lfi_nct_ga', 'value' => 'clos-toreau', 'compare' => '='],
+        ];
     }
+    $args['meta_query'] = $mq;
     return $args;
 }
 
@@ -138,10 +152,15 @@ function lfi_nct_creation_ga() {
     return lfi_nct_scope_ga_slug();
 }
 
-/** Clause SQL pour cloisonner la table des adhérents par GA (colonne `ga`). */
+/**
+ * Clause SQL pour cloisonner la table des adhérents par GA (colonne `ga`).
+ *  - Autre GA : uniquement ses adhérents.
+ *  - Home (Clos Toreau) : on exclut les adhérents rattachés à un autre GA
+ *    (ga = '' = adhérents historiques, ou ga = 'clos-toreau').
+ */
 function lfi_nct_membres_ga_clause($col = 'ga') {
     $slug = lfi_nct_scope_ga_slug();
-    if ($slug === '') return '';
+    if ($slug === '') return " AND ($col = '' OR $col = 'clos-toreau')";
     return " AND $col = '" . esc_sql($slug) . "'";
 }
 
@@ -152,7 +171,11 @@ function lfi_nct_app_view_voir_ga() {
     if (!lfi_nct_super_admin()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     $ga = isset($_GET['ga']) ? sanitize_title(wp_unslash($_GET['ga'])) : '';
     update_user_meta(get_current_user_id(), 'lfi_nct_view_ga', $ga);
-    wp_safe_redirect(lfi_nct_app_url());
+    /* Destination optionnelle après bascule (ex. aller direct aux comptes du GA). */
+    $then  = isset($_GET['then']) ? sanitize_key(wp_unslash($_GET['then'])) : '';
+    $allow = ['comptes-ga', 'membres', 'carte', 'stats-enquete', 'reseau-ga', 'enquetes'];
+    $dest  = in_array($then, $allow, true) ? lfi_nct_app_url($then) : lfi_nct_app_url();
+    wp_safe_redirect($dest);
     exit;
 }
 

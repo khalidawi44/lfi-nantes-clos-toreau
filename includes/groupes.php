@@ -22,6 +22,16 @@ function lfi_nct_groupes_archived() {
     return is_array($a) ? $a : [];
 }
 
+/** Nom affichable d'un GA à partir de son slug ('' / clos-toreau = espace home). */
+function lfi_nct_ga_nom($slug) {
+    $slug = (string) $slug;
+    if ($slug === '' || $slug === 'clos-toreau') return 'LFI Nantes Sud Clos Toreau';
+    foreach (lfi_nct_groupes(true) as $g) {
+        if ($g['slug'] === $slug) return $g['nom'];
+    }
+    return 'LFI Nantes Sud Clos Toreau';
+}
+
 /**
  * Liste des GA déclarés : ceux du dépôt (content/groupes.php) PLUS ceux créés
  * depuis l'application (option lfi_nct_ga_custom). Les slugs restent uniques :
@@ -516,6 +526,7 @@ function lfi_nct_app_view_reseau_ga() {
         echo '</div>';
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
         echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('voir-ga', ['ga' => $r['slug']])) . '">👁 Entrer dans cet espace</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('voir-ga', ['ga' => $r['slug'], 'then' => 'comptes-ga'])) . '">🪪 Comptes &amp; membres</a>';
         echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('groupes')) . '">⚙️ Configurer</a>';
         echo '</div>';
         echo '</li>';
