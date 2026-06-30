@@ -823,7 +823,7 @@ function lfi_nct_app_render_login() {
         <form class="lfi-app-login" action="<?php echo esc_url(wp_login_url($redirect)); ?>" method="post">
             <label>
                 <span>Identifiant ou e-mail</span>
-                <input type="text" name="log" autocomplete="username" required>
+                <input type="text" name="log" id="lfi-login-id" autocomplete="username" required>
             </label>
             <label>
                 <span>Mot de passe</span>
@@ -851,6 +851,24 @@ function lfi_nct_app_render_login() {
             <div class="android">Android : Chrome → menu ⋮ → <strong>Installer l'application</strong></div>
         </div>
     </div>
+    <script>
+    /* Mémorise l'identifiant/email de connexion dans l'app : pré-rempli au
+       prochain accès pour ne pas avoir à le retaper. */
+    (function () {
+        try {
+            var f = document.querySelector('.lfi-app-login');
+            if (!f) return;
+            var inp = document.getElementById('lfi-login-id');
+            if (inp && !inp.value) {
+                var saved = localStorage.getItem('lfi_login_id');
+                if (saved) inp.value = saved;
+            }
+            f.addEventListener('submit', function () {
+                try { if (inp && inp.value) localStorage.setItem('lfi_login_id', inp.value.trim()); } catch (e) {}
+            });
+        } catch (e) {}
+    })();
+    </script>
     <?php
 }
 

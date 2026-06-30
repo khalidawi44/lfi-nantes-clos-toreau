@@ -1722,14 +1722,17 @@ function lfi_nct_app_view_mon_profil() {
     echo '<div class="lfi-app-help"><small>L\'identifiant de connexion ne peut pas être modifié. Pour le changer, contactez le GA.</small></div>';
     echo '</div>';
 
-    /* Form changer email */
-    echo '<details class="lfi-app-collapse" style="margin-top:14px"><summary>✉️ Changer mon adresse email</summary>';
+    /* Form changer email — pré-rempli avec l'adresse actuelle (pas besoin de
+       tout retaper, on modifie juste). */
+    echo '<details class="lfi-app-collapse" style="margin-top:14px" open><summary>✉️ Changer mon adresse email</summary>';
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_change_email');
     echo '<input type="hidden" name="lfi_app_change_email" value="1">';
-    echo '<label>Nouvelle adresse email<input type="email" name="new_email" required></label>';
+    echo '<label>Mon adresse email<input type="email" name="new_email" value="' . esc_attr($user->user_email) . '" autocomplete="email" required></label>';
     echo '<button type="submit" class="btn-primary">✓ Enregistrer</button>';
-    echo '</form></details>';
+    echo '</form>';
+    echo '<div class="lfi-app-help"><small>Votre adresse est enregistrée dans l\'app : vous n\'aurez plus à la retaper pour vous connecter.</small></div>';
+    echo '</details>';
 
     /* Form changer mot de passe */
     echo '<details class="lfi-app-collapse" open><summary>🔑 Changer mon mot de passe</summary>';
@@ -1747,6 +1750,14 @@ function lfi_nct_app_view_mon_profil() {
     echo '🔓 <strong>Mot de passe oublié ?</strong><br>';
     echo 'Si vous perdez votre mot de passe, vous pouvez en demander un nouveau en cliquant sur « Mot de passe oublié » depuis l\'écran de connexion. Un email de réinitialisation vous sera envoyé automatiquement. Aucune validation manuelle n\'est nécessaire.';
     echo '</div>';
+
+    /* Garde l'identifiant de connexion mémorisé synchro avec l'email : si la
+       personne se connecte avec son email et le change ici, l'app retiendra le
+       nouveau pour le pré-remplir au prochain accès (rien à retaper). */
+    $cur_email = (string) $user->user_email;
+    if ($cur_email !== '') {
+        echo '<script>(function(){try{var cur=' . wp_json_encode($cur_email) . ';var s=localStorage.getItem("lfi_login_id");if(s&&s.indexOf("@")>-1&&cur)localStorage.setItem("lfi_login_id",cur);}catch(e){}})();</script>';
+    }
 
     lfi_nct_app_screen_close(false);
 }
