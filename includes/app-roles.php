@@ -1482,14 +1482,14 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
     echo '<strong>✅ ' . esc_html($screen_label) . '</strong> — groupe : <strong>' . esc_html($ga_label) . '</strong><br>';
     echo '<table style="margin:10px 0;border-collapse:collapse;width:100%">';
     echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🌐 URL</small></td><td style="padding:6px 8px"><code>' . esc_html($site_app) . '</code></td></tr>';
-    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.1em;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code></td></tr>';
-    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🔑 Mot de passe</small></td><td style="padding:6px 8px"><code style="font-size:1.25em;font-weight:700;background:#fff8e6;padding:4px 10px;border-radius:4px;border:1px solid #e0c200;letter-spacing:.08em">' . esc_html($pwd) . '</code></td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.1em;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code> ' . lfi_nct_copy_button($login, '📋') . '</td></tr>';
+    echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🔑 Mot de passe</small></td><td style="padding:6px 8px"><code style="font-size:1.25em;font-weight:700;background:#fff8e6;padding:4px 10px;border-radius:4px;border:1px solid #e0c200;letter-spacing:.08em">' . esc_html($pwd) . '</code> ' . lfi_nct_copy_button($pwd, '📋') . '</td></tr>';
     echo '</table>';
     echo '<div class="row-actions">';
     if ($sms_url) echo '<a class="btn-primary" href="' . esc_url($sms_url) . '">📱 Envoyer par SMS</a>';
     echo lfi_nct_copy_button($sms_body, '📋 Copier le message');
     echo '</div>';
-    echo '<div style="margin-top:8px"><small>⚠️ Ce mot de passe ne sera plus affiché. Pour le retrouver plus tard, utilise « 🔑 Réinitialiser &amp; renvoyer » sur la fiche du membre.</small></div>';
+    echo '<div style="margin-top:8px"><small>⚠️ Ce mot de passe ne sera plus affiché. <strong>Conseil : faites « copier » l\'identifiant et le mot de passe (icône 📋) et collez-les</strong> — pas besoin de les retaper (ça évite les fautes et les corrections automatiques du clavier). Pour le retrouver plus tard, utilisez « 🔑 Réinitialiser &amp; renvoyer » sur la fiche du membre.</small></div>';
     echo '</div>';
 }
 

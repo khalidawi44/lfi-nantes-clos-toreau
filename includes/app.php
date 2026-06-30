@@ -823,7 +823,8 @@ function lfi_nct_app_render_login() {
         <form class="lfi-app-login" action="<?php echo esc_url(wp_login_url($redirect)); ?>" method="post">
             <label>
                 <span>Identifiant ou e-mail</span>
-                <input type="text" name="log" id="lfi-login-id" autocomplete="username" required>
+                <input type="text" name="log" id="lfi-login-id" autocomplete="username"
+                       autocapitalize="none" autocorrect="off" spellcheck="false" required>
             </label>
             <label>
                 <span>Mot de passe</span>
