@@ -656,6 +656,8 @@ function lfi_nct_app_shortcode() {
                     case 'prefecture-email':      lfi_nct_app_view_prefecture_email();       break;
                     case 'reussites':             lfi_nct_app_view_reussites();              break;
                     case 'dossier-wizard':        lfi_nct_app_view_dossier_wizard();         break;
+                    case 'modules-params':        lfi_nct_app_view_modules_params();         break;
+                    case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
                     case 'reussite-article':      lfi_nct_app_view_reussite_article();       break;
                     default:                lfi_nct_app_render_dashboard();
@@ -1480,12 +1482,20 @@ function lfi_nct_app_render_register_sw() {
  *  true);  — ou de poser l'option lfi_nct_disable_travaux.         *
  * ============================================================== */
 function lfi_nct_travaux_enabled() {
+    if (function_exists('lfi_nct_module_enabled')) return lfi_nct_module_enabled('travaux');
     if (defined('LFI_NCT_DISABLE_TRAVAUX') && LFI_NCT_DISABLE_TRAVAUX) return false;
     if (get_option('lfi_nct_disable_travaux')) return false;
     return true;
 }
-/** Routes masquées quand le volet travaux est désactivé. */
+/** Routes masquées : agrège les routes de TOUS les modules désactivés. */
 function lfi_nct_module_hidden_routes() {
+    if (function_exists('lfi_nct_modules_registry')) {
+        $hidden = [];
+        foreach (lfi_nct_modules_registry() as $key => $m) {
+            if (!lfi_nct_module_enabled($key)) $hidden = array_merge($hidden, (array) ($m['routes'] ?? []));
+        }
+        return array_values(array_unique($hidden));
+    }
     if (lfi_nct_travaux_enabled()) return [];
     return ['interventions', 'intervention-add', 'intervention-edit', 'facture', 'recouvrements', 'recouvrement-dossier', 'cadre-juridique'];
 }
@@ -1546,6 +1556,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
     return lfi_nct_module_filter_sections([
         '🟣 ESPACE GROUPE D\'ACTION' => [
+            ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
             ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
@@ -1584,6 +1595,8 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '⚙️ SYSTÈME' => [
+            ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
+            ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
             ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],
