@@ -247,19 +247,20 @@ function lfi_nct_app_view_envoyer_photo() {
  * ============================================================== */
 
 function lfi_nct_app_view_dossiers() {
-    /* Admin EXCLUSIVEMENT — données nominatives sensibles (RGPD).
-       Les GA peuvent FAIRE PASSER une enquête (via le formulaire public)
-       mais n'ont JAMAIS accès aux résultats individuels. */
-    if (!current_user_can('manage_options')) return;
+    /* Admin du GA — données nominatives sensibles (RGPD), strictement
+       cloisonnées : chaque GA ne voit QUE ses propres locataires. */
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     global $wpdb;
 
-    $tenants = get_users([
+    $tenant_args = [
         'role'    => LFI_NCT_ROLE_TENANT,
         'fields'  => ['ID', 'user_login', 'display_name', 'user_email'],
-        'number'  => 100,
+        'number'  => 500,
         'orderby' => 'display_name',
         'order'   => 'ASC',
-    ]);
+    ];
+    if (function_exists('lfi_nct_users_ga_query')) $tenant_args = lfi_nct_users_ga_query($tenant_args);
+    $tenants = get_users($tenant_args);
 
     lfi_nct_app_screen_open('🗂 Dossiers locataires', count($tenants) . ' locataire(s) suivi(s)');
 
@@ -307,9 +308,9 @@ function lfi_nct_app_view_dossiers() {
 }
 
 function lfi_nct_app_view_dossier() {
-    if (!current_user_can('manage_options')) {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
-        echo '<div class="lfi-app-empty">Le profil complet d\'un locataire (avec ses données d\'enquête) est réservé à l\'administrateur.<br><br><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossiers-juridiques')) . '">📁 Voir les dossiers juridiques</a></div>';
+        echo '<div class="lfi-app-empty">Le profil complet d\'un locataire (avec ses données d\'enquête) est réservé aux administrateurs du groupe.<br><br><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossiers-juridiques')) . '">📁 Voir les dossiers juridiques</a></div>';
         lfi_nct_app_screen_close(false);
         return;
     }
@@ -317,7 +318,9 @@ function lfi_nct_app_view_dossier() {
 
     $uid = (int) ($_GET['uid'] ?? 0);
     $u = $uid ? get_userdata($uid) : null;
-    if (!$u || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+    /* Cloisonnement : on n'ouvre que les locataires de SON GA. */
+    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
         echo '<div class="lfi-app-empty">Locataire introuvable. <a href="' . esc_url(lfi_nct_app_url('dossiers')) . '">← Retour à la liste</a></div>';
         lfi_nct_app_screen_close(false);
@@ -969,7 +972,7 @@ function lfi_nct_legal_fondement_block($bailleur_nom) {
  * ============================================================== */
 
 function lfi_nct_app_view_signatures() {
-    if (!current_user_can('manage_options')) return;
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
 
     if (!empty($_POST['lfi_app_sig_save']) && check_admin_referer('lfi_app_sig_save')) {
         $keys  = (array) ($_POST['sig_key']  ?? []);
@@ -1047,7 +1050,10 @@ function lfi_nct_app_view_signatures() {
  * ============================================================== */
 
 function lfi_nct_app_view_carte($force_all = false) {
-    if (!current_user_can('manage_options')) return;
+    /* Carte cumulée réseau ($force_all) = super-admin ; carte d'un GA = admin du GA. */
+    $ok = $force_all ? current_user_can('manage_options')
+                     : (function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'));
+    if (!$ok) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 
@@ -1340,13 +1346,14 @@ function lfi_nct_app_view_carte($force_all = false) {
 function lfi_nct_app_view_stats_enquete_helper_stub() {} /* no-op marker, kept for compat */
 
 function lfi_nct_app_view_stats_enquete() {
-    /* Admin EXCLUSIVEMENT — agrégats sur données RGPD. */
-    if (!current_user_can('manage_options')) return;
+    /* Admin du GA — agrégats sur données RGPD, cloisonnés par GA. */
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 
+    $stat_scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
     $rows = $wpdb->get_results(
-        "SELECT adresse, data FROM $table WHERE deleted_at IS NULL"
+        "SELECT adresse, data FROM $table WHERE deleted_at IS NULL" . $stat_scope
     ) ?: [];
     $total = count($rows);
 
@@ -1494,7 +1501,7 @@ function lfi_nct_tenant_sms_templates() {
 }
 
 function lfi_nct_app_view_sms_locataires() {
-    if (!current_user_can('manage_options')) return;
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     global $wpdb;
     $logt = $wpdb->prefix . 'lfi_nct_sms_log';
 
@@ -1510,13 +1517,15 @@ function lfi_nct_app_view_sms_locataires() {
         exit;
     }
 
-    /* Liste des locataires avec un tel */
-    $tenants = get_users([
+    /* Liste des locataires avec un tel — cloisonnée par GA. */
+    $tenant_args = [
         'role'    => LFI_NCT_ROLE_TENANT,
         'fields'  => ['ID', 'user_login', 'display_name'],
-        'number'  => 200,
+        'number'  => 500,
         'orderby' => 'display_name', 'order' => 'ASC',
-    ]);
+    ];
+    if (function_exists('lfi_nct_users_ga_query')) $tenant_args = lfi_nct_users_ga_query($tenant_args);
+    $tenants = get_users($tenant_args);
     $tenants_with_tel = [];
     foreach ($tenants as $u) {
         $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);

@@ -633,6 +633,14 @@ function lfi_nct_app_role_dispatch(&$handled) {
         $handled = true; return;
     }
     if (lfi_nct_user_role_ga()) {
+        /* ADMINS de GA (binôme + admins promus) : ils pilotent leur espace
+           comme un admin — on les laisse passer dans le routeur admin complet
+           (app.php), avec données strictement cloisonnées à leur GA. Les
+           membres « simples » gardent la console restreinte ci-dessous. */
+        if (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga()) {
+            $handled = false;
+            return;
+        }
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
             case 'reunion':         lfi_nct_app_view_reunion();    break;
@@ -1491,7 +1499,7 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
  *  headers sont déjà envoyés — on appelle directement la vue)      *
  * ============================================================== */
 function lfi_nct_app_view_comptes() {
-    if (!current_user_can('manage_options')) return;
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     /* Par défaut on ouvre les Locataires (le plus utilisé) ;
        on bascule sur les GA via ?tab=ga. La nav par onglets est gérée
        dans chacune des deux sous-vues. */
@@ -1727,6 +1735,67 @@ function lfi_nct_app_view_comptes_ga() {
         }
     }
 
+    /* Suppression de membre(s) GA — un seul ou plusieurs (cases à cocher),
+       toujours bornée au GA en cours (un GA ne supprime pas les comptes d'un autre). */
+    if (!empty($_POST['lfi_app_delete_ga']) && check_admin_referer('lfi_app_delete_ga')) {
+        require_once ABSPATH . 'wp-admin/includes/user.php';
+        $uids = array_map('intval', (array) ($_POST['uids'] ?? []));
+        if (!empty($_POST['uid'])) $uids[] = (int) $_POST['uid'];
+        $deleted = 0; $self = (int) get_current_user_id();
+        foreach (array_unique(array_filter($uids)) as $uid) {
+            if ($uid === $self) continue; // on ne se supprime pas soi-même
+            $u = get_userdata($uid);
+            $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+            if ($u && $in_scope && in_array(LFI_NCT_ROLE_GA, (array) $u->roles, true)) {
+                wp_delete_user($uid);
+                $deleted++;
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['del_ga' => $deleted]));
+        exit;
+    }
+
+    /* Promouvoir / révoquer un membre comme ADMIN du GA en cours. */
+    if (!empty($_POST['lfi_app_ga_admin_toggle']) && check_admin_referer('lfi_app_ga_admin_toggle')) {
+        $uid    = (int) ($_POST['uid'] ?? 0);
+        $action = sanitize_key($_POST['admin_action'] ?? '');
+        $slug   = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+        $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($uid && $slug !== '' && $in_scope) {
+            $all = get_option('lfi_nct_ga_xadmins', []);
+            if (!is_array($all)) $all = [];
+            $list = array_map('intval', (array) ($all[$slug] ?? []));
+            if ($action === 'promote' && !in_array($uid, $list, true)) $list[] = $uid;
+            if ($action === 'revoke') $list = array_values(array_diff($list, [$uid]));
+            $all[$slug] = array_values(array_unique(array_filter($list)));
+            update_option('lfi_nct_ga_xadmins', $all, false);
+            wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['admin_set' => 1]));
+            exit;
+        }
+    }
+
+    /* Déplacer un membre vers un autre GA (super-admin uniquement). */
+    if (current_user_can('manage_options') && !empty($_POST['lfi_app_move_ga']) && check_admin_referer('lfi_app_move_ga')) {
+        $uid  = (int) ($_POST['uid'] ?? 0);
+        $dest = sanitize_title(wp_unslash($_POST['dest_ga'] ?? ''));
+        $u = $uid ? get_userdata($uid) : null;
+        if ($u && $dest !== '') {
+            /* On retire le membre du binôme/admins de son ancien GA pour éviter
+               un rattachement fantôme, puis on le réaffecte au GA cible. */
+            $old = (string) get_user_meta($uid, 'lfi_nct_ga', true);
+            if ($old !== '') {
+                $xa = get_option('lfi_nct_ga_xadmins', []);
+                if (is_array($xa) && !empty($xa[$old])) {
+                    $xa[$old] = array_values(array_diff(array_map('intval', $xa[$old]), [$uid]));
+                    update_option('lfi_nct_ga_xadmins', $xa, false);
+                }
+            }
+            update_user_meta($uid, 'lfi_nct_ga', $dest === 'clos-toreau' ? '' : $dest);
+            wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['moved' => 1]));
+            exit;
+        }
+    }
+
     /* Compteur */
     $count = lfi_nct_app_count_users_cached();
     $n_ga  = $count['avail_roles'][LFI_NCT_ROLE_GA] ?? 0;
@@ -1777,6 +1846,9 @@ function lfi_nct_app_view_comptes_ga() {
 
     /* Flash erreur */
     if ($created_err) lfi_nct_app_flash('❌ ' . $created_err, 'err');
+    if (isset($_GET['del_ga']))    lfi_nct_app_flash('🗑 ' . (int) $_GET['del_ga'] . ' membre(s) supprimé(s).');
+    if (!empty($_GET['admin_set'])) lfi_nct_app_flash('⭐ Rôle d\'admin mis à jour.');
+    if (!empty($_GET['moved']))     lfi_nct_app_flash('↪️ Membre déplacé vers son nouveau groupe d\'action.');
 
     /* Batch après import en masse */
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
@@ -1901,24 +1973,69 @@ function lfi_nct_app_view_comptes_ga() {
     if (empty($users_ga)) {
         echo '<div class="lfi-app-empty">Aucun membre GA pour l\'instant.</div>';
     } else {
+        $cur_uid    = (int) get_current_user_id();
+        $cur_slug   = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+        $admin_uids = ($cur_slug !== '' && function_exists('lfi_nct_ga_admin_uids')) ? lfi_nct_ga_admin_uids($cur_slug) : [];
+
+        /* Formulaire de suppression GROUPÉE (les cases sont reliées par l'attribut form). */
+        echo '<form method="post" id="lfi-ga-bulk" onsubmit="return confirm(\'Supprimer définitivement les membres cochés ?\');" style="margin:0 0 8px">';
+        wp_nonce_field('lfi_app_delete_ga');
+        echo '<input type="hidden" name="lfi_app_delete_ga" value="1">';
+        echo '<button type="submit" class="btn-del">🗑 Supprimer la sélection</button>';
+        echo '<span style="margin-left:8px;font-size:.85em;color:#777">Coche un ou plusieurs membres.</span>';
+        echo '</form>';
+
         echo '<ul class="lfi-app-list">';
         foreach ($users_ga as $u) {
+            $is_admin = in_array((int) $u->ID, $admin_uids, true);
             echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">GA</div></div>';
+            echo '<div class="head"><div class="who">';
+            if ((int) $u->ID !== $cur_uid) {
+                echo '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" name="uids[]" value="' . (int) $u->ID . '" form="lfi-ga-bulk">' . esc_html($u->display_name) . '</label>';
+            } else {
+                echo esc_html($u->display_name) . ' <span style="font-size:.8em;color:#777">(toi)</span>';
+            }
+            echo '</div><div class="badge">' . ($is_admin ? '⭐ Admin' : 'GA') . '</div></div>';
             echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span>';
             if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
             $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
             if ($tel) echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
-            echo '</div><form method="post" class="row-actions">';
+            echo '</div>';
+
+            echo '<div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap">';
+            /* Réinitialiser & renvoyer */
+            echo '<form method="post" style="margin:0">';
             wp_nonce_field('lfi_app_reset_pwd');
-            echo '<input type="hidden" name="lfi_app_reset_pwd" value="1">';
-            echo '<input type="hidden" name="uid" value="' . (int) $u->ID . '">';
-            echo '<button type="submit" class="btn-ghost" onclick="return confirm(\'Générer un nouveau mot de passe pour ' . esc_js($u->display_name) . ' ? Tu pourras le renvoyer juste après.\');">🔑 Réinitialiser &amp; renvoyer</button>';
-            echo '</form></li>';
+            echo '<input type="hidden" name="lfi_app_reset_pwd" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+            echo '<button type="submit" class="btn-ghost" onclick="return confirm(\'Générer un nouveau mot de passe pour ' . esc_js($u->display_name) . ' ?\');">🔑 Réinitialiser &amp; renvoyer</button>';
+            echo '</form>';
+            /* Promouvoir / révoquer admin (uniquement dans un GA précis) */
+            if ($cur_slug !== '' && (int) $u->ID !== $cur_uid) {
+                echo '<form method="post" style="margin:0">';
+                wp_nonce_field('lfi_app_ga_admin_toggle');
+                echo '<input type="hidden" name="lfi_app_ga_admin_toggle" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+                echo '<input type="hidden" name="admin_action" value="' . ($is_admin ? 'revoke' : 'promote') . '">';
+                echo '<button type="submit" class="btn-ghost">' . ($is_admin ? '✖ Retirer admin' : '⭐ Faire admin') . '</button>';
+                echo '</form>';
+            }
+            /* Déplacer vers un autre GA (super-admin seulement) */
+            if (current_user_can('manage_options') && function_exists('lfi_nct_groupes')) {
+                echo '<form method="post" style="margin:0;display:flex;gap:4px;align-items:center">';
+                wp_nonce_field('lfi_app_move_ga');
+                echo '<input type="hidden" name="lfi_app_move_ga" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+                echo '<select name="dest_ga" style="font-size:.85em"><option value="clos-toreau">→ Clos Toreau</option>';
+                foreach (lfi_nct_groupes() as $g) {
+                    if (!empty($g['actuel'])) continue;
+                    echo '<option value="' . esc_attr($g['slug']) . '">→ ' . esc_html($g['nom']) . '</option>';
+                }
+                echo '</select><button type="submit" class="btn-ghost">Déplacer</button>';
+                echo '</form>';
+            }
+            echo '</div></li>';
         }
         echo '</ul>';
         if ((int) $n_ga > count($users_ga)) {
-            echo '<div class="lfi-app-help"><small>Affichage des 50 plus récents. ' . ((int) $n_ga - count($users_ga)) . ' autres en base.</small></div>';
+            echo '<div class="lfi-app-help"><small>Affichage des 200 plus récents. ' . ((int) $n_ga - count($users_ga)) . ' autres en base.</small></div>';
         }
     }
 
@@ -1932,7 +2049,7 @@ function lfi_nct_app_view_comptes_ga() {
  *  - Liste + dossier + reset password                              *
  * ============================================================== */
 function lfi_nct_app_view_comptes_locataires() {
-    if (!current_user_can('manage_options')) return;
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     global $wpdb;
 
     $created     = null;
@@ -1942,7 +2059,8 @@ function lfi_nct_app_view_comptes_locataires() {
     if (!empty($_POST['lfi_app_edit_tenant']) && check_admin_referer('lfi_app_edit_tenant')) {
         $uid = (int) ($_POST['uid'] ?? 0);
         $u = $uid ? get_userdata($uid) : null;
-        if ($u && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+        $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($u && $in_scope && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
             $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
             $nom    = sanitize_text_field(wp_unslash($_POST['nom']    ?? ''));
             $email  = sanitize_email(wp_unslash($_POST['email']       ?? ''));
@@ -1981,11 +2099,12 @@ function lfi_nct_app_view_comptes_locataires() {
         }
     }
 
-    /* === ACTION : SUPPRESSION d'un compte locataire === */
+    /* === ACTION : SUPPRESSION d'un compte locataire (bornée au GA) === */
     if (!empty($_POST['lfi_app_delete_tenant']) && check_admin_referer('lfi_app_delete_tenant')) {
         $uid = (int) ($_POST['uid'] ?? 0);
         $u = $uid ? get_userdata($uid) : null;
-        if ($u && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+        $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($u && $in_scope && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
             require_once ABSPATH . 'wp-admin/includes/user.php';
             wp_delete_user($uid);
             wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'deleted' => 1]));
@@ -2021,6 +2140,7 @@ function lfi_nct_app_view_comptes_locataires() {
                 } else {
                     update_user_meta($uid, 'lfi_nct_response_id', $resp_id);
                     if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                    if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
                     $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
                 }
             }
@@ -2049,6 +2169,7 @@ function lfi_nct_app_view_comptes_locataires() {
                 $created_err = 'Erreur : ' . $uid->get_error_message();
             } else {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
+                if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
                 $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
             }
         }
@@ -2071,7 +2192,8 @@ function lfi_nct_app_view_comptes_locataires() {
     $count = lfi_nct_app_count_users_cached();
     $n_tenant = $count['avail_roles'][LFI_NCT_ROLE_TENANT] ?? 0;
 
-    /* Répondant·es non liés */
+    /* Répondant·es non liés — cloisonné : on ne propose que les enquêtes de CE GA. */
+    $resp_scope  = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
     $linked_rids = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_response_id'") ?: [];
     $linked_in   = $linked_rids ? '(' . implode(',', array_map('intval', $linked_rids)) . ')' : '(0)';
     $unlinked_responses = $wpdb->get_results(
@@ -2079,7 +2201,7 @@ function lfi_nct_app_view_comptes_locataires() {
          FROM {$wpdb->prefix}lfi_nct_responses
          WHERE deleted_at IS NULL
                AND id NOT IN $linked_in
-               AND (contact_prenom <> '' OR contact_nom <> '')
+               AND (contact_prenom <> '' OR contact_nom <> '')" . $resp_scope . "
          ORDER BY contact_recontact DESC, submitted_at DESC LIMIT 100"
     ) ?: [];
 
@@ -2097,7 +2219,10 @@ function lfi_nct_app_view_comptes_locataires() {
         $args_users['search'] = '*' . esc_attr($search) . '*';
         $args_users['search_columns'] = ['display_name', 'user_login', 'user_email', 'user_nicename'];
     }
+    /* Cloisonnement : chaque GA ne voit QUE ses locataires. */
+    if (function_exists('lfi_nct_users_ga_query')) $args_users = lfi_nct_users_ga_query($args_users);
     $users_tenant = get_users($args_users);
+    $n_tenant = count($users_tenant);
 
     /* Tri "avec enquête / sans enquête" : on filtre après coup */
     if ($sort === 'avec_enq' || $sort === 'sans_enq') {
@@ -2344,7 +2469,7 @@ function lfi_nct_app_view_comptes_locataires() {
  *  ADMIN : ajouter un témoignage manuellement à l'enquête          *
  * ============================================================== */
 function lfi_nct_app_view_temoignage_add() {
-    if (!current_user_can('manage_options')) return;
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     global $wpdb;
 
     if (!empty($_POST['lfi_app_temoignage_add']) && check_admin_referer('lfi_app_temoignage_add')) {
@@ -2400,8 +2525,20 @@ function lfi_nct_app_view_temoignage_add() {
         ];
 
         $u = wp_get_current_user();
+        /* Rattache la réponse au bon GA : si on est en train de « regarder » un
+           autre GA (super-admin), on l'attribue au compte pivot de ce GA pour
+           qu'elle apparaisse bien dans SON espace cloisonné. */
+        $mil_id = (int) $u->ID;
+        if (function_exists('lfi_nct_scope_ga_slug')) {
+            $sslug = lfi_nct_scope_ga_slug();
+            if ($sslug !== '' && (string) get_user_meta($u->ID, 'lfi_nct_ga', true) !== $sslug
+                && function_exists('lfi_nct_ga_pivot_uid')) {
+                $piv = lfi_nct_ga_pivot_uid($sslug);
+                if ($piv) $mil_id = (int) $piv;
+            }
+        }
         $ok = $wpdb->insert($wpdb->prefix . 'lfi_nct_responses', [
-            'militant_user_id'  => $u->ID,
+            'militant_user_id'  => $mil_id,
             'militant_login'    => $u->user_login,
             'submitted_at'      => current_time('mysql'),
             'adresse'           => $adresse,

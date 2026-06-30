@@ -72,14 +72,40 @@ function lfi_nct_ga_owner_resolve($base) {
     return $base;
 }
 
-/** Peut gérer les comptes de SON GA : super-admin, ou membre du binôme du GA. */
+/** Admins supplémentaires d'un GA (promus par un admin du GA) : [slug => [uid,…]]. */
+function lfi_nct_ga_extra_admins($slug = null) {
+    $all = get_option('lfi_nct_ga_xadmins', []);
+    if (!is_array($all)) $all = [];
+    if ($slug === null) return $all;
+    return array_map('intval', (array) ($all[$slug] ?? []));
+}
+
+/** Liste complète des uid admins d'un GA : binôme paritaire + admins promus. */
+function lfi_nct_ga_admin_uids($slug) {
+    $uids = [];
+    if (function_exists('lfi_nct_ga_admin_pair')) {
+        $pair = lfi_nct_ga_admin_pair($slug);
+        if (!empty($pair['f'])) $uids[] = (int) $pair['f'];
+        if (!empty($pair['h'])) $uids[] = (int) $pair['h'];
+    }
+    foreach (lfi_nct_ga_extra_admins($slug) as $u) $uids[] = (int) $u;
+    return array_values(array_unique(array_filter($uids)));
+}
+
+/** Peut gérer SON GA : super-admin, membre du binôme, ou admin promu du GA. */
 function lfi_nct_is_ga_admin() {
     if (current_user_can('manage_options')) return true;
     $ga = lfi_nct_user_ga();
     if ($ga === '') return false;
-    $pair = function_exists('lfi_nct_ga_admin_pair') ? lfi_nct_ga_admin_pair($ga) : ['f' => 0, 'h' => 0];
-    $uid = (int) get_current_user_id();
-    return ($uid === (int) $pair['f'] || $uid === (int) $pair['h']);
+    return in_array((int) get_current_user_id(), lfi_nct_ga_admin_uids($ga), true);
+}
+
+/**
+ * Peut piloter l'espace en cours comme un admin (super-admin OU admin du GA).
+ * Sert à ouvrir aux binômes l'ensemble des outils, données cloisonnées.
+ */
+function lfi_nct_can_admin_ga() {
+    return lfi_nct_is_ga_admin();
 }
 
 /** Vrai si l'utilisateur $uid appartient au GA actuellement en vigueur. */
