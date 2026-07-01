@@ -56,15 +56,8 @@ function lfi_nct_render_form() {
                     'bruit'            => '🔊 Nuisances sonores / voisinage',
                     'securite'         => '🚨 Insécurité (entrées, parties communes…)',
                 ];
-                foreach ($types as $k => $label): ?>
-                    <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
-                <?php endforeach; ?>
-                <label class="lfi-check"><input type="checkbox" name="problemes_types[]" value="autre"> Autre — précisez :</label>
-                <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="Décrivez ici le problème (texte libre)">
-            </fieldset>
-
-            <fieldset class="lfi-fieldset">
-                <legend class="lfi-legend">Depuis combien de temps ?</legend>
+                ?>
+                <p class="lfi-help">Pour chaque problème coché, précisez <strong>depuis quand</strong> et <strong>combien de fois par an</strong> (estimation).</p>
                 <?php
                 $durees = [
                     'moins_1_mois' => "Moins d'un mois",
@@ -73,16 +66,54 @@ function lfi_nct_render_form() {
                     '1_5_ans'      => "Plus d'un an",
                     'plus_5_ans'   => 'Plus de 5 ans',
                 ];
-                foreach ($durees as $k => $label): ?>
-                    <label class="lfi-radio"><input type="radio" name="problemes_duree" value="<?php echo esc_attr($k); ?>"> <?php echo esc_html($label); ?></label>
+                /* Sous-bloc « depuis quand + nombre de fois / an », ouvert quand on coche. */
+                $sub = function ($k) use ($durees) {
+                    ob_start(); ?>
+                    <div class="lfi-prob-sub" id="sub-<?php echo esc_attr($k); ?>" hidden>
+                        <label class="lfi-field" style="margin:0 0 6px"><span class="lfi-label">Depuis quand&nbsp;?</span>
+                            <select name="probleme_depuis[<?php echo esc_attr($k); ?>]">
+                                <option value="">— choisir —</option>
+                                <?php foreach ($durees as $dk => $dl): ?>
+                                    <option value="<?php echo esc_attr($dk); ?>"><?php echo esc_html($dl); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
+                        <label class="lfi-field" style="margin:0"><span class="lfi-label">Combien de fois par an&nbsp;? (estimation)</span>
+                            <input type="text" name="probleme_par_an[<?php echo esc_attr($k); ?>]" inputmode="numeric" placeholder="ex : 10, « plus de 15 », « je ne sais plus »">
+                        </label>
+                    </div>
+                    <?php return ob_get_clean();
+                };
+                foreach ($types as $k => $label): ?>
+                    <div class="lfi-prob-item">
+                        <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="<?php echo esc_attr($k); ?>" data-sub="sub-<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
+                        <?php echo $sub($k); ?>
+                    </div>
                 <?php endforeach; ?>
-            </fieldset>
+                <div class="lfi-prob-item">
+                    <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="autre" data-sub="sub-autre"> Autre — précisez :</label>
+                    <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="Décrivez ici le problème (texte libre)">
+                    <?php echo $sub('autre'); ?>
+                </div>
 
-            <fieldset class="lfi-fieldset">
-                <legend class="lfi-legend">Est-ce récurrent ?</legend>
-                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="permanent"> Oui, en permanence</label>
-                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="parfois"> Oui, ça revient régulièrement</label>
-                <label class="lfi-radio"><input type="radio" name="problemes_recurrent" value="ponctuel"> Non, c'est ponctuel</label>
+                <style>
+                .lfi-prob-item { margin: 2px 0; }
+                .lfi-prob-sub { margin: 4px 0 10px 26px; padding: 8px 10px; border-left: 3px solid #c8102e; background: #faf6f7; border-radius: 6px; }
+                .lfi-prob-sub .lfi-label { font-size: .85em; color: #555; }
+                @media print { .lfi-prob-sub[hidden] { display: block !important; } }
+                </style>
+                <script>
+                (function () {
+                    var boxes = document.querySelectorAll('.lfi-prob-cb');
+                    boxes.forEach(function (cb) {
+                        var sub = document.getElementById(cb.getAttribute('data-sub'));
+                        if (!sub) return;
+                        function upd() { sub.hidden = !cb.checked; }
+                        cb.addEventListener('change', upd);
+                        upd();
+                    });
+                })();
+                </script>
             </fieldset>
 
             <fieldset class="lfi-fieldset">
@@ -96,6 +127,12 @@ function lfi_nct_render_form() {
             </fieldset>
         </div>
 
+        <?php
+        /* Section « coupures d'eau chaude » : spécifique au Clos Toreau (fait de
+           quartier). On ne l'affiche QUE pour ce GA (home / clos-toreau). */
+        $lfi_eau_chaude = !function_exists('lfi_nct_scope_ga_slug')
+            || in_array(lfi_nct_scope_ga_slug(), ['', 'clos-toreau'], true);
+        if ($lfi_eau_chaude): ?>
         <fieldset class="lfi-fieldset">
             <legend class="lfi-legend">🚿 Coupures d'eau chaude récurrentes</legend>
             <p class="lfi-help">
@@ -117,6 +154,7 @@ function lfi_nct_render_form() {
                 <textarea name="eau_chaude_citation" rows="2" placeholder="Notez tel que dit, sans rien changer"></textarea>
             </label>
         </fieldset>
+        <?php endif; ?>
 
         <fieldset class="lfi-fieldset">
             <legend class="lfi-legend">📸 Photos du logement (facultatif)</legend>
@@ -261,18 +299,27 @@ function lfi_nct_render_submission_summary($id) {
         ?></strong></p>
 
         <?php if ($presence === 'oui'): ?>
+            <?php
+            $p_depuis = (array) ($data['probleme_depuis'] ?? []);
+            $p_paran  = (array) ($data['probleme_par_an']  ?? []);
+            ?>
             <ul class="lfi-summary-list">
                 <?php if ($types): ?>
-                    <li><strong>Types :</strong>
-                        <?php
-                        $labels = [];
-                        foreach ($types as $t) $labels[] = $type_labels[$t] ?? $t;
-                        echo esc_html(implode(' · ', $labels));
-                        if ($types_autre !== '') echo ' (autre : ' . esc_html($types_autre) . ')';
-                        ?>
-                    </li>
+                    <?php foreach ($types as $t): ?>
+                        <li><strong><?php echo esc_html($type_labels[$t] ?? $t); ?></strong>
+                            <?php
+                            $bits = [];
+                            $d = trim((string) ($p_depuis[$t] ?? ''));
+                            $n = trim((string) ($p_paran[$t]  ?? ''));
+                            if ($d !== '') $bits[] = 'depuis ' . ($duree_labels[$d] ?? $d);
+                            if ($n !== '') $bits[] = $n . ' fois/an';
+                            if ($bits) echo ' — <span style="color:#555">' . esc_html(implode(' · ', $bits)) . '</span>';
+                            if ($t === 'autre' && $types_autre !== '') echo ' <span style="color:#555">(' . esc_html($types_autre) . ')</span>';
+                            ?>
+                        </li>
+                    <?php endforeach; ?>
                 <?php endif; ?>
-                <?php if ($duree !== ''): ?><li><strong>Durée :</strong> <?php echo esc_html($duree_labels[$duree] ?? $duree); ?></li><?php endif; ?>
+                <?php if ($duree !== ''): ?><li><strong>Durée (globale) :</strong> <?php echo esc_html($duree_labels[$duree] ?? $duree); ?></li><?php endif; ?>
                 <?php if ($rec !== ''): ?><li><strong>Récurrence :</strong> <?php echo esc_html($rec_labels[$rec] ?? $rec); ?></li><?php endif; ?>
                 <?php if ($gravite > 0): ?><li><strong>Gravité ressentie :</strong> <?php echo $gravite; ?> / 10</li><?php endif; ?>
             </ul>
