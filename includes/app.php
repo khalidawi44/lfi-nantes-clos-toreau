@@ -116,11 +116,21 @@ function lfi_nct_app_create_page() {
     $existing = get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page');
     if ($existing) {
         $fix = [];
+        /* La page DOIT être publiée et publique : sinon un membre déconnecté
+           reçoit un 404 (WordPress cache les pages privées/brouillons aux
+           visiteurs) alors que l'admin, lui, la voit. C'est LA cause du 404
+           du lien de connexion. On la republie et on retire tout mot de passe. */
         if ($existing->post_status !== 'publish') $fix['post_status'] = 'publish';
+        if ((string) $existing->post_password !== '') $fix['post_password'] = '';
         if (strpos((string) $existing->post_content, '[lfi_nct_app]') === false) {
             $fix['post_content'] = trim($existing->post_content . "\n[lfi_nct_app]");
         }
-        if ($fix) { $fix['ID'] = $existing->ID; wp_update_post($fix); }
+        if ($fix) {
+            $fix['ID'] = $existing->ID;
+            wp_update_post($fix);
+            if (function_exists('do_action')) do_action('litespeed_purge_all');
+            if (function_exists('wp_cache_flush')) wp_cache_flush();
+        }
         return;
     }
     /* Page absente → (re)création + flush des règles pour que /app/ résolve. */
