@@ -83,7 +83,7 @@ function lfi_nct_reussite_flag_names($text) {
 /** Lien « Contactez-nous » (page contact du site, configurable). */
 function lfi_nct_reussite_contact_url() {
     $u = get_option('lfi_nct_reussite_contact_url', '');
-    return $u ?: home_url('/contact/');
+    return $u ?: lfi_nct_page_url('contact');
 }
 
 /* ============================================================== *

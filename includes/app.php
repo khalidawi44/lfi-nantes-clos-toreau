@@ -61,17 +61,39 @@ function lfi_nct_survey_url() {
 /* Invalide le cache quand une page/un article change (le slug a pu bouger). */
 add_action('save_post', function () { delete_transient('lfi_nct_survey_url'); });
 
+/**
+ * URL FIABLE d'une page par son slug : renvoie son permalien si elle existe et
+ * est publiée, sinon un repli sûr (par défaut l'accueil) — JAMAIS un 404.
+ */
+function lfi_nct_page_url($slug, $fallback = '') {
+    $slug = trim((string) $slug, '/');
+    if ($slug !== '') {
+        $p = get_page_by_path($slug, OBJECT, ['page', 'post']);
+        if ($p && $p->post_status === 'publish') return get_permalink($p);
+    }
+    return $fallback !== '' ? $fallback : home_url('/');
+}
+
 /* ============================================================== *
  *  Page WordPress /app/                                            *
  * ============================================================== */
 add_action('init', 'lfi_nct_app_create_page', 30);
 function lfi_nct_app_create_page() {
-    if (get_option('lfi_nct_app_page_created') === 'done') return;
-    if (get_page_by_path(LFI_NCT_APP_SLUG)) {
-        update_option('lfi_nct_app_page_created', 'done', false);
+    /* AUTO-RÉPARATION : on vérifie à chaque fois que la page /app/ existe,
+       est publiée et contient le shortcode. Si elle a été supprimée, dépubliée
+       ou renommée, on la recrée → plus jamais de 404 sur toute l'app. */
+    $existing = get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page');
+    if ($existing) {
+        $fix = [];
+        if ($existing->post_status !== 'publish') $fix['post_status'] = 'publish';
+        if (strpos((string) $existing->post_content, '[lfi_nct_app]') === false) {
+            $fix['post_content'] = trim($existing->post_content . "\n[lfi_nct_app]");
+        }
+        if ($fix) { $fix['ID'] = $existing->ID; wp_update_post($fix); }
         return;
     }
-    wp_insert_post([
+    /* Page absente → (re)création + flush des règles pour que /app/ résolve. */
+    $pid = wp_insert_post([
         'post_title'    => 'App du GA',
         'post_name'     => LFI_NCT_APP_SLUG,
         'post_status'   => 'publish',
@@ -81,7 +103,10 @@ function lfi_nct_app_create_page() {
         'comment_status'=> 'closed',
         'ping_status'   => 'closed',
     ]);
-    update_option('lfi_nct_app_page_created', 'done', false);
+    if ($pid && !is_wp_error($pid)) {
+        update_option('lfi_nct_app_page_created', 'done', false);
+        flush_rewrite_rules(false);
+    }
 }
 
 /* ============================================================== *
@@ -2297,18 +2322,18 @@ function lfi_nct_app_enq_message_template($mode, $row, $event_post = null) {
     $ev_date  = $event_post ? get_post_meta($event_post->ID, '_ag_event_date', true) : '';
     $ev_time  = $event_post ? get_post_meta($event_post->ID, '_ag_event_time', true) : '';
     $ev_place = $event_post ? get_post_meta($event_post->ID, '_ag_event_place', true) : '';
-    $ev_url   = $event_post ? get_permalink($event_post) : home_url('/reunion-26-juin-2026/');
+    $ev_url   = $event_post ? get_permalink($event_post) : lfi_nct_page_url('reunion-26-juin-2026');
     $ev_when  = trim($ev_date . ($ev_time ? ' à ' . $ev_time : ''));
 
     switch ($mode) {
         case 'reunion':
-            $body = "Bonjour " . ($prenom ?: 'camarade') . ", c'est le Groupe d'Action LFI Nantes Sud Clos Toreau. On organise une réunion publique sur le logement vendredi 26 juin à 15h à la salle Confluences (4 pl. du Muguet). Venez ? Infos : " . home_url('/reunion-26-juin-2026/');
+            $body = "Bonjour " . ($prenom ?: 'camarade') . ", c'est le Groupe d'Action LFI Nantes Sud Clos Toreau. On organise une réunion publique sur le logement vendredi 26 juin à 15h à la salle Confluences (4 pl. du Muguet). Venez ? Infos : " . lfi_nct_page_url('reunion-26-juin-2026');
             $sujet = "Réunion logement vendredi 26 juin — Confluences";
             return ['body' => $body, 'sujet' => $sujet];
 
         case 'event':
             if (!$event_post) {
-                $body = "Bonjour " . ($prenom ?: '') . ", suivi de votre enquête logement : retrouvez nous bientôt, on vous tient au courant des prochains événements. Calendrier : " . home_url('/evenements/');
+                $body = "Bonjour " . ($prenom ?: '') . ", suivi de votre enquête logement : retrouvez nous bientôt, on vous tient au courant des prochains événements. Calendrier : " . lfi_nct_page_url('evenements');
                 $sujet = "Suivi enquête logement — LFI Clos Toreau";
                 return ['body' => $body, 'sujet' => $sujet];
             }
@@ -2329,7 +2354,7 @@ function lfi_nct_app_enq_message_template($mode, $row, $event_post = null) {
             if ($event_post) {
                 $body .= " On en parle " . ($ev_when ?: 'lors de notre prochaine réunion') . " à " . ($ev_place ?: 'Confluences') . ". Inscription : " . $ev_url;
             } else {
-                $body .= " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . home_url('/reunion-26-juin-2026/');
+                $body .= " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . lfi_nct_page_url('reunion-26-juin-2026');
             }
             $sujet = "Suivi de votre enquête logement" . ($phrase ? ' — ' . $phrase : '');
             return ['body' => $body, 'sujet' => $sujet];
@@ -2692,7 +2717,7 @@ function lfi_nct_app_view_enquetes_email() {
                          ? " On en parle " . trim(get_post_meta($event_post->ID, '_ag_event_date', true) . ' à ' . get_post_meta($event_post->ID, '_ag_event_time', true))
                             . " à " . get_post_meta($event_post->ID, '_ag_event_place', true)
                             . ". Inscription : " . get_permalink($event_post)
-                         : " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . home_url('/reunion-26-juin-2026/'));
+                         : " Prochaine réunion publique vendredi 26 juin à 15h, salle Confluences. Infos : " . lfi_nct_page_url('reunion-26-juin-2026'));
         $msg['sujet'] = "Suivi de votre enquête logement — {{probleme_main}}";
     }
 
