@@ -693,7 +693,9 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         $facture_nums = array_values(array_unique($facture_nums));
         $tr = $wpdb->prefix . 'lfi_nct_recouvrements';
         $place = implode(',', array_fill(0, count($facture_nums), '%s'));
-        $recs = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE facture_numero IN ($place) ORDER BY updated_at DESC", ...$facture_nums)) ?: [];
+        /* Borné au propriétaire (défense en profondeur, en plus du n° de facture). */
+        $args = array_merge($facture_nums, [$owner]);
+        $recs = $wpdb->get_results($wpdb->prepare("SELECT * FROM $tr WHERE facture_numero IN ($place) AND owner_user_id = %d ORDER BY updated_at DESC", ...$args)) ?: [];
     }
 
     /* --- Appels NMH liés (uid OU nom) --- */
@@ -877,7 +879,12 @@ function lfi_nct_app_view_dossier_recap_nmh() {
     global $wpdb;
     $uid = (int) ($_GET['uid'] ?? 0);
     $u = $uid ? get_userdata($uid) : null;
-    if (!$u) { wp_die('Locataire introuvable'); }
+    /* Cloisonnement : le locataire doit appartenir au GA courant ET avoir le
+       rôle locataire (sinon fuite d'identité/adresse via ?uid= d'un autre GA). */
+    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+        wp_die('Locataire introuvable dans ce groupe d\'action.');
+    }
 
     $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
     $resp = $rid ? $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
@@ -1084,7 +1091,7 @@ function lfi_nct_app_view_carte($force_all = false) {
     $pending = (int) $wpdb->get_var(
         "SELECT COUNT(*) FROM $table
          WHERE lat IS NULL AND adresse IS NOT NULL AND adresse != ''
-               AND deleted_at IS NULL"
+               AND deleted_at IS NULL" . $scope
     );
 
     /* Labels + niveaux de gravité (cohérents avec map.php) */
@@ -1675,7 +1682,10 @@ function lfi_nct_app_view_sms_locataires() {
     $mode = isset($_GET['mode']) ? sanitize_key($_GET['mode']) : 'libre';
 
     $user      = $uid ? get_userdata($uid) : null;
-    $is_tenant = $user && in_array(LFI_NCT_ROLE_TENANT, (array) $user->roles, true);
+    /* Cloisonnement : locataire du GA courant uniquement (sinon fuite du
+       nom/tél via ?uid= d'un locataire d'un autre GA). */
+    $in_scope  = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    $is_tenant = $user && $in_scope && in_array(LFI_NCT_ROLE_TENANT, (array) $user->roles, true);
     if (!$is_tenant) { $user = null; $uid = 0; }
     $user_tel  = $user ? (string) get_user_meta($user->ID, 'lfi_nct_tel', true) : '';
 

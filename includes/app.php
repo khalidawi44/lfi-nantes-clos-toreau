@@ -2351,7 +2351,10 @@ function lfi_nct_app_view_sms() {
     $tpl_id    = isset($_GET['tpl'])    ? (int) $_GET['tpl']    : 0;
     /* Identifiant brut du modèle (peut être « gaN » pour un modèle propre au GA). */
     $tpl_sel   = isset($_GET['tpl'])    ? sanitize_text_field(wp_unslash($_GET['tpl'])) : '';
-    $membre = $membre_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $mem WHERE id = %d", $membre_id)) : null;
+    /* Cloisonnement : on ne charge le membre destinataire QUE s'il appartient
+       au GA courant (sinon fuite nom/tél via ?membre= d'un autre GA). */
+    $mem_gac = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
+    $membre = $membre_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $mem WHERE id = %d" . $mem_gac, $membre_id)) : null;
     $tpl_row = $tpl_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tpl WHERE id = %d", $tpl_id)) : null;
 
     $event_id = isset($_GET['event']) ? (int) $_GET['event'] : 0;

@@ -2310,7 +2310,9 @@ function lfi_nct_app_view_email_import() {
         $objet = sanitize_text_field(wp_unslash($_POST['email_objet'] ?? ''));
         $corps = sanitize_textarea_field(wp_unslash($_POST['email_corps'] ?? ''));
         $u = $uid ? get_userdata($uid) : null;
-        if ($u) {
+        /* Cloisonnement : on n'importe que pour un locataire du GA courant. */
+        $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+        if ($u && $in_scope && in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
             $dossier = $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE owner_user_id = %d AND tenant_user_id = %d ORDER BY id DESC LIMIT 1", $owner, $uid));
             if (!$dossier) {
                 $resp = null;

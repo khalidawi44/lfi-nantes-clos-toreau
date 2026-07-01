@@ -300,7 +300,10 @@ function lfi_nct_agenda_rdv_form($row) {
         }
 
         if ($is_edit) {
-            $wpdb->update($t, $data, ['id' => $row->id]);
+            /* WHERE borné au propriétaire aussi (défense en profondeur : $row
+               a déjà été chargé avec la clause owner). */
+            $own_uid = function_exists('lfi_nct_brigade_owner_id') ? (int) lfi_nct_brigade_owner_id() : (int) get_current_user_id();
+            $wpdb->update($t, $data, ['id' => $row->id, 'owner_user_id' => $own_uid]);
             wp_safe_redirect(lfi_nct_app_url('rdv-edit', ['id' => $row->id, 'saved' => 1]));
         } else {
             /* Rattache le RDV au propriétaire (GA) courant → cloisonnement agenda. */
