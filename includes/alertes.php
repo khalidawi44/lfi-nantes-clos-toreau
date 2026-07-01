@@ -56,6 +56,21 @@ function lfi_nct_alertes_auto() {
         $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
         $analyse = (is_array($logs) && !empty($logs['analyse_nmh'])) ? trim((string) $logs['analyse_nmh']) : '';
 
+        /* ⏰ Délai légal NMH dépassé (à partir de la mise en demeure) → étape 4 :
+           saisir le SCHS. S'affiche tant que le SCHS n'a pas été envoyé. */
+        if (!empty($r->lrar_travaux_date) && empty($r->schs_date) && ($r->statut ?? '') !== 'clos' && function_exists('lfi_nct_nmh_deadline')) {
+            $deadline = lfi_nct_nmh_deadline($r->lrar_travaux_date, $r->nmh_urgence ?: 'bailleur');
+            if ($deadline && strtotime($deadline) < $now) {
+                $late = (int) floor(($now - strtotime($deadline)) / 86400);
+                $out[] = [
+                    'prio'   => 'haute',
+                    'titre'  => '⏰ Délai NMH dépassé — ' . $full,
+                    'detail' => 'Mise en demeure sans effet (date limite : ' . wp_date('j M Y', strtotime($deadline)) . ', dépassée de ' . $late . ' j). Étape 4 : saisir le SCHS.',
+                    'url'    => lfi_nct_app_url('dossier-doc-schs', ['id' => $r->id]),
+                ];
+            }
+        }
+
         /* Réponse reçue mais pas encore analysée. */
         if (!empty($recu) && $analyse === '') {
             $out[] = [
