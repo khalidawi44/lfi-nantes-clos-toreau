@@ -211,7 +211,7 @@ function lfi_nct_arpege_success_view($id) {
     $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_arpege WHERE id = %d", $id));
     if (!$row) return '';
 
-    $rdv_url        = esc_url(home_url('/rendez-vous/'));
+    $rdv_url        = esc_url(lfi_nct_page_url('rendez-vous'));
     $today_fr       = wp_date('j F Y');
     $name           = trim($row->prenom . ' ' . $row->nom);
     $type_label     = lfi_nct_arpege_type_label($row->type_arret);

@@ -151,6 +151,37 @@ function lfi_nct_render_admin_hub() {
             }
             ?>
         </div>
+
+        <hr style="margin:24px 0">
+        <h2>🔗 Vérification des liens</h2>
+        <p style="color:#444">État des liens vers les <strong>pages du site</strong> (les boutons de l'app en <code>/app/?vue=…</code> ne peuvent pas faire de 404). ✅ = page trouvée · ❌ = page ABSENTE (c'est elle qui fait le 404).</p>
+        <?php
+        $survey_url = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+        $survey_ok  = (strpos($survey_url, 'enquete-logement-clos-toreau') === false) || (bool) get_page_by_path('enquete-logement-clos-toreau', OBJECT, ['page', 'post']);
+        $rows = [
+            ['📱 Application', home_url('/' . LFI_NCT_APP_SLUG . '/'), (bool) get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page')],
+            ['📋 Formulaire d\'enquête', $survey_url, $survey_ok],
+        ];
+        foreach ([
+            'rendez-vous'  => '📅 Prendre RDV',
+            'mon-compte'   => '👤 Espace adhérent',
+            'adherer'      => '🤝 Adhérer',
+            'signer'       => '✍️ Pétition',
+            'contact'      => '✉️ Contact',
+            'evenements'   => '📣 Événements',
+        ] as $slug => $label) {
+            $p = get_page_by_path($slug, OBJECT, ['page', 'post']);
+            $rows[] = [$label . ' (/' . $slug . '/)', $p ? get_permalink($p) : home_url('/' . $slug . '/'), (bool) $p];
+        }
+        echo '<div style="overflow-x:auto"><table class="widefat striped" style="max-width:760px"><thead><tr><th>Lien</th><th>Statut</th><th>Tester</th></tr></thead><tbody>';
+        foreach ($rows as $r) {
+            $badge = $r[2] ? '<span style="color:#186a3b;font-weight:700">✅ page trouvée</span>'
+                           : '<span style="color:#c8102e;font-weight:700">❌ page absente</span>';
+            echo '<tr><td>' . esc_html($r[0]) . '</td><td>' . $badge . '</td><td><a href="' . esc_url($r[1]) . '" target="_blank" rel="noopener">ouvrir ↗</a></td></tr>';
+        }
+        echo '</tbody></table></div>';
+        echo '<p style="color:#666;font-size:.92em">Une ligne <strong>❌</strong> = c\'est ce lien qui envoie vers le 404. Dis-moi lequel (ou crée la page manquante) et je l\'oriente vers la bonne page. Les liens de l\'app (enquête incluse) se réparent désormais tout seuls.</p>';
+        ?>
     </div>
     <?php
 }

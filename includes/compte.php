@@ -49,7 +49,7 @@ function lfi_nct_handle_login() {
     }
 
     $redirect = wp_get_referer();
-    if (!$redirect) $redirect = home_url('/mon-compte/');
+    if (!$redirect) $redirect = lfi_nct_page_url('mon-compte');
     wp_safe_redirect($redirect);
     exit;
 }
@@ -158,8 +158,8 @@ function lfi_nct_trouver_groupe_url() {
  * $style : 'classic' (wp_nav_menu) ou 'block' (navigation FSE, version à plat).
  */
 function lfi_nct_menu_extra_items($style = 'classic') {
-    $compte_url  = esc_url(home_url('/mon-compte/'));
-    $rdv_url     = esc_url(home_url('/rendez-vous/'));
+    $compte_url  = esc_url(lfi_nct_page_url('mon-compte'));
+    $rdv_url     = esc_url(lfi_nct_page_url('rendez-vous'));
     $survey_url  = esc_url(lfi_nct_survey_url());
     $survey_label = '📋 Enquête logement';
     $logged_in   = is_user_logged_in();
@@ -173,7 +173,7 @@ function lfi_nct_menu_extra_items($style = 'classic') {
         ];
     } else {
         $parent_label = 'Rejoindre';
-        $parent_url   = esc_url(home_url('/adherer/'));
+        $parent_url   = esc_url(lfi_nct_page_url('adherer'));
         $subs = [
             ['Rejoindre le groupe', esc_url(LFI_NCT_ACTION_POPULAIRE_URL), true],
             ['Trouver mon groupe près de chez moi', esc_url(lfi_nct_trouver_groupe_url()), false],

@@ -62,7 +62,7 @@ function lfi_nct_assistant_answer($request) {
         return new WP_REST_Response([
             'ok' => false,
             'message' => 'Je n\'arrive pas à chercher pour le moment. Tu peux nous écrire directement via le formulaire « Témoigner / demander de l\'aide ».',
-            'fallback' => home_url('/signer/'),
+            'fallback' => lfi_nct_page_url('signer'),
         ], 200);
     }
 
@@ -91,7 +91,7 @@ function lfi_nct_assistant_answer($request) {
         return new WP_REST_Response([
             'ok' => true,
             'message' => 'Je n\'ai pas trouvé de réponse précise sur le site. Le mieux : écris-nous via le formulaire « Témoigner / demander de l\'aide » et on te recontacte.',
-            'fallback' => home_url('/signer/'),
+            'fallback' => lfi_nct_page_url('signer'),
             'pages' => [],
         ], 200);
     }
@@ -100,7 +100,7 @@ function lfi_nct_assistant_answer($request) {
         'ok' => true,
         'message' => 'Voici ce que j\'ai trouvé sur notre site :',
         'pages' => array_values($pages),
-        'fallback' => home_url('/signer/'),
+        'fallback' => lfi_nct_page_url('signer'),
     ], 200);
 }
 
@@ -152,7 +152,7 @@ function lfi_nct_assistant_widget() {
     if (is_a($post, 'WP_Post') && $post->post_name === LFI_NCT_APP_SLUG) return;
 
     $endpoint = esc_url_raw(rest_url('lfi-nct/v1/assistant'));
-    $signer   = esc_url(home_url('/signer/'));
+    $signer   = esc_url(lfi_nct_page_url('signer'));
     ?>
     <style>
     #lfi-ia-btn{position:fixed;right:18px;bottom:18px;z-index:99998;background:#c8102e;color:#fff;border:0;border-radius:30px;padding:12px 18px;font-weight:800;font-size:1em;box-shadow:0 6px 20px rgba(200,16,46,.4);cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
