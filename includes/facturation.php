@@ -430,7 +430,7 @@ function lfi_nct_app_view_intervention_edit() {
 
 /** Liste des bailleurs sociaux de Nantes / Loire-Atlantique (menu déroulant). */
 function lfi_nct_bailleurs_sociaux() {
-    return [
+    $list = [
         'Nantes Métropole Habitat',
         'La Nantaise d\'Habitations',
         'Atlantique Habitations',
@@ -444,6 +444,8 @@ function lfi_nct_bailleurs_sociaux() {
         'Le Logement Familial de Loire-Atlantique',
         'Coopérative Logis Atlantique',
     ];
+    /* Permet à chaque GA d'ajouter ses propres bailleurs (cf. ga-perso.php). */
+    return apply_filters('lfi_nct_bailleurs_sociaux_list', $list);
 }
 
 /** Identifiants des photos (constat) d'une intervention. */
