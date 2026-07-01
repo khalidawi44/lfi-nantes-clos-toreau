@@ -315,6 +315,10 @@ function lfi_nct_reunion_confluences_csv_export() {
 
 function lfi_nct_reunion_confluences_admin_page() {
     if (!current_user_can('manage_options')) return;
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('reunion', '📣 Inscrits réunion', 'Le suivi des inscriptions aux réunions/événements est dans l\'app.');
+        return;
+    }
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_reunion_rsvp';
 

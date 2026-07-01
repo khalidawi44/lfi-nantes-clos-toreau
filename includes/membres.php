@@ -239,6 +239,10 @@ function lfi_nct_membres_csv_export() {
 
 function lfi_nct_membres_admin_page() {
     if (!current_user_can('manage_options')) return;
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('membres', '👥 Membres actifs', 'La gestion des membres actifs du GA est dans l\'app.');
+        return;
+    }
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_membres';
 

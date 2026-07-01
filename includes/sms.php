@@ -178,6 +178,10 @@ function lfi_nct_sms_admin_menu() {
 
 function lfi_nct_sms_router() {
     if (!current_user_can('manage_options')) return;
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('sms', '📱 SMS', 'L\'envoi de SMS aux membres actifs est dans l\'app.');
+        return;
+    }
     $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'envoyer';
     ?>
     <div class="wrap">

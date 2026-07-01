@@ -292,6 +292,10 @@ function lfi_nct_chart_data($repartition, $labels_map = []) {
  * Page admin de statistiques (router : globale / filtrée / détail).
  */
 function lfi_nct_stats_page() {
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('stats-enquete', '📊 Statistiques', 'Les statistiques d\'enquête (problèmes, adresses, gravité) sont dans l\'app.');
+        return;
+    }
     $view = $_GET['view'] ?? '';
     $filter = $_GET['filter'] ?? '';
 
