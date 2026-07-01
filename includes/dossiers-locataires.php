@@ -466,6 +466,155 @@ function lfi_nct_nmh_deadline($courrier_date, $urgence) {
     $u = lfi_nct_nmh_urgence_get($urgence);
     return wp_date('Y-m-d', strtotime($courrier_date . ' ' . $u['add']));
 }
+/* ============================================================== *
+ *  NOTE POUR L'AVOCAT — document de présentation / demande de     *
+ *  conseil, rempli automatiquement depuis les VRAIES données du   *
+ *  dossier (aucune donnée inventée). Imprimable / PDF.            *
+ * ============================================================== */
+function lfi_nct_app_view_dossier_avocat() {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
+        wp_safe_redirect(lfi_nct_app_url('dossiers'));
+        exit;
+    }
+    global $wpdb;
+    $uid = (int) ($_GET['uid'] ?? 0);
+    $u   = $uid ? get_userdata($uid) : null;
+    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+        echo '<div class="lfi-app"><div class="lfi-app-error">Locataire introuvable.</div></div>';
+        return;
+    }
+
+    /* Données réelles du dossier. */
+    $d = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($uid) : null;
+    $ph = function ($v) { $v = trim((string) $v); return $v !== '' ? esc_html($v) : '<span style="color:#b00">[à préciser]</span>'; };
+
+    /* Identité + logement. */
+    $prenom  = $d->tenant_prenom ?? '';
+    $nom     = $d->tenant_nom ?? '';
+    $name    = trim($prenom . ' ' . $nom);
+    if ($name === '') $name = $u->display_name ?: $u->user_login;
+    $adresse = $d->tenant_adresse ?? '';
+    $etage   = $d->tenant_etage ?? '';
+    $appt    = $d->tenant_appartement ?? '';
+    $logement = trim($adresse . ($etage ? ' · étage ' . $etage : '') . ($appt ? ' · appt ' . $appt : ''));
+    $bailleur = function_exists('lfi_nct_fact_bailleur') ? (lfi_nct_fact_bailleur()['nom'] ?? '') : '';
+
+    /* Enquête liée → problèmes + gravité. */
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    $response = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    if (!$logement && $response) $logement = trim(($response->adresse ?? '') . ($response->etage ? ' · étage ' . $response->etage : ''));
+    $problem = ($response && function_exists('lfi_nct_app_enq_problem')) ? lfi_nct_app_enq_problem($response) : null;
+    $prob_txt = '';
+    if ($problem && !empty($problem['chips'])) {
+        $names = array_map(function ($c) { return $c[1]; }, $problem['chips']);
+        $prob_txt = implode(', ', $names);
+    }
+    $gravite = $problem ? (int) $problem['gravite'] : 0;
+    $recurrent = $problem ? (string) $problem['recurrent'] : '';
+
+    /* Chronomètre NMH (délais légaux). */
+    $urg      = $d->nmh_urgence ?? 'bailleur';
+    $u_opt    = function_exists('lfi_nct_nmh_urgence_get') ? lfi_nct_nmh_urgence_get($urg) : ['court' => ''];
+    $sent     = $d->lrar_travaux_date ?? '';
+    $deadline = ($sent && function_exists('lfi_nct_nmh_deadline')) ? lfi_nct_nmh_deadline($sent, $urg) : '';
+    $today    = current_time('Y-m-d');
+    $passed   = $deadline && ($today > $deadline) && empty($d->schs_date);
+
+    /* Constatations / demandes / certificat. */
+    $constat = $d->constatations ?? '';
+    $demandes = $d->demandes ?? '';
+    $cert_med = $d->certificat_medecin ?? '';
+    $cert_dat = $d->certificat_date ?? '';
+
+    /* Stats du quartier (cloisonnées au GA — PAS le national). */
+    $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+    $qrows = $wpdb->get_results("SELECT adresse, data FROM {$wpdb->prefix}lfi_nct_responses WHERE deleted_at IS NULL" . $sc) ?: [];
+    $q_total = count($qrows); $q_prob = 0; $q_addr = []; $q_gsum = 0; $q_gn = 0;
+    foreach ($qrows as $qr) {
+        $qd = json_decode((string) $qr->data, true); if (!is_array($qd)) $qd = [];
+        if (($qd['problemes_presence'] ?? '') === 'oui') $q_prob++;
+        $g = (int) ($qd['problemes_gravite'] ?? 0); if ($g > 0) { $q_gsum += $g; $q_gn++; }
+        $a = trim((string) $qr->adresse);
+        if ($a !== '' && function_exists('lfi_nct_address_canonical_key')) { $k = lfi_nct_address_canonical_key($a); if ($k !== '') $q_addr[$k] = 1; }
+    }
+    $q_pct  = $q_total ? round($q_prob * 100 / $q_total) : 0;
+    $q_gavg = $q_gn ? round($q_gsum / $q_gn, 1) : 0;
+    $q_imm  = count($q_addr);
+    $ga_nom = function_exists('lfi_nct_ga_nom') && function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_ga_nom(lfi_nct_scope_ga_slug()) : '';
+    $asso   = function_exists('lfi_nct_ga_entete_nom') ? lfi_nct_ga_entete_nom() : 'Association Union des Quartiers Libres';
+
+    /* ---------- Rendu ---------- */
+    echo '<div class="lfi-app">';
+    echo '<div class="lfi-noprint" style="max-width:720px;margin:0 auto 12px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $uid])) . '">← Dossier</a>';
+    echo '<button type="button" class="btn-primary" onclick="window.print()">🖨 Imprimer / PDF</button>';
+    echo '</div>';
+
+    echo '<div class="lfi-avocat" style="max-width:720px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:12px;padding:26px 30px;color:#1a1a1a;line-height:1.55">';
+    echo '<div style="text-align:center;border-bottom:3px solid #c8102e;padding-bottom:12px;margin-bottom:16px">';
+    echo '<h1 style="color:#c8102e;margin:0;font-size:1.4em">Note de présentation &amp; demande de conseil</h1>';
+    echo '<div style="color:#666;margin-top:4px">' . esc_html($asso) . ($ga_nom ? ' — ' . esc_html($ga_nom) : '') . '</div>';
+    echo '<div style="color:#999;font-size:.85em;margin-top:2px">Édité le ' . esc_html(wp_date('j F Y')) . '</div>';
+    echo '</div>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em">1. L\'objet de ma venue</h2>';
+    echo '<p>Je viens <strong>chercher votre conseil et votre orientation</strong>. Nous avons construit un dispositif pour repérer, documenter l\'habitat indigne et <strong>accompagner</strong> les locataires ; nous avons besoin de vous pour <strong>valider le cadre juridique</strong> et savoir <strong>ce que vous pouvez engager</strong>. Nous accompagnons ; nous ne représentons pas — c\'est votre rôle.</p>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">2. Ce que nous avons déjà mis en place</h2>';
+    echo '<ul>';
+    echo '<li><strong>Enquête de terrain porte-à-porte</strong> : chaque logement recensé, le problème resitué dans l\'immeuble et le quartier.</li>';
+    echo '<li><strong>Dossier juridique par locataire</strong> : constatations, demandes, pièces, historique.</li>';
+    echo '<li><strong>Photos horodatées</strong> du logement (preuve datée).</li>';
+    echo '<li><strong>Suivi des délais légaux</strong> : mise en demeure → délai selon l\'urgence → escalade SCHS/ARS.</li>';
+    echo '<li><strong>Signalement préfecture anonyme par bâtiment</strong> (jamais transmis au bailleur).</li>';
+    echo '<li><strong>Volet « travaux »</strong> pour organiser interventions/constats par la suite.</li>';
+    echo '</ul>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">3. Le cas — ' . esc_html($name) . '</h2>';
+    echo '<ul>';
+    echo '<li>Logement : ' . $ph($logement) . ($bailleur ? ' — bailleur : ' . esc_html($bailleur) : '') . '</li>';
+    echo '<li>Problèmes signalés : ' . ($prob_txt !== '' ? esc_html($prob_txt) : $ph('')) . ($gravite ? ' — gravité déclarée <strong>' . (int) $gravite . '/10</strong>' : '') . ($recurrent === 'permanent' ? ' (en permanence)' : '') . '</li>';
+    echo '<li>Santé : ' . ($cert_med ? 'certificat médical ' . esc_html($cert_med) . ($cert_dat ? ' du ' . esc_html(wp_date('j M Y', strtotime($cert_dat))) : '') : $ph('')) . '</li>';
+    if ($constat)  echo '<li>Constatations : ' . esc_html($constat) . '</li>';
+    if ($demandes) echo '<li>Ce que la personne demande : ' . esc_html($demandes) . '</li>';
+    echo '<li>Démarches : ' . ($sent ? 'mise en demeure envoyée le <strong>' . esc_html(wp_date('j M Y', strtotime($sent))) . '</strong>, délai légal ' . esc_html($u_opt['court']) . ($deadline ? ', échéance le <strong>' . esc_html(wp_date('j M Y', strtotime($deadline))) . '</strong>' : '') . ($passed ? ' — <strong style="color:#b00">délai dépassé</strong>' : ' — en cours') : $ph('') . ' (mise en demeure non encore envoyée)') . '</li>';
+    echo '</ul>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">4. La vue d\'ensemble (quartier)</h2>';
+    echo '<p><strong>' . (int) $q_total . '</strong> logements enquêtés' . ($ga_nom ? ' sur ' . esc_html($ga_nom) : '') . ', <strong>' . (int) $q_pct . ' %</strong> avec au moins un problème, <strong>' . (int) $q_imm . '</strong> immeubles concernés, gravité moyenne <strong>' . esc_html(str_replace('.', ',', (string) $q_gavg)) . '/10</strong>. <em>Ces chiffres montrent que ce n\'est pas un cas isolé.</em></p>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">5. Le parcours d\'accompagnement (à valider avec vous)</h2>';
+    echo '<ol>';
+    echo '<li><strong>Adhésion à l\'association</strong> (gratuite) pour agir aux côtés de la personne — est-ce le bon montage (art. 63‑66 loi 71‑1130) ?</li>';
+    echo '<li><strong>Accompagnement</strong> : courriers au bailleur, constats, orientation.</li>';
+    echo '<li><strong>Travaux / brigade</strong> par la suite si le bailleur n\'agit pas — dans quel cadre légal ?</li>';
+    echo '</ol>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">6. Ce que nous attendons — du plus urgent au plus large</h2>';
+    echo '<ul>';
+    echo '<li><strong>🔴 Le plus urgent (' . esc_html($name) . ', santé/sécurité)</strong> : quelle voie la plus rapide pour la protéger, et que faire dès aujourd\'hui ?</li>';
+    echo '<li><strong>🟠 En général (immeuble / quartier)</strong> : plusieurs logements touchés — peut-on mutualiser (action groupée) ?</li>';
+    echo '<li><strong>🟡 Municipal (élus locaux)</strong> : comment articuler le plaidoyer auprès des élu·es avec l\'action juridique sans la fragiliser ?</li>';
+    echo '</ul>';
+
+    echo '<h2 style="color:#c8102e;font-size:1.1em;margin-top:16px">7. Nos questions — conseil &amp; orientation</h2>';
+    echo '<ul>';
+    echo '<li>Quelle <strong>stratégie</strong> conseillez-vous, et dans <strong>quel ordre</strong> ?</li>';
+    echo '<li>Nos <strong>preuves</strong> sont-elles exploitables ? Que <strong>compléter / sécuriser</strong> ?</li>';
+    echo '<li>Le <strong>montage association → adhésion → courriers → travaux</strong> est-il solide ?</li>';
+    echo '<li>Que <strong>pouvez-vous engager</strong>, et de quoi avez-vous <strong>besoin de notre part</strong> ?</li>';
+    echo '<li>Quelles démarches <strong>faire / surtout ne pas faire</strong> pour ne pas nuire au dossier ?</li>';
+    echo '</ul>';
+
+    echo '<p style="margin-top:16px">Merci de votre écoute et de vos conseils.</p>';
+    echo '<div style="margin-top:14px;border-top:1px solid #eee;padding-top:8px;font-size:.8em;color:#999">Document interne d\'accompagnement — données du locataire strictement confidentielles, non transmises au bailleur.</div>';
+    echo '</div>'; // .lfi-avocat
+    echo '</div>'; // .lfi-app
+
+    echo '<style>@media print{body *{visibility:hidden!important}.lfi-avocat,.lfi-avocat *{visibility:visible!important}.lfi-avocat{position:absolute;left:0;top:0;width:100%;border:0;border-radius:0}.lfi-noprint{display:none!important}.lfi-public-install,.lfi-app-emergency{display:none!important}}</style>';
+}
+
 /** Rendu du panneau chronomètre dans la fiche dossier (admins). */
 function lfi_nct_nmh_render_chrono($dossier) {
     $urg     = $dossier->nmh_urgence ?: 'bailleur';

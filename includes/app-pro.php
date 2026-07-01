@@ -389,6 +389,7 @@ function lfi_nct_app_view_dossier() {
     echo '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
     echo '<a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Page précédente</a>';
+    echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note pour l\'avocat (PDF)</a>';
     echo '</div>';
 
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');

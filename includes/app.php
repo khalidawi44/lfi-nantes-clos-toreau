@@ -720,6 +720,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
                     case 'dossier-recap-nmh': lfi_nct_app_view_dossier_recap_nmh(); break;
+                    case 'dossier-avocat':    lfi_nct_app_view_dossier_avocat();    break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
                     case 'carte':           lfi_nct_app_view_carte();           break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
