@@ -83,7 +83,11 @@ function lfi_nct_reussite_flag_names($text) {
 /** Lien « Contactez-nous » (page contact du site, configurable). */
 function lfi_nct_reussite_contact_url() {
     $u = get_option('lfi_nct_reussite_contact_url', '');
-    return $u ?: lfi_nct_page_url('contact');
+    if ($u) return $u;
+    /* Repli sans 404 : page /contact/ si elle existe, sinon la page « Prendre
+       RDV », sinon le formulaire d'enquête, sinon l'accueil. */
+    $rdv = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('rendez-vous', (function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/'))) : home_url('/');
+    return function_exists('lfi_nct_page_url') ? lfi_nct_page_url('contact', $rdv) : home_url('/');
 }
 
 /* ============================================================== *
