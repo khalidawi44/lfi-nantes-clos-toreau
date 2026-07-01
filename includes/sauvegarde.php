@@ -31,10 +31,57 @@ function lfi_nct_backup_ga_owner($slug) {
 function lfi_nct_backup_ga_folder($slug, $nom) {
     if ($slug === '' || $slug === 'clos-toreau') return 'GA_Clos-Toreau';
     $clean = function_exists('remove_accents') ? remove_accents((string) $nom) : (string) $nom;
-    $clean = preg_replace('/^(GA|Groupe d.?Action)\s+/i', '', $clean);
+    $clean = preg_replace('/^(GA|Groupe d.?Action)\s+(de\s+|du\s+|des\s+|d.?)?/i', '', $clean);
     $clean = trim(preg_replace('/[^A-Za-z0-9]+/', '-', $clean), '-');
     if ($clean === '') $clean = preg_replace('/[^A-Za-z0-9]+/', '-', $slug);
     return 'GA_' . $clean;
+}
+
+/** Sous-dossiers standard d'un GA (identiques à la structure « LFI »). */
+function lfi_nct_backup_ga_subdirs() {
+    return [
+        '01_Membres_actifs',
+        '02_Enquetes_logement/Reponses',
+        '02_Enquetes_logement/Photos_horodatees',
+        '03_Locataires_accompagnes/_Locataire_MODELE_a-dupliquer/Dossier_juridique',
+        '03_Locataires_accompagnes/_Locataire_MODELE_a-dupliquer/Photos',
+        '03_Locataires_accompagnes/_Locataire_MODELE_a-dupliquer/Courriers_NMH_mise-en-demeure_LRAR',
+        '03_Locataires_accompagnes/_Locataire_MODELE_a-dupliquer/Certificats_medicaux',
+        '03_Locataires_accompagnes/_Locataire_MODELE_a-dupliquer/Note_pour_avocat',
+        '04_Evenements/Flyers_et_QR',
+        '04_Evenements/Inscriptions',
+        '05_Travaux_brigade',
+        '06_Statistiques_et_cartes',
+        '07_Prefecture_anonyme_par_batiment',
+        '08_Reussites',
+    ];
+}
+
+/** Pose l'arborescence COMPLÈTE (même vide) pour que « tout » soit dans le ZIP. */
+function lfi_nct_backup_add_scaffold($zip, $gas) {
+    $top = [
+        '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Statuts_et_identite',
+        '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Adhesions',
+        '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Comptes_rendus_reunions',
+        '00_SITE_ET_ASSOCIATION/Modeles_courriers',
+        '00_SITE_ET_ASSOCIATION/Charte_et_RGPD',
+        '00_SITE_ET_ASSOCIATION/Sauvegardes_site_web',
+        '01_VOLET_NATIONAL_deputes/Statistiques_nationales',
+        '01_VOLET_NATIONAL_deputes/Elements_de_langage',
+        '01_VOLET_NATIONAL_deputes/Etudes_et_donnees_scientifiques/Finances_Nantes_Metropole_Habitat',
+        '01_VOLET_NATIONAL_deputes/Dossiers_deputes',
+        '02_VOLET_MUNICIPAL_elus_locaux/Statistiques_cumulees',
+        '02_VOLET_MUNICIPAL_elus_locaux/Cartes_generales',
+        '02_VOLET_MUNICIPAL_elus_locaux/Dossiers_elus_municipaux',
+    ];
+    foreach ($top as $d) { $zip->addEmptyDir($d); $zip->addFromString($d . '/_a-remplir.txt', "Depose ici tes fichiers.\n"); }
+    foreach ($gas as $g) {
+        $base = '03_GROUPES_D_ACTION/' . lfi_nct_backup_ga_folder($g['slug'], $g['nom']);
+        foreach (lfi_nct_backup_ga_subdirs() as $sd) {
+            $zip->addEmptyDir($base . '/' . $sd);
+            $zip->addFromString($base . '/' . $sd . '/_a-remplir.txt', "Depose ici tes fichiers.\n");
+        }
+    }
 }
 
 /** Construit une chaîne CSV (UTF-8 + BOM Excel) depuis un tableau de lignes. */
@@ -82,6 +129,10 @@ function lfi_nct_backup_fill_zip($zip, $since) {
             $gas[] = ['slug' => $g['slug'], 'nom' => $g['nom'] ?? $g['slug']];
         }
     }
+
+    /* Sauvegarde COMPLÈTE : on pose d'abord toute l'arborescence (même vide),
+       pour que le ZIP contienne « tout » et se calque sur le dossier LFI. */
+    if (!$has_since) lfi_nct_backup_add_scaffold($zip, $gas);
 
     foreach ($gas as $g) {
         $slug   = $g['slug'];
