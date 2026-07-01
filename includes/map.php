@@ -84,6 +84,35 @@ function lfi_nct_geocode_query($query, $geo = null) {
 }
 
 /**
+ * Géocode un LIEU (ville / quartier) sans biais de viewbox — utilisé pour
+ * centrer par défaut la carte d'un groupe d'action sur sa ville/son quartier
+ * (ex. « Vallet », « Dervallières, Nantes »). Renvoie [lat, lng] ou null.
+ */
+function lfi_nct_geocode_place($query) {
+    $query = trim((string) $query);
+    if ($query === '') return null;
+    $params = [
+        'q'            => $query . ', France',
+        'format'       => 'json',
+        'limit'        => 1,
+        'countrycodes' => 'fr',
+        'bounded'      => 0,
+    ];
+    $url  = 'https://nominatim.openstreetmap.org/search?' . http_build_query($params);
+    $resp = wp_remote_get($url, [
+        'timeout' => 12,
+        'headers' => [
+            'User-Agent' => 'LFI-Nantes-Clos-Toreau-Survey/1.0 (https://lfi-nantes-clostoreau.fr)',
+            'Accept'     => 'application/json',
+        ],
+    ]);
+    if (is_wp_error($resp)) return null;
+    $body = json_decode(wp_remote_retrieve_body($resp), true);
+    if (!is_array($body) || empty($body) || !isset($body[0]['lat'], $body[0]['lon'])) return null;
+    return [(float) $body[0]['lat'], (float) $body[0]['lon']];
+}
+
+/**
  * Géocode une adresse libre via Nominatim avec plusieurs tentatives. Renvoie [lat, lng] ou null.
  * Respect des CGU Nominatim : User-Agent identifié + ~1 req/sec.
  */

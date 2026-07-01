@@ -1137,11 +1137,16 @@ function lfi_nct_app_view_carte($force_all = false) {
     $center_lng  = defined('LFI_NCT_MAP_CENTER_LNG')  ? (float) LFI_NCT_MAP_CENTER_LNG  : -1.5380;
     $center_zoom = defined('LFI_NCT_MAP_CENTER_ZOOM') ? (int)   LFI_NCT_MAP_CENTER_ZOOM : 16;
 
-    /* Centre la carte sur la zone du GA affiché (Port-Boyer, Rezé…), sauf en
-       mode réseau cumulé où l'on garde Clos Toreau comme point de départ. */
+    /* Centre la carte sur la zone du GA affiché (Vallet, Dervallières,
+       Port-Boyer, Rezé…) en vue aérienne, sauf en mode réseau cumulé où l'on
+       garde Clos Toreau comme point de départ. */
     if (!$force_all && function_exists('lfi_nct_ga_geo') && function_exists('lfi_nct_scope_ga_slug')) {
         $geo = lfi_nct_ga_geo(lfi_nct_scope_ga_slug());
-        if (!empty($geo['centre'])) { $center_lat = (float) $geo['centre'][0]; $center_lng = (float) $geo['centre'][1]; }
+        if (!empty($geo['centre'])) {
+            $center_lat = (float) $geo['centre'][0];
+            $center_lng = (float) $geo['centre'][1];
+            $center_zoom = 15; // vue aérienne sur la ville/quartier du GA
+        }
     }
 
     lfi_nct_app_screen_open($force_all ? '🌐 Carte cumulée du réseau' : '🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
@@ -1299,7 +1304,9 @@ function lfi_nct_app_view_carte($force_all = false) {
         });
         var surveysGJ = { type: 'FeatureCollection', features: feats };
         var pointsGJ  = { type: 'FeatureCollection', features: pts };
-        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 18, pitch: 55, bearing: -15 });
+        /* Dès qu'il y a au moins une enquête, on cadre dessus en vue AÉRIENNE
+           (maxZoom 16) : on voit le point/la pastille sans être collé au sol. */
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 80, maxZoom: 16, pitch: 55, bearing: -15 });
 
         function openPopup(e) {
             if (!e.features || !e.features.length) return;
