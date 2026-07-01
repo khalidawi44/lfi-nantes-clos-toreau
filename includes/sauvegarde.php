@@ -57,9 +57,42 @@ function lfi_nct_backup_ga_subdirs() {
     ];
 }
 
+/** Nettoie un libellé en nom de dossier (sans accents ni caractères spéciaux). */
+function lfi_nct_backup_clean($s, $fallback = '') {
+    $c = function_exists('remove_accents') ? remove_accents((string) $s) : (string) $s;
+    $c = trim(preg_replace('/[^A-Za-z0-9]+/', '-', $c), '-');
+    return $c !== '' ? $c : $fallback;
+}
+/** Dossier racine PERSO (auto-entrepreneur) — factures/travaux, ton nom propre. */
+function lfi_nct_backup_perso_folder() {
+    $nom = function_exists('lfi_nct_fact_prestataire') ? (lfi_nct_fact_prestataire()['nom'] ?? '') : '';
+    return 'PERSO_' . lfi_nct_backup_clean($nom, 'auto-entrepreneur') . '_auto-entrepreneur';
+}
+/** Dossier racine ASSO — accompagnement, mandats, statuts, préfecture. */
+function lfi_nct_backup_asso_folder() {
+    $nom = function_exists('lfi_nct_association') ? (lfi_nct_association()['nom'] ?? '') : '';
+    return 'ASSO_' . lfi_nct_backup_clean($nom, 'Association');
+}
+
 /** Pose l'arborescence COMPLÈTE (même vide) pour que « tout » soit dans le ZIP. */
 function lfi_nct_backup_add_scaffold($zip, $gas) {
+    $perso = lfi_nct_backup_perso_folder();
+    $asso  = lfi_nct_backup_asso_folder();
     $top = [
+        /* ---- PERSO (auto-entrepreneur) : travaux + factures, en ton nom ---- */
+        $perso . '/Factures',
+        $perso . '/Devis',
+        $perso . '/Compta',
+        $perso . '/URSSAF',
+        /* ---- ASSO : accompagnement, mandats, statuts, préfecture ---- */
+        $asso . '/Statuts',
+        $asso . '/PV_Assemblees_generales',
+        $asso . '/Prefecture',
+        $asso . '/Mandats_locataires',
+        $asso . '/Adhesions',
+        $asso . '/Courriers',
+        $asso . '/Compta_asso',
+        /* ---- Site & volets ---- */
         '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Statuts_et_identite',
         '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Adhesions',
         '00_SITE_ET_ASSOCIATION/Association_Union_des_Quartiers_Libres/Comptes_rendus_reunions',
@@ -82,6 +115,55 @@ function lfi_nct_backup_add_scaffold($zip, $gas) {
             $zip->addFromString($base . '/' . $sd . '/_a-remplir.txt', "Depose ici tes fichiers.\n");
         }
     }
+}
+
+/**
+ * PERSO / ASSO — remplit les deux dossiers racines distincts (rien ne se mélange).
+ *  - PERSO : les FACTURES (auto-entrepreneur, ton nom propre) + registre.
+ *  - ASSO : informations de l'association + rappel de la règle (mandats,
+ *    statuts, PV, préfecture se déposent ici, ils ne vivent pas en base).
+ */
+function lfi_nct_backup_add_perso_asso($zip, $since) {
+    global $wpdb;
+    $perso = lfi_nct_backup_perso_folder();
+    $asso  = lfi_nct_backup_asso_folder();
+
+    /* --- PERSO : factures (une par numéro, HTML conforme = source unique) --- */
+    $t = $wpdb->prefix . 'lfi_nct_interventions';
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : 0;
+    if ($owner) {
+        $where = $wpdb->prepare('owner_user_id = %d', $owner) . " AND facture_numero IS NOT NULL AND facture_numero <> ''";
+        if ($since !== '' && $since !== null) $where .= $wpdb->prepare(' AND (facture_date > %s OR updated_at > %s)', $since, $since);
+        $factures = $wpdb->get_results("SELECT facture_numero AS num, MIN(facture_date) AS fd, SUM(total_ht) AS tot, MAX(paye_date) AS pd, MAX(bailleur) AS bailleur FROM $t WHERE $where GROUP BY facture_numero ORDER BY fd ASC") ?: [];
+        $csv = [];
+        foreach ($factures as $f) {
+            $csv[] = [$f->num, $f->fd, $f->bailleur, number_format((float) $f->tot, 2, ',', ''), ($f->pd ? 'paye' : 'facture'), $f->pd];
+            $y = $f->fd ? wp_date('Y', strtotime($f->fd)) : '0000';
+            $m = $f->fd ? wp_date('m', strtotime($f->fd)) : '00';
+            $safe = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $f->num);
+            $inner = function_exists('lfi_nct_facture_render_html') ? lfi_nct_facture_render_html($f->num, $owner) : '';
+            $html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Facture ' . esc_html($f->num) . '</title></head><body style="max-width:760px;margin:16px auto">' . $inner . '</body></html>';
+            $zip->addFromString("$perso/Factures/$y/$m/Facture-$safe.html", $html);
+        }
+        if ($csv) {
+            $zip->addFromString("$perso/Compta/registre-factures.csv", lfi_nct_backup_csv(['Numero', 'Date', 'Bailleur', 'Montant HT', 'Statut', 'Paye le'], $csv));
+        }
+    }
+    $zip->addFromString("$perso/_LISEZ-MOI.txt", "PERSO — auto-entrepreneur (ton nom propre)\n==========================================\nIci : TES factures, devis, compta, URSSAF. Argent sur TON compte.\nNe JAMAIS mettre ici un mandat, un statut ou un document de l'association.\n");
+
+    /* --- ASSO : informations + règle --- */
+    if (function_exists('lfi_nct_association')) {
+        $a = lfi_nct_association();
+        $info = "ASSOCIATION\n===========\n"
+              . 'Nom : ' . ($a['nom'] ?? '') . "\n"
+              . 'RNA : ' . ($a['rna'] ?? '') . "\n"
+              . 'Siege : ' . ($a['siege'] ?? '') . ' ' . ($a['cp_ville'] ?? '') . "\n"
+              . 'President : ' . ($a['president'] ?? '') . "\n"
+              . 'Secretaire : ' . ($a['secretaire'] ?? '') . "\n"
+              . 'Email : ' . ($a['email'] ?? '') . "\n\nObjet :\n" . ($a['objet'] ?? '') . "\n";
+        $zip->addFromString("$asso/asso-informations.txt", $info);
+    }
+    $zip->addFromString("$asso/_LISEZ-MOI.txt", "ASSO — Union des Quartiers Libres\n=================================\nIci : statuts, PV d'AG, recepisses prefecture, MANDATS des locataires,\nadhesions, courriers au nom de l'asso. Argent sur le compte de l'ASSO.\nNe JAMAIS mettre ici une facture de travaux (elle va dans PERSO).\n\nREGLE : l'asso ACCOMPAGNE et MANDATE ; toi tu REPARES et tu FACTURES.\n");
 }
 
 /** Construit une chaîne CSV (UTF-8 + BOM Excel) depuis un tableau de lignes. */
@@ -133,6 +215,10 @@ function lfi_nct_backup_fill_zip($zip, $since) {
     /* Sauvegarde COMPLÈTE : on pose d'abord toute l'arborescence (même vide),
        pour que le ZIP contienne « tout » et se calque sur le dossier LFI. */
     if (!$has_since) lfi_nct_backup_add_scaffold($zip, $gas);
+
+    /* PERSO (factures auto-entrepreneur) + ASSO (infos, mandats) — séparés,
+       pour que rien ne se mélange. */
+    lfi_nct_backup_add_perso_asso($zip, $since);
 
     foreach ($gas as $g) {
         $slug   = $g['slug'];
