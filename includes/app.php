@@ -1024,7 +1024,10 @@ function lfi_nct_app_render_dashboard() {
         </div>
 
         <div class="lfi-app-quick">
+            <?php $reunion_past = function_exists('lfi_nct_reunion_confluences_is_past') && lfi_nct_reunion_confluences_is_past(); ?>
+            <?php if (!$reunion_past) : ?>
             <div class="q"><span class="n"><?php echo (int) $stats['reunion']; ?></span><span class="l">Inscrits 26 juin</span></div>
+            <?php endif; ?>
             <div class="q"><span class="n"><?php echo (int) $stats['surveys']; ?></span><span class="l">Enquêtes</span></div>
             <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Membres actifs</span></div>
         </div>
@@ -1752,9 +1755,33 @@ function lfi_nct_travaux_guard() {
     return false;
 }
 
+/**
+ * Retire automatiquement la tuile d'inscription à la réunion du 26 juin une
+ * fois la date passée (des suggestions, tuiles et raccourcis). Générique :
+ * supprime toute tuile pointant vers l'écran « reunion » quand l'événement
+ * est terminé. L'événement reste consultable, mais on ne propose plus de s'y
+ * inscrire.
+ */
+function lfi_nct_prune_past_event_tiles($tiles) {
+    if (!function_exists('lfi_nct_reunion_confluences_is_past') || !lfi_nct_reunion_confluences_is_past()) return $tiles;
+    $reunion_url = lfi_nct_app_url('reunion');
+    return array_values(array_filter((array) $tiles, function ($t) use ($reunion_url) {
+        return !(is_array($t) && isset($t[3]) && $t[3] === $reunion_url);
+    }));
+}
+/** Même chose sur les sections [titre => [tuiles…]] (retire aussi les sections vidées). */
+function lfi_nct_prune_past_event_sections($sections) {
+    if (!function_exists('lfi_nct_reunion_confluences_is_past') || !lfi_nct_reunion_confluences_is_past()) return $sections;
+    foreach ($sections as $title => $tiles) {
+        $sections[$title] = lfi_nct_prune_past_event_tiles($tiles);
+        if (empty($sections[$title])) unset($sections[$title]);
+    }
+    return $sections;
+}
+
 function lfi_nct_admin_get_tiles($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
-    return lfi_nct_module_filter_tiles([
+    return lfi_nct_prune_past_event_tiles(lfi_nct_module_filter_tiles([
         ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
         ['📊', 'Stats enquête',             'Problèmes, adresses, gravité',        lfi_nct_app_url('stats-enquete')],
@@ -1772,7 +1799,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['📰', 'Articles',                  'Édition WP',                          admin_url('edit.php')],
         ['📝', 'Pages',                     'Édition WP',                          admin_url('edit.php?post_type=page')],
         ['🚪', 'Se déconnecter',            'Quitter la console',                  wp_logout_url(home_url('/'))],
-    ]);
+    ]));
 }
 
 /**
@@ -1781,7 +1808,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
  */
 function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
-    return lfi_nct_module_filter_sections([
+    return lfi_nct_prune_past_event_sections(lfi_nct_module_filter_sections([
         '🟣 ESPACE GROUPE D\'ACTION' => [
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🎨', 'Personnalisation du GA', 'En-tête courriers · bailleurs',       lfi_nct_app_url('ga-params')],
@@ -1842,7 +1869,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📝', 'Pages',                  'Édition WP',                          admin_url('edit.php?post_type=page')],
             ['🚪', 'Se déconnecter',         '',                                    wp_logout_url(home_url('/'))],
         ],
-    ]);
+    ]));
 }
 
 /* ============================================================== *
@@ -1998,9 +2025,13 @@ function lfi_nct_app_view_reunion() {
     $total = count($rows);
     $pers  = $is_home_ga ? (int) $wpdb->get_var("SELECT COALESCE(SUM(avec_qui),0) FROM $table") : 0;
 
-    lfi_nct_app_screen_open('📣 Réunion 26 juin', $total . ' inscription(s) · ' . $pers . ' personne(s) annoncée(s)');
+    $reunion_past = function_exists('lfi_nct_reunion_confluences_is_past') && lfi_nct_reunion_confluences_is_past();
+    lfi_nct_app_screen_open('📣 Réunion 26 juin' . ($reunion_past ? ' (passée)' : ''), $total . ' inscription(s) · ' . $pers . ' personne(s) annoncée(s)');
 
     if (!empty($_GET['deleted'])) lfi_nct_app_flash('Inscription supprimée.');
+    if ($reunion_past) {
+        echo '<div class="lfi-app-help" style="background:#f4f4f4;border-left:4px solid #999">🗓️ <strong>Réunion passée</strong> — les inscriptions sont closes. Cet écran reste consultable en historique (l\'événement reste au calendrier, marqué « passé »).</div>';
+    }
 
     if (empty($rows)) {
         echo '<div class="lfi-app-empty">Aucune inscription pour l\'instant.<br><small>Partage le tract pour faire venir du monde.</small></div>';
