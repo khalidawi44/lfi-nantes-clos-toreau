@@ -673,6 +673,8 @@ function lfi_nct_app_shortcode() {
     if (!is_user_logged_in()) {
         lfi_nct_app_render_login();
     } else {
+        /* Journalise l'usage de l'app (1 fois/jour/utilisateur). */
+        if (function_exists('lfi_nct_activity_track_app')) lfi_nct_activity_track_app();
         $handled = false;
         if (function_exists('lfi_nct_app_role_dispatch')) {
             lfi_nct_app_role_dispatch($handled);
@@ -690,7 +692,7 @@ function lfi_nct_app_shortcode() {
                    admin de GA qui les vise est renvoyé vers son tableau de bord. */
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
-                    'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions',
+                    'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
@@ -798,6 +800,7 @@ function lfi_nct_app_shortcode() {
                     case 'national-pdf':          lfi_nct_app_view_national_pdf();            break;
                     case 'sauvegarde':            lfi_nct_app_view_sauvegarde();             break;
                     case 'suggestions':           lfi_nct_app_view_suggestions();            break;
+                    case 'activite':              lfi_nct_app_view_activite();               break;
                     case 'compta':                lfi_nct_app_view_compta();                 break;
                     case 'compta-relances':       lfi_nct_app_view_compta_relances();        break;
                     case 'compta-export':         lfi_nct_app_view_compta_export();          break;
@@ -1880,6 +1883,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
             ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
             ['💡', 'Suggestions des GA',        'Besoins remontés par les admins',    lfi_nct_app_url('suggestions')],
+            ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
         '🇫🇷 VOLET NATIONAL — député·es' => [
             ['🇫🇷', 'Tableau de bord national', 'Chiffres cumulés pour argumenter',   lfi_nct_app_url('national')],
