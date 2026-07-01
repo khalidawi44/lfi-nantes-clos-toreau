@@ -2128,9 +2128,21 @@ function lfi_nct_app_view_evenements() {
             if ($date)  echo '<span class="meta-chip">🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</span>';
             if ($place) echo '<span class="meta-chip">📍 ' . esc_html($place) . ($city ? ', ' . esc_html($city) : '') . '</span>';
             echo '</div>';
-            echo '<div class="row-actions">';
-            echo '<a class="btn-primary" href="' . esc_url(get_permalink($p)) . '" target="_blank">🔗 Page publique</a>';
-            echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
+            $ev_url   = get_permalink($p);
+            $ev_title = get_the_title($p);
+            /* Édition réservée aux admins ; partage réseaux sociaux pour tous. */
+            $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+            echo '<div class="row-actions" style="flex-wrap:wrap;gap:6px">';
+            echo '<a class="btn-primary" href="' . esc_url($ev_url) . '" target="_blank" rel="noopener">🔗 Page publique</a>';
+            /* Partage réseaux sociaux */
+            $u = rawurlencode($ev_url);
+            $t = rawurlencode($ev_title . ' — GA LFI Nantes Sud');
+            echo '<a class="btn-ghost" href="https://www.facebook.com/sharer/sharer.php?u=' . $u . '" target="_blank" rel="noopener">📘 Facebook</a>';
+            echo '<a class="btn-ghost" href="https://api.whatsapp.com/send?text=' . $t . '%20' . $u . '" target="_blank" rel="noopener">🟢 WhatsApp</a>';
+            echo '<a class="btn-ghost" href="https://t.me/share/url?url=' . $u . '&text=' . $t . '" target="_blank" rel="noopener">✈️ Telegram</a>';
+            echo '<a class="btn-ghost" href="https://twitter.com/intent/tweet?text=' . $t . '&url=' . $u . '" target="_blank" rel="noopener">𝕏 X</a>';
+            if (function_exists('lfi_nct_copy_button')) echo lfi_nct_copy_button($ev_url, '🔗 Copier le lien');
+            if ($can_edit) echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
             echo '</div>';
             echo '</li>';
         }
