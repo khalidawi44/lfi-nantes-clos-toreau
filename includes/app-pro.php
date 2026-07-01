@@ -1169,8 +1169,22 @@ function lfi_nct_app_view_carte($force_all = false) {
     echo '<span><i style="background:#7a0000"></i> 🚨 Critique</span>';
     echo '</div>';
 
+    /* Liste déroulante : aller directement à un signalement (vole vers le point). */
+    if (!empty($markers)) {
+        echo '<label style="display:block;margin:0 0 10px;font-size:.9em;color:#555">📍 Aller à un signalement';
+        echo '<select id="lfi-map-goto" style="width:100%;padding:11px 12px;border:1.5px solid #ddd;border-radius:10px;margin-top:4px;font-size:1em;background:#fafafa">';
+        echo '<option value="">— choisir une adresse (' . count($markers) . ') —</option>';
+        foreach ($markers as $i => $mk) {
+            $lbl = $mk['adresse']
+                . ($mk['etage'] !== '' ? ' · ét. ' . $mk['etage'] : '')
+                . ' — ' . $mk['glabel'];
+            echo '<option value="' . (int) $i . '">' . esc_html($lbl) . '</option>';
+        }
+        echo '</select></label>';
+    }
+
     echo '<div id="lfi-map" style="width:100%;height:65vh;min-height:420px;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1);background:#f5f5f5"></div>';
-    echo '<div class="lfi-app-help" style="margin-top:8px"><small>📱 Bouge à 2 doigts pour incliner la vue 3D. Pince pour zoomer. Touche un cube pour voir le détail.</small></div>';
+    echo '<div class="lfi-app-help" style="margin-top:8px"><small>📱 Bouge à 2 doigts pour incliner la vue 3D. Pince pour zoomer. Touche une balise colorée (ou choisis une adresse ci-dessus) pour voir le détail.</small></div>';
 
     echo '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">';
     echo '<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>';
@@ -1239,7 +1253,7 @@ function lfi_nct_app_view_carte($force_all = false) {
         }
 
         var bounds = new maplibregl.LngLatBounds();
-        var FLOOR_M = 3, CUBE_M = 4;
+        var FLOOR_M = 3, CUBE_M = 7;
         var stackCounts = {};
         var feats = [];
         function squareAround(lng, lat, sizeM) {
@@ -1257,10 +1271,13 @@ function lfi_nct_app_view_carte($force_all = false) {
             var floor = parseFloor(m.etage);
             var key = m.lat.toFixed(5) + '_' + m.lng.toFixed(5) + '_' + floor;
             var rank = (stackCounts[key] = (stackCounts[key] || 0) + 1) - 1;
-            var jitterM = rank * 5;
+            var jitterM = rank * 6;
             var dLng = jitterM / (111111 * Math.cos(m.lat * Math.PI / 180));
-            var base = floor * FLOOR_M + 0.5;
-            var top  = base + 2.5;
+            /* Balise haute et colorée : part du sol et dépasse nettement les
+               immeubles gris (~40 m) pour rester visible même dézoomé. L'étage
+               ajoute un peu de hauteur pour garder un repère. */
+            var base = 0;
+            var top  = 40 + floor * FLOOR_M;
             feats.push({
                 type: 'Feature', id: idx,
                 geometry: { type: 'Polygon', coordinates: squareAround(m.lng + dLng, m.lat, CUBE_M) },
@@ -1332,6 +1349,21 @@ function lfi_nct_app_view_carte($force_all = false) {
             }, beforeId);
         }
         map.on('load', function () { addSurveyLayer(); loadBuildings(); });
+
+        /* Liste déroulante « Aller à un signalement » → vole vers le point + popup. */
+        var goto = document.getElementById('lfi-map-goto');
+        if (goto) {
+            goto.addEventListener('change', function () {
+                var i = parseInt(this.value, 10);
+                if (isNaN(i) || !markers[i]) return;
+                var m = markers[i];
+                map.flyTo({ center: [m.lng, m.lat], zoom: 18.5, pitch: 55, bearing: -15, essential: true });
+                new maplibregl.Popup({ closeButton: true, offset: 12 })
+                    .setLngLat([m.lng, m.lat])
+                    .setHTML(popupHtml(m))
+                    .addTo(map);
+            });
+        }
     })();
     </script>
     <?php

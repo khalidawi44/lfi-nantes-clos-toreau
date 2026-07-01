@@ -135,6 +135,24 @@ function lfi_nct_handle_submission() {
     if ($insert === false) {
         return 'Erreur DB : ' . esc_html($wpdb->last_error);
     }
-    $GLOBALS['lfi_nct_last_submission_id'] = (int) $wpdb->insert_id;
+    $rid = (int) $wpdb->insert_id;
+    $GLOBALS['lfi_nct_last_submission_id'] = $rid;
+
+    /* AUTO : si la personne veut être recontactée et que c'est un·e militant·e
+       CONNECTÉ·E qui saisit → on crée directement, POUR L'ÉQUIPE, le compte
+       locataire + le dossier juridique liés à cette enquête. (Le militant simple
+       n'y a pas accès : réservé aux admins.) */
+    if ($contact_recontact && $militant_user_id
+        && ($contact_prenom !== '' || $contact_nom !== '')
+        && function_exists('lfi_nct_ep_ensure_tenant')) {
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $rid));
+        if ($row) {
+            $tenant_uid = lfi_nct_ep_ensure_tenant($row);
+            if (function_exists('lfi_nct_ep_create_dossier')) {
+                lfi_nct_ep_create_dossier($row, $tenant_uid, '', '');
+            }
+            $GLOBALS['lfi_nct_last_tenant_id'] = (int) $tenant_uid;
+        }
+    }
     return true;
 }
