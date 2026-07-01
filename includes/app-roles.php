@@ -641,79 +641,21 @@ function lfi_nct_app_role_dispatch(&$handled) {
             $handled = false;
             return;
         }
+        /* MEMBRE SIMPLE (non-admin) : console VOLONTAIREMENT restreinte.
+           Il fait passer l'enquête, prend des photos chez les gens (ce qui crée
+           en coulisse un dossier locataire + juridique pour les admins), et
+           gère son profil. PAS de : SMS/email aux adhérents, brigade travaux,
+           dossiers, recouvrement, appels NMH… → réservés aux admins et à toi. */
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
-            case 'reunion':         lfi_nct_app_view_reunion();    break;
-            case 'membres':         lfi_nct_app_view_membres();    break;
-            /* Gestion des comptes du GA (binôme admin uniquement — la vue se
-               protège elle-même via lfi_nct_is_ga_admin). Permet d'ajouter
-               des membres/admins depuis le répertoire du téléphone. */
-            case 'comptes-ga':      lfi_nct_app_view_comptes_ga(); break;
-            case 'evenements':      lfi_nct_app_view_evenements(); break;
-            case 'sms':             lfi_nct_app_view_sms();        break;
-            case 'email':           lfi_nct_app_view_email();      break;
-            case 'stats':           lfi_nct_app_view_stats();      break;
-            case 'mon-profil':      lfi_nct_app_view_mon_profil(); break;
-            case 'installer':       lfi_nct_app_view_installer();  break;
+            case 'reunion':          lfi_nct_app_view_reunion();          break;
+            case 'membres':          lfi_nct_app_view_membres();          break;
+            case 'evenements':       lfi_nct_app_view_evenements();       break;
+            case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
+            case 'mon-profil':       lfi_nct_app_view_mon_profil();       break;
+            case 'installer':        lfi_nct_app_view_installer();        break;
 
-            /* Brigade travaux — chaque membre a ses propres interventions,
-               factures, recouvrements (filtrage strict par owner_user_id). */
-            case 'brigade-intro':           lfi_nct_app_view_brigade_intro_ga();             break;
-            case 'interventions':           lfi_nct_app_view_interventions();                break;
-            case 'intervention-add':        lfi_nct_app_view_intervention_add();             break;
-            case 'intervention-edit':       lfi_nct_app_view_intervention_edit();            break;
-            case 'facture':                 lfi_nct_app_view_facture();                      break;
-            case 'facturation-params':      lfi_nct_app_view_facturation_params();           break;
-            case 'recouvrements':           lfi_nct_app_view_recouvrements();                break;
-            case 'recouvrement-dossier':    lfi_nct_app_view_recouvrement_dossier();         break;
-            case 'recouvrement-doc-mandat': lfi_nct_app_view_recouvrement_doc_mandat();      break;
-            case 'recouvrement-doc-med1':   lfi_nct_app_view_recouvrement_doc_med1();        break;
-            case 'recouvrement-doc-med2':   lfi_nct_app_view_recouvrement_doc_med2();        break;
-            case 'recouvrement-doc-cdc':    lfi_nct_app_view_recouvrement_doc_cdc();         break;
-            case 'recouvrement-doc-tj':     lfi_nct_app_view_recouvrement_doc_tj();          break;
-            case 'recouvrement-doc-schs':   lfi_nct_app_view_recouvrement_doc_schs();        break;
-            case 'dossiers-juridiques':        lfi_nct_app_view_dossiers_juridiques();          break;
-            case 'dossier-juridique-add':      lfi_nct_app_view_dossier_juridique_add();        break;
-            case 'dossier-juridique-edit':     lfi_nct_app_view_dossier_juridique_edit();       break;
-            case 'cadre-juridique':            lfi_nct_app_view_cadre_juridique();              break;
-            case 'montage-financier':          lfi_nct_app_view_montage_financier();            break;
-            case 'aj-calcul':                  lfi_nct_app_view_aj_calcul();                    break;
-            case 'doc-strategie-avocats':      lfi_nct_app_view_doc_strategie_avocats();        break;
-            case 'dossier-synthese':           lfi_nct_app_view_dossier_synthese();             break;
-            case 'association':                lfi_nct_app_view_association();                  break;
-            case 'asso-statuts':               lfi_nct_app_view_asso_statuts();                 break;
-            case 'dossier':                    lfi_nct_app_view_dossier();                      break;
-            case 'dossier-recap-nmh':          lfi_nct_app_view_dossier_recap_nmh();            break;
-            case 'email-import':               lfi_nct_app_view_email_import();                 break;
-            case 'dossier-doc-rapport-visite': lfi_nct_app_view_dossier_doc_rapport_visite();   break;
-            case 'dossier-doc-reponse-nmh':    lfi_nct_app_view_dossier_doc_reponse_nmh();      break;
-            case 'dossier-doc-analyse-nmh':    lfi_nct_app_view_dossier_doc_analyse_nmh();      break;
-            case 'dossier-doc-adhesion':       lfi_nct_app_view_dossier_doc_adhesion();         break;
-            case 'dossier-doc-lrar-travaux':   lfi_nct_app_view_dossier_doc_lrar_travaux();     break;
-            case 'dossier-doc-lrar-relogement':lfi_nct_app_view_dossier_doc_lrar_relogement();  break;
-            case 'dossier-doc-schs':           lfi_nct_app_view_dossier_doc_schs();             break;
-            case 'dossier-doc-ars':            lfi_nct_app_view_dossier_doc_ars();              break;
-            case 'dossier-send-email':         lfi_nct_app_view_dossier_send_email();           break;
-            case 'appels-nmh':                 lfi_nct_app_view_appels_nmh();                   break;
-            case 'appel-nmh-add':              lfi_nct_app_view_appel_nmh_add();                break;
-            case 'appel-nmh-edit':             lfi_nct_app_view_appel_nmh_edit();               break;
-            case 'appel-nmh-rapport':          lfi_nct_app_view_appel_nmh_rapport();            break;
-            case 'appel-guide':                lfi_nct_app_view_appel_guide();                  break;
-            case 'tutoriels':               lfi_nct_app_view_tutoriels();                    break;
-            case 'tutoriel':                lfi_nct_app_view_tutoriel();                     break;
-            case 'agenda':                  lfi_nct_app_view_agenda();                       break;
-            case 'rdv-add':                 lfi_nct_app_view_rdv_add();                      break;
-            case 'rdv-edit':                lfi_nct_app_view_rdv_edit();                     break;
-            case 'outils':                  lfi_nct_app_view_outils();                       break;
-            case 'outil-sonometre':         lfi_nct_app_view_outil_sonometre();              break;
-            case 'outil-niveau':            lfi_nct_app_view_outil_niveau();                 break;
-            case 'outil-boussole':          lfi_nct_app_view_outil_boussole();               break;
-            case 'outil-gps':               lfi_nct_app_view_outil_gps();                    break;
-            case 'outil-photo-preuve':     lfi_nct_app_view_outil_photo_preuve();           break;
-            case 'outil-humidite':          lfi_nct_app_view_outil_humidite();               break;
-            case 'outil-regle':             lfi_nct_app_view_outil_regle();                  break;
-
-            default:                lfi_nct_app_view_ga_dashboard();
+            default:                 lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
     }
@@ -743,28 +685,12 @@ function lfi_nct_app_view_ga_dashboard() {
     $survey_url = lfi_nct_survey_url();
 
     $tiles = [
-        ['📲', 'Installer l\'app',          'iPhone / Android · permissions',      lfi_nct_app_url('installer')],
-        ['📋', 'Faire passer une enquête',  'Formulaire pour les locataires',      $survey_url],
-        ['📣', 'Inscrits réunion 26 juin', $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
+        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
+        ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
         ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
-        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
-        ['📱', 'Envoyer SMS aux adhérents', 'Modèles + envoi',                     lfi_nct_app_url('sms')],
-        ['✉️', 'Email aux adhérents',       'Diffusion ciblée',                    lfi_nct_app_url('email')],
-        ['📊', 'Statistiques générales',    'Compteurs anonymes',                  lfi_nct_app_url('stats')],
-    ];
-
-    /* === Section BRIGADE TRAVAUX (per-user, jamais mélangée) === */
-    $brigade_tiles = [
-        ['🚀', 'Comment ça marche',         'Guide en 1 minute · à lire en 1er',   lfi_nct_app_url('brigade-intro')],
-        ['🔧', 'Mes interventions',         $my_interv . ' interv. · ' . $my_facture . ' facturée(s)', lfi_nct_app_url('interventions')],
-        ['⚖️', 'Mes recouvrements NMH',     'Mandat, mise en demeure, tribunal',   lfi_nct_app_url('recouvrements')],
-        ['📁', 'Dossiers juridiques',       'Travaux urgents, relogement médical', lfi_nct_app_url('dossiers-juridiques')],
-        ['☎️', 'Appels NMH',                'Journal + rapports d\'incident',      lfi_nct_app_url('appels-nmh')],
-        ['🏛', 'Association',               'Statuts, adhésions, cadre légal',    lfi_nct_app_url('association')],
-        ['🛠', 'Tutoriels brigade',         'Plâtre, peinture, plomberie…',        lfi_nct_app_url('tutoriels')],
-        ['🔬', 'Outils scientifiques',      'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
-        ['📅', 'Mon agenda perso',          'RDV, interventions, perso',           lfi_nct_app_url('agenda')],
-        ['⚙️', 'Mes paramètres facture',    'Mon IBAN, mon SIRET, mon tarif',      lfi_nct_app_url('facturation-params')],
+        ['👥', 'Adhérents du GA',           $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+        ['📣', 'Inscrits réunion',          $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
+        ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
     ];
 
     $bottom_tiles = [
@@ -782,18 +708,10 @@ function lfi_nct_app_view_ga_dashboard() {
         </div>
 
         <div class="lfi-app-help" style="margin:0 0 14px">
-            👋 Tu es connecté·e comme membre du GA. Tu peux gérer les événements, écrire aux adhérents, faire passer l\'enquête logement, et lancer tes propres interventions brigade. <strong>Les réponses aux enquêtes et les contacts détaillés des locataires restent réservés à l\'admin</strong> (RGPD).
+            👋 Tu es membre du GA. Tu fais passer l'<strong>enquête logement</strong> en porte-à-porte, et quand les gens t'invitent chez eux tu peux <strong>prendre des photos</strong>. Tout ça part directement à l'équipe. <strong>Les réponses, les dossiers et les contacts des locataires restent réservés aux administrateurs</strong> (RGPD) — tu n'y as pas accès.
         </div>
 
-        <?php if (!$brigade_seen): ?>
-        <div style="background:linear-gradient(135deg,#c8102e,#a30b25);color:#fff;padding:14px 18px;border-radius:12px;margin:0 0 16px;box-shadow:0 2px 6px rgba(0,0,0,.1)">
-            <div style="font-size:1.1em;font-weight:800;margin-bottom:4px">🚀 Nouveau : tu peux faire de la brigade travaux comme Fabrice</div>
-            <div style="font-size:.9em;opacity:.9;margin-bottom:10px">Intervenir chez les locataires, facturer, te faire rembourser par NMH. Lis le guide d'1 minute pour démarrer.</div>
-            <a href="<?php echo esc_url(lfi_nct_app_url('brigade-intro')); ?>" style="background:#fff;color:#c8102e;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">👉 Lire le guide (1 min)</a>
-        </div>
-        <?php endif; ?>
-
-        <h3 style="margin:18px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📣 Action politique</h3>
+        <h3 style="margin:18px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📣 Mes actions</h3>
         <div class="lfi-app-grid">
             <?php foreach ($tiles as $t): ?>
                 <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
@@ -803,34 +721,6 @@ function lfi_nct_app_view_ga_dashboard() {
                 </a>
             <?php endforeach; ?>
         </div>
-
-        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">🔧 Ma brigade travaux <span style="background:#186a3b;color:#fff;font-size:.7em;padding:2px 6px;border-radius:4px;margin-left:6px">PRIVÉ — non partagé</span></h3>
-        <div class="lfi-app-grid">
-            <?php foreach ($brigade_tiles as $t): ?>
-                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
-                    <div class="ico"><?php echo $t[0]; ?></div>
-                    <div class="tit"><?php echo esc_html($t[1]); ?></div>
-                    <div class="sub"><?php echo esc_html($t[2]); ?></div>
-                </a>
-            <?php endforeach; ?>
-        </div>
-
-        <?php if (function_exists('lfi_nct_is_ga_admin') && lfi_nct_is_ga_admin()): ?>
-        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">👥 Gestion du GA <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 6px;border-radius:4px;margin-left:6px">ADMIN DU GROUPE</span></h3>
-        <div class="lfi-app-help" style="margin:0 0 10px;font-size:.9em">Tu es <strong>admin de ton groupe d'action</strong>. Ajoute tes membres et co-admins — depuis le <strong>répertoire de ton téléphone</strong> (carte de contacts) ou à la main. Chaque GA gère ses propres comptes ; ils n'ont jamais accès à WordPress.</div>
-        <div class="lfi-app-grid">
-            <a class="lfi-app-tile" href="<?php echo esc_url(lfi_nct_app_url('comptes-ga')); ?>">
-                <div class="ico">📇</div>
-                <div class="tit">Comptes & membres</div>
-                <div class="sub">Ajouter depuis le répertoire</div>
-            </a>
-            <a class="lfi-app-tile" href="<?php echo esc_url(lfi_nct_app_url('membres')); ?>">
-                <div class="ico">👥</div>
-                <div class="tit">Adhérents du GA</div>
-                <div class="sub">Liste · ajout · suppression</div>
-            </a>
-        </div>
-        <?php endif; ?>
 
         <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>
         <div class="lfi-app-grid">
@@ -844,6 +734,166 @@ function lfi_nct_app_view_ga_dashboard() {
         </div>
     </div>
     <?php
+}
+
+/* ============================================================== *
+ *  📸 PHOTOS CHEZ UN LOCATAIRE (membre simple)                    *
+ *                                                                  *
+ *  Après une enquête, le membre prend des photos du logement. Ça  *
+ *  crée en coulisse, POUR L'ÉQUIPE (admins) : un compte locataire *
+ *  + un dossier juridique liés. Le membre n'y a PAS accès.        *
+ * ============================================================== */
+
+/** Crée (ou retrouve) le compte locataire lié à une réponse d'enquête. */
+function lfi_nct_ep_ensure_tenant($row) {
+    $existing = get_users(['meta_key' => 'lfi_nct_response_id', 'meta_value' => (int) $row->id, 'number' => 1, 'fields' => ['ID']]);
+    if (!empty($existing)) return (int) (is_object($existing[0]) ? $existing[0]->ID : $existing[0]);
+
+    $prenom = (string) ($row->contact_prenom ?: '');
+    $nom    = (string) ($row->contact_nom ?: '');
+    if ($prenom === '' && $nom === '') { $prenom = 'Locataire'; $nom = '#' . (int) $row->id; }
+    $login = lfi_nct_app_make_username($prenom, $nom);
+    $pwd   = lfi_nct_app_make_password();
+    $uid   = wp_insert_user([
+        'user_login' => $login, 'user_pass' => $pwd,
+        'user_email' => lfi_nct_app_clean_email((string) $row->contact_email),
+        'first_name' => $prenom, 'last_name' => $nom,
+        'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+        'role' => LFI_NCT_ROLE_TENANT,
+    ]);
+    if (is_wp_error($uid)) return 0;
+    update_user_meta($uid, 'lfi_nct_response_id', (int) $row->id);
+    if ($row->contact_tel) update_user_meta($uid, 'lfi_nct_tel', (string) $row->contact_tel);
+    if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
+    return (int) $uid;
+}
+
+/** Upload des photos → attachées au locataire (meta _lfi_tenant_user_id), horodatées. */
+function lfi_nct_ep_handle_photos($tenant_uid) {
+    if (empty($_FILES['photos']['name'][0])) return 0;
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    $f = $_FILES['photos'];
+    $count = is_array($f['name']) ? count($f['name']) : 0;
+    $stamp = current_time('mysql');
+    $done = 0;
+    for ($i = 0; $i < $count; $i++) {
+        if (empty($f['name'][$i]) || !empty($f['error'][$i])) continue;
+        $type = (string) ($f['type'][$i] ?? '');
+        if (strpos($type, 'image/') !== 0) continue;
+        $_FILES['lfi_ep_one'] = ['name' => $f['name'][$i], 'type' => $type, 'tmp_name' => $f['tmp_name'][$i], 'error' => $f['error'][$i], 'size' => $f['size'][$i]];
+        $aid = media_handle_upload('lfi_ep_one', 0);
+        if (!is_wp_error($aid)) {
+            update_post_meta($aid, '_lfi_tenant_user_id', (int) $tenant_uid);
+            update_post_meta($aid, '_lfi_photo_date', $stamp);
+            $done++;
+        }
+    }
+    unset($_FILES['lfi_ep_one']);
+    return $done;
+}
+
+/** Crée le dossier juridique lié — rattaché à l'ADMIN du GA (pas au membre). */
+function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    if ($tenant_uid) {
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE tenant_user_id = %d", $tenant_uid));
+        if ($exists) return (int) $exists; // déjà un dossier pour ce locataire
+    }
+    $data  = json_decode((string) $row->data, true) ?: [];
+    $owner = function_exists('lfi_nct_ga_admin_owner') ? lfi_nct_ga_admin_owner() : (int) get_current_user_id();
+    $wpdb->insert($t, [
+        'owner_user_id'      => $owner,
+        'tenant_user_id'     => $tenant_uid ?: null,
+        'tenant_prenom'      => (string) $row->contact_prenom,
+        'tenant_nom'         => (string) $row->contact_nom,
+        'tenant_adresse'     => (string) $row->adresse,
+        'tenant_etage'       => (string) $row->etage,
+        'tenant_appartement' => (string) ($data['appartement'] ?? ''),
+        'tenant_tel'         => (string) $row->contact_tel,
+        'tenant_email'       => (string) $row->contact_email,
+        'visite_date'        => current_time('Y-m-d'),
+        'constatations'      => $constat,
+        'demandes'           => $souhaits,
+        'statut'             => 'ouvert',
+    ]);
+    return (int) $wpdb->insert_id;
+}
+
+function lfi_nct_app_view_enquete_photos() {
+    if (!is_user_logged_in()) return;
+    $is_admin  = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    $is_member = function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga();
+    if (!$is_admin && !$is_member) return;
+    global $wpdb;
+    $resp_t = $wpdb->prefix . 'lfi_nct_responses';
+    $me     = (int) get_current_user_id();
+
+    /* Traitement : crée locataire + dossier + photos (le membre n'y a pas accès). */
+    if (!empty($_POST['lfi_ep_submit']) && check_admin_referer('lfi_ep_submit')) {
+        $resp_id = (int) ($_POST['response_id'] ?? 0);
+        $row = $resp_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $resp_t WHERE id = %d", $resp_id)) : null;
+        /* Sécurité : un membre simple ne peut agir que sur SES propres enquêtes. */
+        if ($row && !$is_admin && (int) $row->militant_user_id !== $me) $row = null;
+        if ($row) {
+            $constat  = sanitize_textarea_field(wp_unslash($_POST['constatations'] ?? ''));
+            $souhaits = sanitize_textarea_field(wp_unslash($_POST['souhaits'] ?? ''));
+            $tenant_uid = lfi_nct_ep_ensure_tenant($row);
+            lfi_nct_ep_handle_photos($tenant_uid);
+            lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits);
+            wp_safe_redirect(lfi_nct_app_url('enquete-photos', ['done' => 1]));
+            exit;
+        }
+    }
+
+    lfi_nct_app_screen_open('📸 Photos chez un locataire', 'Après l\'enquête — transmis à l\'équipe');
+    if (!empty($_GET['done'])) {
+        lfi_nct_app_flash('✅ Merci ! Les photos et le dossier ont été transmis à l\'équipe. Pour des raisons de confidentialité (RGPD), tu n\'as pas accès aux détails du dossier.');
+    }
+
+    echo '<div class="lfi-app-help">Choisis l\'enquête que tu viens de faire, prends des <strong>photos du logement</strong> (fuites, moisissures, dégâts…) et note ce que tu constates + les souhaits du locataire. Ça crée automatiquement, <strong>pour l\'équipe</strong>, un dossier locataire + un dossier juridique liés. Tu n\'as pas accès à ces dossiers.</div>';
+
+    /* Enquêtes candidates : « on peut revenir » = oui, pas déjà converties. */
+    $scope = ($is_admin && function_exists('lfi_nct_responses_scope_clause'))
+        ? lfi_nct_responses_scope_clause('militant_user_id')
+        : $wpdb->prepare(' AND militant_user_id = %d', $me);
+    $linked = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_response_id'") ?: [];
+    $linked_in = $linked ? '(' . implode(',', array_map('intval', $linked)) . ')' : '(0)';
+    $rows = $wpdb->get_results(
+        "SELECT id, adresse, etage, contact_prenom, contact_nom, submitted_at
+         FROM $resp_t
+         WHERE deleted_at IS NULL AND contact_recontact = 1 AND id NOT IN $linked_in" . $scope . "
+         ORDER BY submitted_at DESC LIMIT 50"
+    ) ?: [];
+
+    if (empty($rows)) {
+        echo '<div class="lfi-app-empty">Aucune enquête « on peut revenir » en attente.<br><small>Fais d\'abord passer une enquête et coche « Oui, je suis intéressé·e » à la question du retour.</small><br><br><a class="btn-primary" href="' . esc_url(lfi_nct_survey_url()) . '">📋 Faire passer une enquête</a></div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form">';
+    wp_nonce_field('lfi_ep_submit');
+    echo '<input type="hidden" name="lfi_ep_submit" value="1">';
+    echo '<label>🏠 Le logement visité<select name="response_id" required>';
+    echo '<option value="">— choisir l\'enquête —</option>';
+    foreach ($rows as $r) {
+        $who = trim(($r->contact_prenom ?: '') . ' ' . ($r->contact_nom ?: '')) ?: 'sans nom';
+        $lbl = $r->adresse . ($r->etage ? ' · ét. ' . $r->etage : '') . ' — ' . $who;
+        echo '<option value="' . (int) $r->id . '">' . esc_html($lbl) . '</option>';
+    }
+    echo '</select></label>';
+
+    echo '<label>📸 Photos (fuites, moisissures, dégâts…)<input type="file" name="photos[]" accept="image/*" multiple></label>';
+    echo '<label>📝 Ce que tu constates<textarea name="constatations" rows="3" placeholder="Ex : moisissures noires au plafond de la chambre, fenêtre qui ferme mal…"></textarea></label>';
+    echo '<label>🙏 Souhaits du locataire<textarea name="souhaits" rows="2" placeholder="Ex : voudrait être relogé, veut que NMH répare vite…"></textarea></label>';
+    echo '<button type="submit" class="btn-primary big">📤 Envoyer à l\'équipe</button>';
+    echo '</form>';
+    echo '<div class="lfi-app-help"><small>🔒 Tu ne verras pas le dossier créé : les données nominatives et juridiques sont réservées aux administrateurs.</small></div>';
+
+    lfi_nct_app_screen_close();
 }
 
 /* ============================================================== *

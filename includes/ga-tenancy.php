@@ -99,6 +99,23 @@ function lfi_nct_owner_clause($col = 'owner_user_id') {
     return " AND $col = $owner";
 }
 
+/**
+ * Propriétaire ADMIN du GA en cours : à qui rattacher un dossier créé par un
+ * membre simple, pour qu'il aille à l'ÉQUIPE (et jamais au membre lui-même).
+ * = compte pivot du GA si configuré ; sinon l'administrateur principal du site
+ * (cas Clos Toreau / espace home).
+ */
+function lfi_nct_ga_admin_owner() {
+    $slug = lfi_nct_scope_ga_slug();
+    if ($slug !== '' && function_exists('lfi_nct_ga_pivot_uid')) {
+        $p = lfi_nct_ga_pivot_uid($slug);
+        if ($p) return (int) $p;
+    }
+    $admins = get_users(['role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => ['ID']]);
+    if (!empty($admins)) return (int) (is_object($admins[0]) ? $admins[0]->ID : $admins[0]);
+    return 1;
+}
+
 /** Admins supplémentaires d'un GA (promus par un admin du GA) : [slug => [uid,…]]. */
 function lfi_nct_ga_extra_admins($slug = null) {
     $all = get_option('lfi_nct_ga_xadmins', []);

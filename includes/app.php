@@ -710,6 +710,7 @@ function lfi_nct_app_shortcode() {
                     case 'comptes-ga':         lfi_nct_app_view_comptes_ga();           break;
                     case 'comptes-locataires': lfi_nct_app_view_comptes_locataires();   break;
                     case 'temoignage-add':     lfi_nct_app_view_temoignage_add();       break;
+                    case 'enquete-photos':     lfi_nct_app_view_enquete_photos();       break;
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
                     case 'dossier-recap-nmh': lfi_nct_app_view_dossier_recap_nmh(); break;
