@@ -69,8 +69,8 @@ function lfi_nct_register_admin_menu() {
         $items['📣 ACTION POLITIQUE'] = [
             ['📋 Faire passer une enquête', lfi_nct_survey_url()],
             ['📅 Événements',               lfi_nct_app_url('evenements')],
-            ['👥 Adhérents',                lfi_nct_app_url('membres')],
-            ['📱 SMS aux adhérents',        lfi_nct_app_url('sms')],
+            ['👥 Membres actifs',           lfi_nct_app_url('membres')],
+            ['📱 SMS aux membres actifs',   lfi_nct_app_url('sms')],
             ['✉️ Email aux adhérents',       lfi_nct_app_url('email')],
         ];
     }

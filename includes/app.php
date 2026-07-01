@@ -1024,7 +1024,7 @@ function lfi_nct_app_render_dashboard() {
         <div class="lfi-app-quick">
             <div class="q"><span class="n"><?php echo (int) $stats['reunion']; ?></span><span class="l">Inscrits 26 juin</span></div>
             <div class="q"><span class="n"><?php echo (int) $stats['surveys']; ?></span><span class="l">Enquêtes</span></div>
-            <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Adhérents</span></div>
+            <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Membres actifs</span></div>
         </div>
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
@@ -1760,7 +1760,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['➕', '+ Saisir une réponse d\'enquête', 'Porte-à-porte / collecte papier', lfi_nct_app_url('temoignage-add')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['🗂', 'Dossiers locataires',        'Photos, enquête, historique',         lfi_nct_app_url('dossiers')],
-        ['👥', 'Adhérents',                 $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+        ['👥', 'Membres actifs',            $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
         ['📱', 'Envoyer SMS',               'Diffusion ciblée',                    lfi_nct_app_url('sms')],
         ['✉️', 'Email blast',               'Campagne mail',                       lfi_nct_app_url('email')],
         ['✍️', 'Signatures email',           'Le Collectif, Fabrice, etc.',         lfi_nct_app_url('signatures')],
@@ -1783,11 +1783,11 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '🟣 ESPACE GROUPE D\'ACTION' => [
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🎨', 'Personnalisation du GA', 'En-tête courriers · bailleurs',       lfi_nct_app_url('ga-params')],
-            ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
+            ['👥', 'Membres actifs',         $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
             ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
             ['📣', 'Inscrits réunion',       $stats['reunion'] . ' inscription(s)', lfi_nct_app_url('reunion')],
-            ['📱', 'SMS aux adhérents',      'Modèles + diffusion',                 lfi_nct_app_url('sms')],
+            ['📱', 'SMS aux membres actifs', 'Modèles + diffusion',                 lfi_nct_app_url('sms')],
             ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
             ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
         ],
@@ -2077,10 +2077,10 @@ function lfi_nct_app_view_membres() {
     }
     $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE 1=1" . $gac);
 
-    lfi_nct_app_screen_open('👥 Adhérents', $total . ' adhérent(s) au total');
+    lfi_nct_app_screen_open('👥 Membres actifs du GA', $total . ' membre(s) actif(s) au total');
 
-    if (!empty($_GET['added']))   lfi_nct_app_flash('Adhérent ajouté.');
-    if (!empty($_GET['deleted'])) lfi_nct_app_flash('Adhérent supprimé.');
+    if (!empty($_GET['added']))   lfi_nct_app_flash('Membre actif ajouté.');
+    if (!empty($_GET['deleted'])) lfi_nct_app_flash('Membre actif supprimé.');
 
     echo '<form method="get" class="lfi-app-searchbar">';
     echo '<input type="hidden" name="vue" value="membres">';
@@ -2089,7 +2089,7 @@ function lfi_nct_app_view_membres() {
     if ($q) echo '<a class="clear" href="' . esc_url(lfi_nct_app_url('membres')) . '">×</a>';
     echo '</form>';
 
-    echo '<details class="lfi-app-collapse"><summary>+ Ajouter un adhérent</summary>';
+    echo '<details class="lfi-app-collapse"><summary>+ Ajouter un membre actif</summary>';
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_membre_add');
     echo '<input type="hidden" name="lfi_app_add" value="1">';
@@ -2102,7 +2102,7 @@ function lfi_nct_app_view_membres() {
     echo '</form></details>';
 
     if (empty($rows)) {
-        echo '<div class="lfi-app-empty">' . ($q ? 'Aucun résultat pour « ' . esc_html($q) . ' ».' : 'Aucun adhérent.') . '</div>';
+        echo '<div class="lfi-app-empty">' . ($q ? 'Aucun résultat pour « ' . esc_html($q) . ' ».' : 'Aucun membre actif.') . '</div>';
     } else {
         echo '<ul class="lfi-app-list">';
         foreach ($rows as $r) {
@@ -2971,7 +2971,7 @@ function lfi_nct_app_view_stats() {
         ['📣', $s['reunion'], 'Inscrits 26 juin'],
         ['🏠', $s['surveys'], 'Enquêtes logement'],
         ['📅', $s['events'],  'Événements'],
-        ['👥', $s['membres'], 'Adhérents'],
+        ['👥', $s['membres'], 'Membres actifs'],
         ['📱', $sms_sent,     'SMS envoyés (logs)'],
         ['✉️', $emails_sent,  'Emails envoyés'],
     ];
