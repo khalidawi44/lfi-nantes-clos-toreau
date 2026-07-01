@@ -22,6 +22,45 @@ function lfi_nct_groupes_archived() {
     return is_array($a) ? $a : [];
 }
 
+/**
+ * Détermine (et mémorise) le centre géographique d'un GA créé depuis l'app :
+ * on géocode son secteur/quartier (ou son nom) une seule fois, puis on stocke
+ * le résultat dans l'option du GA. Ainsi la carte 3D d'un GA de Vallet est
+ * centrée sur Vallet, celui des Dervallières sur les Dervallières, etc.
+ * Renvoie [lat, lng] ou null.
+ */
+function lfi_nct_ga_ensure_centre($g) {
+    if (!is_array($g) || empty($g['slug'])) return null;
+    if (!empty($g['centre']) && is_array($g['centre']) && count($g['centre']) === 2) {
+        return [(float) $g['centre'][0], (float) $g['centre'][1]];
+    }
+    /* Seulement pour les GA créés depuis l'app (le fichier de contenu fournit
+       déjà les centres des GA « historiques »). */
+    if (empty($g['custom'])) return null;
+    $slug = $g['slug'];
+    /* Une seule tentative par jour pour ne pas marteler Nominatim si ça échoue. */
+    if (get_transient('lfi_nct_ga_geo_tried_' . $slug)) return null;
+    set_transient('lfi_nct_ga_geo_tried_' . $slug, 1, DAY_IN_SECONDS);
+
+    $q = trim((string) ($g['secteur'] ?? ''));
+    if ($q === '') $q = trim((string) ($g['nom'] ?? ''));
+    /* On enlève un éventuel préfixe « GA / Groupe d'Action » pour ne garder que le lieu. */
+    $q = trim(preg_replace('/^(ga|groupe d[\'’]action)\s+(lfi\s+)?/i', '', $q));
+    if ($q === '') return null;
+
+    $coords = function_exists('lfi_nct_geocode_place') ? lfi_nct_geocode_place($q) : null;
+    if (!$coords) return null;
+
+    /* Persiste le centre dans l'option du GA pour ne plus jamais re-géocoder. */
+    $custom = get_option('lfi_nct_ga_custom', []);
+    if (is_array($custom) && isset($custom[$slug]) && is_array($custom[$slug])) {
+        $custom[$slug]['centre']   = [(float) $coords[0], (float) $coords[1]];
+        if (empty($custom[$slug]['geo_hint'])) $custom[$slug]['geo_hint'] = $q;
+        update_option('lfi_nct_ga_custom', $custom, false);
+    }
+    return [(float) $coords[0], (float) $coords[1]];
+}
+
 /** Config géographique d'un GA (pour géocoder/centrer la carte au bon endroit). */
 function lfi_nct_ga_geo($slug) {
     $slug = (string) $slug;
@@ -30,7 +69,13 @@ function lfi_nct_ga_geo($slug) {
     foreach (lfi_nct_groupes(true) as $g) {
         if ($g['slug'] !== $slug) continue;
         $centre = (isset($g['centre']) && is_array($g['centre']) && count($g['centre']) === 2)
-            ? [(float) $g['centre'][0], (float) $g['centre'][1]] : $default['centre'];
+            ? [(float) $g['centre'][0], (float) $g['centre'][1]] : null;
+        /* GA créé sans coordonnées → on géocode sa ville/quartier (une fois). */
+        if (!$centre) {
+            $c = lfi_nct_ga_ensure_centre($g);
+            if ($c) $centre = $c;
+        }
+        if (!$centre) $centre = $default['centre'];
         return [
             'ville'  => $g['ville'] ?? 'Nantes',
             'cp'     => $g['cp'] ?? '',
@@ -172,6 +217,14 @@ function lfi_nct_app_view_groupes() {
                 /* 1) Enregistre le GA dans le store dynamique. */
                 $custom = lfi_nct_groupes_custom();
                 $custom[$slug] = ['slug' => $slug, 'nom' => $nom, 'secteur' => $secteur, 'travaux' => $travaux];
+                /* Centre la future carte 3D sur la ville/quartier du GA
+                   (géocodage du secteur saisi ; sinon, tentative paresseuse au
+                   premier affichage de la carte). */
+                $geo_q = trim($secteur !== '' ? $secteur : $nom);
+                if ($geo_q !== '' && function_exists('lfi_nct_geocode_place')) {
+                    $c = lfi_nct_geocode_place($geo_q);
+                    if ($c) { $custom[$slug]['centre'] = [(float) $c[0], (float) $c[1]]; $custom[$slug]['geo_hint'] = $geo_q; }
+                }
                 update_option('lfi_nct_ga_custom', $custom, false);
 
                 /* 2) Binôme paritaire d'admins. */
