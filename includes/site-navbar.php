@@ -86,7 +86,7 @@ function lfi_nct_render_site_navbar() {
             $secondary[] = ['👥', 'Comptes GA + loc.', lfi_nct_app_url('membres')];
         }
         if ($is_ga) {
-            $secondary[] = ['👥', 'Adhérents',  lfi_nct_app_url('membres')];
+            $secondary[] = ['👥', 'Membres actifs',  lfi_nct_app_url('membres')];
             $secondary[] = ['📣', 'Événements', lfi_nct_app_url('evenements')];
             $secondary[] = ['📱', 'SMS aux adhérents', lfi_nct_app_url('sms')];
             $secondary[] = ['✉️', 'Email aux adhérents', lfi_nct_app_url('email')];
@@ -292,8 +292,8 @@ function lfi_nct_admin_bar_menu($bar) {
             $sections[] = ['📣 Action politique', [
                 ['📋 Faire passer une enquête', lfi_nct_survey_url()],
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
-                ['👥 Adhérents',                lfi_nct_app_url('membres')],
-                ['📱 SMS aux adhérents',        lfi_nct_app_url('sms')],
+                ['👥 Membres actifs',           lfi_nct_app_url('membres')],
+                ['📱 SMS aux membres actifs',   lfi_nct_app_url('sms')],
                 ['✉️ Email aux adhérents',       lfi_nct_app_url('email')],
             ]];
         }

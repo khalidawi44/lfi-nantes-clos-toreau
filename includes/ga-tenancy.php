@@ -358,7 +358,7 @@ function lfi_nct_render_ga_switcher() {
         if (!empty($g['actuel'])) continue;
         $sel = ($cur === $g['slug']) ? ' selected' : '';
         $piv = lfi_nct_ga_pivot_uid($g['slug']);
-        $label = $g['nom'] . ($piv ? '' : ' — (pivot à configurer)');
+        $label = $g['nom'] . ($piv ? '' : ' — (administrateur à configurer)');
         echo '<option value="' . esc_url(lfi_nct_app_url('voir-ga', ['ga' => $g['slug']])) . '"' . $sel . '>' . esc_html($label) . '</option>';
     }
     echo '</select></label>';

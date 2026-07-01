@@ -520,7 +520,7 @@ function lfi_nct_app_view_reseau_ga() {
         ['🗺️', 'Annuaire & créer un GA',  'Liste, création, binôme',        lfi_nct_app_url('groupes')],
         ['➕', 'Créer un groupe d\'action','Nom + 2 responsables',           lfi_nct_app_url('groupes')],
         ['🪪', 'Comptes du GA affiché',    'Créer · importer · reset',       lfi_nct_app_url('comptes-ga')],
-        ['👥', 'Adhérents du GA affiché',  'Liste cloisonnée',               lfi_nct_app_url('membres')],
+        ['👥', 'Membres actifs du GA affiché', 'Liste cloisonnée',           lfi_nct_app_url('membres')],
         ['🗺', 'Carte du GA affiché',      'Signalements (cloisonnés)',      lfi_nct_app_url('carte')],
         ['📊', 'Stats du GA affiché',      'Compteurs (cloisonnés)',         lfi_nct_app_url('stats-enquete')],
     ];
@@ -562,8 +562,8 @@ function lfi_nct_app_view_reseau_ga() {
         echo '<div class="meta" style="font-size:.85em;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">';
         echo '<span class="meta-chip">🏠 ' . (int) $r['enq'] . ' enquête(s)</span>';
         echo '<span class="meta-chip">⚠️ ' . (int) $r['prob'] . ' avec problème</span>';
-        echo '<span class="meta-chip">👥 ' . (int) $r['adh'] . ' adhérent(s)</span>';
-        echo '<span class="meta-chip">' . ($r['pivot'] ? '🔒 cloisonné' : '⚙️ responsable à désigner') . '</span>';
+        echo '<span class="meta-chip">👥 ' . (int) $r['adh'] . ' membre(s) actif(s)</span>';
+        echo '<span class="meta-chip">' . ($r['pivot'] ? '🔒 cloisonné' : '⚙️ administrateur à désigner') . '</span>';
         echo '</div>';
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
         echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('voir-ga', ['ga' => $r['slug']])) . '">👁 Entrer dans cet espace</a>';
@@ -584,7 +584,7 @@ function lfi_nct_app_view_reseau_ga() {
     echo '<div style="overflow-x:auto">';
     echo '<table class="lfi-app-table" style="width:100%;border-collapse:collapse;font-size:.9em">';
     echo '<thead><tr style="text-align:left;border-bottom:2px solid #ddd">';
-    echo '<th style="padding:6px 8px">Groupe d\'action</th><th style="padding:6px 8px">Enquêtes</th><th style="padding:6px 8px">Avec problème</th><th style="padding:6px 8px">Adhérents</th>';
+    echo '<th style="padding:6px 8px">Groupe d\'action</th><th style="padding:6px 8px">Enquêtes</th><th style="padding:6px 8px">Avec problème</th><th style="padding:6px 8px">Membres actifs</th>';
     echo '</tr></thead><tbody>';
     foreach ($rows as $r) {
         $bg = !empty($r['home']) ? 'background:#fff5f6' : '';
@@ -634,7 +634,7 @@ function lfi_nct_app_view_reseau_ga_pdf() {
     echo '<p>État récapitulatif des chiffres par groupe d\'action : nombre d\'enquêtes réalisées, foyers déclarant au moins un problème, et adhérents. Document interne.</p>';
 
     echo '<table class="detail">';
-    echo '<thead><tr><th>Groupe d\'action</th><th>Enquêtes</th><th>Avec problème</th><th>Adhérents</th></tr></thead><tbody>';
+    echo '<thead><tr><th>Groupe d\'action</th><th>Enquêtes</th><th>Avec problème</th><th>Membres actifs</th></tr></thead><tbody>';
     foreach ($rows as $r) {
         echo '<tr>';
         echo '<td>' . esc_html($r['nom']) . (!empty($r['binome']) ? '<br><span style="font-size:.85em;color:#555">' . esc_html($r['binome']) . '</span>' : '') . '</td>';

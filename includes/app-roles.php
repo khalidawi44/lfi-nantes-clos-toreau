@@ -1766,7 +1766,7 @@ function lfi_nct_app_view_comptes_ga() {
         $mid = (int) $_POST['membre_id'];
         $row = $mid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_membres WHERE id = %d", $mid)) : null;
         if (!$row) {
-            $created_err = "Adhérent introuvable (#$mid).";
+            $created_err = "Membre actif introuvable (#$mid).";
         } else {
             $prenom = (string) ($row->prenom ?: '');
             $nom    = (string) ($row->nom ?: $row->pseudo ?: '');
