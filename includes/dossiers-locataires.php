@@ -21,7 +21,7 @@
 if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_DOSSIER_DBVER_KEY = 'lfi_nct_dossier_db_ver';
-const LFI_NCT_DOSSIER_DBVER_VAL = '2';
+const LFI_NCT_DOSSIER_DBVER_VAL = '3';
 
 /* ============================================================== *
  *  DB Setup                                                        *
@@ -62,10 +62,18 @@ function lfi_nct_dossier_db_setup() {
         notes TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        nmh_urgence VARCHAR(20) DEFAULT '',
         PRIMARY KEY (id),
         KEY owner_user_id (owner_user_id),
         KEY tenant_user_id (tenant_user_id)
     ) $charset;");
+
+    /* Chronomètre NMH : niveau d'urgence qui fixe le délai légal après la mise
+       en demeure (urgent 8j / bailleur 1 mois / autre 2 mois). Ajout explicite. */
+    $t2 = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    if (!$wpdb->get_var("SHOW COLUMNS FROM $t2 LIKE 'nmh_urgence'")) {
+        $wpdb->query("ALTER TABLE $t2 ADD COLUMN nmh_urgence VARCHAR(20) DEFAULT ''");
+    }
 
     update_option(LFI_NCT_DOSSIER_DBVER_KEY, LFI_NCT_DOSSIER_DBVER_VAL, false);
 }
@@ -438,6 +446,74 @@ function lfi_nct_app_view_dossier_juridique_edit() {
     lfi_nct_app_dossier_juridique_form($row);
 }
 
+/* ============================================================== *
+ *  CHRONOMÈTRE NMH — délai légal + alerte + étape 4 (SCHS)         *
+ * ============================================================== */
+function lfi_nct_nmh_urgence_options() {
+    return [
+        'urgent'   => ['label' => 'Urgent — santé / sécurité (plus de chauffage ou d\'eau chaude, insalubrité, danger)', 'add' => '+8 days',   'court' => '8 jours'],
+        'bailleur' => ['label' => 'Réparation à la charge du bailleur',                                                  'add' => '+1 month',  'court' => '1 mois'],
+        'autre'    => ['label' => 'Autre situation',                                                                     'add' => '+2 months', 'court' => '2 mois'],
+    ];
+}
+function lfi_nct_nmh_urgence_get($u) {
+    $o = lfi_nct_nmh_urgence_options();
+    return $o[$u] ?? $o['bailleur'];
+}
+/** Date limite = date d'envoi de la mise en demeure + délai selon l'urgence. */
+function lfi_nct_nmh_deadline($courrier_date, $urgence) {
+    if (empty($courrier_date)) return '';
+    $u = lfi_nct_nmh_urgence_get($urgence);
+    return wp_date('Y-m-d', strtotime($courrier_date . ' ' . $u['add']));
+}
+/** Rendu du panneau chronomètre dans la fiche dossier (admins). */
+function lfi_nct_nmh_render_chrono($dossier) {
+    $urg     = $dossier->nmh_urgence ?: 'bailleur';
+    $u       = lfi_nct_nmh_urgence_get($urg);
+    $sent    = $dossier->lrar_travaux_date ?: '';
+    $deadline = lfi_nct_nmh_deadline($sent, $urg);
+    $today   = current_time('Y-m-d');
+
+    echo '<div style="border:1.5px solid #c8102e;border-radius:12px;padding:14px;margin:12px 0;background:#fff">';
+    echo '<div style="font-weight:800;color:#c8102e;margin-bottom:6px">⏱ Chronomètre NMH</div>';
+
+    /* 1) Choix du délai (urgence) */
+    echo '<form method="post" style="margin:0 0 10px">';
+    wp_nonce_field('lfi_dossier_nmh_urgence');
+    echo '<input type="hidden" name="lfi_dossier_nmh_urgence" value="1">';
+    echo '<label style="font-size:.9em">Délai légal selon l\'urgence<select name="nmh_urgence" onchange="this.form.submit()">';
+    foreach (lfi_nct_nmh_urgence_options() as $k => $o) {
+        echo '<option value="' . esc_attr($k) . '" ' . selected($urg, $k, false) . '>' . esc_html($o['label']) . ' → ' . esc_html($o['court']) . '</option>';
+    }
+    echo '</select></label>';
+    echo '</form>';
+
+    if (!$sent) {
+        echo '<div class="lfi-app-help" style="margin:0">Le chrono démarre quand tu <strong>envoies la mise en demeure</strong>. Génère le courrier, envoie-le, puis clique « ✅ Marquer la mise en demeure comme envoyée » (dans les étapes ci-dessous). Le délai (' . esc_html($u['court']) . ') courra à partir de cette date.</div>';
+        echo '</div>';
+        return;
+    }
+
+    $days_left = (int) floor((strtotime($deadline) - strtotime($today)) / 86400);
+    echo '<div style="font-size:.95em;line-height:1.6">';
+    echo '📨 Mise en demeure envoyée le <strong>' . esc_html(wp_date('j M Y', strtotime($sent))) . '</strong><br>';
+    echo '⚖️ Délai : <strong>' . esc_html($u['court']) . '</strong> → date limite <strong>' . esc_html(wp_date('j M Y', strtotime($deadline))) . '</strong><br>';
+    if ($days_left > 0) {
+        echo '<span style="color:#186a3b;font-weight:700">⏳ Il reste ' . $days_left . ' jour(s).</span> On attend, sans débat.';
+        echo '</div></div>';
+        return;
+    }
+    /* Délai dépassé → étape 4 : SCHS */
+    echo '<span style="color:#c8102e;font-weight:800">⏰ DÉLAI DÉPASSÉ' . ($days_left < 0 ? ' depuis ' . abs($days_left) . ' jour(s)' : ' aujourd\'hui') . '.</span><br>';
+    echo '<strong>➡️ Étape 4 : saisir le SCHS (Service Communal d\'Hygiène et de Santé).</strong>';
+    echo '</div>';
+    echo '<div class="row-actions" style="margin-top:8px">';
+    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier-doc-schs', ['id' => $dossier->id])) . '">🏥 Générer la saisine SCHS</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-send-email', ['id' => $dossier->id, 'letter' => 'schs'])) . '">✉️ Envoyer au SCHS</a>';
+    echo '</div>';
+    echo '</div>';
+}
+
 function lfi_nct_app_dossier_juridique_form($row) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
@@ -515,6 +591,16 @@ function lfi_nct_app_dossier_juridique_form($row) {
             wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'marked' => $etape]));
             exit;
         }
+    }
+
+    /* Chronomètre NMH : choix du niveau d'urgence (= délai légal après la mise
+       en demeure). Le chrono démarre à la date d'envoi de la mise en demeure. */
+    if ($is_edit && !empty($_POST['lfi_dossier_nmh_urgence']) && check_admin_referer('lfi_dossier_nmh_urgence')) {
+        $urg = sanitize_key($_POST['nmh_urgence'] ?? 'bailleur');
+        if (!array_key_exists($urg, lfi_nct_nmh_urgence_options())) $urg = 'bailleur';
+        $wpdb->update($t, ['nmh_urgence' => $urg], ['id' => $row->id, 'owner_user_id' => $owner]);
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'nmh_set' => 1]));
+        exit;
     }
 
     /* Enregistrer un email REÇU (réponse de NMH / M. Morineau…) dans le dossier */
@@ -695,6 +781,10 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['email_del_ok']))   lfi_nct_app_flash('🗑 Entrée de correspondance supprimée.');
     if (!empty($_GET['analyse_ok']))     lfi_nct_app_flash('📑 Analyse enregistrée dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');
+    if (!empty($_GET['nmh_set']))      lfi_nct_app_flash('⏱ Délai NMH mis à jour.');
+
+    /* Chronomètre NMH (fiche existante) : délai légal + alerte + étape 4. */
+    if ($is_edit) lfi_nct_nmh_render_chrono($row);
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_dossier_save');
@@ -1808,8 +1898,9 @@ function lfi_nct_dossier_email_body_text($letter_key, $dossier, $bailleur, $tena
             $html .= '<p>Nous saisissons le SCHS de Nantes et l\'ARS aux fins de constat d\'insalubrité (art. L.1331-22 et s. CSP), susceptible d\'emporter votre obligation de relogement (art. L.521-3-1 CCH), et réservons la saisine de la juridiction compétente.</p>';
             break;
         case 'lrar_travaux':
+            $dc = function_exists('lfi_nct_nmh_urgence_get') ? lfi_nct_nmh_urgence_get($dossier->nmh_urgence ?: 'bailleur')['court'] : '1 mois';
             $html .= '<h3 style="color:#c8102e">Demande</h3>';
-            $html .= '<p>En application des articles 1719 et 1724 du Code civil, de l\'article 6 de la loi n° 89-462 et du décret 2002-120, je vous mets en demeure de procéder, <strong>sous QUINZE (15) JOURS</strong>, à une visite contradictoire du logement et de réaliser, <strong>sous UN (1) MOIS</strong>, l\'intégralité des travaux nécessaires à la remise en conformité avec les critères de décence.</p>';
+            $html .= '<p>En application des articles 1719 et 1724 du Code civil, de l\'article 6 de la loi n° 89-462 et du décret 2002-120, je vous mets en demeure de procéder <strong>sans délai</strong> à une visite contradictoire du logement et de réaliser, <strong>sous ' . esc_html(strtoupper($dc)) . '</strong> à compter de la réception, l\'intégralité des travaux nécessaires à la remise en conformité avec les critères de décence.</p>';
             $html .= '<p>À défaut, je serai contraint(e) de saisir la Commission Départementale de Conciliation, puis le Tribunal Judiciaire de Nantes aux fins de condamnation sous astreinte, ainsi que le SCHS et l\'ARS pour constat d\'insalubrité.</p>';
             break;
         case 'lrar_relogement':
@@ -2819,10 +2910,11 @@ function lfi_nct_app_view_dossier_doc_lrar_travaux() {
 
     echo '<p>En conséquence, et en application des <strong>articles 1217, 1226 et 1231-1 du Code civil</strong>, je vous mets formellement en demeure, par la présente lettre recommandée avec accusé de réception :</p>';
 
+    $delai_court = function_exists('lfi_nct_nmh_urgence_get') ? lfi_nct_nmh_urgence_get($dossier->nmh_urgence ?: 'bailleur')['court'] : '1 mois';
     echo '<div class="citations">';
     echo '<ul>';
-    echo '<li>de <strong>diligenter sous QUINZE (15) JOURS</strong> à compter de la réception des présentes une visite contradictoire du logement, en ma présence ;</li>';
-    echo '<li>de <strong>réaliser, dans un délai maximal d\'UN (1) MOIS</strong>, l\'intégralité des travaux nécessaires à la remise en conformité du logement avec les critères de décence ;</li>';
+    echo '<li>de <strong>diligenter sans délai</strong> à compter de la réception des présentes une visite contradictoire du logement, en ma présence ;</li>';
+    echo '<li>de <strong>réaliser, dans un délai maximal de ' . esc_html(strtoupper($delai_court)) . '</strong> à compter de la réception des présentes, l\'intégralité des travaux nécessaires à la remise en conformité du logement avec les critères de décence ;</li>';
     echo '<li>de <strong>m\'indiquer par écrit</strong>, dans le même délai, le calendrier précis et la nature des interventions prévues.</li>';
     echo '</ul>';
     echo '</div>';
