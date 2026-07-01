@@ -688,7 +688,7 @@ function lfi_nct_app_shortcode() {
                 /* Routes RÉSERVÉES au super-admin (réseau des GA, système). Un
                    admin de GA qui les vise est renvoyé vers son tableau de bord. */
                 $super_only = [
-                    'groupes', 'reseau-ga', 'reseau-carte', 'reseau-ga-pdf', 'voir-ga',
+                    'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
@@ -784,6 +784,7 @@ function lfi_nct_app_shortcode() {
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
+                    case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
                     case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
@@ -1823,7 +1824,9 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🌐', 'Tableau de bord du réseau', 'Tous les GA, regroupé',              lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
             ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
-            ['📊', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
+            ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
+            ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
+            ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
         ],
         '⚙️ SYSTÈME' => [
             ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
@@ -2564,7 +2567,7 @@ function lfi_nct_app_view_enquetes() {
 
     $rows = $wpdb->get_results(
         "SELECT id, submitted_at, adresse, etage, contact_recontact,
-                contact_prenom, contact_nom, contact_tel, contact_email, data
+                contact_prenom, contact_nom, contact_tel, contact_email, data, ga
          FROM $table $where
          ORDER BY submitted_at DESC LIMIT 300"
     ) ?: [];
@@ -2602,8 +2605,13 @@ function lfi_nct_app_view_enquetes() {
         echo '<ul class="lfi-app-list">';
         foreach ($rows as $r) {
             $name = trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')) ?: '(anonyme)';
+            $ref  = function_exists('lfi_nct_response_ref')
+                ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '')
+                : '';
             echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($name) . '</div>';
+            echo '<div class="head"><div class="who">';
+            if ($ref) echo '<span style="display:inline-block;background:#c8102e;color:#fff;font-weight:700;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle;letter-spacing:.5px">' . esc_html($ref) . '</span>';
+            echo esc_html($name) . '</div>';
             echo '<div class="when">' . esc_html(wp_date('j M', strtotime($r->submitted_at))) . '</div>';
             echo '</div>';
 
