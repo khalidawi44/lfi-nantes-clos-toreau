@@ -798,6 +798,9 @@ function lfi_nct_app_shortcode() {
                     case 'national-pdf':          lfi_nct_app_view_national_pdf();            break;
                     case 'sauvegarde':            lfi_nct_app_view_sauvegarde();             break;
                     case 'suggestions':           lfi_nct_app_view_suggestions();            break;
+                    case 'compta':                lfi_nct_app_view_compta();                 break;
+                    case 'compta-relances':       lfi_nct_app_view_compta_relances();        break;
+                    case 'compta-export':         lfi_nct_app_view_compta_export();          break;
                     case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
@@ -1856,6 +1859,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🔧', 'Interventions',          'Travaux chez les locataires',         lfi_nct_app_url('interventions')],
             ['☎️', 'Appels NMH',            'Journal + rapports d\'incident',       lfi_nct_app_url('appels-nmh')],
             ['⚖️', 'Recouvrement NMH',       'Mise en demeure, tribunal',           lfi_nct_app_url('recouvrements')],
+            ['💶', 'Comptabilité',           'CA · relances · export factures',     lfi_nct_app_url('compta')],
             ['📅', 'Agenda',                 'RDV et interventions',                lfi_nct_app_url('agenda')],
             ['🛠', 'Tutoriels',              'Guides par problème',                 lfi_nct_app_url('tutoriels')],
             ['🔬', 'Outils scientifiques',   'Sonomètre, GPS, photo preuve…',       lfi_nct_app_url('outils')],
