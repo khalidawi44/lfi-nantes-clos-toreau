@@ -159,9 +159,12 @@ function lfi_nct_render_admin_hub() {
         $survey_url = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
         $survey_ok  = (strpos($survey_url, 'enquete-logement-clos-toreau') === false) || (bool) get_page_by_path('enquete-logement-clos-toreau', OBJECT, ['page', 'post']);
         $app_url_real = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/' . LFI_NCT_APP_SLUG . '/');
-        $app_ok       = (bool) get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page') || ($app_url_real !== home_url('/' . LFI_NCT_APP_SLUG . '/'));
+        $app_page     = get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page');
+        $app_status   = $app_page ? $app_page->post_status : 'absente';
+        $app_public   = ($app_status === 'publish' && (string) ($app_page->post_password ?? '') === '');
+        $app_label    = '📱 Application (lien des SMS) — page : ' . ($app_public ? 'publiée ✅' : 'PAS PUBLIQUE (' . $app_status . ') → c\'est ça qui fait le 404 pour les membres déconnectés');
         $rows = [
-            ['📱 Application (lien des SMS)', $app_url_real, $app_ok],
+            [$app_label, $app_url_real, $app_public],
             ['📋 Formulaire d\'enquête', $survey_url, $survey_ok],
         ];
         foreach ([
