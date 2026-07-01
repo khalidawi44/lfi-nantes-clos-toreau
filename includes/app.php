@@ -690,7 +690,7 @@ function lfi_nct_app_shortcode() {
                    admin de GA qui les vise est renvoyé vers son tableau de bord. */
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
-                    'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde',
+                    'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
@@ -797,6 +797,7 @@ function lfi_nct_app_shortcode() {
                     case 'national-etudes':       lfi_nct_app_view_national_etudes();        break;
                     case 'national-pdf':          lfi_nct_app_view_national_pdf();            break;
                     case 'sauvegarde':            lfi_nct_app_view_sauvegarde();             break;
+                    case 'suggestions':           lfi_nct_app_view_suggestions();            break;
                     case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
@@ -997,6 +998,10 @@ function lfi_nct_app_render_login() {
 }
 
 function lfi_nct_app_render_dashboard() {
+    /* Accueil première connexion (admin de GA) — traite l'envoi puis affichera
+       le pop-up si besoin. Doit passer avant tout rendu (redirection). */
+    if (function_exists('lfi_nct_onboarding_maybe_handle')) lfi_nct_onboarding_maybe_handle();
+
     $can_admin = function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
     if (!$can_admin) {
         echo '<div class="lfi-app"><div class="lfi-app-error">Cette console est réservée aux administrateurs du GA. <a href="' . esc_url(wp_logout_url(home_url('/' . LFI_NCT_APP_SLUG . '/'))) . '">Se déconnecter</a>.</div></div>';
@@ -1025,6 +1030,8 @@ function lfi_nct_app_render_dashboard() {
             ['🚪', 'Se déconnecter',      '',                                    wp_logout_url(home_url('/'))],
         ];
     }
+    /* Pop-up d'accueil au tout premier login d'un admin de GA. */
+    if (function_exists('lfi_nct_onboarding_render')) lfi_nct_onboarding_render();
     ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
@@ -1868,6 +1875,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
             ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
+            ['💡', 'Suggestions des GA',        'Besoins remontés par les admins',    lfi_nct_app_url('suggestions')],
         ],
         '🇫🇷 VOLET NATIONAL — député·es' => [
             ['🇫🇷', 'Tableau de bord national', 'Chiffres cumulés pour argumenter',   lfi_nct_app_url('national')],
