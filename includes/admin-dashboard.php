@@ -158,8 +158,10 @@ function lfi_nct_render_admin_hub() {
         <?php
         $survey_url = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
         $survey_ok  = (strpos($survey_url, 'enquete-logement-clos-toreau') === false) || (bool) get_page_by_path('enquete-logement-clos-toreau', OBJECT, ['page', 'post']);
+        $app_url_real = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/' . LFI_NCT_APP_SLUG . '/');
+        $app_ok       = (bool) get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page') || ($app_url_real !== home_url('/' . LFI_NCT_APP_SLUG . '/'));
         $rows = [
-            ['📱 Application', home_url('/' . LFI_NCT_APP_SLUG . '/'), (bool) get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page')],
+            ['📱 Application (lien des SMS)', $app_url_real, $app_ok],
             ['📋 Formulaire d\'enquête', $survey_url, $survey_ok],
         ];
         foreach ([

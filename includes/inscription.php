@@ -370,7 +370,7 @@ function lfi_nct_app_view_inscription_ga() {
 
 function lfi_nct_inscription_render_success($credentials, $type) {
     $login = $credentials['login']; $pwd = $credentials['pwd']; $tel = $credentials['tel'] ?? '';
-    $site_app = home_url('/app/');
+    $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
     $sms_body = "Bonjour,\n\n"
               . "Mon compte sur l'app du GA LFI Nantes Sud Clos Toreau :\n\n"
               . "🌐 " . $site_app . "\n\n"
@@ -405,7 +405,7 @@ function lfi_nct_inscription_render_success($credentials, $type) {
     }
 
     echo '<div class="row-actions" style="margin-top:14px">';
-    echo '<a class="btn-primary big" href="' . esc_url(home_url('/app/')) . '">🚀 Accéder à mon espace</a>';
+    echo '<a class="btn-primary big" href="' . esc_url($site_app) . '">🚀 Accéder à mon espace</a>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('installer')) . '">📲 Installer l\'app sur mon téléphone</a>';
     echo '</div>';
 }
