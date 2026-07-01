@@ -1,0 +1,187 @@
+<?php
+/**
+ * ROBOT ASSISTANT (étape 1 : commandes intelligentes, gratuit, LECTURE SEULE).
+ *
+ * Pour les administrateur·rices de GA : on tape une demande en langage
+ * simple (« dossier locataire 27 », « enquête RE01 », « stats », « contacts
+ * NMH », « que faire pour des moisissures »…) et le robot interroge la base
+ * — STRICTEMENT cloisonnée au GA courant — puis renvoie le bon document /
+ * les bons liens. Il ne modifie jamais rien (pas de write, pas de code).
+ *
+ * Étape 2 (plus tard) : brancher l'IA Claude par-dessus pour le langage libre.
+ */
+if (!defined('ABSPATH')) exit;
+
+/** Peut utiliser le robot : admin du GA ou super-admin. */
+function lfi_nct_robot_can() {
+    return function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
+}
+
+/** Trouve une enquête par sa référence (RE01, CLO02…) dans le GA courant. */
+function lfi_nct_robot_find_response_by_ref($ref) {
+    $ref = strtoupper(preg_replace('/\s+/', '', (string) $ref));
+    if (!preg_match('/^([A-Z]+)(\d+)$/', $ref, $m)) return 0;
+    $code = $m[1]; $num = (int) $m[2];
+    $slug = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    if (function_exists('lfi_nct_ga_code') && strtoupper(lfi_nct_ga_code($slug)) !== $code) {
+        /* Réf d'un autre GA → refusé (cloisonnement). */
+        return 0;
+    }
+    $map = function_exists('lfi_nct_response_seq_map') ? lfi_nct_response_seq_map($slug) : [];
+    foreach ($map as $id => $seq) { if ((int) $seq === $num) return (int) $id; }
+    return 0;
+}
+
+/* ============================================================== *
+ *  VUE : Robot assistant                                          *
+ * ============================================================== */
+function lfi_nct_app_view_assistant() {
+    if (!lfi_nct_robot_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    global $wpdb;
+    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+
+    lfi_nct_app_screen_open('🤖 Assistant', 'Demande-moi un dossier, une enquête, des stats, un contact…');
+
+    /* Barre de recherche. */
+    echo '<form method="get" class="lfi-app-searchbar" style="margin-bottom:10px">';
+    echo '<input type="hidden" name="vue" value="assistant">';
+    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Ex : dossier locataire 27 · enquête RE01 · stats · contacts NMH">';
+    echo '<button type="submit">🔎</button>';
+    echo '</form>';
+
+    /* Suggestions rapides. */
+    if ($q === '') {
+        echo '<div class="lfi-app-help">Tape ce que tu veux, en langage simple. Exemples :</div>';
+        echo '<div class="lfi-app-filter-chips">';
+        foreach (['stats' => '📊 Stats', 'carte' => '🗺️ Carte', 'contacts NMH' => '☎️ Contacts NMH', 'que faire moisissures' => '📋 Que faire ?', 'enquêtes' => '🏠 Enquêtes', 'locataires' => '🗂 Locataires'] as $ex => $lab) {
+            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('assistant', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
+        }
+        echo '</div>';
+        echo '<div class="lfi-app-help" style="margin-top:10px;background:#f7f7f7"><small>🔒 L\'assistant lit seulement les données de <strong>ton</strong> groupe d\'action, ne modifie rien, et te renvoie les documents (dossiers, récapitulatifs, stats).</small></div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    $ql = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
+    $has = function ($needles) use ($ql) {
+        foreach ((array) $needles as $n) if (strpos($ql, $n) !== false) return true;
+        return false;
+    };
+    $num = (preg_match('/\d+/', $q, $mm)) ? (int) $mm[0] : 0;
+    $answered = false;
+
+    /* ---- 1) Enquête par référence (RE01, CLO02…) ---- */
+    if (preg_match('/\b([a-z]{2,4}\s?\d{1,3})\b/i', $q, $rm)) {
+        $rid = lfi_nct_robot_find_response_by_ref($rm[1]);
+        if ($rid) {
+            $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+            $r = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d AND deleted_at IS NULL" . $sc, $rid));
+            if ($r) {
+                $ref = function_exists('lfi_nct_response_ref') ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '') : '';
+                $prob = function_exists('lfi_nct_app_enq_problem') ? lfi_nct_app_enq_problem($r) : null;
+                echo '<div class="lfi-app-card"><div class="head"><div class="who">🏠 Enquête ' . esc_html($ref) . ' — ' . esc_html(trim($r->contact_prenom . ' ' . $r->contact_nom) ?: '(anonyme)') . '</div></div>';
+                if ($r->adresse) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html(trim($r->adresse . ($r->etage ? ' · ét. ' . $r->etage : ''))) . '</span></div>';
+                if ($prob && !empty($prob['chips'])) {
+                    echo '<div class="prob-chips" style="margin-top:4px">';
+                    foreach ($prob['chips'] as $ch) echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
+                    echo '</div>';
+                }
+                echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('enquetes')) . '">Ouvrir les enquêtes</a></div></div>';
+                $answered = true;
+            }
+        }
+    }
+
+    /* ---- 2) Dossier / locataire ---- */
+    if (!$answered && $has(['dossier', 'locataire', 'locataires'])) {
+        /* a) par numéro de dossier (borné au GA via lfi_nct_dossier_get) */
+        $d = ($num && function_exists('lfi_nct_dossier_get')) ? lfi_nct_dossier_get($num) : null;
+        if ($d) {
+            lfi_nct_robot_render_dossier_card($d->tenant_user_id, trim($d->tenant_prenom . ' ' . $d->tenant_nom), $d->tenant_adresse);
+            $answered = true;
+        } else {
+            /* b) recherche par nom parmi les locataires du GA */
+            $terms = trim(preg_replace('/\b(dossier|locataire|locataires|de|du|la|le|numero|numéro|n°)\b/iu', ' ', $q));
+            $args = ['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'number' => 20, 'fields' => ['ID', 'display_name']];
+            if ($terms !== '') { $args['search'] = '*' . $terms . '*'; $args['search_columns'] = ['display_name', 'user_login', 'user_email']; }
+            if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
+            $found = get_users($args);
+            if ($found) {
+                echo '<div class="lfi-app-help">' . count($found) . ' locataire(s) trouvé(s) :</div><ul class="lfi-app-list">';
+                foreach ($found as $u) {
+                    echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">🗂 ' . esc_html($u->display_name) . '</div></div>';
+                    echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
+                    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Dossier</a>';
+                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
+                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => $u->ID])) . '" target="_blank">🧾 Récap NMH</a>';
+                    echo '</div></li>';
+                }
+                echo '</ul>';
+            } else {
+                echo '<div class="lfi-app-empty">Aucun locataire trouvé dans ton GA pour « ' . esc_html($q) . ' ».</div>';
+            }
+            $answered = true;
+        }
+    }
+
+    /* ---- 3) Stats / carte ---- */
+    if (!$answered && $has(['stat', 'chiffre', 'combien'])) {
+        $s = function_exists('lfi_nct_app_quick_stats') ? lfi_nct_app_quick_stats() : [];
+        echo '<div class="lfi-app-stats-grid">';
+        echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . (int) ($s['surveys'] ?? 0) . '</div><div class="l">Enquêtes</div></div>';
+        echo '<div class="stat"><div class="ico">👥</div><div class="n">' . (int) ($s['membres'] ?? 0) . '</div><div class="l">Membres actifs</div></div>';
+        echo '<div class="stat"><div class="ico">📅</div><div class="n">' . (int) ($s['events'] ?? 0) . '</div><div class="l">Événements</div></div>';
+        echo '</div>';
+        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('stats-enquete')) . '">📊 Stats détaillées</a> <a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('carte')) . '">🗺️ Carte</a></div>';
+        $answered = true;
+    }
+    if (!$answered && $has(['carte', 'map', 'géoloc', 'geoloc'])) {
+        echo '<div class="lfi-app-card">🗺️ Ta carte 3D des signalements.<div class="row-actions" style="margin-top:8px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('carte')) . '">Ouvrir la carte</a></div></div>';
+        $answered = true;
+    }
+
+    /* ---- 4) Contacts NMH / bailleur ---- */
+    if (!$answered && $has(['nmh', 'bailleur', 'contact', 'morineau', 'agence', 'téléphone', 'telephone', 'mail', 'email'])) {
+        $b = function_exists('lfi_nct_fact_bailleur') ? lfi_nct_fact_bailleur() : [];
+        echo '<div class="lfi-app-card"><div class="head"><div class="who">☎️ ' . esc_html($b['nom'] ?? 'Bailleur') . '</div></div><div class="meta" style="flex-direction:column;align-items:flex-start;gap:4px">';
+        if (!empty($b['agence_nom']))     echo '<span class="meta-chip">🏘 ' . esc_html($b['agence_nom']) . (!empty($b['agence_secteur']) ? ' — ' . esc_html($b['agence_secteur']) : '') . '</span>';
+        if (!empty($b['agence_contact'])) echo '<span class="meta-chip">👤 ' . esc_html($b['agence_contact']) . '</span>';
+        if (!empty($b['agence_tel']))     echo '<a class="meta-chip" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $b['agence_tel'])) . '">📞 ' . esc_html($b['agence_tel']) . '</a>';
+        if (!empty($b['agence_email']))   echo '<a class="meta-chip" href="mailto:' . esc_attr($b['agence_email']) . '">✉️ ' . esc_html($b['agence_email']) . '</a>';
+        echo '</div><div class="row-actions" style="margin-top:8px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">⚙️ Modifier les contacts</a></div></div>';
+        $answered = true;
+    }
+
+    /* ---- 5) Marche à suivre ---- */
+    if (!$answered && $has(['que faire', 'quoi faire', 'démarche', 'demarche', 'étape', 'etape', 'moisiss', 'insalub', 'humidit', 'procédure', 'procedure', 'comment'])) {
+        echo '<div class="lfi-app-card"><div class="head"><div class="who">📋 Marche à suivre — insalubrité / non-décence</div></div><ol style="line-height:1.7;margin:8px 0 0;padding-left:18px">';
+        echo '<li><strong>Documenter</strong> : enquête + photos horodatées + dossier du locataire (fais-le adhérer à l\'asso).</li>';
+        echo '<li><strong>Mise en demeure LRAR</strong> au bailleur (délai légal selon l\'urgence : 8 j santé/sécurité, 1 mois réparation, 2 mois autre).</li>';
+        echo '<li><strong>Délai dépassé → SCHS / mairie</strong> (service d\'hygiène) puis <strong>ARS</strong>.</li>';
+        echo '<li><strong>Tribunal</strong> (référé travaux, action au fond) — via un avocat, selon la volonté du locataire.</li>';
+        echo '</ol><div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossiers')) . '">🗂 Dossiers locataires</a><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('tutoriels')) . '">🛠 Tutoriels</a></div></div>';
+        $answered = true;
+    }
+
+    /* ---- Fallback ---- */
+    if (!$answered) {
+        echo '<div class="lfi-app-empty">Je n\'ai pas compris « ' . esc_html($q) . ' ». Essaie : <em>dossier locataire &lt;nom ou n°&gt;</em>, <em>enquête RE01</em>, <em>stats</em>, <em>carte</em>, <em>contacts NMH</em>, <em>que faire pour…</em></div>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/** Carte d'un locataire (liens dossier / note avocat / récap NMH). */
+function lfi_nct_robot_render_dossier_card($uid, $name, $adresse) {
+    echo '<div class="lfi-app-card"><div class="head"><div class="who">🗂 ' . esc_html($name ?: ('Locataire #' . (int) $uid)) . '</div></div>';
+    if ($adresse) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html($adresse) . '</span></div>';
+    echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
+    if ($uid) {
+        echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $uid])) . '">📂 Dossier</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $uid])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => $uid])) . '" target="_blank">🧾 Récap NMH</a>';
+    } else {
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossiers')) . '">🗂 Voir les dossiers</a>';
+    }
+    echo '</div></div>';
+}

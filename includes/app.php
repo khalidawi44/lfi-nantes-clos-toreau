@@ -801,6 +801,7 @@ function lfi_nct_app_shortcode() {
                     case 'sauvegarde':            lfi_nct_app_view_sauvegarde();             break;
                     case 'suggestions':           lfi_nct_app_view_suggestions();            break;
                     case 'activite':              lfi_nct_app_view_activite();               break;
+                    case 'assistant':             lfi_nct_app_view_assistant();              break;
                     case 'compta':                lfi_nct_app_view_compta();                 break;
                     case 'compta-relances':       lfi_nct_app_view_compta_relances();        break;
                     case 'compta-export':         lfi_nct_app_view_compta_export();          break;
@@ -1835,6 +1836,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
     return lfi_nct_prune_past_event_sections(lfi_nct_module_filter_sections([
         '🟣 VOLET GROUPE D\'ACTION (local)' => [
+            ['🤖', 'Assistant',              'Demande un dossier, une stat, un contact', lfi_nct_app_url('assistant')],
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🎨', 'Personnalisation du GA', 'En-tête courriers · bailleurs',       lfi_nct_app_url('ga-params')],
             ['👥', 'Membres actifs',         $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
