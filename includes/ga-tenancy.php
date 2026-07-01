@@ -107,10 +107,15 @@ function lfi_nct_owner_clause($col = 'owner_user_id') {
  */
 function lfi_nct_ga_admin_owner() {
     $slug = lfi_nct_scope_ga_slug();
-    if ($slug !== '' && function_exists('lfi_nct_ga_pivot_uid')) {
-        $p = lfi_nct_ga_pivot_uid($slug);
-        if ($p) return (int) $p;
+    /* Autre GA (pas le Clos Toreau) : propriétaire PROPRE à ce GA, jamais
+       partagé. Sinon deux GA non configurés se retrouveraient sous le même
+       propriétaire (le 1er admin du site) → dossiers mélangés entre GA. */
+    if ($slug !== '' && $slug !== 'clos-toreau') {
+        if (function_exists('lfi_nct_ga_pivot_uid')) { $p = (int) lfi_nct_ga_pivot_uid($slug); if ($p) return $p; }
+        if (function_exists('lfi_nct_ga_admin_uids')) { $uids = lfi_nct_ga_admin_uids($slug); if (!empty($uids)) return (int) $uids[0]; }
+        if (function_exists('lfi_nct_ga_phantom_owner')) return (int) lfi_nct_ga_phantom_owner($slug);
     }
+    /* Home (Clos Toreau) → 1er administrateur du site. */
     $admins = get_users(['role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => ['ID']]);
     if (!empty($admins)) return (int) (is_object($admins[0]) ? $admins[0]->ID : $admins[0]);
     return 1;

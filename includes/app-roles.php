@@ -794,12 +794,14 @@ function lfi_nct_ep_handle_photos($tenant_uid) {
 function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $owner = function_exists('lfi_nct_ga_admin_owner') ? lfi_nct_ga_admin_owner() : (int) get_current_user_id();
     if ($tenant_uid) {
-        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE tenant_user_id = %d", $tenant_uid));
-        if ($exists) return (int) $exists; // déjà un dossier pour ce locataire
+        /* Cloisonnement : on ne considère « déjà un dossier » que DANS CE GA
+           (même propriétaire), sinon le contrôle fuiterait sur les autres GA. */
+        $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE tenant_user_id = %d AND owner_user_id = %d", $tenant_uid, $owner));
+        if ($exists) return (int) $exists; // déjà un dossier pour ce locataire dans ce GA
     }
     $data  = json_decode((string) $row->data, true) ?: [];
-    $owner = function_exists('lfi_nct_ga_admin_owner') ? lfi_nct_ga_admin_owner() : (int) get_current_user_id();
     $wpdb->insert($t, [
         'owner_user_id'      => $owner,
         'tenant_user_id'     => $tenant_uid ?: null,
