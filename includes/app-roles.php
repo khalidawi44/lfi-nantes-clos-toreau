@@ -1455,20 +1455,86 @@ function lfi_nct_copy_button($text, $label = '📋 Copier le message') {
 }
 
 /**
+ * CONNEXION DIRECTE (lien magique) — évite d'avoir à taper/copier l'identifiant
+ * et le mot de passe (impossible à coller sur beaucoup d'Android). Un jeton à
+ * USAGE UNIQUE et EXPIRABLE est stocké côté serveur (haché) ; le lien connecte
+ * la personne d'un seul clic. Pas moins sûr que l'ancien SMS (qui contenait déjà
+ * le mot de passe), et même mieux : usage unique + expiration.
+ */
+function lfi_nct_make_login_token($uid) {
+    $uid = (int) $uid;
+    if (!$uid) return '';
+    $token = wp_generate_password(32, false, false); // alphanumérique, sans caractères ambigus
+    update_user_meta($uid, 'lfi_nct_login_token', hash('sha256', $token));
+    update_user_meta($uid, 'lfi_nct_login_token_exp', time() + 14 * DAY_IN_SECONDS);
+    return $token;
+}
+
+/** Retrouve l'utilisateur d'un jeton de connexion valide (non expiré). */
+function lfi_nct_find_user_by_login_token($token) {
+    $token = (string) $token;
+    if (strlen($token) < 20) return 0;
+    $hash  = hash('sha256', $token);
+    $users = get_users(['meta_key' => 'lfi_nct_login_token', 'meta_value' => $hash, 'number' => 1, 'fields' => ['ID']]);
+    if (empty($users)) return 0;
+    $uid = (int) (is_object($users[0]) ? $users[0]->ID : $users[0]);
+    $exp = (int) get_user_meta($uid, 'lfi_nct_login_token_exp', true);
+    if ($exp && $exp < time()) return 0;
+    return $uid;
+}
+
+/** URL de connexion directe (app + jeton). '' si pas d'uid. */
+function lfi_nct_login_link($uid) {
+    $uid = (int) $uid;
+    if (!$uid) return '';
+    $token = lfi_nct_make_login_token($uid);
+    if (!$token) return '';
+    $base = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    return add_query_arg('lfi_login', $token, $base);
+}
+
+/**
+ * Auto-connexion par lien magique : ?lfi_login=<jeton>. On connecte, on invalide
+ * le jeton (usage unique) et on redirige vers l'app « propre » (sans le jeton).
+ */
+add_action('template_redirect', 'lfi_nct_maybe_token_login', 1);
+function lfi_nct_maybe_token_login() {
+    if (empty($_GET['lfi_login'])) return;
+    $token = sanitize_text_field(wp_unslash($_GET['lfi_login']));
+    $dest  = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    $uid   = lfi_nct_find_user_by_login_token($token);
+    if ($uid) {
+        delete_user_meta($uid, 'lfi_nct_login_token');      // usage unique
+        delete_user_meta($uid, 'lfi_nct_login_token_exp');
+        wp_set_current_user($uid);
+        wp_set_auth_cookie($uid, true);                     // « rester connecté »
+    }
+    wp_safe_redirect($dest);
+    exit;
+}
+
+/**
  * Construit le message d'accès (identifiants) pour un GA donné.
  * $ga_label = nom lisible du groupe d'action (ex. « GA Port-Boyer »).
+ * $login_url (optionnel) = lien de connexion directe (1 clic, sans rien taper).
  */
-function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes Sud Clos Toreau') {
+function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes Sud Clos Toreau', $login_url = '') {
     $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
-    return "Bonjour,\n\n"
-         . "Vos accès à l'app du groupe d'action « " . $ga_label . " » :\n\n"
-         . "📲 Installez l'app en ouvrant ce lien :\n"
-         . $site_app . "\n\n"
-         . "→ iPhone : ouvrez le lien dans Safari, puis Partager > « Sur l'écran d'accueil ».\n"
-         . "→ Android : ouvrez le lien dans Chrome, un bouton « Installer » apparaît.\n\n"
-         . "🪪 Identifiant : " . $login . "\n"
-         . "🔑 Mot de passe : " . $pwd . "\n\n"
-         . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
+    $msg  = "Bonjour,\n\n"
+          . "Vos accès à l'app du groupe d'action « " . $ga_label . " » :\n\n";
+    if ($login_url !== '') {
+        $msg .= "✅ CONNEXION DIRECTE (1 clic, rien à taper) :\n" . $login_url . "\n\n"
+              . "(Ce lien vous connecte automatiquement. Ensuite : Partager > « Sur l'écran d'accueil » pour garder l'app.)\n\n"
+              . "— Ou connexion manuelle —\n";
+    } else {
+        $msg .= "📲 Installez l'app en ouvrant ce lien :\n" . $site_app . "\n\n"
+              . "→ iPhone : ouvrez le lien dans Safari, puis Partager > « Sur l'écran d'accueil ».\n"
+              . "→ Android : ouvrez le lien dans Chrome, un bouton « Installer » apparaît.\n\n";
+    }
+    $msg .= "🪪 Identifiant : " . $login . "\n"
+          . "🔑 Mot de passe : " . $pwd . "\n\n"
+          . "Conservez bien ces informations. Vous pourrez les modifier dans l'app, rubrique « Mon profil ».";
+    return $msg;
 }
 
 function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte créé') {
@@ -1476,10 +1542,15 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
     $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
     $ga_label = $created['ga_nom']
         ?? (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($created['ga'] ?? '') : 'LFI Nantes Sud Clos Toreau');
-    $sms_body = lfi_nct_app_credentials_message($login, $pwd, $ga_label);
+    /* Lien de connexion directe (1 clic) — évite de taper/coller sur Android. */
+    $login_url = (!empty($created['uid']) && function_exists('lfi_nct_login_link')) ? lfi_nct_login_link($created['uid']) : '';
+    $sms_body = lfi_nct_app_credentials_message($login, $pwd, $ga_label, $login_url);
     $sms_url  = $tel ? 'sms:' . preg_replace('/[^\d+]/', '', $tel) . '?body=' . rawurlencode($sms_body) : '';
     echo '<div class="lfi-app-flash ok">';
     echo '<strong>✅ ' . esc_html($screen_label) . '</strong> — groupe : <strong>' . esc_html($ga_label) . '</strong><br>';
+    if ($login_url) {
+        echo '<div style="margin:8px 0;padding:8px 10px;background:#eef7ee;border:1px solid #a6d3a6;border-radius:8px">🔗 <strong>Connexion directe</strong> (rien à taper) : <a href="' . esc_url($login_url) . '">ouvrir la connexion directe</a><br><small>Ce lien (dans le SMS/message) connecte la personne d\'un seul clic. Usage unique, valable 14 jours.</small></div>';
+    }
     echo '<table style="margin:10px 0;border-collapse:collapse;width:100%">';
     echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🌐 URL</small></td><td style="padding:6px 8px"><code>' . esc_html($site_app) . '</code></td></tr>';
     echo '<tr><td style="padding:6px 8px;vertical-align:top"><small>🪪 Identifiant</small></td><td style="padding:6px 8px"><code style="font-size:1.1em;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd">' . esc_html($login) . '</code> ' . lfi_nct_copy_button($login, '📋') . '</td></tr>';
@@ -1592,7 +1663,7 @@ function lfi_nct_app_view_comptes_ga() {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
                 if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga, 'uid' => $uid];
             }
         }
     }
@@ -1636,7 +1707,7 @@ function lfi_nct_app_view_comptes_ga() {
             if (is_wp_error($uid)) continue;
             if (!empty($c['tel'])) update_user_meta($uid, 'lfi_nct_tel', $c['tel']);
             if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $c['tel'] ?? '', 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga];
+            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $c['tel'] ?? '', 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga, 'uid' => $uid];
         }
         if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
         wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['batched' => count($batch)]));
@@ -1670,7 +1741,7 @@ function lfi_nct_app_view_comptes_ga() {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
                 if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'ga' => $cga, 'uid' => $uid];
             }
         }
     }
@@ -1710,7 +1781,7 @@ function lfi_nct_app_view_comptes_ga() {
             if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
             $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
             if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
-            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga];
+            $batch[] = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'name' => trim($prenom . ' ' . $nom) ?: $login, 'ga' => $cga, 'uid' => $uid];
         }
         if ($batch) set_transient('lfi_nct_pwd_batch_' . get_current_user_id(), $batch, 1800);
 
@@ -1731,7 +1802,7 @@ function lfi_nct_app_view_comptes_ga() {
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
             $tel = (string) get_user_meta($uid, 'lfi_nct_tel', true);
-            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true)];
+            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true), 'uid' => $uid];
         }
     }
 
@@ -1858,7 +1929,8 @@ function lfi_nct_app_view_comptes_ga() {
         echo '<ul class="lfi-app-list">';
         foreach ($batch as $b) {
             $ga_label  = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($b['ga'] ?? '') : 'LFI Nantes Sud Clos Toreau';
-            $sms_body  = lfi_nct_app_credentials_message($b['login'], $b['pwd'], $ga_label);
+            $login_url = (!empty($b['uid']) && function_exists('lfi_nct_login_link')) ? lfi_nct_login_link($b['uid']) : '';
+            $sms_body  = lfi_nct_app_credentials_message($b['login'], $b['pwd'], $ga_label, $login_url);
             $tel_clean = preg_replace('/[^\d+]/', '', (string) ($b['tel'] ?? ''));
             $sms_url   = $tel_clean ? 'sms:' . $tel_clean . '?body=' . rawurlencode($sms_body) : '';
             echo '<li class="lfi-app-card">';
@@ -2141,7 +2213,7 @@ function lfi_nct_app_view_comptes_locataires() {
                     update_user_meta($uid, 'lfi_nct_response_id', $resp_id);
                     if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                     if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
-                    $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+                    $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid];
                 }
             }
         }
@@ -2170,7 +2242,7 @@ function lfi_nct_app_view_comptes_locataires() {
             } else {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid];
             }
         }
     }
@@ -2184,7 +2256,7 @@ function lfi_nct_app_view_comptes_locataires() {
             wp_set_password($pwd, $uid);
             $u   = get_userdata($uid);
             $tel = (string) get_user_meta($uid, 'lfi_nct_tel', true);
-            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true)];
+            $created = ['login' => $u->user_login, 'pwd' => $pwd, 'tel' => $tel, 'reset' => true, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true), 'uid' => $uid];
         }
     }
 
