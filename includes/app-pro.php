@@ -1332,17 +1332,21 @@ function lfi_nct_app_view_carte($force_all = false) {
                  colorés par gravité — tout le détail au clic. */
             map.addSource('survey-pts', {
                 type: 'geojson', data: pointsGJ,
-                cluster: true, clusterMaxZoom: 16, clusterRadius: 44
+                cluster: true, clusterMaxZoom: 16, clusterRadius: 50
             });
             map.addLayer({
                 id: 'clusters', type: 'circle', source: 'survey-pts',
                 filter: ['has', 'point_count'],
                 paint: {
                     'circle-color': '#c8102e',
-                    'circle-opacity': 0.92,
-                    'circle-radius': ['step', ['get', 'point_count'], 16, 5, 20, 15, 26],
+                    'circle-opacity': 0.95,
+                    /* Rayon en PIXELS écran (pitch-scale viewport) → toujours
+                       visible, même en vue aérienne très inclinée et éloignée. */
+                    'circle-radius': ['step', ['get', 'point_count'], 18, 5, 23, 15, 28, 40, 34],
                     'circle-stroke-width': 3,
-                    'circle-stroke-color': '#fff'
+                    'circle-stroke-color': '#fff',
+                    'circle-pitch-scale': 'viewport',
+                    'circle-pitch-alignment': 'viewport'
                 }
             });
             map.addLayer({
@@ -1351,8 +1355,10 @@ function lfi_nct_app_view_carte($force_all = false) {
                 layout: {
                     'text-field': ['get', 'point_count_abbreviated'],
                     'text-font': ['Noto Sans Regular'],
-                    'text-size': 14,
-                    'text-allow-overlap': true
+                    'text-size': 15,
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true,
+                    'text-pitch-alignment': 'viewport'
                 },
                 paint: { 'text-color': '#fff' }
             });
@@ -1361,9 +1367,13 @@ function lfi_nct_app_view_carte($force_all = false) {
                 filter: ['!', ['has', 'point_count']],
                 paint: {
                     'circle-color': ['get', 'color'],
-                    'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 9, 15, 8, 17, 7, 20, 5],
+                    /* Curseur d'une enquête isolée : rayon écran constant, bien
+                       visible de loin, plus petit une fois zoomé au sol. */
+                    'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 11, 14, 9, 17, 7, 20, 5],
                     'circle-stroke-width': 2,
-                    'circle-stroke-color': '#fff'
+                    'circle-stroke-color': '#fff',
+                    'circle-pitch-scale': 'viewport',
+                    'circle-pitch-alignment': 'viewport'
                 }
             });
 
