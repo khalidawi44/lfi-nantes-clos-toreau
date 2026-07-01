@@ -14,6 +14,18 @@ if (!defined('ABSPATH')) exit;
 const LFI_NCT_REUNION_CONFLUENCES_SLUG  = 'reunion-26-juin-2026';
 const LFI_NCT_REUNION_CONFLUENCES_FLAG  = 'lfi_nct_reunion_confluences_page_created';
 const LFI_NCT_REUNION_CONFLUENCES_DBVER = 'lfi_nct_reunion_confluences_db_ver';
+const LFI_NCT_REUNION_CONFLUENCES_DATE  = '2026-06-26';
+
+/**
+ * La réunion du 26 juin est-elle passée ? (fin de journée de l'événement)
+ * Sert à retirer automatiquement l'inscription des suggestions/tuiles et à
+ * clore les inscriptions une fois la date passée.
+ */
+function lfi_nct_reunion_confluences_is_past() {
+    $end = strtotime(LFI_NCT_REUNION_CONFLUENCES_DATE . ' 23:59:59');
+    $now = function_exists('current_time') ? current_time('timestamp') : time();
+    return ($now > $end);
+}
 
 /* ------------------------------------------------------------------ */
 /* DB                                                                  */
@@ -101,7 +113,11 @@ function lfi_nct_reunion_confluences_shortcode() {
 
     $notice = '';
     $error  = '';
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_reunion_submit'])) {
+    $is_past = function_exists('lfi_nct_reunion_confluences_is_past') && lfi_nct_reunion_confluences_is_past();
+    /* Réunion passée : inscriptions closes, on n'enregistre plus rien. */
+    if ($is_past && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_reunion_submit'])) {
+        $error = 'Les inscriptions sont closes : cette réunion est passée.';
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_reunion_submit'])) {
         if (!isset($_POST['lfi_reunion_nonce']) || !wp_verify_nonce($_POST['lfi_reunion_nonce'], 'lfi_reunion_rsvp')) {
             $error = 'Sécurité : jeton invalide. Rechargez la page.';
         } else {
@@ -161,6 +177,12 @@ function lfi_nct_reunion_confluences_shortcode() {
             <div class="lfi-error"><strong>Erreur :</strong> <?php echo esc_html($error); ?></div>
         <?php endif; ?>
 
+        <?php if ($is_past): ?>
+            <div class="lfi-info-box" style="background:#f4f4f4;border-left:6px solid #999;margin-top:1.5em">
+                <div style="font-weight:700">🗓️ Réunion passée — inscriptions closes</div>
+                <div style="margin-top:.3em">Cette réunion a eu lieu le 26 juin 2026. Merci à toutes les personnes venues ! Les prochains rendez-vous sont annoncés dans nos événements.</div>
+            </div>
+        <?php else: ?>
         <h3 style="margin-top:1.5em">Je participe</h3>
         <p>
             <strong><?php echo $count; ?></strong> personne<?php echo $count > 1 ? 's' : ''; ?>
@@ -199,8 +221,9 @@ function lfi_nct_reunion_confluences_shortcode() {
             </fieldset>
             <p><button type="submit" name="lfi_reunion_submit" class="lfi-btn lfi-btn-lg lfi-submit">✓ Je participe</button></p>
         </form>
+        <?php endif; /* fin if($is_past) */ ?>
 
-        <?php endif; ?>
+        <?php endif; /* fin if($notice) */ ?>
 
         <div class="lfi-info-box" style="margin-top:1.5em">
             🔒 <strong>RGPD</strong> : ces informations restent au Groupe d'Action LFI Nantes Sud Clos Toreau,
