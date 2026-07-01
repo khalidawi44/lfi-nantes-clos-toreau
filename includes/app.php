@@ -702,6 +702,8 @@ function lfi_nct_app_shortcode() {
                     case 'sms':             lfi_nct_app_view_sms();             break;
                     case 'email':           lfi_nct_app_view_email();           break;
                     case 'enquetes':        lfi_nct_app_view_enquetes();        break;
+                    case 'enquete-edit':    lfi_nct_app_view_enquete_edit();    break;
+                    case 'enquetes-corbeille': lfi_nct_app_view_enquetes_corbeille(); break;
                     case 'enquetes-sms':    lfi_nct_app_view_enquetes_sms();    break;
                     case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
                     case 'stats':           lfi_nct_app_view_stats();           break;
@@ -2546,16 +2548,64 @@ function lfi_nct_app_enq_message_template($mode, $row, $event_post = null) {
     }
 }
 
+/* Liste canonique des types de problème (partagée liste + édition). */
+function lfi_nct_enq_problem_types() {
+    return [
+        'degats_eaux'      => ['💧', 'Dégâts des eaux'],
+        'humidite'         => ['🌫', 'Humidité / moisissures'],
+        'insectes'         => ['🐜', 'Nuisibles (cafards, rats…)'],
+        'chauffage'        => ['🥶', 'Chauffage défaillant'],
+        'electricite'      => ['⚡', 'Électricité défectueuse'],
+        'ascenseur'        => ['🛗', 'Ascenseur en panne'],
+        'parties_communes' => ['🚪', 'Parties communes dégradées'],
+        'bruit'            => ['🔊', 'Nuisances sonores'],
+        'securite'         => ['🚨', 'Insécurité'],
+    ];
+}
+
+/** Peut gérer les enquêtes (éditer / supprimer) : admin du GA ou super-admin. */
+function lfi_nct_enq_can_manage() {
+    return function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
+}
+
 /* ---------- 🏠 Enquêtes logement : liste + filtres + actions ----- */
 function lfi_nct_app_view_enquetes() {
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
-
-    /* Filtre : par défaut on ne montre que ceux qui ACCEPTENT le recontact (RGPD) */
-    $filter = isset($_GET['f']) ? sanitize_key($_GET['f']) : 'recontact';
+    $can_manage = lfi_nct_enq_can_manage();
 
     /* Cloisonnement par GA (chaque GA ne voit que ses propres réponses). */
     $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+
+    /* --- Actions de gestion (suppression → corbeille), cloisonnées au GA --- */
+    if ($can_manage && !empty($_POST['lfi_enq_manage']) && check_admin_referer('lfi_app_enq_manage')) {
+        $now = current_time('mysql');
+        $ids = [];
+        if (!empty($_POST['del_one'])) {
+            $ids = [(int) $_POST['del_one']];
+        } elseif (!empty($_POST['bulk_del']) && !empty($_POST['ids']) && is_array($_POST['ids'])) {
+            $ids = array_map('intval', $_POST['ids']);
+        }
+        $ids = array_values(array_filter($ids));
+        $n = 0;
+        foreach ($ids as $rid) {
+            /* La clause de scope garantit qu'on ne touche QUE les enquêtes de ce GA. */
+            $n += (int) $wpdb->query($wpdb->prepare(
+                "UPDATE $table SET deleted_at = %s WHERE id = %d AND deleted_at IS NULL" . $sc,
+                $now, $rid
+            ));
+        }
+        wp_safe_redirect(lfi_nct_app_url('enquetes', array_filter([
+            'f'       => isset($_POST['f']) ? sanitize_key($_POST['f']) : null,
+            'sort'    => isset($_POST['sort']) ? sanitize_key($_POST['sort']) : null,
+            'trashed' => $n,
+        ])));
+        exit;
+    }
+
+    /* Filtre : par défaut on ne montre que ceux qui ACCEPTENT le recontact (RGPD) */
+    $filter = isset($_GET['f']) ? sanitize_key($_GET['f']) : 'recontact';
+    $sort   = isset($_GET['sort']) ? sanitize_key($_GET['sort']) : 'recent';
 
     $where = "WHERE deleted_at IS NULL" . $sc;
     switch ($filter) {
@@ -2572,12 +2622,42 @@ function lfi_nct_app_view_enquetes() {
          ORDER BY submitted_at DESC LIMIT 300"
     ) ?: [];
 
+    /* Tri en mémoire (la gravité est dans le JSON — plus simple qu'en SQL). */
+    $grav_of = function ($r) {
+        $d = json_decode((string) $r->data, true);
+        return is_array($d) ? (int) ($d['problemes_gravite'] ?? 0) : 0;
+    };
+    switch ($sort) {
+        case 'ancien':
+            $rows = array_reverse($rows);
+            break;
+        case 'gravite':
+            usort($rows, function ($a, $b) use ($grav_of) { return $grav_of($b) <=> $grav_of($a); });
+            break;
+        case 'immeuble':
+            usort($rows, function ($a, $b) { return strcasecmp((string) $a->adresse, (string) $b->adresse); });
+            break;
+        case 'nom':
+            usort($rows, function ($a, $b) {
+                return strcasecmp(trim($a->contact_nom . ' ' . $a->contact_prenom), trim($b->contact_nom . ' ' . $b->contact_prenom));
+            });
+            break;
+        case 'recent':
+        default:
+            /* déjà trié DESC par la requête */
+            break;
+    }
+
     $total       = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc);
     $with_tel    = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_tel <> ''   AND contact_tel   IS NOT NULL AND contact_recontact = 1");
     $with_email  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_email <> '' AND contact_email IS NOT NULL AND contact_recontact = 1");
     $with_recont = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NULL" . $sc . " AND contact_recontact = 1");
+    $in_trash    = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table WHERE deleted_at IS NOT NULL" . $sc);
 
     lfi_nct_app_screen_open('🏠 Enquêtes logement', $total . ' réponse(s) · ' . $with_recont . ' acceptent recontact');
+
+    if (isset($_GET['trashed'])) lfi_nct_app_flash((int) $_GET['trashed'] . ' enquête(s) mise(s) à la corbeille.');
+    if (!empty($_GET['edited']))  lfi_nct_app_flash('✅ Enquête modifiée.');
 
     /* Filtres en chips */
     $filters = [
@@ -2589,7 +2669,22 @@ function lfi_nct_app_view_enquetes() {
     echo '<div class="lfi-app-filter-chips">';
     foreach ($filters as $k => $label) {
         $cls = $filter === $k ? 'on' : '';
-        echo '<a class="fc ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('enquetes', ['f' => $k])) . '">' . esc_html($label) . '</a>';
+        echo '<a class="fc ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('enquetes', ['f' => $k, 'sort' => $sort])) . '">' . esc_html($label) . '</a>';
+    }
+    echo '</div>';
+
+    /* Tri en chips */
+    $sorts = [
+        'recent'   => '📅 Récent',
+        'ancien'   => '📅 Ancien',
+        'gravite'  => '⚠️ Gravité',
+        'immeuble' => '📍 Immeuble',
+        'nom'      => '🔤 Nom',
+    ];
+    echo '<div class="lfi-app-filter-chips" style="margin-top:-4px"><span style="align-self:center;font-size:.8em;color:#888;margin-right:2px">Trier :</span>';
+    foreach ($sorts as $k => $label) {
+        $cls = $sort === $k ? 'on' : '';
+        echo '<a class="fc ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('enquetes', ['f' => $filter, 'sort' => $k])) . '">' . esc_html($label) . '</a>';
     }
     echo '</div>';
 
@@ -2597,61 +2692,266 @@ function lfi_nct_app_view_enquetes() {
     echo '<div class="lfi-app-bulk-row">';
     echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('enquetes-sms')) . '">📱 SMS en série (' . $with_tel . ')</a>';
     echo '<a class="btn-ghost"   href="' . esc_url(lfi_nct_app_url('enquetes-email')) . '">✉️ Email groupé (' . $with_email . ')</a>';
+    if ($can_manage && $in_trash > 0) {
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-corbeille')) . '">🗑 Corbeille (' . $in_trash . ')</a>';
+    }
     echo '</div>';
 
     if (empty($rows)) {
         echo '<div class="lfi-app-empty">Aucune réponse pour ce filtre.</div>';
-    } else {
-        echo '<ul class="lfi-app-list">';
-        foreach ($rows as $r) {
-            $name = trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')) ?: '(anonyme)';
-            $ref  = function_exists('lfi_nct_response_ref')
-                ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '')
-                : '';
-            echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">';
-            if ($ref) echo '<span style="display:inline-block;background:#c8102e;color:#fff;font-weight:700;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle;letter-spacing:.5px">' . esc_html($ref) . '</span>';
-            echo esc_html($name) . '</div>';
-            echo '<div class="when">' . esc_html(wp_date('j M', strtotime($r->submitted_at))) . '</div>';
-            echo '</div>';
-
-            $adr = trim($r->adresse . ($r->etage ? ' · ét. ' . $r->etage : ''));
-            if ($adr) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html($adr) . '</span></div>';
-
-            /* Problème principal — synthèse + gravité */
-            $problem = lfi_nct_app_enq_problem($r);
-            if ($problem) {
-                echo '<div class="lfi-app-problem">';
-                echo '<div class="prob-head">Problème(s) signalé(s)';
-                if ($problem['gravite']) {
-                    echo ' <span class="prob-grav g' . (int) $problem['gravite'] . '">gravité ' . (int) $problem['gravite'] . '/10</span>';
-                }
-                if ($problem['recurrent'] === 'permanent') echo ' <span class="prob-recur">en permanence</span>';
-                echo '</div>';
-                echo '<div class="prob-chips">';
-                foreach ($problem['chips'] as $ch) {
-                    echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
-                }
-                echo '</div></div>';
-            }
-
-            echo '<div class="meta">';
-            if (!empty($r->contact_tel)) {
-                $tel_clean = preg_replace('/[^\d+]/', '', $r->contact_tel);
-                echo '<a class="meta-chip" href="tel:' . esc_attr($tel_clean) . '">📞 ' . esc_html($r->contact_tel) . '</a>';
-                echo '<a class="meta-chip act" href="sms:' . esc_attr($tel_clean) . '">📱 SMS</a>';
-            }
-            if (!empty($r->contact_email)) {
-                echo '<a class="meta-chip" href="mailto:' . esc_attr($r->contact_email) . '">✉️ ' . esc_html($r->contact_email) . '</a>';
-            }
-            if ($r->contact_recontact) {
-                echo '<span class="meta-chip" style="background:#e7f5ee;color:#186a3b">✓ Recontact OK</span>';
-            }
-            echo '</div>';
-            echo '</li>';
-        }
-        echo '</ul>';
+        lfi_nct_app_screen_close();
+        return;
     }
+
+    /* Tout est dans un formulaire pour la sélection multiple + suppression. */
+    if ($can_manage) {
+        echo '<form method="post" id="lfi-enq-form">';
+        wp_nonce_field('lfi_app_enq_manage');
+        echo '<input type="hidden" name="lfi_enq_manage" value="1">';
+        echo '<input type="hidden" name="f" value="' . esc_attr($filter) . '">';
+        echo '<input type="hidden" name="sort" value="' . esc_attr($sort) . '">';
+    }
+
+    echo '<ul class="lfi-app-list">';
+    foreach ($rows as $r) {
+        $name = trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')) ?: '(anonyme)';
+        $ref  = function_exists('lfi_nct_response_ref')
+            ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '')
+            : '';
+        echo '<li class="lfi-app-card">';
+        echo '<div class="head"><div class="who">';
+        if ($can_manage) echo '<input type="checkbox" name="ids[]" value="' . (int) $r->id . '" style="width:18px;height:18px;margin-right:8px;vertical-align:middle" aria-label="Sélectionner">';
+        if ($ref) echo '<span style="display:inline-block;background:#c8102e;color:#fff;font-weight:700;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle;letter-spacing:.5px">' . esc_html($ref) . '</span>';
+        echo esc_html($name) . '</div>';
+        echo '<div class="when">' . esc_html(wp_date('j M', strtotime($r->submitted_at))) . '</div>';
+        echo '</div>';
+
+        $adr = trim($r->adresse . ($r->etage ? ' · ét. ' . $r->etage : ''));
+        if ($adr) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html($adr) . '</span></div>';
+
+        /* Problème principal — synthèse + gravité */
+        $problem = lfi_nct_app_enq_problem($r);
+        if ($problem) {
+            echo '<div class="lfi-app-problem">';
+            echo '<div class="prob-head">Problème(s) signalé(s)';
+            if ($problem['gravite']) {
+                echo ' <span class="prob-grav g' . (int) $problem['gravite'] . '">gravité ' . (int) $problem['gravite'] . '/10</span>';
+            }
+            if ($problem['recurrent'] === 'permanent') echo ' <span class="prob-recur">en permanence</span>';
+            echo '</div>';
+            echo '<div class="prob-chips">';
+            foreach ($problem['chips'] as $ch) {
+                echo '<span class="prob-chip">' . $ch[0] . ' ' . esc_html($ch[1]) . '</span>';
+            }
+            echo '</div></div>';
+        }
+
+        echo '<div class="meta">';
+        if (!empty($r->contact_tel)) {
+            $tel_clean = preg_replace('/[^\d+]/', '', $r->contact_tel);
+            echo '<a class="meta-chip" href="tel:' . esc_attr($tel_clean) . '">📞 ' . esc_html($r->contact_tel) . '</a>';
+            echo '<a class="meta-chip act" href="sms:' . esc_attr($tel_clean) . '">📱 SMS</a>';
+        }
+        if (!empty($r->contact_email)) {
+            echo '<a class="meta-chip" href="mailto:' . esc_attr($r->contact_email) . '">✉️ ' . esc_html($r->contact_email) . '</a>';
+        }
+        if ($r->contact_recontact) {
+            echo '<span class="meta-chip" style="background:#e7f5ee;color:#186a3b">✓ Recontact OK</span>';
+        }
+        echo '</div>';
+
+        /* Actions de gestion par enquête */
+        if ($can_manage) {
+            echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => (int) $r->id])) . '">✏️ Éditer</a>';
+            echo '<button type="submit" name="del_one" value="' . (int) $r->id . '" class="btn-ghost" onclick="return confirm(\'Mettre cette enquête à la corbeille ?\');">🗑 Supprimer</button>';
+            echo '</div>';
+        }
+        echo '</li>';
+    }
+    echo '</ul>';
+
+    if ($can_manage) {
+        echo '<div class="lfi-app-bulk-row" style="position:sticky;bottom:8px">';
+        echo '<button type="submit" name="bulk_del" value="1" class="btn-ghost" style="border-color:#c8102e;color:#c8102e" onclick="return confirm(\'Mettre les enquêtes cochées à la corbeille ?\');">🗑 Supprimer la sélection</button>';
+        echo '</div>';
+        echo '</form>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- ✏️ Éditer une enquête (admin du GA) ---------- */
+function lfi_nct_app_view_enquete_edit() {
+    if (!lfi_nct_enq_can_manage()) { wp_safe_redirect(lfi_nct_app_url('enquetes')); exit; }
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+    $id  = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+
+    /* Chargement borné au GA en vigueur (impossible d'éditer l'enquête d'un autre GA). */
+    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d AND deleted_at IS NULL" . $sc, $id)) : null;
+    if (!$row) {
+        lfi_nct_app_screen_open('✏️ Éditer une enquête');
+        echo '<div class="lfi-app-empty">Enquête introuvable dans ce groupe d\'action.</div>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes')) . '">← Retour</a>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    if (!empty($_POST['lfi_enq_edit_save']) && check_admin_referer('lfi_enq_edit_' . $id)) {
+        $adresse = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+        if (function_exists('lfi_nct_normalize_address')) $adresse = lfi_nct_normalize_address($adresse);
+        $etage = sanitize_text_field(wp_unslash($_POST['etage'] ?? ''));
+        $cp = sanitize_text_field(wp_unslash($_POST['contact_prenom'] ?? ''));
+        $cn = sanitize_text_field(wp_unslash($_POST['contact_nom'] ?? ''));
+        $ct = sanitize_text_field(wp_unslash($_POST['contact_tel'] ?? ''));
+        $ce = sanitize_email(wp_unslash($_POST['contact_email'] ?? ''));
+        $recontact = !empty($_POST['contact_recontact']) ? 1 : 0;
+
+        $data = json_decode((string) $row->data, true);
+        if (!is_array($data)) $data = [];
+        $presence = (isset($_POST['problemes_presence']) && in_array($_POST['problemes_presence'], ['oui', 'non'], true))
+            ? $_POST['problemes_presence'] : ($data['problemes_presence'] ?? 'oui');
+        $data['problemes_presence'] = $presence;
+        $data['problemes_types']    = array_values(array_intersect(
+            array_keys(lfi_nct_enq_problem_types()),
+            array_map('sanitize_key', (array) ($_POST['problemes_types'] ?? []))
+        ));
+        $data['problemes_gravite']  = max(0, min(10, (int) ($_POST['problemes_gravite'] ?? 0)));
+        $rec = sanitize_key($_POST['problemes_recurrent'] ?? '');
+        if (in_array($rec, ['permanent', 'parfois', 'ponctuel', ''], true)) $data['problemes_recurrent'] = $rec;
+
+        $addr_changed = (trim($adresse) !== trim((string) $row->adresse));
+        $upd = [
+            'adresse' => $adresse, 'etage' => $etage,
+            'contact_prenom' => $cp, 'contact_nom' => $cn,
+            'contact_tel' => $ct, 'contact_email' => $ce,
+            'contact_recontact' => $recontact,
+            'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
+        ];
+        /* Adresse changée → on efface les coordonnées pour un nouveau géocodage. */
+        if ($addr_changed) { $upd['lat'] = null; $upd['lng'] = null; }
+        $wpdb->update($table, $upd, ['id' => $id]);
+        delete_transient('lfi_nct_known_addresses');
+        wp_safe_redirect(lfi_nct_app_url('enquetes', ['edited' => 1]));
+        exit;
+    }
+
+    $data = json_decode((string) $row->data, true);
+    if (!is_array($data)) $data = [];
+    $cur_types    = (array) ($data['problemes_types'] ?? []);
+    $cur_presence = (string) ($data['problemes_presence'] ?? 'oui');
+    $cur_grav     = (int) ($data['problemes_gravite'] ?? 0);
+    $cur_rec      = (string) ($data['problemes_recurrent'] ?? '');
+    $ref = function_exists('lfi_nct_response_ref') ? lfi_nct_response_ref($row->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($row) : '') : '';
+
+    lfi_nct_app_screen_open('✏️ Éditer' . ($ref ? ' — ' . $ref : ''), 'Corrige les informations de cette enquête');
+
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_enq_edit_' . $id);
+    echo '<input type="hidden" name="lfi_enq_edit_save" value="1">';
+
+    echo '<h3 style="margin:8px 0 4px">📍 Logement</h3>';
+    echo '<label>Adresse<input type="text" name="adresse" value="' . esc_attr($row->adresse) . '" required></label>';
+    echo '<label>Étage<input type="text" name="etage" value="' . esc_attr($row->etage) . '"></label>';
+
+    echo '<h3 style="margin:14px 0 4px">👤 Contact</h3>';
+    echo '<label>Prénom<input type="text" name="contact_prenom" value="' . esc_attr($row->contact_prenom) . '"></label>';
+    echo '<label>Nom<input type="text" name="contact_nom" value="' . esc_attr($row->contact_nom) . '"></label>';
+    echo '<label>Téléphone<input type="tel" name="contact_tel" value="' . esc_attr($row->contact_tel) . '"></label>';
+    echo '<label>Email<input type="email" name="contact_email" value="' . esc_attr($row->contact_email) . '"></label>';
+    echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="contact_recontact" value="1" ' . checked($row->contact_recontact, 1, false) . '> Accepte d\'être recontacté·e</label>';
+
+    echo '<h3 style="margin:14px 0 4px">⚠️ Problèmes</h3>';
+    echo '<label>Présence de problèmes<select name="problemes_presence">';
+    echo '<option value="oui" ' . selected($cur_presence, 'oui', false) . '>Oui</option>';
+    echo '<option value="non" ' . selected($cur_presence, 'non', false) . '>Non</option>';
+    echo '</select></label>';
+    echo '<div class="lfi-app-help" style="margin:6px 0"><small>Types de problème :</small></div>';
+    echo '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+    foreach (lfi_nct_enq_problem_types() as $slug => $lab) {
+        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="problemes_types[]" value="' . esc_attr($slug) . '" ' . checked(in_array($slug, $cur_types, true), true, false) . '> ' . $lab[0] . ' ' . esc_html($lab[1]) . '</label>';
+    }
+    echo '</div>';
+    echo '<label>Gravité (0 à 10)<input type="number" name="problemes_gravite" min="0" max="10" value="' . (int) $cur_grav . '"></label>';
+    echo '<label>Récurrence<select name="problemes_recurrent">';
+    foreach (['' => '—', 'permanent' => 'En permanence', 'parfois' => 'Régulièrement', 'ponctuel' => 'Ponctuel'] as $k => $lab) {
+        echo '<option value="' . esc_attr($k) . '" ' . selected($cur_rec, $k, false) . '>' . esc_html($lab) . '</option>';
+    }
+    echo '</select></label>';
+
+    echo '<div class="row-actions" style="margin-top:14px;display:flex;gap:8px">';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes')) . '">Annuler</a>';
+    echo '</div>';
+    echo '</form>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 🗑 Corbeille des enquêtes (admin du GA) ---------- */
+function lfi_nct_app_view_enquetes_corbeille() {
+    if (!lfi_nct_enq_can_manage()) { wp_safe_redirect(lfi_nct_app_url('enquetes')); exit; }
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+
+    if (!empty($_POST['lfi_enq_trash']) && check_admin_referer('lfi_app_enq_trash')) {
+        $rid = (int) ($_POST['id'] ?? 0);
+        if ($rid && !empty($_POST['restore'])) {
+            $wpdb->query($wpdb->prepare("UPDATE $table SET deleted_at = NULL WHERE id = %d AND deleted_at IS NOT NULL" . $sc, $rid));
+            delete_transient('lfi_nct_known_addresses');
+            wp_safe_redirect(lfi_nct_app_url('enquetes-corbeille', ['restored' => 1]));
+            exit;
+        }
+        if ($rid && !empty($_POST['purge'])) {
+            /* Suppression DÉFINITIVE, bornée au GA. */
+            $wpdb->query($wpdb->prepare("DELETE FROM $table WHERE id = %d AND deleted_at IS NOT NULL" . $sc, $rid));
+            wp_safe_redirect(lfi_nct_app_url('enquetes-corbeille', ['purged' => 1]));
+            exit;
+        }
+    }
+
+    $rows = $wpdb->get_results(
+        "SELECT id, submitted_at, deleted_at, adresse, etage, contact_prenom, contact_nom, data, ga
+         FROM $table WHERE deleted_at IS NOT NULL" . $sc . " ORDER BY deleted_at DESC LIMIT 300"
+    ) ?: [];
+
+    lfi_nct_app_screen_open('🗑 Corbeille des enquêtes', count($rows) . ' enquête(s) supprimée(s)');
+    if (!empty($_GET['restored'])) lfi_nct_app_flash('♻️ Enquête restaurée.');
+    if (!empty($_GET['purged']))   lfi_nct_app_flash('❌ Enquête supprimée définitivement.');
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes')) . '">← Retour aux enquêtes</a>';
+
+    if (empty($rows)) {
+        echo '<div class="lfi-app-empty">La corbeille est vide.</div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    echo '<ul class="lfi-app-list" style="margin-top:10px">';
+    foreach ($rows as $r) {
+        $name = trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')) ?: '(anonyme)';
+        $ref  = function_exists('lfi_nct_response_ref') ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '') : '';
+        echo '<li class="lfi-app-card">';
+        echo '<div class="head"><div class="who">';
+        if ($ref) echo '<span style="display:inline-block;background:#999;color:#fff;font-weight:700;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle;letter-spacing:.5px">' . esc_html($ref) . '</span>';
+        echo esc_html($name) . '</div>';
+        echo '<div class="when">supprimée ' . esc_html(wp_date('j M', strtotime($r->deleted_at))) . '</div>';
+        echo '</div>';
+        $adr = trim($r->adresse . ($r->etage ? ' · ét. ' . $r->etage : ''));
+        if ($adr) echo '<div class="meta"><span class="meta-chip">📍 ' . esc_html($adr) . '</span></div>';
+        echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
+        echo '<form method="post" style="display:inline">';
+        wp_nonce_field('lfi_app_enq_trash');
+        echo '<input type="hidden" name="lfi_enq_trash" value="1"><input type="hidden" name="id" value="' . (int) $r->id . '">';
+        echo '<button type="submit" name="restore" value="1" class="btn-ghost">♻️ Restaurer</button> ';
+        echo '<button type="submit" name="purge" value="1" class="btn-ghost" style="border-color:#c8102e;color:#c8102e" onclick="return confirm(\'Supprimer DÉFINITIVEMENT ? Cette action est irréversible.\');">❌ Supprimer définitivement</button>';
+        echo '</form>';
+        echo '</div>';
+        echo '</li>';
+    }
+    echo '</ul>';
     lfi_nct_app_screen_close();
 }
 
