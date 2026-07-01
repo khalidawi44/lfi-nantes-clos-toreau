@@ -1459,7 +1459,7 @@ function lfi_nct_copy_button($text, $label = '📋 Copier le message') {
  * $ga_label = nom lisible du groupe d'action (ex. « GA Port-Boyer »).
  */
 function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes Sud Clos Toreau') {
-    $site_app = home_url('/app/');
+    $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
     return "Bonjour,\n\n"
          . "Vos accès à l'app du groupe d'action « " . $ga_label . " » :\n\n"
          . "📲 Installez l'app en ouvrant ce lien :\n"
@@ -1473,7 +1473,7 @@ function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes S
 
 function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte créé') {
     $login = $created['login']; $pwd = $created['pwd']; $tel = $created['tel'] ?? '';
-    $site_app = home_url('/app/');
+    $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
     $ga_label = $created['ga_nom']
         ?? (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($created['ga'] ?? '') : 'LFI Nantes Sud Clos Toreau');
     $sms_body = lfi_nct_app_credentials_message($login, $pwd, $ga_label);

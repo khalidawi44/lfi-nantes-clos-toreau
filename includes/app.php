@@ -62,6 +62,37 @@ function lfi_nct_survey_url() {
 add_action('save_post', function () { delete_transient('lfi_nct_survey_url'); });
 
 /**
+ * URL FIABLE de la page de l'app (là où vit le shortcode [lfi_nct_app]).
+ * On ne se fie plus à un chemin fixe /app/ : si la page a un autre slug
+ * (ex. « app-2 » parce que « app » était déjà pris), le lien du SMS pointait
+ * vers un 404. On retrouve donc la VRAIE page publiée.
+ */
+function lfi_nct_app_page_url() {
+    $cached = get_transient('lfi_nct_app_page_url');
+    if ($cached) return $cached;
+
+    $url = '';
+    $p = get_page_by_path(LFI_NCT_APP_SLUG, OBJECT, 'page');
+    if ($p && $p->post_status === 'publish') {
+        $url = get_permalink($p);
+    } else {
+        $q = new WP_Query([
+            'post_type' => 'page', 'post_status' => 'publish',
+            'posts_per_page' => 10, 'fields' => 'ids', 's' => 'lfi_nct_app', 'no_found_rows' => true,
+        ]);
+        foreach ((array) $q->posts as $pid) {
+            $pp = get_post($pid);
+            if ($pp && has_shortcode((string) $pp->post_content, 'lfi_nct_app')) { $url = get_permalink($pid); break; }
+        }
+    }
+    if (!$url) $url = home_url('/' . LFI_NCT_APP_SLUG . '/');
+
+    set_transient('lfi_nct_app_page_url', $url, HOUR_IN_SECONDS);
+    return $url;
+}
+add_action('save_post', function () { delete_transient('lfi_nct_app_page_url'); });
+
+/**
  * URL FIABLE d'une page par son slug : renvoie son permalien si elle existe et
  * est publiée, sinon un repli sûr (par défaut l'accueil) — JAMAIS un 404.
  */
