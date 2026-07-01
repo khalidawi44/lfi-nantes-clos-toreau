@@ -67,7 +67,7 @@ function lfi_nct_register_admin_menu() {
 
     if ($is_admin || $is_ga) {
         $items['📣 ACTION POLITIQUE'] = [
-            ['📋 Faire passer une enquête', home_url('/enquete-logement-clos-toreau/')],
+            ['📋 Faire passer une enquête', lfi_nct_survey_url()],
             ['📅 Événements',               lfi_nct_app_url('evenements')],
             ['👥 Adhérents',                lfi_nct_app_url('membres')],
             ['📱 SMS aux adhérents',        lfi_nct_app_url('sms')],
@@ -136,7 +136,7 @@ function lfi_nct_render_admin_hub() {
             $quick = [
                 ['🚨', 'Dossiers locataires urgents', 'Suivi prioritaire',            lfi_nct_app_url('dossiers-juridiques')],
                 ['⏰', 'Relances à faire',            'Courriers sans réponse',       lfi_nct_app_url('')],
-                ['📋', 'Faire une enquête',           'Formulaire porte-à-porte',     home_url('/enquete-logement-clos-toreau/')],
+                ['📋', 'Faire une enquête',           'Formulaire porte-à-porte',     lfi_nct_survey_url()],
                 ['🗺️', 'Les autres groupes d\'action','Réseau des GA du réseau',      lfi_nct_app_url('groupes')],
                 ['🏠', 'Ouvrir l\'application',       'Tableau de bord interactif',   lfi_nct_app_url('')],
                 ['🔥', 'Forcer la synchro',           'Purger cache + SW',            admin_url('admin-post.php?action=lfi_nct_purge_all')],
@@ -385,7 +385,7 @@ function lfi_nct_render_dashboard_widget() {
         ['＋', 'Nouveau dossier',       lfi_nct_app_url('dossier-juridique-add')],
         ['⚖️', 'Recouvrement NMH',      lfi_nct_app_url('recouvrements')],
         ['🛠', 'Tutoriels',             lfi_nct_app_url('tutoriels')],
-        ['📋', 'Faire passer enquête',  home_url('/enquete-logement-clos-toreau/')],
+        ['📋', 'Faire passer enquête',  lfi_nct_survey_url()],
         ['🔥', 'Forcer la synchro',     admin_url('admin-post.php?action=lfi_nct_purge_all')],
     ];
     echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';

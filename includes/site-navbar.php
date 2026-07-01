@@ -75,7 +75,7 @@ function lfi_nct_render_site_navbar() {
         $secondary = [
             ['🔬', 'Outils scientifiques', lfi_nct_app_url('outils')],
             ['📅', 'Mon agenda',           lfi_nct_app_url('agenda')],
-            ['📋', 'Faire passer enquête', home_url('/enquete-logement-clos-toreau/')],
+            ['📋', 'Faire passer enquête', lfi_nct_survey_url()],
         ];
         if ($is_admin) {
             $secondary[] = ['🔄', 'Synchroniser', admin_url('admin-post.php?action=lfi_nct_purge_all')];
@@ -290,7 +290,7 @@ function lfi_nct_admin_bar_menu($bar) {
 
         if ($is_admin || $is_ga) {
             $sections[] = ['📣 Action politique', [
-                ['📋 Faire passer une enquête', home_url('/enquete-logement-clos-toreau/')],
+                ['📋 Faire passer une enquête', lfi_nct_survey_url()],
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
                 ['👥 Adhérents',                lfi_nct_app_url('membres')],
                 ['📱 SMS aux adhérents',        lfi_nct_app_url('sms')],
