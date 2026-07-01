@@ -215,6 +215,10 @@ function lfi_nct_rdv_admin_menu() {
 
 function lfi_nct_rdv_admin_page() {
     if (!current_user_can('manage_options')) return;
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('agenda', '📅 Rendez-vous', 'Les rendez-vous et l\'agenda sont dans l\'app.');
+        return;
+    }
     global $wpdb;
     $rows = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}lfi_nct_rdv ORDER BY created_at DESC LIMIT 300");
     ?>

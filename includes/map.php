@@ -183,6 +183,10 @@ function lfi_nct_map_admin_menu() {
 
 function lfi_nct_map_page() {
     if (!current_user_can('manage_options')) return;
+    if (function_exists('lfi_nct_admin_app_landing')) {
+        lfi_nct_admin_app_landing('carte', '🗺 Carte des enquêtes', 'La carte 3D — pastilles, regroupement par zone, centrage par groupe d\'action — est dans l\'app.');
+        return;
+    }
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 

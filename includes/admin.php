@@ -1,6 +1,26 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+/**
+ * Page wp-admin « déménagée dans l'app ». Affiche un renvoi clair vers la
+ * version de l'app (référence unique), sans supprimer l'ancien code : la
+ * fonction appelante fait `return` juste après, donc rien n'est cassé et
+ * c'est réversible.
+ */
+function lfi_nct_admin_app_landing($app_route, $title, $subtitle = '') {
+    $url  = home_url('/app/?vue=' . rawurlencode($app_route));
+    $home = home_url('/app/');
+    echo '<div class="wrap">';
+    echo '<h1>' . esc_html($title) . '</h1>';
+    echo '<div style="max-width:680px;margin:18px 0;background:#fff;border:1px solid #e2e2e2;border-left:5px solid #c8102e;border-radius:10px;padding:22px 26px">';
+    echo '<h2 style="margin:0 0 6px;color:#c8102e">👉 Cette page est désormais dans l\'app</h2>';
+    if ($subtitle) echo '<p style="color:#555;margin:0 0 10px">' . esc_html($subtitle) . '</p>';
+    echo '<p style="margin:0 0 14px">Tout se pilote au même endroit (et depuis ton téléphone) dans l\'app — c\'est la version de référence. Cette page WordPress est conservée mais n\'est plus utilisée.</p>';
+    echo '<p><a class="button button-primary button-hero" href="' . esc_url($url) . '">🚀 Ouvrir dans l\'app</a> ';
+    echo '<a class="button button-hero" href="' . esc_url($home) . '">🏠 Tableau de bord de l\'app</a></p>';
+    echo '</div></div>';
+}
+
 add_action('admin_menu', 'lfi_nct_admin_menu');
 function lfi_nct_admin_menu() {
     add_menu_page(
@@ -32,6 +52,8 @@ function lfi_nct_admin_menu() {
 
 function lfi_nct_admin_page() {
     if (!current_user_can('manage_options')) return;
+    lfi_nct_admin_app_landing('enquetes', '🏠 Enquêtes logement', 'La liste des réponses — avec tri, édition, suppression et corbeille — est dans l\'app.');
+    return;
 
     // === Sauvegarde des modifications (AVANT tout rendu, sinon l'edit form se ré-affiche) ===
     if (!empty($_POST['lfi_nct_edit_id'])) {
