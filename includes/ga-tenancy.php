@@ -181,15 +181,91 @@ function lfi_nct_ga_member_ids($slug) {
 
 /**
  * Fragment SQL pour cloisonner les réponses d'enquête par GA.
- * '' (super-admin, vue « tout ») → aucun filtre. GA sans membre → ne montre rien.
- * Les identifiants sont des entiers assainis : concaténation SQL sûre.
+ *
+ * On s'appuie sur la colonne `ga` de la table des réponses (taguée à la saisie
+ * avec le GA en cours), et NON plus sur l'identifiant du·de la militant·e :
+ * ainsi, même quand le super-admin saisit une enquête « comme » un autre GA,
+ * elle reste rattachée à CE GA et ne fuit pas vers le Clos Toreau.
+ *
+ *  - Home (Clos Toreau / mon espace) : enquêtes du Clos Toreau uniquement
+ *    (ga vide/historique ou « clos-toreau »). Les autres GA sont exclus.
+ *  - Autre GA : uniquement SES enquêtes.
+ *
+ * La vue « réseau cumulée » (super-admin) n'utilise pas cette clause : elle
+ * passe un scope vide pour tout voir.
  */
-function lfi_nct_responses_scope_clause($col = 'militant_user_id') {
+function lfi_nct_responses_scope_clause($col = 'ga') {
     $slug = lfi_nct_scope_ga_slug();
-    if ($slug === '') return '';
-    $ids = lfi_nct_ga_member_ids($slug);
-    if (empty($ids)) return ' AND 1=0';
-    return ' AND ' . $col . ' IN (' . implode(',', array_map('intval', $ids)) . ')';
+    if ($slug === '' || $slug === 'clos-toreau') {
+        return " AND (ga = '' OR ga = 'clos-toreau' OR ga IS NULL)";
+    }
+    return " AND ga = '" . esc_sql($slug) . "'";
+}
+
+/**
+ * Code court d'un GA pour préfixer les références d'enquête (RE, PB, CLO…).
+ * Configurable via la personnalisation du GA (champ « code »), sinon déduit du
+ * slug : initiales des mots pour un slug composé (« port-boyer » → PB), sinon
+ * les deux premières lettres (« reze » → RE). Clos Toreau = CLO.
+ */
+function lfi_nct_ga_code($slug) {
+    if ($slug === '') $slug = 'clos-toreau';
+    if (function_exists('lfi_nct_ga_perso')) {
+        $p = lfi_nct_ga_perso($slug);
+        if (!empty($p['code'])) {
+            $c = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $p['code']));
+            if ($c !== '') return $c;
+        }
+    }
+    if ($slug === 'clos-toreau') return 'CLO';
+    $parts = array_values(array_filter(preg_split('/[-_\s]+/', $slug)));
+    if (count($parts) >= 2) {
+        $c = '';
+        foreach ($parts as $w) $c .= strtoupper(substr($w, 0, 1));
+        return $c;
+    }
+    return strtoupper(substr($parts[0] ?? $slug, 0, 2));
+}
+
+/**
+ * Table id → numéro de séquence PROPRE au GA (1, 2, 3…), ordonné par id.
+ * Mise en cache par requête. Permet des références stables « RE01 », « CLO02 ».
+ */
+function lfi_nct_response_seq_map($slug) {
+    static $cache = [];
+    if ($slug === '') $slug = 'clos-toreau';
+    if (isset($cache[$slug])) return $cache[$slug];
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    if ($slug === 'clos-toreau') {
+        $ids = $wpdb->get_col(
+            "SELECT id FROM $table
+             WHERE deleted_at IS NULL AND (ga = '' OR ga = 'clos-toreau' OR ga IS NULL)
+             ORDER BY id ASC"
+        );
+    } else {
+        $ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT id FROM $table WHERE deleted_at IS NULL AND ga = %s ORDER BY id ASC",
+            $slug
+        ));
+    }
+    $map = []; $i = 0;
+    foreach ((array) $ids as $rid) $map[(int) $rid] = ++$i;
+    $cache[$slug] = $map;
+    return $map;
+}
+
+/** Référence d'enquête cloisonnée et lisible : « RE01 », « PB03 », « CLO02 ». */
+function lfi_nct_response_ref($id, $ga_slug) {
+    $map = lfi_nct_response_seq_map($ga_slug);
+    $n   = $map[(int) $id] ?? 0;
+    return lfi_nct_ga_code($ga_slug) . sprintf('%02d', $n);
+}
+
+/** GA d'une réponse (depuis sa colonne `ga`), normalisé pour l'affichage. */
+function lfi_nct_response_ga_of($row) {
+    $g = isset($row->ga) ? (string) $row->ga : '';
+    return ($g === '') ? 'clos-toreau' : $g;
 }
 
 /**

@@ -444,34 +444,30 @@ function lfi_nct_ga_overview_rows() {
     $mem  = $wpdb->prefix . 'lfi_nct_membres';
     $groupes = lfi_nct_groupes();
 
-    /* Identifiants des militants par GA + union de tous les « autres GA ». */
+    /* Les enquêtes sont désormais cloisonnées par la colonne `ga` de la table
+       des réponses (et non plus par l'identifiant du·de la militant·e). On
+       compte donc chaque GA par son tag `ga`. */
     $others = [];
-    $all_other_ids = [];
     foreach ($groupes as $g) {
         if (!empty($g['actuel'])) continue;
-        $ids = function_exists('lfi_nct_ga_member_ids') ? array_map('intval', (array) lfi_nct_ga_member_ids($g['slug'])) : [];
-        $others[$g['slug']] = ['g' => $g, 'ids' => $ids];
-        foreach ($ids as $id) $all_other_ids[] = (int) $id;
+        $others[$g['slug']] = ['g' => $g];
     }
-    $all_other_ids = array_values(array_unique(array_filter($all_other_ids)));
 
     $like_prob = "data LIKE '%\"problemes_presence\":\"oui\"%'";
 
-    $count_set = function ($ids) use ($wpdb, $resp, $like_prob) {
-        if (empty($ids)) return ['enq' => 0, 'prob' => 0];
-        $in = implode(',', array_map('intval', $ids));
+    $count_slug = function ($slug) use ($wpdb, $resp, $like_prob) {
         return [
-            'enq'  => (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp WHERE militant_user_id IN ($in)"),
-            'prob' => (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp WHERE militant_user_id IN ($in) AND $like_prob"),
+            'enq'  => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $resp WHERE deleted_at IS NULL AND ga = %s", $slug)),
+            'prob' => (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $resp WHERE deleted_at IS NULL AND ga = %s AND $like_prob", $slug)),
         ];
     };
 
     $rows = [];
 
-    /* Ligne « Mon espace » (Clos Toreau) = tout ce qui n'appartient à AUCUN autre GA. */
-    $notin = $all_other_ids ? (' WHERE militant_user_id NOT IN (' . implode(',', $all_other_ids) . ')') : '';
-    $home_enq  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp" . $notin);
-    $home_prob = (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp" . ($notin ? $notin . ' AND ' : ' WHERE ') . $like_prob);
+    /* Ligne « Mon espace » (Clos Toreau) = enquêtes du Clos Toreau (ga vide/historique). */
+    $home_where = " WHERE deleted_at IS NULL AND (ga = '' OR ga = 'clos-toreau' OR ga IS NULL)";
+    $home_enq  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp" . $home_where);
+    $home_prob = (int) $wpdb->get_var("SELECT COUNT(*) FROM $resp" . $home_where . ' AND ' . $like_prob);
     $home_adh  = (int) $wpdb->get_var("SELECT COUNT(*) FROM $mem WHERE ga = '' OR ga = 'clos-toreau'");
     $rows[] = [
         'nom' => 'Mon espace — Clos Toreau', 'home' => true, 'slug' => 'clos-toreau',
@@ -480,7 +476,7 @@ function lfi_nct_ga_overview_rows() {
     ];
 
     foreach ($others as $slug => $o) {
-        $c   = $count_set($o['ids']);
+        $c   = $count_slug($slug);
         $adh = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $mem WHERE ga = %s", $slug));
         $names = [];
         if (function_exists('lfi_nct_ga_admin_pair')) {

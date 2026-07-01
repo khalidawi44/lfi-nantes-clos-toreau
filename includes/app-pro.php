@@ -1075,7 +1075,7 @@ function lfi_nct_app_view_carte($force_all = false) {
     }
 
     $rows = $wpdb->get_results(
-        "SELECT id, adresse, etage, data, lat, lng, submitted_at
+        "SELECT id, adresse, etage, data, lat, lng, submitted_at, ga
          FROM $table
          WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL" . $scope . "
          ORDER BY submitted_at DESC LIMIT 500"
@@ -1110,8 +1110,12 @@ function lfi_nct_app_view_carte($force_all = false) {
         }
         $types_raw = (array) ($data['problemes_types'] ?? []);
         $types = array_map(function ($t) use ($type_labels) { return $type_labels[$t] ?? ucfirst($t); }, $types_raw);
+        $ref = function_exists('lfi_nct_response_ref')
+            ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '')
+            : '';
         $markers[] = [
             'id'        => (int) $r->id,
+            'ref'       => $ref,
             'lat'       => (float) $r->lat,
             'lng'       => (float) $r->lng,
             'adresse'   => (string) $r->adresse,
@@ -1175,7 +1179,8 @@ function lfi_nct_app_view_carte($force_all = false) {
         echo '<select id="lfi-map-goto" style="width:100%;padding:11px 12px;border:1.5px solid #ddd;border-radius:10px;margin-top:4px;font-size:1em;background:#fafafa">';
         echo '<option value="">— choisir une adresse (' . count($markers) . ') —</option>';
         foreach ($markers as $i => $mk) {
-            $lbl = $mk['adresse']
+            $lbl = ($mk['ref'] !== '' ? $mk['ref'] . ' · ' : '')
+                . $mk['adresse']
                 . ($mk['etage'] !== '' ? ' · ét. ' . $mk['etage'] : '')
                 . ' — ' . $mk['glabel'];
             echo '<option value="' . (int) $i . '">' . esc_html($lbl) . '</option>';
@@ -1205,7 +1210,8 @@ function lfi_nct_app_view_carte($force_all = false) {
         function parseFloor(s){ if(!s) return 0; var m=String(s).match(/(\d+)/); return m?parseInt(m[1],10):0; }
         function popupHtml(m){
             var unite = 'Étage ' + esc(m.etage) + (m.appt ? ' · Appt ' + esc(m.appt) : '');
-            var html = '<h3>' + esc(m.adresse) + '</h3>'
+            var reftag = m.ref ? '<span style="display:inline-block;background:#c8102e;color:#fff;font-weight:700;font-size:.75em;padding:2px 7px;border-radius:6px;margin-bottom:4px;letter-spacing:.5px">' + esc(m.ref) + '</span><br>' : '';
+            var html = reftag + '<h3>' + esc(m.adresse) + '</h3>'
                      + '<div>' + unite + '</div>'
                      + '<div style="margin:.4em 0"><span class="gravbadge" style="background:'+esc(m.gcolor)+';color:#fff;padding:2px 8px;border-radius:10px;font-weight:600;font-size:.85em">'
                      + esc(m.glabel) + (m.score ? ' (' + m.score + '/10)' : '') + '</span></div>';
@@ -1377,13 +1383,19 @@ function lfi_nct_app_view_carte($force_all = false) {
 
 function lfi_nct_app_view_stats_enquete_helper_stub() {} /* no-op marker, kept for compat */
 
-function lfi_nct_app_view_stats_enquete() {
-    /* Admin du GA — agrégats sur données RGPD, cloisonnés par GA. */
-    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
+function lfi_nct_app_view_stats_enquete($force_all = false) {
+    /* Admin du GA — agrégats sur données RGPD, cloisonnés par GA.
+       En mode « réseau » ($force_all), agrégats de TOUS les GA (super-admin). */
+    if ($force_all) {
+        if (!current_user_can('manage_options')) return;
+    } elseif (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
+        return;
+    }
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
 
-    $stat_scope = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
+    $stat_scope = (!$force_all && function_exists('lfi_nct_responses_scope_clause'))
+        ? lfi_nct_responses_scope_clause() : '';
     $rows = $wpdb->get_results(
         "SELECT adresse, data FROM $table WHERE deleted_at IS NULL" . $stat_scope
     ) ?: [];
@@ -1424,7 +1436,10 @@ function lfi_nct_app_view_stats_enquete() {
 
     $labels_base = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [];
 
-    lfi_nct_app_screen_open('📊 Stats enquête', $total . ' réponse(s) au total');
+    lfi_nct_app_screen_open($force_all ? '🌐 Stats enquête — réseau' : '📊 Stats enquête', $total . ' réponse(s) au total' . ($force_all ? ' · tous les GA' : ''));
+    if ($force_all) {
+        echo '<div class="lfi-app-help" style="background:#eef4ff;border-left:4px solid #0066a3"><strong>Statistiques cumulées de tout le réseau</strong> : toutes les enquêtes de tous les groupes d\'action additionnées. Vue réservée au super-admin.</div>';
+    }
 
     /* Bandeau résumé */
     echo '<div class="lfi-app-stats-grid">';

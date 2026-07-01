@@ -32,6 +32,7 @@ function lfi_nct_ga_perso($slug = null) {
         'couleur'        => '', // couleur d'accent (#rrggbb) — vide = rouge LFI
         'logo_id'        => 0,  // attachment WP du logo
         'sms_templates'  => [], // [ ['nom'=>..., 'texte'=>...], … ]
+        'code'           => '', // préfixe des références d'enquête (RE, PB…) — vide = auto
     ];
     return array_merge($defaults, $data);
 }
@@ -119,6 +120,10 @@ function lfi_nct_app_view_ga_params() {
             $tpls[] = ['nom' => sanitize_text_field($nom), 'texte' => sanitize_textarea_field($txt)];
         }
 
+        /* Code de référence des enquêtes (RE, PB, CLO…) : lettres/chiffres. */
+        $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) wp_unslash($_POST['code'] ?? '')));
+        $code = substr($code, 0, 5);
+
         $data = [
             'entete_nom'     => sanitize_text_field(wp_unslash($_POST['entete_nom'] ?? '')),
             'entete_adresse' => sanitize_text_field(wp_unslash($_POST['entete_adresse'] ?? '')),
@@ -129,6 +134,7 @@ function lfi_nct_app_view_ga_params() {
             'couleur'        => $coul,
             'logo_id'        => $logo_id,
             'sms_templates'  => $tpls,
+            'code'           => $code,
         ];
         lfi_nct_ga_perso_save($slug, $data);
         wp_safe_redirect(lfi_nct_app_url('ga-params', ['saved' => 1]));
@@ -156,6 +162,11 @@ function lfi_nct_app_view_ga_params() {
     $cur_coul = $p['couleur'] ?: '#c8102e';
     echo '<label>Couleur d\'accent<input type="color" name="couleur" value="' . esc_attr($cur_coul) . '" style="width:64px;height:38px;padding:2px"></label>';
     echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>La couleur et le logo s\'appliquent à l\'app de ton GA (boutons, en-têtes). Laisse vide pour garder le rouge LFI par défaut.</small></div>';
+
+    echo '<h3 style="margin:14px 0 6px">🔖 Référence des enquêtes</h3>';
+    $code_auto = function_exists('lfi_nct_ga_code') ? lfi_nct_ga_code($slug) : '';
+    echo '<label>Code court du GA<input type="text" name="code" value="' . esc_attr($p['code']) . '" maxlength="5" placeholder="Ex : ' . esc_attr($code_auto) . '" style="text-transform:uppercase"></label>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Sert à numéroter tes enquêtes de façon cloisonnée : <strong>' . esc_html($code_auto) . '01</strong>, <strong>' . esc_html($code_auto) . '02</strong>… Laisse vide pour le code automatique.</small></div>';
 
     echo '<h3 style="margin:14px 0 6px">✉️ En-tête des courriers & emails</h3>';
     echo '<label>Nom affiché (ton GA)<input type="text" name="entete_nom" value="' . esc_attr($p['entete_nom']) . '" placeholder="Ex : Groupe d\'Action LFI Rezé"></label>';
