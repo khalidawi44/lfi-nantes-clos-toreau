@@ -1230,6 +1230,7 @@ function lfi_nct_app_view_carte($force_all = false) {
             container: 'lfi-map',
             style: {
                 version: 8,
+                glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
                 sources: { osm: {
                     type: 'raster',
                     tiles: [
@@ -1259,9 +1260,10 @@ function lfi_nct_app_view_carte($force_all = false) {
         }
 
         var bounds = new maplibregl.LngLatBounds();
-        var FLOOR_M = 3, CUBE_M = 7;
+        var FLOOR_M = 3, CUBE_M = 5;
         var stackCounts = {};
-        var feats = [];
+        var feats = [];   // cubes 3D au niveau de l'étage (détail en vue rapprochée)
+        var pts = [];     // points (curseurs adaptatifs + regroupement par zone)
         function squareAround(lng, lat, sizeM) {
             var dLat = sizeM / 111111;
             var dLng = sizeM / (111111 * Math.cos(lat * Math.PI / 180));
@@ -1277,28 +1279,44 @@ function lfi_nct_app_view_carte($force_all = false) {
             var floor = parseFloor(m.etage);
             var key = m.lat.toFixed(5) + '_' + m.lng.toFixed(5) + '_' + floor;
             var rank = (stackCounts[key] = (stackCounts[key] || 0) + 1) - 1;
-            var jitterM = rank * 6;
+            var jitterM = rank * 5;
             var dLng = jitterM / (111111 * Math.cos(m.lat * Math.PI / 180));
-            /* Balise haute et colorée : part du sol et dépasse nettement les
-               immeubles gris (~40 m) pour rester visible même dézoomé. L'étage
-               ajoute un peu de hauteur pour garder un repère. */
-            var base = 0;
-            var top  = 40 + floor * FLOOR_M;
+            /* Cube au niveau réel de l'étage : détail visible en vue rapprochée. */
+            var base = floor * FLOOR_M + 0.4;
+            var top  = base + 2.6;
+            var pop  = popupHtml(m);
             feats.push({
                 type: 'Feature', id: idx,
                 geometry: { type: 'Polygon', coordinates: squareAround(m.lng + dLng, m.lat, CUBE_M) },
-                properties: { fid: idx, base: base, height: top, color: m.gcolor, popup: popupHtml(m) }
+                properties: { fid: idx, base: base, height: top, color: m.gcolor, popup: pop }
+            });
+            pts.push({
+                type: 'Feature', id: idx,
+                geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
+                properties: { fid: idx, color: m.gcolor, popup: pop }
             });
             bounds.extend([m.lng, m.lat]);
         });
         var surveysGJ = { type: 'FeatureCollection', features: feats };
+        var pointsGJ  = { type: 'FeatureCollection', features: pts };
         if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 18, pitch: 55, bearing: -15 });
+
+        function openPopup(e) {
+            if (!e.features || !e.features.length) return;
+            var g = e.features[0].geometry;
+            var c = (g && g.type === 'Point') ? g.coordinates.slice() : e.lngLat;
+            new maplibregl.Popup({ closeButton: true, offset: 10 })
+                .setLngLat(c).setHTML(e.features[0].properties.popup).addTo(map);
+        }
 
         function addSurveyLayer() {
             if (map.getSource('surveys')) return;
+
+            /* Cubes 3D au niveau de l'étage : n'apparaissent qu'en vue rapprochée
+               (zoom ≥ 16), pour le détail « au ras du sol ». */
             map.addSource('surveys', { type: 'geojson', data: surveysGJ });
             map.addLayer({
-                id: 'surveys-3d', type: 'fill-extrusion', source: 'surveys',
+                id: 'surveys-3d', type: 'fill-extrusion', source: 'surveys', minzoom: 16,
                 paint: {
                     'fill-extrusion-color': ['get', 'color'],
                     'fill-extrusion-base': ['get', 'base'],
@@ -1306,12 +1324,68 @@ function lfi_nct_app_view_carte($force_all = false) {
                     'fill-extrusion-opacity': 0.95
                 }
             });
-            map.on('click', 'surveys-3d', function (e) {
-                if (!e.features || !e.features.length) return;
-                new maplibregl.Popup({ closeButton: true })
-                    .setLngLat(e.lngLat)
-                    .setHTML(e.features[0].properties.popup)
-                    .addTo(map);
+
+            /* Curseurs adaptatifs + REGROUPEMENT par zone :
+               - vue haute (dézoomée) : un gros curseur bien visible portant le
+                 NOMBRE d'enquêtes, là où il y en a une ou plusieurs ;
+               - vue basse (rapprochée) : les curseurs se séparent, petits,
+                 colorés par gravité — tout le détail au clic. */
+            map.addSource('survey-pts', {
+                type: 'geojson', data: pointsGJ,
+                cluster: true, clusterMaxZoom: 16, clusterRadius: 44
+            });
+            map.addLayer({
+                id: 'clusters', type: 'circle', source: 'survey-pts',
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': '#c8102e',
+                    'circle-opacity': 0.92,
+                    'circle-radius': ['step', ['get', 'point_count'], 16, 5, 20, 15, 26],
+                    'circle-stroke-width': 3,
+                    'circle-stroke-color': '#fff'
+                }
+            });
+            map.addLayer({
+                id: 'cluster-count', type: 'symbol', source: 'survey-pts',
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': ['get', 'point_count_abbreviated'],
+                    'text-font': ['Noto Sans Regular'],
+                    'text-size': 14,
+                    'text-allow-overlap': true
+                },
+                paint: { 'text-color': '#fff' }
+            });
+            map.addLayer({
+                id: 'survey-pt', type: 'circle', source: 'survey-pts',
+                filter: ['!', ['has', 'point_count']],
+                paint: {
+                    'circle-color': ['get', 'color'],
+                    'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 9, 15, 8, 17, 7, 20, 5],
+                    'circle-stroke-width': 2,
+                    'circle-stroke-color': '#fff'
+                }
+            });
+
+            /* Clic sur un groupe : on zoome pour l'éclater. */
+            map.on('click', 'clusters', function (e) {
+                var f = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+                if (!f.length) return;
+                var cid = f[0].properties.cluster_id;
+                var src = map.getSource('survey-pts');
+                if (!src || !src.getClusterExpansionZoom) return;
+                src.getClusterExpansionZoom(cid).then(function (z) {
+                    map.easeTo({ center: f[0].geometry.coordinates, zoom: (z || 17) + 0.4 });
+                }).catch(function () {
+                    map.easeTo({ center: f[0].geometry.coordinates, zoom: 17.5 });
+                });
+            });
+            /* Clic sur un curseur individuel (point ou cube) : fiche détaillée. */
+            map.on('click', 'survey-pt', openPopup);
+            map.on('click', 'surveys-3d', openPopup);
+            ['clusters', 'survey-pt', 'surveys-3d'].forEach(function (id) {
+                map.on('mouseenter', id, function () { map.getCanvas().style.cursor = 'pointer'; });
+                map.on('mouseleave', id, function () { map.getCanvas().style.cursor = ''; });
             });
         }
         function loadBuildings() {
