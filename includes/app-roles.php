@@ -648,8 +648,6 @@ function lfi_nct_app_role_dispatch(&$handled) {
            dossiers, recouvrement, appels NMH… → réservés aux admins et à toi. */
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
-            case 'reunion':          lfi_nct_app_view_reunion();          break;
-            case 'membres':          lfi_nct_app_view_membres();          break;
             case 'evenements':       lfi_nct_app_view_evenements();       break;
             case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
             case 'mon-profil':       lfi_nct_app_view_mon_profil();       break;
@@ -687,9 +685,7 @@ function lfi_nct_app_view_ga_dashboard() {
     $tiles = [
         ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
-        ['📅', 'Événements',                $stats['events']  . ' événement(s)',   lfi_nct_app_url('evenements')],
-        ['👥', 'Adhérents du GA',           $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
-        ['📣', 'Inscrits réunion',          $stats['reunion'] . ' inscrit(s)',     lfi_nct_app_url('reunion')],
+        ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
     ];
 
