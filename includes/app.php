@@ -690,7 +690,7 @@ function lfi_nct_app_shortcode() {
                    admin de GA qui les vise est renvoyé vers son tableau de bord. */
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
-                    'national', 'national-args', 'national-etudes', 'national-pdf',
+                    'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
@@ -796,6 +796,7 @@ function lfi_nct_app_shortcode() {
                     case 'national-args':         lfi_nct_app_view_national_args();          break;
                     case 'national-etudes':       lfi_nct_app_view_national_etudes();        break;
                     case 'national-pdf':          lfi_nct_app_view_national_pdf();            break;
+                    case 'sauvegarde':            lfi_nct_app_view_sauvegarde();             break;
                     case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
@@ -1875,6 +1876,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📄', 'Dossier national (PDF)',     'À envoyer aux député·es',            lfi_nct_app_url('national-pdf')],
         ],
         '⚙️ SYSTÈME' => [
+            ['💾', 'Sauvegarde & export',     'Télécharger les données (point fixe)', lfi_nct_app_url('sauvegarde')],
             ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
             ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
