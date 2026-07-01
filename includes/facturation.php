@@ -1236,48 +1236,30 @@ function lfi_nct_app_intervention_form($row) {
 /* ============================================================== *
  *  VUE : Facture (imprimable / PDF via print)                      *
  * ============================================================== */
-function lfi_nct_app_view_facture() {
-    if (!lfi_nct_app_guard_brigade()) return;
-    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
+/**
+ * GÉNÉRATEUR UNIQUE de facture (source de vérité légale). Renvoie le HTML
+ * complet et conforme (mentions micro-entrepreneur, pénalités L.441-10,
+ * indemnité 40 €, etc.). Utilisé par la vue « facture » ET par l'export
+ * comptable, pour qu'ils soient TOUJOURS identiques. Renvoie '' si introuvable.
+ */
+function lfi_nct_facture_render_html($num, $owner = null) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_interventions';
-
-    $num = isset($_GET['numero']) ? sanitize_text_field(wp_unslash($_GET['numero'])) : '';
-    if (!$num) {
-        lfi_nct_app_screen_open('Facture introuvable');
-        echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour aux interventions</a></div>';
-        lfi_nct_app_screen_close(false);
-        return;
-    }
-
-    $owner = (int) lfi_nct_fact_owner_id();
+    $num = (string) $num;
+    if ($num === '') return '';
+    $owner = ($owner === null) ? (int) lfi_nct_fact_owner_id() : (int) $owner;
     $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE facture_numero = %s AND owner_user_id = %d ORDER BY date_intervention ASC", $num, $owner)) ?: [];
-    if (empty($rows)) {
-        lfi_nct_app_screen_open('Facture ' . $num . ' introuvable');
-        echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour</a></div>';
-        lfi_nct_app_screen_close(false);
-        return;
-    }
+    if (empty($rows)) return '';
 
     $facture_date = $rows[0]->facture_date;
     $delai = lfi_nct_fact_delai();
     $echeance = wp_date('Y-m-d', strtotime($facture_date . ' +' . $delai . ' days'));
-
     $total_ht_global = 0;
     foreach ($rows as $r) $total_ht_global += (float) $r->total_ht;
-
     $presta = lfi_nct_fact_prestataire();
     $bailleur = lfi_nct_fact_bailleur();
 
-    lfi_nct_app_screen_open('🧾 Facture ' . $num);
-
-    echo '<div class="lfi-app-help no-print">📄 Cette facture est prête à imprimer ou à exporter en PDF (via la fonction « Imprimer » de ton navigateur > « Enregistrer au format PDF »).</div>';
-
-    echo '<div class="row-actions no-print" style="margin-bottom:14px">';
-    echo '<button type="button" class="btn-primary" onclick="window.print()">🖨 Imprimer / Exporter PDF</button>';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour</a>';
-    echo '</div>';
-
+    ob_start();
     echo '<div class="lfi-facture">';
 
     /* En-tête */
@@ -1409,7 +1391,30 @@ function lfi_nct_app_view_facture() {
     }
     </style>
     <?php
+    return ob_get_clean();
+}
 
+/* ---------- Vue « Facture » (utilise le générateur unique) ---------- */
+function lfi_nct_app_view_facture() {
+    if (!lfi_nct_app_guard_brigade()) return;
+    if (function_exists('lfi_nct_travaux_guard') && !lfi_nct_travaux_guard()) return;
+
+    $num = isset($_GET['numero']) ? sanitize_text_field(wp_unslash($_GET['numero'])) : '';
+    $html = $num ? lfi_nct_facture_render_html($num) : '';
+    if ($html === '') {
+        lfi_nct_app_screen_open('Facture introuvable');
+        echo '<div class="lfi-app-empty"><a href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour aux interventions</a></div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
+
+    lfi_nct_app_screen_open('🧾 Facture ' . $num);
+    echo '<div class="lfi-app-help no-print">📄 Cette facture est prête à imprimer ou à exporter en PDF (via la fonction « Imprimer » de ton navigateur > « Enregistrer au format PDF »).</div>';
+    echo '<div class="row-actions no-print" style="margin-bottom:14px">';
+    echo '<button type="button" class="btn-primary" onclick="window.print()">🖨 Imprimer / Exporter PDF</button>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('interventions')) . '">← Retour</a>';
+    echo '</div>';
+    echo $html;
     lfi_nct_app_screen_close(false);
 }
 
