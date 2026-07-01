@@ -1548,8 +1548,45 @@ function lfi_nct_app_render_styles() {
     /* Grille de checkboxes (témoignage) */
     .lfi-checkbox-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
     @media (min-width: 600px) { .lfi-checkbox-grid { grid-template-columns: 1fr 1fr; } }
+    <?php
+    /* Couleur d'accent personnalisée par GA (repli = rouge LFI, aucun effet). */
+    if (function_exists('lfi_nct_ga_couleur')) {
+        $gc = lfi_nct_ga_couleur();
+        if ($gc !== '#c8102e') {
+            echo '.lfi-app .btn-primary,.lfi-app-topbar,.lfi-app-logo,.lfi-app-logo-mini{background:' . esc_attr($gc) . ' !important;border-color:' . esc_attr($gc) . ' !important}';
+            echo '.lfi-app-tile .tit,.lfi-app-section-title,.lfi-app-hi,.lfi-app-alertes>div:first-child{color:' . esc_attr($gc) . ' !important}';
+            echo '.lfi-app-alertes,.lfi-app-gaswitch{border-color:' . esc_attr($gc) . ' !important}';
+        }
+    }
+    ?>
     </style>
     <?php
+    /* Logo du GA : affiché en haut de la console (si configuré). */
+    if (function_exists('lfi_nct_ga_logo_url')) {
+        $glogo = lfi_nct_ga_logo_url();
+        if ($glogo) echo '<div style="text-align:center;margin:6px 0 0"><img src="' . esc_url($glogo) . '" alt="logo" style="max-height:56px"></div>';
+    }
+
+    /* GROS EN-TÊTE « Groupe d'Action … » : comme toutes les apps des GA
+     * partagent la même URL /app/, on affiche bien en évidence, en haut de
+     * chaque écran, sur quel groupe d'action on se trouve. Rien ne s'affiche
+     * sur l'écran de connexion (utilisateur pas encore connecté). */
+    if (is_user_logged_in()
+        && function_exists('lfi_nct_scope_ga_slug')
+        && (current_user_can('manage_options')
+            || (function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga())
+            || (function_exists('lfi_nct_is_ga_member') && lfi_nct_is_ga_member()))) {
+        $ga_slug = lfi_nct_scope_ga_slug();
+        $ga_name = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($ga_slug) : '';
+        /* Préfixe « Groupe d'Action » pour que ce soit limpide (sans doublon). */
+        if ($ga_name !== '' && stripos($ga_name, 'groupe') === false) {
+            $ga_name = 'Groupe d\'Action ' . $ga_name;
+        }
+        $gc = function_exists('lfi_nct_ga_couleur') ? lfi_nct_ga_couleur() : '#c8102e';
+        if ($ga_name !== '') {
+            echo '<div style="max-width:480px;margin:8px auto 12px;background:' . esc_attr($gc) . ';color:#fff;text-align:center;font-weight:800;font-size:1.08em;letter-spacing:.3px;padding:12px 14px;border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,.15);text-transform:uppercase">📍 ' . esc_html($ga_name) . '</div>';
+        }
+    }
 }
 
 /* Bouton fixe « 📲 Télécharger l'app » sur TOUT le site public
@@ -2234,6 +2271,8 @@ function lfi_nct_app_view_sms() {
 
     $membre_id = isset($_GET['membre']) ? (int) $_GET['membre'] : 0;
     $tpl_id    = isset($_GET['tpl'])    ? (int) $_GET['tpl']    : 0;
+    /* Identifiant brut du modèle (peut être « gaN » pour un modèle propre au GA). */
+    $tpl_sel   = isset($_GET['tpl'])    ? sanitize_text_field(wp_unslash($_GET['tpl'])) : '';
     $membre = $membre_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $mem WHERE id = %d", $membre_id)) : null;
     $tpl_row = $tpl_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $tpl WHERE id = %d", $tpl_id)) : null;
 
@@ -2254,6 +2293,29 @@ function lfi_nct_app_view_sms() {
 
     $gac       = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
     $templates = $wpdb->get_results("SELECT * FROM $tpl ORDER BY categorie, nom") ?: [];
+    /* Modèles SMS propres au GA (cf. Personnalisation du GA). */
+    if (function_exists('lfi_nct_ga_sms_templates')) {
+        foreach (lfi_nct_ga_sms_templates() as $i => $gt) {
+            $templates[] = (object) [
+                'id'        => 'ga' . $i,
+                'nom'       => (string) ($gt['nom'] ?? 'Modèle GA'),
+                'body'      => (string) ($gt['texte'] ?? ''),
+                'categorie' => 'Mon GA',
+            ];
+        }
+        /* Si un modèle GA est sélectionné (id « gaN », donc non numérique), on le
+           résout depuis la liste (le lookup SQL par id ne le trouve pas). */
+        if (!$tpl_row && isset($_GET['tpl'])) {
+            $sel = sanitize_text_field(wp_unslash($_GET['tpl']));
+            foreach ($templates as $tt) {
+                if ((string) $tt->id === $sel) { $tpl_row = $tt; break; }
+            }
+            if ($tpl_row) {
+                $body = ($membre && function_exists('lfi_nct_sms_render'))
+                    ? lfi_nct_sms_render($tpl_row->body, $membre, $event_vars) : $tpl_row->body;
+            }
+        }
+    }
     $membres   = $wpdb->get_results("SELECT id, prenom, nom, tel FROM $mem WHERE tel <> ''" . $gac . " ORDER BY prenom, nom LIMIT 300") ?: [];
 
     lfi_nct_app_screen_open('📱 Envoyer un SMS', 'Choisis un membre + un modèle, puis ouvre ton appli SMS');
@@ -2274,7 +2336,8 @@ function lfi_nct_app_view_sms() {
     echo '<label>💬 Modèle<select name="tpl" onchange="this.form.submit()">';
     echo '<option value="">— choisir un modèle —</option>';
     foreach ($templates as $t) {
-        echo '<option value="' . (int) $t->id . '" ' . selected($tpl_id, $t->id, false) . '>' . esc_html($t->nom) . '</option>';
+        $sel = selected((string) $tpl_sel, (string) $t->id, false);
+        echo '<option value="' . esc_attr((string) $t->id) . '" ' . $sel . '>' . esc_html($t->nom) . '</option>';
     }
     echo '</select></label>';
 

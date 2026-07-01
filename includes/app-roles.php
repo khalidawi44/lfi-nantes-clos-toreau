@@ -855,12 +855,13 @@ function lfi_nct_app_view_enquete_photos() {
     $scope = ($is_admin && function_exists('lfi_nct_responses_scope_clause'))
         ? lfi_nct_responses_scope_clause('militant_user_id')
         : $wpdb->prepare(' AND militant_user_id = %d', $me);
-    $linked = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'lfi_nct_response_id'") ?: [];
-    $linked_in = $linked ? '(' . implode(',', array_map('intval', $linked)) . ')' : '(0)';
+    /* On montre TOUTES les enquêtes « on peut revenir » (même déjà converties en
+       dossier) : on peut toujours y ajouter des photos. Le dossier est créé une
+       seule fois (idempotent). */
     $rows = $wpdb->get_results(
         "SELECT id, adresse, etage, contact_prenom, contact_nom, submitted_at
          FROM $resp_t
-         WHERE deleted_at IS NULL AND contact_recontact = 1 AND id NOT IN $linked_in" . $scope . "
+         WHERE deleted_at IS NULL AND contact_recontact = 1" . $scope . "
          ORDER BY submitted_at DESC LIMIT 50"
     ) ?: [];
 
@@ -2259,7 +2260,7 @@ function lfi_nct_app_view_comptes_locataires() {
                     update_user_meta($uid, 'lfi_nct_response_id', $resp_id);
                     if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                     if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
-                    $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid];
+                    $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid, 'ga' => (function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '')];
                 }
             }
         }
@@ -2288,7 +2289,7 @@ function lfi_nct_app_view_comptes_locataires() {
             } else {
                 if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
                 if (function_exists('lfi_nct_creation_ga')) update_user_meta($uid, 'lfi_nct_ga', lfi_nct_creation_ga());
-                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid];
+                $created = ['login' => $login, 'pwd' => $pwd, 'tel' => $tel, 'uid' => $uid, 'ga' => (function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '')];
             }
         }
     }
