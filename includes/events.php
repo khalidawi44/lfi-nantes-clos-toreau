@@ -196,6 +196,11 @@ function lfi_nct_event_data($id_or_post) {
     $heure_clean = preg_replace('/[^\d:]/', '', str_replace('h', ':', $heure_debut));
     $ts = $date ? strtotime($date . ($heure_clean ? ' ' . $heure_clean : '')) : 0;
 
+    // Événement passé ? (fin de journée de l'événement)
+    $end_ts  = $date ? strtotime($date . ' 23:59:59') : $ts;
+    $now     = function_exists('current_time') ? current_time('timestamp') : time();
+    $is_past = $end_ts ? ($now > $end_ts) : false;
+
     return [
         'id'             => $id,
         'titre'          => get_the_title($post),
@@ -210,6 +215,7 @@ function lfi_nct_event_data($id_or_post) {
         'rsvp_actif'     => get_post_meta($id, '_lfi_evt_rsvp_actif', true) !== '0',
         'url_ap'         => get_post_meta($id, '_lfi_evt_url_ap', true),
         'ts'             => $ts,
+        'is_past'        => $is_past,
         'jour'           => $ts ? date_i18n('l', $ts) : '',
         'date_fr'        => $ts ? date_i18n('d/m', $ts) : '',
         'date_complete'  => $ts ? date_i18n('l j F · H\hi', $ts) : ($date ? date_i18n('l j F', strtotime($date)) : ''),
@@ -244,7 +250,14 @@ function lfi_nct_event_render_content($content) {
     }
     $bandeau .= '</div>';
 
-    $rsvp = $data['rsvp_actif'] ? lfi_nct_render_event_rsvp_form($data['id']) : '';
+    if (!empty($data['is_past'])) {
+        /* Événement passé : inscriptions closes automatiquement. */
+        $rsvp = '<div class="lfi-evt-rsvp" style="background:#f4f4f4;border-left:6px solid #999;padding:16px 20px;margin-top:1.5em;border-radius:6px">'
+              . '<strong>🗓️ Événement passé — inscriptions closes</strong>'
+              . '<div style="margin-top:.3em;color:#555">Merci à toutes les personnes venues ! Les prochains rendez-vous sont annoncés dans nos événements.</div></div>';
+    } else {
+        $rsvp = $data['rsvp_actif'] ? lfi_nct_render_event_rsvp_form($data['id']) : '';
+    }
     return $bandeau . $content . $rsvp;
 }
 
@@ -255,8 +268,11 @@ function lfi_nct_render_event_rsvp_form($event_id) {
     $notice = '';
     $error  = '';
 
+    $ev_data_guard = lfi_nct_event_data($event_id);
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['lfi_evt_rsvp_submit']) && (int) ($_POST['lfi_evt_id'] ?? 0) === $event_id) {
-        if (!isset($_POST['lfi_evt_rsvp_nonce']) || !wp_verify_nonce($_POST['lfi_evt_rsvp_nonce'], 'lfi_evt_rsvp_' . $event_id)) {
+        if ($ev_data_guard && !empty($ev_data_guard['is_past'])) {
+            $error = 'Les inscriptions sont closes : cet événement est passé.';
+        } elseif (!isset($_POST['lfi_evt_rsvp_nonce']) || !wp_verify_nonce($_POST['lfi_evt_rsvp_nonce'], 'lfi_evt_rsvp_' . $event_id)) {
             $error = 'Jeton de sécurité invalide. Recharge la page.';
         } else {
             $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));

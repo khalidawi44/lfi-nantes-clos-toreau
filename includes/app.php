@@ -633,6 +633,7 @@ function lfi_nct_app_shortcode() {
         'inscription'            => 'lfi_nct_app_view_inscription',
         'inscription-locataire'  => 'lfi_nct_app_view_inscription_locataire',
         'inscription-ga'         => 'lfi_nct_app_view_inscription_ga',
+        'flyer'                  => 'lfi_nct_app_view_flyer',
     ];
     if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
         call_user_func($public_routes[$vue_public]);
@@ -706,6 +707,8 @@ function lfi_nct_app_shortcode() {
                     case 'enquetes-corbeille': lfi_nct_app_view_enquetes_corbeille(); break;
                     case 'enquetes-sms':    lfi_nct_app_view_enquetes_sms();    break;
                     case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
+                    case 'event-sms':       lfi_nct_app_view_event_sms();       break;
+                    case 'event-inscrits':  lfi_nct_app_view_event_inscrits();  break;
                     case 'stats':           lfi_nct_app_view_stats();           break;
                     case 'cache':           lfi_nct_app_view_cache();           break;
                     case 'comptes':            lfi_nct_app_view_comptes();              break;
@@ -2205,8 +2208,9 @@ function lfi_nct_app_view_evenements() {
             $time  = get_post_meta($p->ID, '_ag_event_time', true);
             $place = get_post_meta($p->ID, '_ag_event_place', true);
             $city  = get_post_meta($p->ID, '_ag_event_city',  true);
+            $ev_past = function_exists('lfi_nct_event_data') ? (bool) (lfi_nct_event_data($p)['is_past'] ?? false) : false;
             echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html(get_the_title($p)) . '</div></div>';
+            echo '<div class="head"><div class="who">' . esc_html(get_the_title($p)) . ($ev_past ? ' <span style="font-size:.72em;background:#eee;color:#888;padding:2px 7px;border-radius:6px;font-weight:600;vertical-align:middle">passé</span>' : '') . '</div></div>';
             echo '<div class="meta">';
             if ($date)  echo '<span class="meta-chip">🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</span>';
             if ($place) echo '<span class="meta-chip">📍 ' . esc_html($place) . ($city ? ', ' . esc_html($city) : '') . '</span>';
@@ -2228,7 +2232,13 @@ function lfi_nct_app_view_evenements() {
             echo '<a class="btn-ghost" href="https://t.me/share/url?url=' . $u . '&text=' . $t . '" target="_blank" rel="noopener">✈️ Telegram</a>';
             echo '<a class="btn-ghost" href="https://twitter.com/intent/tweet?text=' . $t . '&url=' . $u . '" target="_blank" rel="noopener">𝕏 X</a>';
             if (function_exists('lfi_nct_copy_button')) echo lfi_nct_copy_button($ev_url, '🔗 Copier le lien');
-            if ($can_edit) echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
+            /* Outils d'inscription (admins) : flyer + QR, diffusion SMS, inscrit·es. */
+            if ($can_edit) {
+                echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('flyer', ['event' => $p->ID])) . '">🖨 Flyer + QR</a>';
+                if (!$ev_past) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-sms', ['event' => $p->ID])) . '">📱 Diffuser SMS</a>';
+                echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-inscrits', ['event' => $p->ID])) . '">📋 Inscrit·es</a>';
+                echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
+            }
             echo '</div>';
             echo '</li>';
         }
