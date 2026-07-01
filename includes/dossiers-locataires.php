@@ -1780,8 +1780,12 @@ function lfi_nct_app_view_dossier_send_email() {
     echo '<label>Lettre / corps du mail (HTML autorisé)<textarea name="email_body" id="lfi-email-body" rows="14" required>' . esc_textarea($default_body) . '</textarea></label>';
     echo '<div class="lfi-app-help"><small>Tu peux modifier librement le texte. Les balises HTML simples (&lt;p&gt; &lt;strong&gt; &lt;br&gt; &lt;ul&gt; &lt;li&gt;) sont conservées.</small></div>';
 
-    /* Bouton Gmail robuste (ouvre l'app Gmail sur iPhone) + journalisation. */
-    $gmail_signature = "\n\n—\nFabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
+    /* Bouton Gmail robuste (ouvre l'app Gmail sur iPhone) + journalisation.
+       Signature personnalisée par GA (nom + responsable), avec repli sûr. */
+    $ga_nom_courrier = function_exists('lfi_nct_ga_entete_nom') ? lfi_nct_ga_entete_nom() : 'Groupe d\'Action LFI Nantes Sud – Clos Toreau';
+    $ga_resp = function_exists('lfi_nct_ga_perso') ? trim((string) lfi_nct_ga_perso()['responsable']) : '';
+    $sig_qui = $ga_resp !== '' ? $ga_resp . ' — ' . $ga_nom_courrier : $ga_nom_courrier;
+    $gmail_signature = "\n\n—\n" . $sig_qui . " / Union des Quartiers Libres\nCourrier établi avec notre appui, à la demande et avec l'accord de " . ($tenant_full ?: 'la locataire') . ".";
     lfi_nct_render_gmail_opener(lfi_nct_ga_gmail(), $gmail_signature, 'lfi_send_gmail_log', '📨 Ouvrir dans mon Gmail (' . lfi_nct_ga_gmail() . ')', lfi_nct_app_url('dossier-juridique-edit', ['id' => $dossier->id, 'gmail_open' => 1]));
     echo '<div class="lfi-app-help" style="background:#e8f0ff;border-left:4px solid #0066a3"><small>Sur iPhone, ça ouvre <strong>l\'application Gmail</strong> avec le message déjà rempli — tu n\'as plus qu\'à appuyer sur « Envoyer ». L\'email est <strong>aussitôt ajouté au dossier</strong>. (Si rien ne s\'ouvre, utilise les liens de secours qui apparaissent.)</small></div>';
 

@@ -551,6 +551,18 @@ function lfi_nct_app_view_reseau_ga() {
         echo '<div class="com"><strong>' . esc_html($r['nom']) . '</strong>' . (!empty($r['custom']) ? ' <span style="font-size:.8em;color:#186a3b">(créé ici)</span>' : '') . '</div>';
         if ($r['binome']) echo '<div class="meta" style="font-size:.88em;color:#444">' . esc_html($r['binome']) . '</div>';
         else echo '<div class="meta" style="font-size:.85em;color:#c8102e">⚠️ Binôme à désigner</div>';
+        /* Liens directs vers les téléphones des responsables enregistrés. */
+        if (function_exists('lfi_nct_ga_admin_uids')) {
+            $tel_chips = '';
+            foreach (lfi_nct_ga_admin_uids($r['slug']) as $auid) {
+                $u = get_userdata($auid);
+                $tel = (string) get_user_meta($auid, 'lfi_nct_tel', true);
+                if ($u && $tel) {
+                    $tel_chips .= '<a class="meta-chip" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 ' . esc_html($u->display_name) . '</a> ';
+                }
+            }
+            if ($tel_chips) echo '<div class="meta" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">' . $tel_chips . '</div>';
+        }
         echo '<div class="meta" style="font-size:.85em;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">';
         echo '<span class="meta-chip">🏠 ' . (int) $r['enq'] . ' enquête(s)</span>';
         echo '<span class="meta-chip">⚠️ ' . (int) $r['prob'] . ' avec problème</span>';

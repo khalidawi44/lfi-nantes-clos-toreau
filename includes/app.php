@@ -778,6 +778,8 @@ function lfi_nct_app_shortcode() {
                     case 'reussites':             lfi_nct_app_view_reussites();              break;
                     case 'dossier-wizard':        lfi_nct_app_view_dossier_wizard();         break;
                     case 'modules-params':        lfi_nct_app_view_modules_params();         break;
+                    case 'ga-params':             lfi_nct_app_view_ga_params();              break;
+                    case 'evenement-add':         lfi_nct_app_view_evenement_add();          break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
@@ -1742,6 +1744,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
     return lfi_nct_module_filter_sections([
         '🟣 ESPACE GROUPE D\'ACTION' => [
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
+            ['🎨', 'Personnalisation du GA', 'En-tête courriers · bailleurs',       lfi_nct_app_url('ga-params')],
             ['👥', 'Adhérents',              $stats['membres'] . ' adhérent(s)',    lfi_nct_app_url('membres')],
             ['🪪', 'Comptes GA',             'Créer · importer · reset',            lfi_nct_app_url('comptes-ga')],
             ['📅', 'Événements',             $stats['events'] . ' à venir',         lfi_nct_app_url('evenements')],
@@ -2113,6 +2116,13 @@ function lfi_nct_app_view_evenements() {
     $total = count($events);
     lfi_nct_app_screen_open('📅 Événements', $total . ' événement(s)');
 
+    if (!empty($_GET['evt_add'])) lfi_nct_app_flash('✅ Événement créé.');
+    /* Créer un événement : réservé aux admins (GA admins + super-admin). */
+    $ev_can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    if ($ev_can_edit) {
+        echo '<div style="margin:0 0 12px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('evenement-add')) . '">➕ Créer un événement</a></div>';
+    }
+
     if (empty($events)) {
         echo '<div class="lfi-app-empty">Aucun événement.</div>';
     } else {
@@ -2134,6 +2144,9 @@ function lfi_nct_app_view_evenements() {
             $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
             echo '<div class="row-actions" style="flex-wrap:wrap;gap:6px">';
             echo '<a class="btn-primary" href="' . esc_url($ev_url) . '" target="_blank" rel="noopener">🔗 Page publique</a>';
+            /* Lien Action Populaire (inscription) si renseigné */
+            $ap_url = (string) get_post_meta($p->ID, '_lfi_evt_ap_url', true);
+            if ($ap_url) echo '<a class="btn-ghost" href="' . esc_url($ap_url) . '" target="_blank" rel="noopener">📣 Action Populaire</a>';
             /* Partage réseaux sociaux */
             $u = rawurlencode($ev_url);
             $t = rawurlencode($ev_title . ' — GA LFI Nantes Sud');
@@ -2148,6 +2161,54 @@ function lfi_nct_app_view_evenements() {
         }
         echo '</ul>';
     }
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- ➕ Créer un événement (admins) — avec lien Action Populaire ---------- */
+function lfi_nct_app_view_evenement_add() {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
+
+    if (!empty($_POST['lfi_evt_add']) && check_admin_referer('lfi_evt_add')) {
+        $title = sanitize_text_field(wp_unslash($_POST['titre'] ?? ''));
+        if ($title !== '') {
+            $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+            $pid = wp_insert_post([
+                'post_type'   => $cpt,
+                'post_status' => 'publish',
+                'post_title'  => $title,
+                'post_content'=> wp_kses_post(wp_unslash($_POST['description'] ?? '')),
+                'post_author' => get_current_user_id(),
+            ], true);
+            if (!is_wp_error($pid) && $pid) {
+                update_post_meta($pid, '_ag_event_date',  sanitize_text_field(wp_unslash($_POST['date']  ?? '')));
+                update_post_meta($pid, '_ag_event_time',  sanitize_text_field(wp_unslash($_POST['heure'] ?? '')));
+                update_post_meta($pid, '_ag_event_place', sanitize_text_field(wp_unslash($_POST['lieu']  ?? '')));
+                update_post_meta($pid, '_ag_event_city',  sanitize_text_field(wp_unslash($_POST['ville'] ?? '')));
+                $ap = esc_url_raw(wp_unslash($_POST['ap_url'] ?? ''));
+                if ($ap) update_post_meta($pid, '_lfi_evt_ap_url', $ap);
+                /* Rattache l'événement au GA courant (cloisonnement des événements). */
+                if (function_exists('lfi_nct_creation_ga')) update_post_meta($pid, '_lfi_evt_ga', lfi_nct_creation_ga());
+                update_post_meta($pid, '_lfi_evt_internal', 1);
+                wp_safe_redirect(lfi_nct_app_url('evenements', ['evt_add' => 1]));
+                exit;
+            }
+        }
+    }
+
+    lfi_nct_app_screen_open('➕ Nouvel événement', 'Créer un événement de ton GA');
+    echo '<div class="lfi-app-help">L\'événement apparaît dans <strong>ton</strong> agenda GA et sur le site. Ajoute le lien <strong>Action Populaire</strong> pour que les gens s\'y inscrivent.</div>';
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_evt_add');
+    echo '<input type="hidden" name="lfi_evt_add" value="1">';
+    echo '<label>Titre <span style="color:#c8102e">*</span><input type="text" name="titre" required placeholder="Ex : Kermesse Républicaine"></label>';
+    echo '<label>Date<input type="date" name="date"></label>';
+    echo '<label>Heure<input type="text" name="heure" placeholder="Ex : 14h – 23h"></label>';
+    echo '<label>Lieu<input type="text" name="lieu" placeholder="Ex : Parc de la Crapaudine"></label>';
+    echo '<label>Ville<input type="text" name="ville" placeholder="Ex : Nantes"></label>';
+    echo '<label>Lien Action Populaire (inscription)<input type="url" name="ap_url" placeholder="https://actionpopulaire.fr/evenements/…" inputmode="url" autocapitalize="none"></label>';
+    echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…"></textarea></label>';
+    echo '<button type="submit" class="btn-primary">✅ Créer l\'événement</button>';
+    echo '</form>';
     lfi_nct_app_screen_close();
 }
 
