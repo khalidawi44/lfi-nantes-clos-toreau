@@ -690,6 +690,7 @@ function lfi_nct_app_shortcode() {
                    admin de GA qui les vise est renvoyé vers son tableau de bord. */
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
+                    'national', 'national-args', 'national-etudes', 'national-pdf',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
@@ -790,6 +791,10 @@ function lfi_nct_app_shortcode() {
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
                     case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
+                    case 'national':              lfi_nct_app_view_national();               break;
+                    case 'national-args':         lfi_nct_app_view_national_args();          break;
+                    case 'national-etudes':       lfi_nct_app_view_national_etudes();        break;
+                    case 'national-pdf':          lfi_nct_app_view_national_pdf();            break;
                     case 'reseau-ga-pdf':         lfi_nct_app_view_reseau_ga_pdf();          break;
                     case 'voir-ga':               lfi_nct_app_view_voir_ga();                break;
                     case 'reussite-edit':         lfi_nct_app_view_reussite_edit();          break;
@@ -1007,7 +1012,9 @@ function lfi_nct_app_render_dashboard() {
     $is_super_home = current_user_can('manage_options')
         && (!function_exists('lfi_nct_scope_ga_slug') || lfi_nct_scope_ga_slug() === '');
     if (!$is_super_home) {
-        unset($sections['🌐 ESPACE AUTRES GROUPES D\'ACTION']);
+        /* Les volets municipal et national ne concernent que le super-admin. */
+        unset($sections['🏛️ VOLET MUNICIPAL — élus locaux']);
+        unset($sections['🇫🇷 VOLET NATIONAL — député·es']);
         /* Section système réduite aux outils utiles à un GA. */
         $sections['⚙️ SYSTÈME'] = [
             ['📖', 'Guide d\'utilisation', 'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
@@ -1812,7 +1819,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
 function lfi_nct_admin_get_tiles_sections($stats = null) {
     if ($stats === null) $stats = lfi_nct_app_quick_stats();
     return lfi_nct_prune_past_event_sections(lfi_nct_module_filter_sections([
-        '🟣 ESPACE GROUPE D\'ACTION' => [
+        '🟣 VOLET GROUPE D\'ACTION (local)' => [
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🎨', 'Personnalisation du GA', 'En-tête courriers · bailleurs',       lfi_nct_app_url('ga-params')],
             ['👥', 'Membres actifs',         $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
@@ -1852,13 +1859,19 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
-        '🌐 ESPACE AUTRES GROUPES D\'ACTION' => [
-            ['🌐', 'Tableau de bord du réseau', 'Tous les GA, regroupé',              lfi_nct_app_url('reseau-ga')],
+        '🏛️ VOLET MUNICIPAL — élus locaux' => [
+            ['🌐', 'Tableau de bord du réseau', 'Tous les GA municipaux, regroupé',   lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
             ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
             ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
+        ],
+        '🇫🇷 VOLET NATIONAL — député·es' => [
+            ['🇫🇷', 'Tableau de bord national', 'Chiffres cumulés pour argumenter',   lfi_nct_app_url('national')],
+            ['🗣️', 'Éléments de langage',       'Arguments prêts à l\'emploi',        lfi_nct_app_url('national-args')],
+            ['📚', 'Études & données',           'Documents · données scientifiques',  lfi_nct_app_url('national-etudes')],
+            ['📄', 'Dossier national (PDF)',     'À envoyer aux député·es',            lfi_nct_app_url('national-pdf')],
         ],
         '⚙️ SYSTÈME' => [
             ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
