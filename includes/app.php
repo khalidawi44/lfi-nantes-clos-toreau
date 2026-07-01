@@ -20,6 +20,47 @@ if (!defined('ABSPATH')) exit;
 
 const LFI_NCT_APP_SLUG = 'app';
 
+/**
+ * URL FIABLE du formulaire d'enquête : on retrouve la vraie page qui porte le
+ * shortcode [lfi_nct_survey] quel que soit son slug (évite les liens 404 si la
+ * page a été renommée). Repli sur le slug historique en dernier recours.
+ * Résultat mis en cache 1h ; invalidé quand une page est enregistrée.
+ */
+function lfi_nct_survey_url() {
+    $cached = get_transient('lfi_nct_survey_url');
+    if ($cached) return $cached;
+
+    $url = '';
+    /* 1) Cherche une page/article publié contenant le shortcode enquête. */
+    $q = new WP_Query([
+        'post_type'      => ['page', 'post'],
+        'post_status'    => 'publish',
+        'posts_per_page' => 30,
+        'fields'         => 'ids',
+        's'              => 'lfi_nct_survey',
+        'no_found_rows'  => true,
+    ]);
+    foreach ((array) $q->posts as $pid) {
+        $p = get_post($pid);
+        if ($p && has_shortcode((string) $p->post_content, 'lfi_nct_survey')) {
+            $url = get_permalink($pid);
+            break;
+        }
+    }
+    /* 2) Sinon, la page au slug historique si elle existe. */
+    if (!$url) {
+        $by = get_page_by_path('enquete-logement-clos-toreau');
+        if ($by) $url = get_permalink($by);
+    }
+    /* 3) Dernier recours : le slug historique (au moins ça ne casse pas le code). */
+    if (!$url) $url = lfi_nct_survey_url();
+
+    set_transient('lfi_nct_survey_url', $url, HOUR_IN_SECONDS);
+    return $url;
+}
+/* Invalide le cache quand une page/un article change (le slug a pu bouger). */
+add_action('save_post', function () { delete_transient('lfi_nct_survey_url'); });
+
 /* ============================================================== *
  *  Page WordPress /app/                                            *
  * ============================================================== */

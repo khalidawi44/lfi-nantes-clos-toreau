@@ -160,7 +160,7 @@ function lfi_nct_trouver_groupe_url() {
 function lfi_nct_menu_extra_items($style = 'classic') {
     $compte_url  = esc_url(home_url('/mon-compte/'));
     $rdv_url     = esc_url(home_url('/rendez-vous/'));
-    $survey_url  = esc_url(home_url('/enquete-logement-clos-toreau/'));
+    $survey_url  = esc_url(lfi_nct_survey_url());
     $survey_label = '📋 Enquête logement';
     $logged_in   = is_user_logged_in();
 

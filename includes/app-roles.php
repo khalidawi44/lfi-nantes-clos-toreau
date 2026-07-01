@@ -740,7 +740,7 @@ function lfi_nct_app_view_ga_dashboard() {
 
     /* URL du formulaire public d'enquête (les GA s'en servent pour faire
        passer l'enquête en porte-à-porte). Les résultats restent admin only. */
-    $survey_url = home_url('/enquete-logement-clos-toreau/');
+    $survey_url = lfi_nct_survey_url();
 
     $tiles = [
         ['📲', 'Installer l\'app',          'iPhone / Android · permissions',      lfi_nct_app_url('installer')],
