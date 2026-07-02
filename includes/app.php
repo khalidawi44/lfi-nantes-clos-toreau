@@ -641,6 +641,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_styles();
         lfi_nct_app_render_register_sw();
         if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
+        lfi_nct_app_render_assistant_button();
         return ob_get_clean();
     }
 
@@ -843,6 +844,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_styles();
         lfi_nct_app_render_register_sw();
         if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
+        lfi_nct_app_render_assistant_button();
     } catch (\Throwable $e) {
         if (function_exists('error_log')) error_log('[LFI app] Erreur rendu final : ' . $e->getMessage());
     }
@@ -1702,6 +1704,57 @@ function lfi_nct_app_render_emergency_button() {
     }
     @media print {
         .lfi-app-emergency { display: none !important; }
+    }
+    </style>
+    <?php
+}
+
+/* Bouton fixe « Assistant » (robot) sur toutes les pages de l'app.
+ * Toujours visible, en bas à gauche (ne chevauche pas le bouton Urgence
+ * en bas à droite). Contextuel :
+ *   - admin de GA / super-admin  → ouvre le robot admin (vue « assistant »),
+ *   - locataire / visiteur       → ouvre l'aide & contact (vue « aide », publique). */
+function lfi_nct_app_render_assistant_button() {
+    $is_admin = function_exists('lfi_nct_robot_can') && lfi_nct_robot_can();
+    if ($is_admin) {
+        $href  = lfi_nct_app_url('assistant');
+        $label = 'Assistant';
+        $aria  = 'Ouvrir l\'assistant du groupe d\'action';
+    } else {
+        $href  = lfi_nct_app_url('aide');
+        $label = 'Aide';
+        $aria  = 'Aide et contact — être accompagné·e';
+    }
+    ?>
+    <a class="lfi-app-assistant" href="<?php echo esc_url($href); ?>" aria-label="<?php echo esc_attr($aria); ?>">
+        <span class="ico">🤖</span>
+        <span class="lbl"><?php echo esc_html($label); ?></span>
+    </a>
+    <style>
+    .lfi-app-assistant {
+        position: fixed; bottom: 20px; left: 16px;
+        z-index: 99990;
+        background: #4b2e83; color: #fff;
+        padding: 14px 18px; border-radius: 999px;
+        text-decoration: none;
+        box-shadow: 0 4px 14px rgba(75,46,131,.4);
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-weight: 700; font-size: .92em;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: transform .12s ease;
+    }
+    .lfi-app-assistant:hover, .lfi-app-assistant:focus {
+        color: #fff; transform: scale(1.05);
+    }
+    .lfi-app-assistant:active { background: #3a2367; transform: scale(.98); }
+    .lfi-app-assistant .ico { font-size: 1.2em; }
+    .lfi-app-assistant .lbl { white-space: nowrap; }
+    @media (max-width: 480px) {
+        .lfi-app-assistant .lbl { display: none; }
+        .lfi-app-assistant { padding: 14px; }
+    }
+    @media print {
+        .lfi-app-assistant { display: none !important; }
     }
     </style>
     <?php
