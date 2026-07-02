@@ -163,6 +163,53 @@ function lfi_nct_gmail_compose_url($to, $subject, $body, $cc = '') {
     return $url;
 }
 
+/* ============================================================== *
+ *  ÉCRAN SIMPLE « À envoyer » : toutes les réponses prêtes,       *
+ *  tous dossiers confondus, en un seul endroit.                   *
+ * ============================================================== */
+function lfi_nct_app_view_a_envoyer() {
+    $can = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    if (!$can) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $owner = function_exists('lfi_nct_dossier_owner_id') ? (int) lfi_nct_dossier_owner_id() : 0;
+    /* Un membre non super-admin ne voit que ses dossiers confiés. */
+    $ref = (function_exists('lfi_nct_dossier_sees_all') && !lfi_nct_dossier_sees_all())
+        ? $wpdb->prepare(' AND referent_user_id = %d', get_current_user_id()) : '';
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE owner_user_id = %d" . $ref . " ORDER BY updated_at DESC LIMIT 200", $owner)) ?: [];
+
+    lfi_nct_app_screen_open('📥 À envoyer', 'Tes réponses prêtes — relis et envoie');
+    $central = lfi_nct_central_email();
+    $n = 0;
+    echo '<ul class="lfi-app-list">';
+    foreach ($rows as $r) {
+        $notes = json_decode($r->notes ?? '', true);
+        $replies = (is_array($notes) && !empty($notes['replies'])) ? $notes['replies'] : [];
+        if (empty($replies)) continue;
+        $who = trim($r->tenant_prenom . ' ' . $r->tenant_nom) ?: ('Dossier #' . $r->id);
+        foreach (array_reverse($replies) as $rep) {
+            $to  = (string) ($rep['to'] ?? '');
+            $sub = (string) ($rep['subject'] ?? '');
+            $bod = (string) ($rep['body'] ?? '');
+            if ($to === '' || $bod === '') continue;
+            $n++;
+            $cc = ($central && stripos($to, $central) === false) ? $central : '';
+            $url = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
+            echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
+            echo '<div class="head"><div class="who">🗂 ' . esc_html($who) . '</div></div>';
+            echo '<div class="meta"><span class="meta-chip">À : ' . esc_html($to) . '</span></div>';
+            if ($sub) echo '<div class="com"><strong>' . esc_html($sub) . '</strong></div>';
+            echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire</summary>'
+               . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
+            echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url($url) . '" target="_blank" rel="noopener">✅ Ouvrir dans Gmail et envoyer</a></div>';
+            echo '</li>';
+        }
+    }
+    echo '</ul>';
+    if ($n === 0) echo '<div class="lfi-app-card" style="border:2px solid #186a3b"><div class="com">✅ Rien à envoyer pour l\'instant. Quand une réponse est prête, elle apparaît ici.</div></div>';
+    lfi_nct_app_screen_close();
+}
+
 /** Rendu de la section « Réponses à envoyer » (validées → bouton Gmail). */
 function lfi_nct_render_dossier_replies($row) {
     $notes   = json_decode($row->notes ?? '', true);
