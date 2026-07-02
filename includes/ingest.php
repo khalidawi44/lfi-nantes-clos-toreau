@@ -81,7 +81,46 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_reply_set',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/dossier-assign', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_assign',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/membres-ga', [
+        'methods'             => 'GET',
+        'callback'            => 'lfi_nct_ingest_rest_membres_ga',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
 });
+
+/** Liste des comptes du GA (pour affecter un référent). */
+function lfi_nct_ingest_rest_membres_ga($request) {
+    $args = ['number' => 200, 'fields' => ['ID', 'display_name', 'user_email']];
+    $users = get_users($args);
+    $out = [];
+    foreach ($users as $u) {
+        $roles = (array) $u->roles;
+        /* Comptes avec accès app : admins + rôle GA. */
+        if (array_intersect($roles, ['administrator', 'lfi_nct_ga', defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga'])) {
+            $out[] = ['id' => (int) $u->ID, 'nom' => $u->display_name, 'email' => $u->user_email];
+        }
+    }
+    return new WP_REST_Response(['ok' => true, 'membres' => $out], 200);
+}
+
+/** Affecte un dossier à un référent (membre du GA). */
+function lfi_nct_ingest_rest_assign($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $id  = (int) $request->get_param('dossier_id');
+    $ref = (int) $request->get_param('referent_user_id');
+    if (!$id || !$wpdb->get_row($wpdb->prepare("SELECT id FROM $t WHERE id = %d", $id))) {
+        return new WP_REST_Response(['ok' => false, 'error' => 'dossier_introuvable'], 404);
+    }
+    if ($ref && !get_userdata($ref)) return new WP_REST_Response(['ok' => false, 'error' => 'membre_introuvable'], 400);
+    $wpdb->update($t, ['referent_user_id' => $ref ?: null], ['id' => $id]);
+    return new WP_REST_Response(['ok' => true, 'dossier_id' => $id, 'referent_user_id' => $ref], 200);
+}
 
 /** Dépose une RÉPONSE PROPOSÉE (psy+architecte) dans un dossier. */
 function lfi_nct_ingest_rest_reply_set($request) {
@@ -109,12 +148,19 @@ function lfi_nct_ingest_rest_reply_set($request) {
     return new WP_REST_Response(['ok' => true, 'count' => count($notes['replies'])], 200);
 }
 
+/** Email principal (hub) mis en copie de chaque réponse pour tout centraliser. */
+function lfi_nct_central_email() {
+    return (string) get_option('lfi_nct_central_email', 'nantessudclostoreau@gmail.com');
+}
+
 /** Lien de composition Gmail pré-rempli (ouvre Gmail avec la réponse). */
-function lfi_nct_gmail_compose_url($to, $subject, $body) {
-    return 'https://mail.google.com/mail/?view=cm&fs=1'
+function lfi_nct_gmail_compose_url($to, $subject, $body, $cc = '') {
+    $url = 'https://mail.google.com/mail/?view=cm&fs=1'
         . '&to=' . rawurlencode($to)
         . '&su=' . rawurlencode($subject)
         . '&body=' . rawurlencode($body);
+    if ($cc !== '') $url .= '&cc=' . rawurlencode($cc);
+    return $url;
 }
 
 /** Rendu de la section « Réponses à envoyer » (validées → bouton Gmail). */
@@ -131,7 +177,10 @@ function lfi_nct_render_dossier_replies($row) {
         $to  = (string) ($r['to'] ?? '');
         $sub = (string) ($r['subject'] ?? '');
         $bod = (string) ($r['body'] ?? '');
-        $url = lfi_nct_gmail_compose_url($to, $sub, $bod);
+        /* On met l'email principal (hub) en copie : tout reste centralisé. */
+        $central = lfi_nct_central_email();
+        $cc = ($central && stripos($to, $central) === false) ? $central : '';
+        $url = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
         echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
         echo '<div class="head"><div class="who">✉️ Réponse prête</div>';
         echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($r['date'] ?? '') . '</div></div>';
