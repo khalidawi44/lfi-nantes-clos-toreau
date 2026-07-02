@@ -258,14 +258,14 @@ function lfi_nct_render_site_navbar_loggedout() {
     }
     .lfi-pub-brand .lfi-pub-brand-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .lfi-pub-navbar a.lfi-pub-btn {
-        color: #fff; text-decoration: none; font-weight: 800; font-size: 13.5px;
+        text-decoration: none; font-weight: 800; font-size: 13.5px;
         padding: 8px 14px; border-radius: 999px; white-space: nowrap;
         display: inline-flex; align-items: center; gap: 6px; transition: transform .12s, background .15s;
     }
-    .lfi-pub-btn.ghost { border: 1.5px solid rgba(255,255,255,.7); }
-    .lfi-pub-btn.ghost:hover { background: rgba(255,255,255,.16); color: #fff; }
-    .lfi-pub-btn.solid { background: #fff; color: #c8102e; }
-    .lfi-pub-btn.solid:hover { transform: scale(1.04); color: #a30b25; }
+    .lfi-pub-navbar a.lfi-pub-btn.ghost { color: #fff !important; border: 1.5px solid rgba(255,255,255,.7); }
+    .lfi-pub-navbar a.lfi-pub-btn.ghost:hover { background: rgba(255,255,255,.16); color: #fff !important; }
+    .lfi-pub-navbar a.lfi-pub-btn.solid { background: #fff; color: #c8102e !important; }
+    .lfi-pub-navbar a.lfi-pub-btn.solid:hover { transform: scale(1.04); color: #a30b25 !important; }
     @media (max-width: 480px) {
         .lfi-pub-brand .lfi-pub-brand-txt { display: none; }
         .lfi-pub-navbar a.lfi-pub-btn { padding: 8px 12px; font-size: 13px; }
