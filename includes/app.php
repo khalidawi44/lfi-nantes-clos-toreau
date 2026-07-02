@@ -472,6 +472,19 @@ function lfi_nct_app_handle_redirects() {
 
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
 
+    /* Suppression d'un brouillon de réponse (écran « À envoyer » ou dossier). */
+    if (!empty($_POST['lfi_reply_del']) && check_admin_referer('lfi_reply_del')) {
+        $can = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+        if ($can && function_exists('lfi_nct_reply_delete')) {
+            $did = (int) ($_POST['dossier_id'] ?? 0);
+            $idx = isset($_POST['reply_index']) && $_POST['reply_index'] !== '' ? (int) $_POST['reply_index'] : null;
+            if ($did) lfi_nct_reply_delete($did, $idx);
+        }
+        $back = !empty($_POST['back']) ? esc_url_raw(wp_unslash($_POST['back'])) : lfi_nct_app_url('a-envoyer');
+        wp_safe_redirect(add_query_arg('rdel', 1, $back));
+        exit;
+    }
+
     /* Redirige les routes d'inscription vers /app/ si user déjà connecté */
     if (is_user_logged_in() && in_array($vue, ['inscription', 'inscription-locataire', 'inscription-ga'], true)) {
         wp_safe_redirect(home_url('/app/'));
