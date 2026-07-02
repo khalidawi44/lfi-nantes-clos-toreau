@@ -1280,6 +1280,17 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</form>';
         echo '</details>';
 
+        /* === CHIFFRAGE DU PRÉJUDICE === */
+        echo '<h3 style="margin:22px 0 6px;color:#c8102e">💶 Chiffrage du préjudice</h3>';
+        $prej = (is_array($logs) && !empty($logs['prejudice'])) ? $logs['prejudice'] : null;
+        if ($prej) {
+            echo '<div class="lfi-app-card" style="border-left:4px solid #0066a3"><div class="meta">';
+            echo '<span class="meta-chip">🤝 Amiable : ' . number_format((float) $prej['amiable'], 0, ',', ' ') . ' €</span>';
+            echo '<span class="meta-chip">⚖️ Fond : ' . number_format((float) $prej['fond_min'], 0, ',', ' ') . ' – ' . number_format((float) $prej['fond_max'], 0, ',', ' ') . ' €</span>';
+            echo '<span class="meta-chip">' . esc_html($prej['date'] ?? '') . '</span></div></div>';
+        }
+        echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('prejudice', ['id' => (int) $row->id])) . '">💶 ' . ($prej ? 'Recalculer' : 'Chiffrer le préjudice') . '</a></div>';
+
         /* === PIÈCES JOINTES (classées automatiquement par Claude) === */
         if (function_exists('lfi_nct_ingest_render_pieces')) {
             lfi_nct_ingest_render_pieces($row);

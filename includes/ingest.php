@@ -66,7 +66,41 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_event',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/dossier-create', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_dossier_create',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
 });
+
+/** Crée un dossier locataire à distance (clé d'intégration). */
+function lfi_nct_ingest_rest_dossier_create($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $prenom = sanitize_text_field((string) $request->get_param('prenom'));
+    $nom    = sanitize_text_field((string) $request->get_param('nom'));
+    if ($prenom === '' && $nom === '') return new WP_REST_Response(['ok' => false, 'error' => 'nom_manquant'], 400);
+    /* Propriétaire = celui du GA « maison » (clos-toreau / super-admin). */
+    $owner = function_exists('lfi_nct_ga_admin_owner') ? (int) lfi_nct_ga_admin_owner('clos-toreau') : 0;
+    if (!$owner && function_exists('lfi_nct_dossier_owner_id')) $owner = (int) lfi_nct_dossier_owner_id();
+    /* Anti-doublon simple. */
+    $exists = $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM $t WHERE owner_user_id = %d AND tenant_prenom = %s AND tenant_nom = %s LIMIT 1",
+        $owner, $prenom, $nom));
+    if ($exists) return new WP_REST_Response(['ok' => true, 'id' => (int) $exists, 'existant' => true], 200);
+    $ok = $wpdb->insert($t, [
+        'owner_user_id'  => $owner,
+        'tenant_prenom'  => $prenom,
+        'tenant_nom'     => $nom,
+        'tenant_adresse' => sanitize_text_field((string) $request->get_param('adresse')),
+        'tenant_tel'     => sanitize_text_field((string) $request->get_param('tel')),
+        'tenant_email'   => sanitize_email((string) $request->get_param('email')),
+        'constatations'  => sanitize_textarea_field((string) $request->get_param('constatations')),
+        'statut'         => 'ouvert',
+    ]);
+    if (!$ok) return new WP_REST_Response(['ok' => false, 'error' => 'creation_impossible'], 500);
+    return new WP_REST_Response(['ok' => true, 'id' => (int) $wpdb->insert_id], 200);
+}
 
 /** Crée un événement à distance (clé d'intégration). */
 function lfi_nct_ingest_rest_event($request) {
