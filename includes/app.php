@@ -801,6 +801,7 @@ function lfi_nct_app_shortcode() {
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
+                    case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -2182,6 +2183,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '⚙️ SYSTÈME' => [
             ['💾', 'Sauvegarde & export',     'Télécharger les données (point fixe)', lfi_nct_app_url('sauvegarde')],
             ['🛡️', 'Cadre RGPD',              'Fichiers légaux · registre · droit à l\'oubli', lfi_nct_app_url('rgpd')],
+            ['📬', 'Check emails auto',       'Surveillance boîte 24/7 · réponses prêtes', lfi_nct_app_url('mailcheck')],
             ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
             ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
             ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
