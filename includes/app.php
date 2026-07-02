@@ -796,6 +796,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-piece-dl':      lfi_nct_ingest_download();                 break;
                     case 'journal':               lfi_nct_app_view_journal();                break;
                     case 'journal-edit':          lfi_nct_app_view_journal_edit();           break;
+                    case 'strategie':             lfi_nct_app_view_strategie();              break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
@@ -2083,6 +2084,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['➕', 'Saisir une réponse',     'Porte-à-porte / papier',             lfi_nct_app_url('temoignage-add')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
+            ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
             ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
