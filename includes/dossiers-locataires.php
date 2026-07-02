@@ -1289,7 +1289,8 @@ function lfi_nct_app_dossier_juridique_form($row) {
             echo '<span class="meta-chip">⚖️ Fond : ' . number_format((float) $prej['fond_min'], 0, ',', ' ') . ' – ' . number_format((float) $prej['fond_max'], 0, ',', ' ') . ' €</span>';
             echo '<span class="meta-chip">' . esc_html($prej['date'] ?? '') . '</span></div></div>';
         }
-        echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('prejudice', ['id' => (int) $row->id])) . '">💶 ' . ($prej ? 'Recalculer' : 'Chiffrer le préjudice') . '</a></div>';
+        echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('prejudice', ['id' => (int) $row->id])) . '">💶 ' . ($prej ? 'Recalculer' : 'Chiffrer le préjudice') . '</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('jurisprudence', ['id' => (int) $row->id])) . '">🔎 Jurisprudence</a></div>';
 
         /* === PIÈCES JOINTES (classées automatiquement par Claude) === */
         if (function_exists('lfi_nct_ingest_render_pieces')) {

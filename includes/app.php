@@ -800,6 +800,7 @@ function lfi_nct_app_shortcode() {
                     case 'architecte':            lfi_nct_app_view_architecte();             break;
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
+                    case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -2138,6 +2139,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
             ['💶', 'Chiffrage préjudice',    'Punaises · 10 postes · amiable + fond', lfi_nct_app_url('prejudice')],
+            ['🔎', 'Jurisprudence',          'Vraies décisions (Judilibre) par dossier', lfi_nct_app_url('jurisprudence')],
             ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
