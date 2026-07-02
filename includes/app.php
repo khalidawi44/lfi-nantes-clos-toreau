@@ -797,6 +797,7 @@ function lfi_nct_app_shortcode() {
                     case 'journal':               lfi_nct_app_view_journal();                break;
                     case 'journal-edit':          lfi_nct_app_view_journal_edit();           break;
                     case 'strategie':             lfi_nct_app_view_strategie();              break;
+                    case 'architecte':            lfi_nct_app_view_architecte();             break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -1072,6 +1073,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+        <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
         <?php foreach ($sections as $section_title => $tiles): ?>
             <div class="lfi-app-section">
