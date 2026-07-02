@@ -930,8 +930,26 @@ function lfi_nct_app_dossier_juridique_form($row) {
     }
     echo '</div>';
 
-    /* Sommaire — accès rapide aux sections du dossier (réduit le « fouillis »). */
-    echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px;font-size:.85em">';
+    /* ⭐ L'ESSENTIEL EN HAUT : infos clés + ce qu'il y a à envoyer. */
+    if ($is_edit && $row) {
+        $adr = trim((string) $row->tenant_adresse . ($row->tenant_etage ? ' · ét. ' . $row->tenant_etage : ''));
+        echo '<div class="lfi-app-card" style="border-left:4px solid #4b2e83"><div class="head"><div class="who">🗂 ' . esc_html(trim($row->tenant_prenom . ' ' . $row->tenant_nom) ?: ('Dossier #' . $row->id)) . '</div></div><div class="meta">';
+        if ($adr) echo '<span class="meta-chip">📍 ' . esc_html($adr) . '</span>';
+        if ($row->tenant_tel) echo '<a class="meta-chip" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $row->tenant_tel)) . '">📞 ' . esc_html($row->tenant_tel) . '</a>';
+        echo '</div></div>';
+    }
+    if ($is_edit && $row && function_exists('lfi_nct_render_dossier_replies')) {
+        lfi_nct_render_dossier_replies($row);
+    }
+
+    /* Le reste (constatations, lettres, emails, analyse…) est RANGÉ ici pour
+       ne pas encombrer : on ne l'ouvre que si on en a besoin. */
+    if ($is_edit) {
+        echo '<details style="margin:10px 0"><summary style="cursor:pointer;font-weight:700;color:#666;padding:8px 4px">✏️ Détails, constats, lettres et modification du dossier</summary>';
+    }
+
+    /* Sommaire — accès rapide aux sections du dossier. */
+    echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px;padding:10px 12px;background:#fafafa;border:1px solid #eee;border-radius:10px;font-size:.85em">';
     echo '<strong style="width:100%;color:#c8102e;margin-bottom:2px">Aller à :</strong>';
     $somm = [['#sec-locataire', '👤 Locataire'], ['#sec-constat', '🔍 Constats']];
     if ($is_edit) {
@@ -1304,11 +1322,6 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</form>';
         echo '</details>';
 
-        /* === RÉPONSES À ENVOYER (générées, prêtes → bouton Gmail) === */
-        if (function_exists('lfi_nct_render_dossier_replies')) {
-            lfi_nct_render_dossier_replies($row);
-        }
-
         /* === CHIFFRAGE DU PRÉJUDICE === */
         echo '<h3 style="margin:22px 0 6px;color:#c8102e">💶 Chiffrage du préjudice</h3>';
         $prej = (is_array($logs) && !empty($logs['prejudice'])) ? $logs['prejudice'] : null;
@@ -1346,6 +1359,8 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '<input type="hidden" name="lfi_dossier_delete" value="1">';
         echo '<button type="submit" style="background:#a30b25;color:#fff;border:0;padding:10px 16px;border-radius:8px;font-weight:700;cursor:pointer">🗑 Supprimer ce dossier</button>';
         echo '</form>';
+
+        echo '</details>'; /* ferme « Détails, constats, lettres… » */
     }
 
     /* Helper voice — injecté ici, partagé avec l'intervention */
