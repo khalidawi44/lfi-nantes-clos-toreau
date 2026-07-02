@@ -386,6 +386,7 @@ function lfi_nct_map_page() {
         var CUBE_M  = 4;        // côté du cube
         var stackCounts = {};
         var feats = [];
+        var pts = [];   // pastilles plates (toujours visibles, même vue du dessus)
 
         function squareAround(lng, lat, sizeM) {
             var dLat = sizeM / 111111;
@@ -420,9 +421,16 @@ function lfi_nct_map_page() {
                     popup: popupHtml(m)
                 }
             });
+            pts.push({
+                type: 'Feature',
+                id: idx,
+                geometry: { type: 'Point', coordinates: [m.lng + dLng, m.lat] },
+                properties: { fid: idx, color: m.gcolor, popup: popupHtml(m) }
+            });
             bounds.extend([m.lng, m.lat]);
         });
         var surveysGJ = { type: 'FeatureCollection', features: feats };
+        var pointsGJ  = { type: 'FeatureCollection', features: pts };
 
         if (!bounds.isEmpty()) {
             map.fitBounds(bounds, { padding: 100, maxZoom: 18, pitch: 55, bearing: -15 });
@@ -452,6 +460,32 @@ function lfi_nct_map_page() {
             });
             map.on('mouseenter', 'surveys-3d', function () { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', 'surveys-3d', function () { map.getCanvas().style.cursor = ''; });
+
+            // Pastilles plates : dessinées PAR-DESSUS les cubes ET les immeubles,
+            // donc toujours visibles, y compris en vue aérienne (du dessus).
+            map.addSource('surveys-pts', { type: 'geojson', data: pointsGJ });
+            map.addLayer({
+                id: 'surveys-dots',
+                type: 'circle',
+                source: 'surveys-pts',
+                paint: {
+                    'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 16, 7, 19, 10],
+                    'circle-color': ['get', 'color'],
+                    'circle-stroke-color': '#ffffff',
+                    'circle-stroke-width': 2,
+                    'circle-opacity': 0.95,
+                    'circle-pitch-alignment': 'viewport'
+                }
+            });
+            map.on('click', 'surveys-dots', function (e) {
+                if (!e.features || !e.features.length) return;
+                new maplibregl.Popup({ closeButton: true })
+                    .setLngLat(e.features[0].geometry.coordinates)
+                    .setHTML(e.features[0].properties.popup)
+                    .addTo(map);
+            });
+            map.on('mouseenter', 'surveys-dots', function () { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'surveys-dots', function () { map.getCanvas().style.cursor = ''; });
         }
 
         // === Extrusion 3D des immeubles via Overpass / OSM ===
