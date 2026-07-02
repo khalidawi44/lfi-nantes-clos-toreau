@@ -261,6 +261,34 @@ function lfi_nct_event_render_content($content) {
     return $bandeau . $content . $rsvp;
 }
 
+/* Le thème AG Starter affiche des compteurs de DÉMO (« JE PARTICIPE 294 »,
+ * « JE SOUTIENS 83 ») qui sont FICTIFS. On ne montre jamais de chiffre inventé :
+ * on masque ce bloc du thème sur les pages d'événement (notre RSVP réel reste). */
+add_action('wp_footer', 'lfi_nct_event_hide_fake_counters');
+function lfi_nct_event_hide_fake_counters() {
+    if (!is_singular(['ag_evenement', 'lfi_evenement'])) return;
+    ?>
+    <script>
+    (function () {
+        function clean() {
+            var els = document.querySelectorAll('a,button,div,li,section,span');
+            els.forEach(function (el) {
+                if (el.closest('.lfi-evt-rsvp') || el.closest('.lfi-evt-bandeau')) return;
+                var txt = (el.textContent || '').trim().toUpperCase();
+                if (txt.length > 45) return;
+                if (/JE SOUTIENS/.test(txt) || (/JE PARTICIPE/.test(txt) && /\d/.test(txt))) {
+                    var card = el.closest('a,button,div') || el;
+                    card.style.display = 'none';
+                }
+            });
+        }
+        if (document.readyState !== 'loading') clean(); else document.addEventListener('DOMContentLoaded', clean);
+        setTimeout(clean, 600);
+    })();
+    </script>
+    <?php
+}
+
 function lfi_nct_render_event_rsvp_form($event_id) {
     global $wpdb;
     $table = $wpdb->prefix . LFI_NCT_EVT_RSVP_TABLE;

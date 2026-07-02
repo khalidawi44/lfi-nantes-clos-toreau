@@ -118,6 +118,12 @@ function lfi_nct_ingest_rest_event($request) {
     update_post_meta($pid, '_ag_event_time',  sanitize_text_field((string) $request->get_param('heure')));
     update_post_meta($pid, '_ag_event_place', sanitize_text_field((string) $request->get_param('lieu')));
     update_post_meta($pid, '_ag_event_city',  sanitize_text_field((string) $request->get_param('ville')));
+    /* Lien Action Populaire (l'inscription se fait TOUJOURS d'abord sur AP). */
+    $ap = esc_url_raw((string) $request->get_param('ap_url'));
+    if ($ap) {
+        update_post_meta($pid, '_lfi_evt_url_ap', $ap); /* utilisé par la page single */
+        update_post_meta($pid, '_lfi_evt_ap_url', $ap); /* utilisé par la liste de l'app */
+    }
     $ga = sanitize_text_field((string) $request->get_param('ga'));
     update_post_meta($pid, '_lfi_evt_ga', $ga !== '' ? $ga : 'clos-toreau');
     update_post_meta($pid, '_lfi_evt_internal', 1);
