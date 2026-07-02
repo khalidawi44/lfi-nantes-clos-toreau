@@ -286,3 +286,54 @@ function lfi_nct_journal_rest_add($request) {
     if (!$ok) return new WP_REST_Response(['ok' => false, 'error' => 'insert_failed'], 500);
     return new WP_REST_Response(['ok' => true, 'id' => (int) $wpdb->insert_id], 200);
 }
+
+/* REST : gérer une note existante (corriger / supprimer) à distance. */
+add_action('rest_api_init', function () {
+    register_rest_route('lfi-nct/v1', '/journal-manage', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_journal_rest_manage',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/journal-list', [
+        'methods'             => 'GET',
+        'callback'            => 'lfi_nct_journal_rest_list',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+});
+function lfi_nct_journal_rest_list($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_journal';
+    $rows = $wpdb->get_results("SELECT id, date_evt, categorie, titre, pinned FROM $t ORDER BY id ASC LIMIT 500") ?: [];
+    return new WP_REST_Response(['ok' => true, 'notes' => $rows], 200);
+}
+function lfi_nct_journal_rest_manage($request) {
+    global $wpdb;
+    $t  = $wpdb->prefix . 'lfi_nct_journal';
+    $id = (int) $request->get_param('id');
+    $action = sanitize_key((string) $request->get_param('op'));
+    if (!$id) return new WP_REST_Response(['ok' => false, 'error' => 'id_manquant'], 400);
+    if ($action === 'delete') {
+        $wpdb->delete($t, ['id' => $id]);
+        return new WP_REST_Response(['ok' => true, 'deleted' => $id], 200);
+    }
+    if ($action === 'update') {
+        $data = [];
+        $cats = lfi_nct_journal_categories();
+        if ($request->get_param('categorie') !== null) {
+            $c = sanitize_key((string) $request->get_param('categorie'));
+            $data['categorie'] = isset($cats[$c]) ? $c : 'general';
+        }
+        if ($request->get_param('date_evt') !== null) {
+            $d = sanitize_text_field((string) $request->get_param('date_evt'));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) $data['date_evt'] = $d;
+        }
+        if ($request->get_param('heure') !== null) $data['heure'] = sanitize_text_field((string) $request->get_param('heure'));
+        if ($request->get_param('titre') !== null) $data['titre'] = sanitize_text_field((string) $request->get_param('titre'));
+        if ($request->get_param('corps') !== null) $data['corps'] = sanitize_textarea_field(wp_check_invalid_utf8((string) $request->get_param('corps')));
+        if ($request->get_param('pinned') !== null) $data['pinned'] = $request->get_param('pinned') ? 1 : 0;
+        if (empty($data)) return new WP_REST_Response(['ok' => false, 'error' => 'rien_a_modifier'], 400);
+        $wpdb->update($t, $data, ['id' => $id]);
+        return new WP_REST_Response(['ok' => true, 'updated' => $id], 200);
+    }
+    return new WP_REST_Response(['ok' => false, 'error' => 'op_inconnue'], 400);
+}
