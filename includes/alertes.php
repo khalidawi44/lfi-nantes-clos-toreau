@@ -54,7 +54,6 @@ function lfi_nct_alertes_auto() {
         $logs = json_decode($r->notes ?? '', true);
         $sent = (is_array($logs) && !empty($logs['email_log']))  ? $logs['email_log']  : [];
         $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
-        $analyse = (is_array($logs) && !empty($logs['analyse_nmh'])) ? trim((string) $logs['analyse_nmh']) : '';
 
         /* ⏰ Délai légal NMH dépassé (à partir de la mise en demeure) → étape 4 :
            saisir le SCHS. S'affiche tant que le SCHS n'a pas été envoyé. */
@@ -71,15 +70,10 @@ function lfi_nct_alertes_auto() {
             }
         }
 
-        /* Réponse reçue mais pas encore analysée. */
-        if (!empty($recu) && $analyse === '') {
-            $out[] = [
-                'prio'   => 'haute',
-                'titre'  => 'Analyser la réponse de NMH — ' . $full,
-                'detail' => 'Une réponse est enregistrée dans le dossier mais pas encore analysée.',
-                'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]) . '#sec-analyse',
-            ];
-        }
+        /* NOTE : on ne demande JAMAIS à l'utilisateur d'« analyser » un courrier.
+           L'analyse et la rédaction de la réponse, c'est le travail de l'assistant.
+           Les réponses prêtes apparaissent dans l'écran « À envoyer » : l'utilisateur
+           les relit et les envoie, rien d'autre. */
 
         /* Dernier courrier envoyé sans réponse depuis 8 jours → relancer. */
         if (!empty($sent)) {

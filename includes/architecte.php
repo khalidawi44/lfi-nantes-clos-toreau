@@ -57,16 +57,11 @@ function lfi_nct_architecte_scan() {
             $push(1, '🏥', $nom, 'Certificat médical au dossier mais aucune demande de relogement envoyée : active ce levier, c\'est le plus fort.', $uid);
         }
 
-        /* PRIORITÉ 2 — réponse à traiter (avec lecture PSY). */
-        if ($recu && $analyse === '') {
-            $last = end($recu);
-            $posture = '';
-            if (function_exists('lfi_nct_psy_analyse')) {
-                $rep = lfi_nct_psy_analyse((string) ($last['corps'] ?? ''), 'institution');
-                $posture = $rep['label'] . ' — ' . $rep['ton'];
-            }
-            $push(2, '📩', $nom, 'Une réponse reçue n\'est pas encore analysée. Traite-la et pousse un protocole amiable.', $uid, $posture);
-        }
+        /* PRIORITÉ 2 — leviers à activer.
+           (On n'interpelle JAMAIS l'utilisateur pour « analyser » un courrier reçu :
+           l'analyse et la rédaction de la réponse sont faites par l'assistant, et la
+           réponse prête arrive dans « À envoyer ». L'architecte ne propose ici que des
+           coups à jouer — pas des tâches de lecture/analyse à faire soi-même.) */
         if ($want_travaux && !$lrar_trav) {
             $push(2, '📨', $nom, 'Travaux demandés mais mise en demeure pas encore envoyée : propose aussi le levier brigade.', $uid);
         }
