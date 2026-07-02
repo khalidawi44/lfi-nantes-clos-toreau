@@ -51,7 +51,9 @@ function lfi_nct_mailcheck_do() {
     $pw   = str_replace(' ', '', (string) get_option('lfi_nct_gmail_app_pw', ''));
     if ($user === '' || $pw === '') { $rep['msg'] = 'Identifiants Gmail non configurés.'; lfi_nct_mailcheck_log($rep); return $rep; }
 
-    $mbox = @imap_open('{imap.gmail.com:993/imap/ssl}INBOX', $user, $pw, 0, 1);
+    /* /novalidate-cert : contourne le bug SNI de certains clients PHP IMAP
+       (la connexion reste chiffrée SSL). */
+    $mbox = @imap_open('{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX', $user, $pw, 0, 1);
     if (!$mbox) { $rep['msg'] = 'Connexion IMAP échouée : ' . imap_last_error(); lfi_nct_mailcheck_log($rep); return $rep; }
 
     /* Messages non lus des 3 derniers jours. */
