@@ -798,6 +798,8 @@ function lfi_nct_app_shortcode() {
                     case 'journal-edit':          lfi_nct_app_view_journal_edit();           break;
                     case 'strategie':             lfi_nct_app_view_strategie();              break;
                     case 'architecte':            lfi_nct_app_view_architecte();             break;
+                    case 'prejudice':             lfi_nct_app_view_prejudice();              break;
+                    case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -1940,6 +1942,51 @@ function lfi_nct_app_render_assistant_button() {
     <?php
 }
 
+/* Partage simplifié : un seul bouton « Partager » qui ouvre la feuille de
+ * partage native du téléphone (un geste → toutes les apps). Repli : les
+ * réseaux individuels dans un menu déroulant si le partage natif est absent. */
+function lfi_nct_app_share_control($url, $title) {
+    static $js_done = false;
+    $u = rawurlencode($url);
+    $t = rawurlencode($title);
+    ob_start();
+    echo '<span class="lfi-share" data-url="' . esc_attr($url) . '" data-title="' . esc_attr($title) . '">';
+    echo '<button type="button" class="btn-primary lfi-share-btn" onclick="lfiShare(this)">📤 Partager</button>';
+    echo '<span class="lfi-share-more" hidden>';
+    echo '<a class="btn-ghost" href="https://api.whatsapp.com/send?text=' . $t . '%20' . $u . '" target="_blank" rel="noopener">🟢 WhatsApp</a>';
+    echo '<a class="btn-ghost" href="https://www.facebook.com/sharer/sharer.php?u=' . $u . '" target="_blank" rel="noopener">📘 Facebook</a>';
+    echo '<a class="btn-ghost" href="https://t.me/share/url?url=' . $u . '&text=' . $t . '" target="_blank" rel="noopener">✈️ Telegram</a>';
+    echo '<a class="btn-ghost" href="https://twitter.com/intent/tweet?text=' . $t . '&url=' . $u . '" target="_blank" rel="noopener">𝕏 X</a>';
+    echo '<button type="button" class="btn-ghost" onclick="lfiShareCopy(this)">🔗 Copier le lien</button>';
+    echo '</span></span>';
+    if (!$js_done) {
+        $js_done = true;
+        ?>
+        <script>
+        function lfiShare(btn){
+            var box = btn.closest('.lfi-share');
+            var url = box.getAttribute('data-url'), title = box.getAttribute('data-title');
+            if (navigator.share) {
+                navigator.share({title: title, text: title, url: url}).catch(function(){});
+            } else {
+                var more = box.querySelector('.lfi-share-more');
+                if (more) more.hidden = !more.hidden;
+            }
+        }
+        function lfiShareCopy(btn){
+            var box = btn.closest('.lfi-share');
+            var url = box.getAttribute('data-url');
+            if (navigator.clipboard) navigator.clipboard.writeText(url).then(function(){ btn.textContent='✅ Copié'; });
+        }
+        </script>
+        <style>
+        .lfi-share-more { display:inline-flex; gap:6px; flex-wrap:wrap; margin-left:6px; }
+        </style>
+        <?php
+    }
+    return ob_get_clean();
+}
+
 function lfi_nct_app_render_register_sw() {
     /* Query-var direct = marche même si les rewrite rules ne sont pas flushées */
     $sw = esc_url(home_url('/?lfi_app=sw&v=' . LFI_NCT_VERSION));
@@ -2090,6 +2137,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
+            ['💶', 'Chiffrage préjudice',    'Punaises · 10 postes · amiable + fond', lfi_nct_app_url('prejudice')],
             ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
@@ -2513,13 +2561,7 @@ function lfi_nct_app_view_evenements() {
             echo '<a class="btn-primary" href="' . esc_url($ev_url) . '" target="_blank" rel="noopener">🔗 Page publique</a>';
             $ap_url = (string) get_post_meta($p->ID, '_lfi_evt_ap_url', true);
             if ($ap_url) echo '<a class="btn-ghost" href="' . esc_url($ap_url) . '" target="_blank" rel="noopener">📣 Action Populaire</a>';
-            $u = rawurlencode($ev_url);
-            $t = rawurlencode($ev_title . ' — GA LFI Nantes Sud');
-            echo '<a class="btn-ghost" href="https://www.facebook.com/sharer/sharer.php?u=' . $u . '" target="_blank" rel="noopener">📘 Facebook</a>';
-            echo '<a class="btn-ghost" href="https://api.whatsapp.com/send?text=' . $t . '%20' . $u . '" target="_blank" rel="noopener">🟢 WhatsApp</a>';
-            echo '<a class="btn-ghost" href="https://t.me/share/url?url=' . $u . '&text=' . $t . '" target="_blank" rel="noopener">✈️ Telegram</a>';
-            echo '<a class="btn-ghost" href="https://twitter.com/intent/tweet?text=' . $t . '&url=' . $u . '" target="_blank" rel="noopener">𝕏 X</a>';
-            if (function_exists('lfi_nct_copy_button')) echo lfi_nct_copy_button($ev_url, '🔗 Copier le lien');
+            echo lfi_nct_app_share_control($ev_url, $ev_title . ' — GA LFI Nantes Sud');
             if ($can_edit) {
                 echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('flyer', ['event' => $p->ID])) . '">🖨 Flyer + QR</a>';
                 if (!$ev_past) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-sms', ['event' => $p->ID])) . '">📱 Diffuser SMS</a>';
