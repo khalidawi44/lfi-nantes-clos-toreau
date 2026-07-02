@@ -2461,13 +2461,33 @@ function lfi_nct_app_view_evenements() {
     if (empty($events)) {
         echo '<div class="lfi-app-empty">Aucun événement.</div>';
     } else {
-        echo '<ul class="lfi-app-list">';
+        /* Tri : on sépare « à venir » et « passés », puis on trie chaque groupe.
+           À venir = du plus proche au plus loin ; passés = du plus récent au plus ancien. */
+        $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+        $upcoming = []; $past = [];
         foreach ($events as $p) {
+            $d  = function_exists('lfi_nct_event_data') ? lfi_nct_event_data($p) : null;
+            $ts = (int) ($d['ts'] ?? 0);
+            if (!$ts) {
+                $raw = get_post_meta($p->ID, '_ag_event_date', true) ?: get_post_meta($p->ID, '_lfi_evt_date_debut', true);
+                $ts  = $raw ? (int) strtotime($raw) : 0;
+            }
+            $row = ['p' => $p, 'ts' => $ts, 'past' => (bool) ($d['is_past'] ?? false)];
+            if ($row['past']) $past[] = $row; else $upcoming[] = $row;
+        }
+        /* À venir : ceux sans date connue (ts=0) partent à la fin. */
+        usort($upcoming, function ($a, $b) {
+            if ($a['ts'] === 0 xor $b['ts'] === 0) return $a['ts'] === 0 ? 1 : -1;
+            return $a['ts'] <=> $b['ts'];
+        });
+        usort($past, function ($a, $b) { return $b['ts'] <=> $a['ts']; });
+
+        /* Rendu d'une carte événement (mutualisé entre « à venir » et « passés »). */
+        $render_card = function ($p, $ev_past) use ($can_edit) {
             $date  = get_post_meta($p->ID, '_ag_event_date', true) ?: get_post_meta($p->ID, '_lfi_evt_date_debut', true);
             $time  = get_post_meta($p->ID, '_ag_event_time', true);
             $place = get_post_meta($p->ID, '_ag_event_place', true);
             $city  = get_post_meta($p->ID, '_ag_event_city',  true);
-            $ev_past = function_exists('lfi_nct_event_data') ? (bool) (lfi_nct_event_data($p)['is_past'] ?? false) : false;
             echo '<li class="lfi-app-card">';
             echo '<div class="head"><div class="who">' . esc_html(get_the_title($p)) . ($ev_past ? ' <span style="font-size:.72em;background:#eee;color:#888;padding:2px 7px;border-radius:6px;font-weight:600;vertical-align:middle">passé</span>' : '') . '</div></div>';
             echo '<div class="meta">';
@@ -2476,14 +2496,10 @@ function lfi_nct_app_view_evenements() {
             echo '</div>';
             $ev_url   = get_permalink($p);
             $ev_title = get_the_title($p);
-            /* Édition réservée aux admins ; partage réseaux sociaux pour tous. */
-            $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
             echo '<div class="row-actions" style="flex-wrap:wrap;gap:6px">';
             echo '<a class="btn-primary" href="' . esc_url($ev_url) . '" target="_blank" rel="noopener">🔗 Page publique</a>';
-            /* Lien Action Populaire (inscription) si renseigné */
             $ap_url = (string) get_post_meta($p->ID, '_lfi_evt_ap_url', true);
             if ($ap_url) echo '<a class="btn-ghost" href="' . esc_url($ap_url) . '" target="_blank" rel="noopener">📣 Action Populaire</a>';
-            /* Partage réseaux sociaux */
             $u = rawurlencode($ev_url);
             $t = rawurlencode($ev_title . ' — GA LFI Nantes Sud');
             echo '<a class="btn-ghost" href="https://www.facebook.com/sharer/sharer.php?u=' . $u . '" target="_blank" rel="noopener">📘 Facebook</a>';
@@ -2491,7 +2507,6 @@ function lfi_nct_app_view_evenements() {
             echo '<a class="btn-ghost" href="https://t.me/share/url?url=' . $u . '&text=' . $t . '" target="_blank" rel="noopener">✈️ Telegram</a>';
             echo '<a class="btn-ghost" href="https://twitter.com/intent/tweet?text=' . $t . '&url=' . $u . '" target="_blank" rel="noopener">𝕏 X</a>';
             if (function_exists('lfi_nct_copy_button')) echo lfi_nct_copy_button($ev_url, '🔗 Copier le lien');
-            /* Outils d'inscription (admins) : flyer + QR, diffusion SMS, inscrit·es. */
             if ($can_edit) {
                 echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('flyer', ['event' => $p->ID])) . '">🖨 Flyer + QR</a>';
                 if (!$ev_past) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-sms', ['event' => $p->ID])) . '">📱 Diffuser SMS</a>';
@@ -2500,8 +2515,27 @@ function lfi_nct_app_view_evenements() {
             }
             echo '</div>';
             echo '</li>';
+        };
+
+        /* --- À venir (du plus proche au plus loin) --- */
+        echo '<div class="lfi-app-help" style="margin:0 0 8px;font-weight:700">📅 À venir (' . count($upcoming) . ')</div>';
+        if ($upcoming) {
+            echo '<ul class="lfi-app-list">';
+            foreach ($upcoming as $row) $render_card($row['p'], false);
+            echo '</ul>';
+        } else {
+            echo '<div class="lfi-app-empty">Aucun événement à venir.</div>';
         }
-        echo '</ul>';
+
+        /* --- Passés (à part, repliés, du plus récent au plus ancien) --- */
+        if ($past) {
+            echo '<details style="margin-top:16px">';
+            echo '<summary style="cursor:pointer;font-weight:700;color:#666;padding:6px 0">🕓 Événements passés (' . count($past) . ')</summary>';
+            echo '<ul class="lfi-app-list" style="margin-top:8px;opacity:.85">';
+            foreach ($past as $row) $render_card($row['p'], true);
+            echo '</ul>';
+            echo '</details>';
+        }
     }
     lfi_nct_app_screen_close();
 }
