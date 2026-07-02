@@ -1280,6 +1280,11 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</form>';
         echo '</details>';
 
+        /* === RÉPONSES À ENVOYER (générées, prêtes → bouton Gmail) === */
+        if (function_exists('lfi_nct_render_dossier_replies')) {
+            lfi_nct_render_dossier_replies($row);
+        }
+
         /* === CHIFFRAGE DU PRÉJUDICE === */
         echo '<h3 style="margin:22px 0 6px;color:#c8102e">💶 Chiffrage du préjudice</h3>';
         $prej = (is_array($logs) && !empty($logs['prejudice'])) ? $logs['prejudice'] : null;

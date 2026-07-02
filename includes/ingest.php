@@ -76,7 +76,78 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_event_update',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/dossier-reply-set', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_reply_set',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
 });
+
+/** Dépose une RÉPONSE PROPOSÉE (psy+architecte) dans un dossier. */
+function lfi_nct_ingest_rest_reply_set($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $id = (int) $request->get_param('dossier_id');
+    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id)) : null;
+    if (!$row) return new WP_REST_Response(['ok' => false, 'error' => 'dossier_introuvable'], 404);
+    $to      = sanitize_text_field((string) $request->get_param('to'));
+    $subject = sanitize_text_field((string) $request->get_param('subject'));
+    $body    = sanitize_textarea_field(wp_check_invalid_utf8((string) $request->get_param('body')));
+    if ($to === '' || $body === '') return new WP_REST_Response(['ok' => false, 'error' => 'to_ou_body_vide'], 400);
+    $notes = json_decode($row->notes ?? '', true);
+    if (!is_array($notes)) $notes = [];
+    $notes['replies'] = isset($notes['replies']) && is_array($notes['replies']) ? $notes['replies'] : [];
+    $notes['replies'][] = [
+        'to'      => $to,
+        'subject' => $subject,
+        'body'    => $body,
+        'objet'   => sanitize_text_field((string) $request->get_param('ref')), /* à quel email on répond */
+        'date'    => wp_date('Y-m-d'),
+        'src'     => 'claude',
+    ];
+    $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => $id]);
+    return new WP_REST_Response(['ok' => true, 'count' => count($notes['replies'])], 200);
+}
+
+/** Lien de composition Gmail pré-rempli (ouvre Gmail avec la réponse). */
+function lfi_nct_gmail_compose_url($to, $subject, $body) {
+    return 'https://mail.google.com/mail/?view=cm&fs=1'
+        . '&to=' . rawurlencode($to)
+        . '&su=' . rawurlencode($subject)
+        . '&body=' . rawurlencode($body);
+}
+
+/** Rendu de la section « Réponses à envoyer » (validées → bouton Gmail). */
+function lfi_nct_render_dossier_replies($row) {
+    $notes   = json_decode($row->notes ?? '', true);
+    $replies = (is_array($notes) && !empty($notes['replies'])) ? $notes['replies'] : [];
+    echo '<h3 id="sec-reponses" style="margin:22px 0 6px;color:#c8102e">✉️ Réponses à envoyer (prêtes)</h3>';
+    if (empty($replies)) {
+        echo '<div class="lfi-app-help">Quand un email arrive, le psy et l\'architecte préparent ici une réponse. Tu la relis, puis tu cliques « Ouvrir dans Gmail » : Gmail s\'ouvre avec la réponse pré-remplie, tu n\'as plus qu\'à envoyer.</div>';
+        return;
+    }
+    echo '<ul class="lfi-app-list">';
+    foreach (array_reverse($replies, true) as $i => $r) {
+        $to  = (string) ($r['to'] ?? '');
+        $sub = (string) ($r['subject'] ?? '');
+        $bod = (string) ($r['body'] ?? '');
+        $url = lfi_nct_gmail_compose_url($to, $sub, $bod);
+        echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
+        echo '<div class="head"><div class="who">✉️ Réponse prête</div>';
+        echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($r['date'] ?? '') . '</div></div>';
+        echo '<div class="meta">';
+        if ($to)  echo '<span class="meta-chip">À : ' . esc_html($to) . '</span>';
+        if (!empty($r['objet'])) echo '<span class="meta-chip">↩︎ ' . esc_html($r['objet']) . '</span>';
+        echo '</div>';
+        if ($sub) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($sub) . '</div>';
+        echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire la réponse</summary>'
+           . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
+        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url($url) . '" target="_blank" rel="noopener">✅ Valider et ouvrir dans Gmail</a></div>';
+        echo '<div class="lfi-app-help" style="margin-top:4px"><small>Gmail s\'ouvre avec la réponse déjà écrite — vérifie et appuie sur Envoyer.</small></div>';
+        echo '</li>';
+    }
+    echo '</ul>';
+}
 
 /** Met à jour un événement existant (ex : attacher le lien Action Populaire). */
 function lfi_nct_ingest_rest_event_update($request) {
