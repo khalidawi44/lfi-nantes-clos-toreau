@@ -61,7 +61,34 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_list',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/evenement', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_event',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
 });
+
+/** Crée un événement à distance (clé d'intégration). */
+function lfi_nct_ingest_rest_event($request) {
+    $title = sanitize_text_field((string) $request->get_param('titre'));
+    if ($title === '') return new WP_REST_Response(['ok' => false, 'error' => 'titre_manquant'], 400);
+    $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+    $pid = wp_insert_post([
+        'post_type'    => $cpt,
+        'post_status'  => 'publish',
+        'post_title'   => $title,
+        'post_content' => wp_kses_post((string) $request->get_param('description')),
+    ], true);
+    if (is_wp_error($pid) || !$pid) return new WP_REST_Response(['ok' => false, 'error' => 'creation_impossible'], 500);
+    update_post_meta($pid, '_ag_event_date',  sanitize_text_field((string) $request->get_param('date')));
+    update_post_meta($pid, '_ag_event_time',  sanitize_text_field((string) $request->get_param('heure')));
+    update_post_meta($pid, '_ag_event_place', sanitize_text_field((string) $request->get_param('lieu')));
+    update_post_meta($pid, '_ag_event_city',  sanitize_text_field((string) $request->get_param('ville')));
+    $ga = sanitize_text_field((string) $request->get_param('ga'));
+    update_post_meta($pid, '_lfi_evt_ga', $ga !== '' ? $ga : 'clos-toreau');
+    update_post_meta($pid, '_lfi_evt_internal', 1);
+    return new WP_REST_Response(['ok' => true, 'id' => (int) $pid, 'url' => get_permalink($pid)], 200);
+}
 
 /** Authentification : en-tête X-LFI-Key === clé d'intégration. */
 function lfi_nct_ingest_rest_auth($request) {
