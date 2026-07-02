@@ -171,6 +171,85 @@ function lfi_nct_app_view_assistant() {
     lfi_nct_app_screen_close();
 }
 
+/* ============================================================== *
+ *  ROBOT CÔTÉ UTILISATEUR·RICE (locataires, visiteurs) — route     *
+ *  publique « aide ». Objectif : aider sur le problème ET, EN      *
+ *  PRIORITÉ, faire prendre contact avec nous.                      *
+ * ============================================================== */
+function lfi_nct_app_view_aide() {
+    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+
+    /* Points de contact (priorité). */
+    $tel     = 'tel:+33623526074';
+    $survey  = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+    $contact = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('signer', $survey) : $survey;
+    $rdv     = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('rendez-vous', $contact) : $contact;
+
+    lfi_nct_app_screen_open('🤖 On peut t\'aider', 'Dis-nous ton problème de logement — on t\'accompagne, gratuitement');
+
+    /* --- CTA PRIORITAIRE : nous contacter --- */
+    echo '<div class="lfi-app-card" style="border:2px solid #c8102e">';
+    echo '<div style="font-weight:800;color:#c8102e;font-size:1.05em;margin-bottom:6px">📞 Être accompagné·e gratuitement</div>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px">Un problème dans ton logement ? Ne reste pas seul·e. On t\'aide à faire valoir tes droits, pas à pas.</div>';
+    echo '<div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-primary big" href="' . esc_url($contact) . '">✍️ Nous écrire / demander de l\'aide</a>';
+    echo '<a class="btn-ghost" href="' . esc_attr($tel) . '">📞 Appeler</a>';
+    echo '<a class="btn-ghost" href="' . esc_url($rdv) . '">📅 Prendre rendez-vous</a>';
+    echo '</div></div>';
+
+    /* --- Recherche du problème --- */
+    echo '<form method="get" class="lfi-app-searchbar" style="margin:12px 0 8px">';
+    echo '<input type="hidden" name="vue" value="aide">';
+    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Décris ton problème : moisissures, chauffage, punaises, loyer…">';
+    echo '<button type="submit">🔎</button>';
+    echo '</form>';
+
+    if ($q === '') {
+        echo '<div class="lfi-app-filter-chips">';
+        foreach (['moisissures' => '🌫 Moisissures', 'chauffage' => '🥶 Chauffage / eau chaude', 'punaises' => '🐜 Nuisibles', 'électricité' => '⚡ Électricité', 'insécurité' => '🚨 Insécurité', 'loyer' => '💶 Loyer / charges'] as $ex => $lab) {
+            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('aide', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
+        }
+        echo '</div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
+
+    $ql = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
+    $has = function ($needles) use ($ql) { foreach ((array) $needles as $n) if (strpos($ql, $n) !== false) return true; return false; };
+
+    $titre = '💬 Ta situation'; $texte = '';
+    if ($has(['moisiss', 'humidit', 'infiltrat', 'condensation'])) {
+        $titre = '🌫 Moisissures / humidité';
+        $texte = 'Ton logement doit être <strong>décent et sain</strong> (loi n° 89-462, art. 6 ; décret 2002-120). Les moisissures liées au bâti sont à la charge du <strong>bailleur</strong>. <br><strong>Première action :</strong> signale-le <strong>par écrit</strong> au bailleur et prends des <strong>photos datées</strong>. On rédige la lettre avec toi et on suit les délais.';
+    } elseif ($has(['chauff', 'eau chaude', 'froid', 'radiateur'])) {
+        $titre = '🥶 Chauffage / eau chaude';
+        $texte = 'Le bailleur doit garantir un <strong>chauffage et une eau chaude</strong> qui fonctionnent. Une panne durable, surtout l\'hiver ou avec des enfants, est une <strong>urgence</strong>. On t\'aide à le mettre en demeure rapidement.';
+    } elseif ($has(['punais', 'cafard', 'blatte', 'rat', 'souris', 'nuisib', 'cafr'])) {
+        $titre = '🐜 Nuisibles';
+        $texte = 'Un logement décent doit être <strong>exempt de nuisibles</strong>. Selon les cas, le traitement incombe au bailleur. Ne paie pas seul·e un traitement coûteux sans nous en parler — on t\'oriente.';
+    } elseif ($has(['électri', 'electri', 'prise', 'disjonct', 'court-circuit'])) {
+        $titre = '⚡ Électricité';
+        $texte = 'Une installation électrique <strong>dangereuse</strong> met ta sécurité en jeu : le bailleur doit la remettre aux normes. C\'est à traiter en priorité.';
+    } elseif ($has(['insécur', 'insecur', 'partie commune', 'parties communes', 'ascenseur', 'porte', 'serrure'])) {
+        $titre = '🚨 Sécurité / parties communes';
+        $texte = 'L\'entretien des <strong>parties communes</strong> et la sécurité de l\'immeuble relèvent du bailleur. Si ça dure, un signalement collectif est souvent plus efficace — on peut t\'aider à mobiliser tes voisin·es.';
+    } elseif ($has(['loyer', 'charge', 'expuls', 'impayé', 'impaye', 'apl', 'caf'])) {
+        $titre = '💶 Loyer / charges / expulsion';
+        $texte = 'Selon ta situation, il existe des <strong>recours et des aides</strong> (CAF, ADIL 44, commission de conciliation). Ne laisse pas traîner : plus tôt on agit, mieux c\'est. Contacte-nous, on t\'oriente.';
+    } else {
+        $texte = 'On n\'a pas de réponse toute prête, mais on peut t\'aider. <strong>Le mieux : nous contacter</strong> (ci-dessus). On regarde ta situation avec toi.';
+    }
+
+    echo '<div class="lfi-app-card"><div class="head"><div class="who">' . $titre . '</div></div><div style="line-height:1.55;margin-top:6px">' . $texte . '</div>';
+    echo '<div class="row-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-primary" href="' . esc_url($contact) . '">✍️ Être accompagné·e</a>';
+    echo '<a class="btn-ghost" href="' . esc_attr($tel) . '">📞 Appeler</a>';
+    echo '</div></div>';
+    echo '<div class="lfi-app-help" style="margin-top:8px"><small>Ceci est une première orientation, pas un avis juridique. On t\'accompagne pour la suite.</small></div>';
+
+    lfi_nct_app_screen_close(false);
+}
+
 /** Carte d'un locataire (liens dossier / note avocat / récap NMH). */
 function lfi_nct_robot_render_dossier_card($uid, $name, $adresse) {
     echo '<div class="lfi-app-card"><div class="head"><div class="who">🗂 ' . esc_html($name ?: ('Locataire #' . (int) $uid)) . '</div></div>';

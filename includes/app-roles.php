@@ -685,6 +685,7 @@ function lfi_nct_app_view_ga_dashboard() {
     $tiles = [
         ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
+        ['🤖', 'Aide & contact',            'Un problème ? On t\'accompagne',      lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
     ];
@@ -991,6 +992,7 @@ function lfi_nct_app_view_tenant_dashboard() {
     }
 
     $tiles = [
+        ['🤖', 'Aide & contact',    'Un problème ? On vous accompagne', lfi_nct_app_url('aide')],
         ['📲', 'Installer l\'app',  'iPhone / Android · permissions', lfi_nct_app_url('installer')],
         ['📅', 'Mes rendez-vous',   'Agenda avec le GA',              lfi_nct_app_url('mes-rdv')],
         ['📷', 'Envoyer une photo', 'Documenter votre logement',      lfi_nct_app_url('envoyer-photo')],
