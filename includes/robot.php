@@ -8,11 +8,16 @@
  * — STRICTEMENT cloisonnée au GA courant — puis renvoie le bon document /
  * les bons liens. Il ne modifie jamais rien (pas de write, pas de code).
  *
+ * L'assistant s'ouvre dans une POPUP de discussion (chat) sans changer de
+ * page — voir lfi_nct_app_render_assistant_button() dans app.php. La popup
+ * appelle l'endpoint AJAX lfi_nct_robot_ajax(), qui réutilise exactement la
+ * même logique de réponse que les vues plein écran ci-dessous.
+ *
  * Étape 2 (plus tard) : brancher l'IA Claude par-dessus pour le langage libre.
  */
 if (!defined('ABSPATH')) exit;
 
-/** Peut utiliser le robot : admin du GA ou super-admin. */
+/** Peut utiliser le robot « admin » : admin du GA ou super-admin. */
 function lfi_nct_robot_can() {
     return function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
 }
@@ -32,35 +37,67 @@ function lfi_nct_robot_find_response_by_ref($ref) {
     return 0;
 }
 
-/* ============================================================== *
- *  VUE : Robot assistant                                          *
- * ============================================================== */
-function lfi_nct_app_view_assistant() {
-    if (!lfi_nct_robot_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
-    global $wpdb;
-    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+/** Points de contact prioritaires (côté utilisateur·rice). */
+function lfi_nct_robot_public_contacts() {
+    $tel     = 'tel:+33623526074';
+    $survey  = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+    $contact = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('signer', $survey) : $survey;
+    $rdv     = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('rendez-vous', $contact) : $contact;
+    return ['tel' => $tel, 'contact' => $contact, 'rdv' => $rdv];
+}
 
-    lfi_nct_app_screen_open('🤖 Assistant', 'Demande-moi un dossier, une enquête, des stats, un contact…');
-
-    /* Barre de recherche. */
-    echo '<form method="get" class="lfi-app-searchbar" style="margin-bottom:10px">';
-    echo '<input type="hidden" name="vue" value="assistant">';
-    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Ex : dossier locataire 27 · enquête RE01 · stats · contacts NMH">';
-    echo '<button type="submit">🔎</button>';
-    echo '</form>';
-
-    /* Suggestions rapides. */
-    if ($q === '') {
-        echo '<div class="lfi-app-help">Tape ce que tu veux, en langage simple. Exemples :</div>';
-        echo '<div class="lfi-app-filter-chips">';
-        foreach (['stats' => '📊 Stats', 'carte' => '🗺️ Carte', 'contacts NMH' => '☎️ Contacts NMH', 'que faire moisissures' => '📋 Que faire ?', 'enquêtes' => '🏠 Enquêtes', 'locataires' => '🗂 Locataires'] as $ex => $lab) {
-            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('assistant', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
-        }
-        echo '</div>';
-        echo '<div class="lfi-app-help" style="margin-top:10px;background:#f7f7f7"><small>🔒 L\'assistant lit seulement les données de <strong>ton</strong> groupe d\'action, ne modifie rien, et te renvoie les documents (dossiers, récapitulatifs, stats).</small></div>';
-        lfi_nct_app_screen_close();
-        return;
+/** Puces de suggestions rapides (chat + plein écran). */
+function lfi_nct_robot_chips($is_admin) {
+    if ($is_admin) {
+        return [
+            'stats'                 => '📊 Stats',
+            'carte'                 => '🗺️ Carte',
+            'contacts NMH'          => '☎️ Contacts NMH',
+            'que faire moisissures' => '📋 Que faire ?',
+            'enquêtes'              => '🏠 Enquêtes',
+            'locataires'            => '🗂 Locataires',
+        ];
     }
+    return [
+        'moisissures' => '🌫 Moisissures',
+        'chauffage'   => '🥶 Chauffage / eau chaude',
+        'punaises'    => '🐜 Nuisibles',
+        'électricité' => '⚡ Électricité',
+        'insécurité'  => '🚨 Insécurité',
+        'loyer'       => '💶 Loyer / charges',
+    ];
+}
+
+/** Message d'accueil de la popup (première bulle). */
+function lfi_nct_robot_welcome_html($is_admin) {
+    ob_start();
+    if ($is_admin) {
+        echo '<div class="lfi-app-help" style="margin:0">👋 Dis-moi ce que tu cherches, en langage simple : un dossier, une enquête, des stats, un contact…</div>';
+        echo '<div class="lfi-app-help" style="margin-top:8px;background:#f7f7f7"><small>🔒 Je lis seulement les données de <strong>ton</strong> groupe d\'action, je ne modifie rien.</small></div>';
+    } else {
+        $c = lfi_nct_robot_public_contacts();
+        echo '<div style="font-weight:800;color:#c8102e;margin-bottom:6px">📞 Être accompagné·e gratuitement</div>';
+        echo '<div class="lfi-app-help" style="margin:0 0 8px">Un problème dans ton logement ? Ne reste pas seul·e. Dis-moi ce qui se passe, ou contacte-nous directement.</div>';
+        echo '<div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap">';
+        echo '<a class="btn-primary" href="' . esc_url($c['contact']) . '">✍️ Nous écrire</a>';
+        echo '<a class="btn-ghost" href="' . esc_attr($c['tel']) . '">📞 Appeler</a>';
+        echo '<a class="btn-ghost" href="' . esc_url($c['rdv']) . '">📅 Rendez-vous</a>';
+        echo '</div>';
+    }
+    return ob_get_clean();
+}
+
+/* ============================================================== *
+ *  RÉPONSE ADMIN (langage simple → cartes/liens, cloisonné GA)    *
+ *  Réutilisée par la vue plein écran ET la popup AJAX.            *
+ * ============================================================== */
+function lfi_nct_robot_answer_admin_html($q) {
+    if (!lfi_nct_robot_can()) return '';
+    global $wpdb;
+    $q = trim((string) $q);
+    if ($q === '') return lfi_nct_robot_welcome_html(true);
+
+    ob_start();
 
     $ql = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
     $has = function ($needles) use ($ql) {
@@ -168,52 +205,18 @@ function lfi_nct_app_view_assistant() {
         echo '<div class="lfi-app-empty">Je n\'ai pas compris « ' . esc_html($q) . ' ». Essaie : <em>dossier locataire &lt;nom ou n°&gt;</em>, <em>enquête RE01</em>, <em>stats</em>, <em>carte</em>, <em>contacts NMH</em>, <em>que faire pour…</em></div>';
     }
 
-    lfi_nct_app_screen_close();
+    return ob_get_clean();
 }
 
 /* ============================================================== *
- *  ROBOT CÔTÉ UTILISATEUR·RICE (locataires, visiteurs) — route     *
- *  publique « aide ». Objectif : aider sur le problème ET, EN      *
- *  PRIORITÉ, faire prendre contact avec nous.                      *
+ *  RÉPONSE UTILISATEUR·RICE (locataires, visiteurs) — orientation *
+ *  + mise en relation prioritaire. Réutilisée plein écran + popup.*
  * ============================================================== */
-function lfi_nct_app_view_aide() {
-    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+function lfi_nct_robot_answer_public_html($q) {
+    $q = trim((string) $q);
+    if ($q === '') return lfi_nct_robot_welcome_html(false);
 
-    /* Points de contact (priorité). */
-    $tel     = 'tel:+33623526074';
-    $survey  = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
-    $contact = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('signer', $survey) : $survey;
-    $rdv     = function_exists('lfi_nct_page_url') ? lfi_nct_page_url('rendez-vous', $contact) : $contact;
-
-    lfi_nct_app_screen_open('🤖 On peut t\'aider', 'Dis-nous ton problème de logement — on t\'accompagne, gratuitement');
-
-    /* --- CTA PRIORITAIRE : nous contacter --- */
-    echo '<div class="lfi-app-card" style="border:2px solid #c8102e">';
-    echo '<div style="font-weight:800;color:#c8102e;font-size:1.05em;margin-bottom:6px">📞 Être accompagné·e gratuitement</div>';
-    echo '<div class="lfi-app-help" style="margin:0 0 8px">Un problème dans ton logement ? Ne reste pas seul·e. On t\'aide à faire valoir tes droits, pas à pas.</div>';
-    echo '<div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap">';
-    echo '<a class="btn-primary big" href="' . esc_url($contact) . '">✍️ Nous écrire / demander de l\'aide</a>';
-    echo '<a class="btn-ghost" href="' . esc_attr($tel) . '">📞 Appeler</a>';
-    echo '<a class="btn-ghost" href="' . esc_url($rdv) . '">📅 Prendre rendez-vous</a>';
-    echo '</div></div>';
-
-    /* --- Recherche du problème --- */
-    echo '<form method="get" class="lfi-app-searchbar" style="margin:12px 0 8px">';
-    echo '<input type="hidden" name="vue" value="aide">';
-    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Décris ton problème : moisissures, chauffage, punaises, loyer…">';
-    echo '<button type="submit">🔎</button>';
-    echo '</form>';
-
-    if ($q === '') {
-        echo '<div class="lfi-app-filter-chips">';
-        foreach (['moisissures' => '🌫 Moisissures', 'chauffage' => '🥶 Chauffage / eau chaude', 'punaises' => '🐜 Nuisibles', 'électricité' => '⚡ Électricité', 'insécurité' => '🚨 Insécurité', 'loyer' => '💶 Loyer / charges'] as $ex => $lab) {
-            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('aide', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
-        }
-        echo '</div>';
-        lfi_nct_app_screen_close(false);
-        return;
-    }
-
+    $c  = lfi_nct_robot_public_contacts();
     $ql = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
     $has = function ($needles) use ($ql) { foreach ((array) $needles as $n) if (strpos($ql, $n) !== false) return true; return false; };
 
@@ -237,16 +240,105 @@ function lfi_nct_app_view_aide() {
         $titre = '💶 Loyer / charges / expulsion';
         $texte = 'Selon ta situation, il existe des <strong>recours et des aides</strong> (CAF, ADIL 44, commission de conciliation). Ne laisse pas traîner : plus tôt on agit, mieux c\'est. Contacte-nous, on t\'oriente.';
     } else {
-        $texte = 'On n\'a pas de réponse toute prête, mais on peut t\'aider. <strong>Le mieux : nous contacter</strong> (ci-dessus). On regarde ta situation avec toi.';
+        $texte = 'On n\'a pas de réponse toute prête, mais on peut t\'aider. <strong>Le mieux : nous contacter</strong>. On regarde ta situation avec toi.';
     }
 
+    ob_start();
     echo '<div class="lfi-app-card"><div class="head"><div class="who">' . $titre . '</div></div><div style="line-height:1.55;margin-top:6px">' . $texte . '</div>';
     echo '<div class="row-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">';
-    echo '<a class="btn-primary" href="' . esc_url($contact) . '">✍️ Être accompagné·e</a>';
-    echo '<a class="btn-ghost" href="' . esc_attr($tel) . '">📞 Appeler</a>';
+    echo '<a class="btn-primary" href="' . esc_url($c['contact']) . '">✍️ Être accompagné·e</a>';
+    echo '<a class="btn-ghost" href="' . esc_attr($c['tel']) . '">📞 Appeler</a>';
     echo '</div></div>';
     echo '<div class="lfi-app-help" style="margin-top:8px"><small>Ceci est une première orientation, pas un avis juridique. On t\'accompagne pour la suite.</small></div>';
+    return ob_get_clean();
+}
 
+/* ============================================================== *
+ *  ENDPOINT AJAX : appelé par la popup de discussion.            *
+ *  Cloisonné : mêmes fonctions de scope que les vues plein écran.*
+ * ============================================================== */
+add_action('wp_ajax_lfi_nct_robot', 'lfi_nct_robot_ajax');
+add_action('wp_ajax_nopriv_lfi_nct_robot', 'lfi_nct_robot_ajax');
+function lfi_nct_robot_ajax() {
+    check_ajax_referer('lfi_nct_robot', 'nonce');
+    $q = isset($_POST['q']) ? trim(sanitize_text_field(wp_unslash($_POST['q']))) : '';
+    $is_admin = lfi_nct_robot_can();
+    $html = $is_admin ? lfi_nct_robot_answer_admin_html($q) : lfi_nct_robot_answer_public_html($q);
+    if ($html === '' || $html === null) {
+        $html = '<div class="lfi-app-empty">Je n\'ai pas bien compris. Reformule, ou contacte-nous directement.</div>';
+    }
+    wp_send_json_success(['html' => $html, 'admin' => (bool) $is_admin]);
+}
+
+/* ============================================================== *
+ *  VUE PLEIN ÉCRAN : Robot assistant (admin) — repli sans JS.     *
+ * ============================================================== */
+function lfi_nct_app_view_assistant() {
+    if (!lfi_nct_robot_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+
+    lfi_nct_app_screen_open('🤖 Assistant', 'Demande-moi un dossier, une enquête, des stats, un contact…');
+
+    /* Barre de recherche. */
+    echo '<form method="get" class="lfi-app-searchbar" style="margin-bottom:10px">';
+    echo '<input type="hidden" name="vue" value="assistant">';
+    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Ex : dossier locataire 27 · enquête RE01 · stats · contacts NMH">';
+    echo '<button type="submit">🔎</button>';
+    echo '</form>';
+
+    if ($q === '') {
+        echo '<div class="lfi-app-help">Tape ce que tu veux, en langage simple. Exemples :</div>';
+        echo '<div class="lfi-app-filter-chips">';
+        foreach (lfi_nct_robot_chips(true) as $ex => $lab) {
+            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('assistant', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
+        }
+        echo '</div>';
+        echo '<div class="lfi-app-help" style="margin-top:10px;background:#f7f7f7"><small>🔒 L\'assistant lit seulement les données de <strong>ton</strong> groupe d\'action, ne modifie rien, et te renvoie les documents (dossiers, récapitulatifs, stats).</small></div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    echo lfi_nct_robot_answer_admin_html($q);
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  VUE PLEIN ÉCRAN : aide utilisateur·rice — repli sans JS.       *
+ * ============================================================== */
+function lfi_nct_app_view_aide() {
+    $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
+    $c = lfi_nct_robot_public_contacts();
+
+    lfi_nct_app_screen_open('🤖 On peut t\'aider', 'Dis-nous ton problème de logement — on t\'accompagne, gratuitement');
+
+    /* --- CTA PRIORITAIRE : nous contacter --- */
+    echo '<div class="lfi-app-card" style="border:2px solid #c8102e">';
+    echo '<div style="font-weight:800;color:#c8102e;font-size:1.05em;margin-bottom:6px">📞 Être accompagné·e gratuitement</div>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px">Un problème dans ton logement ? Ne reste pas seul·e. On t\'aide à faire valoir tes droits, pas à pas.</div>';
+    echo '<div class="row-actions" style="display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-primary big" href="' . esc_url($c['contact']) . '">✍️ Nous écrire / demander de l\'aide</a>';
+    echo '<a class="btn-ghost" href="' . esc_attr($c['tel']) . '">📞 Appeler</a>';
+    echo '<a class="btn-ghost" href="' . esc_url($c['rdv']) . '">📅 Prendre rendez-vous</a>';
+    echo '</div></div>';
+
+    /* --- Recherche du problème --- */
+    echo '<form method="get" class="lfi-app-searchbar" style="margin:12px 0 8px">';
+    echo '<input type="hidden" name="vue" value="aide">';
+    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Décris ton problème : moisissures, chauffage, punaises, loyer…">';
+    echo '<button type="submit">🔎</button>';
+    echo '</form>';
+
+    if ($q === '') {
+        echo '<div class="lfi-app-filter-chips">';
+        foreach (lfi_nct_robot_chips(false) as $ex => $lab) {
+            echo '<a class="fc" href="' . esc_url(lfi_nct_app_url('aide', ['q' => $ex])) . '">' . esc_html($lab) . '</a>';
+        }
+        echo '</div>';
+        lfi_nct_app_screen_close(false);
+        return;
+    }
+
+    echo lfi_nct_robot_answer_public_html($q);
     lfi_nct_app_screen_close(false);
 }
 

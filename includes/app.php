@@ -1709,27 +1709,53 @@ function lfi_nct_app_render_emergency_button() {
     <?php
 }
 
-/* Bouton fixe « Assistant » (robot) sur toutes les pages de l'app.
+/* Bouton fixe « Assistant » (robot) + POPUP de discussion (chat).
  * Toujours visible, en bas à gauche (ne chevauche pas le bouton Urgence
- * en bas à droite). Contextuel :
- *   - admin de GA / super-admin  → ouvre le robot admin (vue « assistant »),
- *   - locataire / visiteur       → ouvre l'aide & contact (vue « aide », publique). */
+ * en bas à droite). Un clic ouvre une fenêtre de discussion PAR-DESSUS la
+ * page (aucun changement de page). Contextuel :
+ *   - admin de GA / super-admin  → robot admin (dossiers, enquêtes, stats… cloisonné),
+ *   - locataire / visiteur       → aide & contact (orientation + mise en relation).
+ * Repli sans JavaScript : le bouton reste un lien vers la vue plein écran. */
 function lfi_nct_app_render_assistant_button() {
     $is_admin = function_exists('lfi_nct_robot_can') && lfi_nct_robot_can();
-    if ($is_admin) {
-        $href  = lfi_nct_app_url('assistant');
-        $label = 'Assistant';
-        $aria  = 'Ouvrir l\'assistant du groupe d\'action';
-    } else {
-        $href  = lfi_nct_app_url('aide');
-        $label = 'Aide';
-        $aria  = 'Aide et contact — être accompagné·e';
-    }
+    $href  = $is_admin ? lfi_nct_app_url('assistant') : lfi_nct_app_url('aide');
+    $label = $is_admin ? 'Assistant' : 'Aide';
+    $aria  = $is_admin ? 'Ouvrir l\'assistant du groupe d\'action' : 'Aide et contact — être accompagné·e';
+    $titre = $is_admin ? '🤖 Assistant' : '🤖 On peut t\'aider';
+    $ph    = $is_admin ? 'Ex : dossier locataire 27 · enquête RE01 · stats…' : 'Décris ton problème : moisissures, chauffage, loyer…';
+
+    $chips   = function_exists('lfi_nct_robot_chips') ? lfi_nct_robot_chips($is_admin) : [];
+    $welcome = function_exists('lfi_nct_robot_welcome_html') ? lfi_nct_robot_welcome_html($is_admin) : '';
+
+    $cfg = [
+        'ajax'    => admin_url('admin-ajax.php'),
+        'nonce'   => wp_create_nonce('lfi_nct_robot'),
+        'admin'   => (bool) $is_admin,
+        'welcome' => $welcome,
+        'chips'   => $chips,
+        'fallback'=> $href,
+    ];
     ?>
-    <a class="lfi-app-assistant" href="<?php echo esc_url($href); ?>" aria-label="<?php echo esc_attr($aria); ?>">
+    <a class="lfi-app-assistant" id="lfiRobotFab" href="<?php echo esc_url($href); ?>" aria-label="<?php echo esc_attr($aria); ?>" aria-haspopup="dialog">
         <span class="ico">🤖</span>
         <span class="lbl"><?php echo esc_html($label); ?></span>
     </a>
+
+    <div class="lfi-robot-overlay" id="lfiRobotOverlay" hidden>
+        <div class="lfi-robot-panel" role="dialog" aria-modal="true" aria-label="<?php echo esc_attr($titre); ?>">
+            <div class="lfi-robot-head">
+                <span class="t"><?php echo esc_html($titre); ?></span>
+                <button type="button" class="lfi-robot-close" id="lfiRobotClose" aria-label="Fermer">✕</button>
+            </div>
+            <div class="lfi-robot-msgs" id="lfiRobotMsgs" aria-live="polite"></div>
+            <div class="lfi-robot-chips" id="lfiRobotChips"></div>
+            <form class="lfi-robot-input" id="lfiRobotForm">
+                <input type="text" id="lfiRobotQ" autocomplete="off" placeholder="<?php echo esc_attr($ph); ?>" aria-label="Votre message">
+                <button type="submit" aria-label="Envoyer">➤</button>
+            </form>
+        </div>
+    </div>
+
     <style>
     .lfi-app-assistant {
         position: fixed; bottom: 20px; left: 16px;
@@ -1743,9 +1769,7 @@ function lfi_nct_app_render_assistant_button() {
         display: inline-flex; align-items: center; gap: 8px;
         transition: transform .12s ease;
     }
-    .lfi-app-assistant:hover, .lfi-app-assistant:focus {
-        color: #fff; transform: scale(1.05);
-    }
+    .lfi-app-assistant:hover, .lfi-app-assistant:focus { color: #fff; transform: scale(1.05); }
     .lfi-app-assistant:active { background: #3a2367; transform: scale(.98); }
     .lfi-app-assistant .ico { font-size: 1.2em; }
     .lfi-app-assistant .lbl { white-space: nowrap; }
@@ -1753,10 +1777,155 @@ function lfi_nct_app_render_assistant_button() {
         .lfi-app-assistant .lbl { display: none; }
         .lfi-app-assistant { padding: 14px; }
     }
-    @media print {
-        .lfi-app-assistant { display: none !important; }
+    @media print { .lfi-app-assistant, .lfi-robot-overlay { display: none !important; } }
+
+    /* --- Popup de discussion --- */
+    .lfi-robot-overlay {
+        position: fixed; inset: 0; z-index: 100000;
+        background: rgba(20,12,40,.45);
+        display: flex; align-items: flex-end; justify-content: flex-start;
+        padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    }
+    .lfi-robot-overlay[hidden] { display: none; }
+    .lfi-robot-panel {
+        width: 380px; max-width: calc(100vw - 24px);
+        height: 560px; max-height: calc(100vh - 24px);
+        margin: 12px; background: #fff; border-radius: 18px;
+        box-shadow: 0 18px 50px rgba(0,0,0,.35);
+        display: flex; flex-direction: column; overflow: hidden;
+        animation: lfiRobotIn .18s ease;
+    }
+    @keyframes lfiRobotIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+    .lfi-robot-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; background: #4b2e83; color: #fff;
+    }
+    .lfi-robot-head .t { font-weight: 800; font-size: 1.02em; }
+    .lfi-robot-close {
+        background: rgba(255,255,255,.18); color: #fff; border: 0;
+        width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
+        font-size: .95em; line-height: 1;
+    }
+    .lfi-robot-close:hover { background: rgba(255,255,255,.32); }
+    .lfi-robot-msgs {
+        flex: 1; overflow-y: auto; padding: 14px;
+        background: #f4f2f8; display: flex; flex-direction: column; gap: 10px;
+    }
+    .lfi-robot-msg { max-width: 92%; }
+    .lfi-robot-msg.user {
+        align-self: flex-end; background: #4b2e83; color: #fff;
+        padding: 9px 13px; border-radius: 16px 16px 4px 16px; font-size: .93em;
+    }
+    .lfi-robot-msg.bot {
+        align-self: flex-start; background: #fff; color: #1c1c28;
+        padding: 12px 13px; border-radius: 16px 16px 16px 4px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.08); font-size: .93em; line-height: 1.5;
+    }
+    .lfi-robot-msg.bot .lfi-app-card { box-shadow: none; border: 1px solid #ece8f4; margin: 0; }
+    .lfi-robot-msg.bot a.btn-primary, .lfi-robot-msg.bot a.btn-ghost { display: inline-flex; }
+    .lfi-robot-msg.typing { color: #7a7590; font-style: italic; }
+    .lfi-robot-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; background: #f4f2f8; }
+    .lfi-robot-chips button {
+        background: #efeaf7; color: #4b2e83; border: 1px solid #dcd2ee;
+        padding: 6px 11px; border-radius: 999px; font-size: .82em; cursor: pointer;
+        font-weight: 600;
+    }
+    .lfi-robot-chips button:hover { background: #e3d8f5; }
+    .lfi-robot-input { display: flex; gap: 8px; padding: 10px 12px 12px; background: #f4f2f8; }
+    .lfi-robot-input input {
+        flex: 1; border: 1px solid #d6cfe6; border-radius: 999px;
+        padding: 11px 15px; font-size: .95em; outline: none; background: #fff;
+    }
+    .lfi-robot-input input:focus { border-color: #4b2e83; }
+    .lfi-robot-input button {
+        background: #4b2e83; color: #fff; border: 0; border-radius: 999px;
+        width: 44px; height: 44px; cursor: pointer; font-size: 1.05em; flex: 0 0 auto;
+    }
+    .lfi-robot-input button:hover { background: #3a2367; }
+    @media (max-width: 480px) {
+        .lfi-robot-overlay { align-items: stretch; justify-content: stretch; }
+        .lfi-robot-panel { width: 100%; height: 100%; max-width: 100%; max-height: 100%; margin: 0; border-radius: 0; }
     }
     </style>
+
+    <script>
+    (function () {
+        var cfg = <?php echo wp_json_encode($cfg); ?>;
+        var fab = document.getElementById('lfiRobotFab');
+        var ov  = document.getElementById('lfiRobotOverlay');
+        if (!fab || !ov) return;
+        var panel = ov.querySelector('.lfi-robot-panel');
+        var msgs  = document.getElementById('lfiRobotMsgs');
+        var chips = document.getElementById('lfiRobotChips');
+        var form  = document.getElementById('lfiRobotForm');
+        var input = document.getElementById('lfiRobotQ');
+        var started = false, busy = false;
+
+        function scrollDown() { msgs.scrollTop = msgs.scrollHeight; }
+
+        function addBubble(cls, html) {
+            var d = document.createElement('div');
+            d.className = 'lfi-robot-msg ' + cls;
+            if (cls === 'user') { d.textContent = html; } else { d.innerHTML = html; }
+            msgs.appendChild(d); scrollDown();
+            return d;
+        }
+
+        function renderChips() {
+            chips.innerHTML = '';
+            var list = cfg.chips || {};
+            Object.keys(list).forEach(function (key) {
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = list[key];
+                b.addEventListener('click', function () { send(key); });
+                chips.appendChild(b);
+            });
+        }
+
+        function open() {
+            ov.hidden = false;
+            if (!started) {
+                started = true;
+                if (cfg.welcome) addBubble('bot', cfg.welcome);
+                renderChips();
+            }
+            setTimeout(function () { input.focus(); }, 60);
+        }
+        function close() { ov.hidden = true; }
+
+        function send(q) {
+            q = (q || '').trim();
+            if (!q || busy) return;
+            addBubble('user', q);
+            input.value = '';
+            busy = true;
+            var typing = addBubble('bot typing', 'Un instant…');
+            var body = 'action=lfi_nct_robot&nonce=' + encodeURIComponent(cfg.nonce) + '&q=' + encodeURIComponent(q);
+            fetch(cfg.ajax, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                credentials: 'same-origin',
+                body: body
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                typing.remove();
+                var html = (j && j.success && j.data && j.data.html) ? j.data.html
+                         : '<div class="lfi-app-empty">Petit souci de connexion. Réessaie, ou contacte-nous directement.</div>';
+                addBubble('bot', html);
+            }).catch(function () {
+                typing.remove();
+                addBubble('bot', '<div class="lfi-app-empty">Petit souci de connexion. Réessaie, ou contacte-nous directement.</div>');
+            }).finally(function () { busy = false; scrollDown(); });
+        }
+
+        fab.addEventListener('click', function (e) { e.preventDefault(); open(); });
+        document.getElementById('lfiRobotClose').addEventListener('click', close);
+        ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) close(); });
+        form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
+    })();
+    </script>
     <?php
 }
 
