@@ -242,10 +242,17 @@ function lfi_nct_app_view_prejudice() {
         exit;
     }
 
-    /* Préremplissage minimal depuis le dossier (ce qui existe réellement). */
+    /* Préremplissage depuis le dossier : d'abord le chiffrage déjà enregistré
+       (rempli automatiquement), sinon quelques indices des constatations. */
     if ($dossier && !$has) {
-        $has_med = trim((string) ($dossier->certificat_medecin ?? '') . (string) ($dossier->certificat_pathologie ?? '')) !== '';
-        if ($has_med) { $p['anxiete'] = 1; }
+        $dnotes = json_decode($dossier->notes ?? '', true);
+        if (is_array($dnotes) && !empty($dnotes['prejudice']['params']) && is_array($dnotes['prejudice']['params'])) {
+            $p = array_merge($dnotes['prejudice']['params'], $p);
+            $has = true; /* on affiche directement le résultat pré-rempli */
+        } else {
+            $has_med = trim((string) ($dossier->certificat_medecin ?? '') . (string) ($dossier->certificat_pathologie ?? '')) !== '';
+            if ($has_med) { $p['anxiete'] = 1; }
+        }
     }
 
     $sub = $dossier ? ('Dossier : ' . trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom)) : 'Punaises de lit — méthode DOUCET c/ NMH · 11 postes';
@@ -402,4 +409,55 @@ function lfi_nct_app_view_prejudice_report() {
     }
     echo '<p style="color:#666;font-size:.85em;margin-top:12px">Document d\'aide au chiffrage — pas un avis juridique. Chaque montant doit être documenté par des pièces et validé par l\'avocat.</p>';
     echo '</div></div></div>';
+}
+
+/* ============================================================== *
+ *  REST : remplir le chiffrage d'un dossier à distance          *
+ *  (clé d'intégration). Montants explicites OU calculés.         *
+ * ============================================================== */
+add_action('rest_api_init', function () {
+    register_rest_route('lfi-nct/v1', '/prejudice-set', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_prej_rest_set',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+});
+function lfi_nct_prej_rest_set($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $id = (int) $request->get_param('dossier_id');
+    $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id)) : null;
+    if (!$row) return new WP_REST_Response(['ok' => false, 'error' => 'dossier_introuvable'], 404);
+
+    $keys = ['annees', 'membres', 'enfants_mineurs', 'enfants_mdph', 'personnes_ald', 'loyer', 'coef',
+        'enfants_scolarises', 'courriels_diffamatoires', 'engagements_contrainte',
+        'p1_souffrances_cotation', 'p1_dft_taux', 'p1_dft_jours', 'p1_agrement', 'p1_esthetique_cotation',
+        'p2_intensite', 'p4_factures', 'p5_factures', 'astreinte_jour', 'astreinte_jours',
+        'photos', 'arrets_5j', 'dermatose', 'anxiete', 'precancereux', 'arret_scolaire', 'decrochage',
+        'redoublement', 'diff_publique', 'diff_recidive', 'contrainte_systemique'];
+    $params = [];
+    foreach ($keys as $k) { $v = $request->get_param($k); if ($v !== null && $v !== '') $params[$k] = $v; }
+
+    $explicit = $request->get_param('amiable');
+    if ($explicit !== null && $explicit !== '') {
+        $prej = [
+            'amiable'  => round((float) $request->get_param('amiable')),
+            'fond_min' => round((float) $request->get_param('fond_min')),
+            'fond_max' => round((float) $request->get_param('fond_max')),
+        ];
+    } else {
+        $r = lfi_nct_prej_compute($params);
+        $prej = ['amiable' => round($r['amiable']), 'fond_min' => round($r['fond_min']), 'fond_max' => round($r['fond_max'])];
+    }
+
+    $notes = json_decode($row->notes ?? '', true);
+    if (!is_array($notes)) $notes = [];
+    $notes['prejudice'] = array_merge($prej, [
+        'date'   => wp_date('Y-m-d'),
+        'params' => $params,
+        'source' => sanitize_text_field((string) $request->get_param('source')),
+        'note'   => sanitize_text_field((string) $request->get_param('note')),
+    ]);
+    $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => $id]);
+    return new WP_REST_Response(['ok' => true, 'prejudice' => $notes['prejudice']], 200);
 }
