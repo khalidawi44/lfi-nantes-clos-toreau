@@ -78,6 +78,24 @@ function lfi_nct_dossier_db_setup() {
     update_option(LFI_NCT_DOSSIER_DBVER_KEY, LFI_NCT_DOSSIER_DBVER_VAL, false);
 }
 
+/* Référent : membre du GA à qui le dossier est confié (partage des tâches). */
+add_action('init', 'lfi_nct_dossier_referent_col', 7);
+function lfi_nct_dossier_referent_col() {
+    if (get_option('lfi_nct_dossier_referent_col') === '1') return;
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    if ($wpdb->get_var("SHOW TABLES LIKE '$t'") === $t
+        && !$wpdb->get_var("SHOW COLUMNS FROM $t LIKE 'referent_user_id'")) {
+        $wpdb->query("ALTER TABLE $t ADD COLUMN referent_user_id BIGINT UNSIGNED DEFAULT NULL");
+    }
+    update_option('lfi_nct_dossier_referent_col', '1', false);
+}
+
+/** Vrai si l'utilisateur courant voit TOUS les dossiers du GA (pas seulement les siens). */
+function lfi_nct_dossier_sees_all() {
+    return current_user_can('manage_options');
+}
+
 /* ============================================================== *
  *  Helpers                                                         *
  * ============================================================== */
@@ -324,11 +342,17 @@ function lfi_nct_app_view_dossiers_juridiques() {
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
     $owner = (int) lfi_nct_dossier_owner_id();
 
+    /* Partage des tâches : un membre non super-admin ne voit QUE les dossiers
+       qui lui sont confiés (référent). Le super-admin voit tout. */
+    $ref_clause = '';
+    if (!lfi_nct_dossier_sees_all()) {
+        $ref_clause = $wpdb->prepare(' AND referent_user_id = %d', get_current_user_id());
+    }
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $t WHERE owner_user_id = %d ORDER BY updated_at DESC LIMIT 200", $owner
+        "SELECT * FROM $t WHERE owner_user_id = %d" . $ref_clause . " ORDER BY updated_at DESC LIMIT 200", $owner
     )) ?: [];
 
-    lfi_nct_app_screen_open('📁 Dossiers juridiques locataires', count($rows) . ' dossier(s)');
+    lfi_nct_app_screen_open('📁 Dossiers juridiques locataires', count($rows) . ' dossier(s)' . (lfi_nct_dossier_sees_all() ? '' : ' · qui me sont confiés'));
 
     echo '<div class="lfi-app-help">';
     echo '<strong>Un dossier juridique par locataire qui le demande.</strong> Tu y consignes tes constats de visite, le certificat médical éventuel, et tu choisis les demandes (travaux urgents, relogement médical, etc.). L\'app génère pour toi les 4 lettres types — mise en demeure NMH, demande de relogement, saisine SCHS, saisine ARS — prêtes à imprimer en LRAR.';
