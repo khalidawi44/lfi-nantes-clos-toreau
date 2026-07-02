@@ -153,8 +153,17 @@ function lfi_nct_central_email() {
     return (string) get_option('lfi_nct_central_email', 'nantessudclostoreau@gmail.com');
 }
 
-/** Lien de composition Gmail pré-rempli (ouvre Gmail avec la réponse). */
+/** Lien qui ouvre l'APPLICATION Gmail (mobile) avec la réponse en brouillon. */
 function lfi_nct_gmail_compose_url($to, $subject, $body, $cc = '') {
+    $url = 'googlegmail:///co?to=' . rawurlencode($to)
+        . '&subject=' . rawurlencode($subject)
+        . '&body=' . rawurlencode($body);
+    if ($cc !== '') $url .= '&cc=' . rawurlencode($cc);
+    return $url;
+}
+
+/** Repli : lien Gmail web (si l'appli n'est pas installée / sur ordinateur). */
+function lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc = '') {
     $url = 'https://mail.google.com/mail/?view=cm&fs=1'
         . '&to=' . rawurlencode($to)
         . '&su=' . rawurlencode($subject)
@@ -194,14 +203,16 @@ function lfi_nct_app_view_a_envoyer() {
             if ($to === '' || $bod === '') continue;
             $n++;
             $cc = ($central && stripos($to, $central) === false) ? $central : '';
-            $url = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
+            $url    = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
+            $urlweb = lfi_nct_gmail_compose_url_web($to, $sub, $bod, $cc);
             echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
             echo '<div class="head"><div class="who">🗂 ' . esc_html($who) . '</div></div>';
             echo '<div class="meta"><span class="meta-chip">À : ' . esc_html($to) . '</span></div>';
             if ($sub) echo '<div class="com"><strong>' . esc_html($sub) . '</strong></div>';
             echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire</summary>'
                . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
-            echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url($url) . '" target="_blank" rel="noopener">✅ Ouvrir dans Gmail et envoyer</a></div>';
+            echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a></div>';
+            echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
             echo '</li>';
         }
     }
@@ -227,7 +238,8 @@ function lfi_nct_render_dossier_replies($row) {
         /* On met l'email principal (hub) en copie : tout reste centralisé. */
         $central = lfi_nct_central_email();
         $cc = ($central && stripos($to, $central) === false) ? $central : '';
-        $url = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
+        $url    = lfi_nct_gmail_compose_url($to, $sub, $bod, $cc);
+        $urlweb = lfi_nct_gmail_compose_url_web($to, $sub, $bod, $cc);
         echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
         echo '<div class="head"><div class="who">✉️ Réponse prête</div>';
         echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($r['date'] ?? '') . '</div></div>';
@@ -238,8 +250,8 @@ function lfi_nct_render_dossier_replies($row) {
         if ($sub) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($sub) . '</div>';
         echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire la réponse</summary>'
            . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
-        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url($url) . '" target="_blank" rel="noopener">✅ Valider et ouvrir dans Gmail</a></div>';
-        echo '<div class="lfi-app-help" style="margin-top:4px"><small>Gmail s\'ouvre avec la réponse déjà écrite — vérifie et appuie sur Envoyer.</small></div>';
+        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a></div>';
+        echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
         echo '</li>';
     }
     echo '</ul>';
