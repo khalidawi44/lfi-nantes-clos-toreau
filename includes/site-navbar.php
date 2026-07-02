@@ -26,8 +26,16 @@ function lfi_nct_render_site_navbar_safe() {
     }
 }
 
+/* URL de connexion (page « mon-compte ») avec repli sur le login WP. */
+function lfi_nct_login_page_url() {
+    return function_exists('lfi_nct_page_url') ? lfi_nct_page_url('mon-compte', wp_login_url()) : wp_login_url();
+}
+/* URL d'inscription (landing app : locataire ou GA). */
+function lfi_nct_register_page_url() {
+    return function_exists('lfi_nct_app_url') ? lfi_nct_app_url('inscription') : home_url('/app/?vue=inscription');
+}
+
 function lfi_nct_render_site_navbar() {
-    if (!is_user_logged_in()) return;
     if (is_admin()) return;
 
     /* Ne pas afficher sur les pages qui ont déjà leur propre interface :
@@ -38,6 +46,12 @@ function lfi_nct_render_site_navbar() {
         if (has_shortcode($post->post_content, 'lfi_nct_survey')) return;
         if (has_shortcode($post->post_content, 'lfi_nct_compte')) return;
         if ($post->post_name === 'mon-compte') return;
+    }
+
+    /* === VISITEUR NON CONNECTÉ : barre « S'inscrire / Se connecter » === */
+    if (!is_user_logged_in()) {
+        lfi_nct_render_site_navbar_loggedout();
+        return;
     }
 
     $u = wp_get_current_user();
@@ -213,6 +227,89 @@ function lfi_nct_render_site_navbar() {
     })();
     </script>
     <?php
+}
+
+/* ============================================================== *
+ *  Barre publique (visiteur non connecté) : S'inscrire / Se        *
+ *  connecter. Sans elle, les personnes déjà inscrites n'ont aucun  *
+ *  lien pour se connecter.                                          *
+ * ============================================================== */
+function lfi_nct_render_site_navbar_loggedout() {
+    $login    = lfi_nct_login_page_url();
+    $register = lfi_nct_register_page_url();
+    ?>
+    <style>
+    .lfi-pub-navbar {
+        position: sticky; top: 0; z-index: 9999;
+        background: linear-gradient(135deg, #c8102e, #a30b25);
+        color: #fff; padding: 7px 12px;
+        display: flex; align-items: center; gap: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .lfi-pub-navbar .lfi-pub-brand {
+        display: inline-flex; align-items: center; gap: 7px;
+        color: #fff; text-decoration: none; font-weight: 800; font-size: 14px;
+        margin-right: auto; min-width: 0;
+    }
+    .lfi-pub-brand .dot {
+        background: #fff; color: #c8102e; width: 26px; height: 26px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center; font-weight: 900; flex-shrink: 0;
+    }
+    .lfi-pub-brand .lfi-pub-brand-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lfi-pub-navbar a.lfi-pub-btn {
+        color: #fff; text-decoration: none; font-weight: 800; font-size: 13.5px;
+        padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+        display: inline-flex; align-items: center; gap: 6px; transition: transform .12s, background .15s;
+    }
+    .lfi-pub-btn.ghost { border: 1.5px solid rgba(255,255,255,.7); }
+    .lfi-pub-btn.ghost:hover { background: rgba(255,255,255,.16); color: #fff; }
+    .lfi-pub-btn.solid { background: #fff; color: #c8102e; }
+    .lfi-pub-btn.solid:hover { transform: scale(1.04); color: #a30b25; }
+    @media (max-width: 480px) {
+        .lfi-pub-brand .lfi-pub-brand-txt { display: none; }
+        .lfi-pub-navbar a.lfi-pub-btn { padding: 8px 12px; font-size: 13px; }
+    }
+    @media print { .lfi-pub-navbar { display: none !important; } }
+    </style>
+    <div class="lfi-pub-navbar" role="navigation" aria-label="Connexion">
+        <a class="lfi-pub-brand" href="<?php echo esc_url(home_url('/')); ?>">
+            <span class="dot">Φ</span><span class="lfi-pub-brand-txt">LFI Nantes Sud — Clos Toreau</span>
+        </a>
+        <a class="lfi-pub-btn ghost" href="<?php echo esc_url($register); ?>">✍️ S'inscrire</a>
+        <a class="lfi-pub-btn solid" href="<?php echo esc_url($login); ?>">🔑 Se connecter</a>
+    </div>
+    <?php
+}
+
+/* ============================================================== *
+ *  Injection dans le MENU du thème : « Se connecter / S'inscrire » *
+ *  (déconnecté) ou « Mon espace / Se déconnecter » (connecté).     *
+ *  Ciblé sur le menu principal (header) pour ne pas polluer le      *
+ *  menu de pied de page.                                            *
+ * ============================================================== */
+add_filter('wp_nav_menu_items', 'lfi_nct_menu_auth_items', 20, 2);
+function lfi_nct_menu_auth_items($items, $args) {
+    if (is_admin()) return $items;
+    /* On ne l'ajoute qu'au menu principal / d'en-tête. */
+    $loc = is_object($args) ? strtolower((string) ($args->theme_location ?? '')) : '';
+    $is_primary = $loc !== '' && (
+        strpos($loc, 'primary') !== false || strpos($loc, 'main') !== false ||
+        strpos($loc, 'header')  !== false || strpos($loc, 'top')  !== false ||
+        $loc === 'menu-1'
+    );
+    if (!$is_primary) return $items;
+
+    if (is_user_logged_in()) {
+        $space  = function_exists('lfi_nct_app_url') ? lfi_nct_app_url('') : home_url('/app/');
+        $logout = wp_logout_url(home_url('/'));
+        $items .= '<li class="menu-item lfi-menu-auth"><a href="' . esc_url($space) . '">🏠 Mon espace</a></li>';
+        $items .= '<li class="menu-item lfi-menu-auth"><a href="' . esc_url($logout) . '">🚪 Se déconnecter</a></li>';
+    } else {
+        $items .= '<li class="menu-item lfi-menu-auth"><a href="' . esc_url(lfi_nct_register_page_url()) . '">✍️ S\'inscrire</a></li>';
+        $items .= '<li class="menu-item lfi-menu-auth lfi-menu-auth-cta"><a href="' . esc_url(lfi_nct_login_page_url()) . '">🔑 Se connecter</a></li>';
+    }
+    return $items;
 }
 
 /* ============================================================== *
