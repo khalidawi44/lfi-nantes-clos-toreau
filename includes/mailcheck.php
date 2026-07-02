@@ -137,12 +137,16 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
         $posture = $r['label'] . ' — ton conseillé : ' . $r['ton'];
     }
     $nom = trim($row->tenant_prenom . ' ' . $row->tenant_nom);
+    /* Volet pénal (règle) : détecter intimidation / contournement illégal du
+       message reçu et insérer un paragraphe de désamorçage dans la réponse. */
+    $penal = function_exists('lfi_nct_penal_paragraphe') ? lfi_nct_penal_paragraphe($body) : '';
     $reply = "Madame, Monsieur,\n\n"
         . "En accompagnement de " . $nom . ", que je suis à sa demande en tant que président de l'association Union des Quartiers Libres, je reviens vers vous.\n\n"
         . "[BROUILLON AUTOMATIQUE À RELIRE ET COMPLÉTER]\n"
         . "- Lecture de votre message : " . $posture . "\n"
         . "- Je rappelle que je suis l'interlocuteur unique de la personne accompagnée ; tout contact et tout accès au logement se font par mon intermédiaire et en ma présence.\n"
         . "- Sur le fond : un dysfonctionnement a été constaté et signalé. Il vous appartient d'intervenir/de constater ; je vous demande de me communiquer une date.\n\n"
+        . ($penal !== '' ? $penal . "\n\n" : '')
         . "(Complétez ici les points précis selon le message reçu, puis envoyez.)\n\n"
         . "Cordialement,\nFabrice Doucet\nPrésident — Association Union des Quartiers Libres\nGroupe d'Action La France Insoumise Nantes Sud – Clos Toreau";
 
