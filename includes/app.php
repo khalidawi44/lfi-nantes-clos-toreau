@@ -802,6 +802,7 @@ function lfi_nct_app_shortcode() {
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
+                    case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -1079,20 +1080,43 @@ function lfi_nct_app_render_dashboard() {
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
-        <?php foreach ($sections as $section_title => $tiles): ?>
-            <div class="lfi-app-section">
-                <div class="lfi-app-section-title"><?php echo esc_html($section_title); ?></div>
-                <div class="lfi-app-grid">
-                    <?php foreach ($tiles as $t): ?>
-                        <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
-                            <div class="ico"><?php echo $t[0]; ?></div>
-                            <div class="tit"><?php echo esc_html($t[1]); ?></div>
-                            <div class="sub"><?php echo esc_html($t[2]); ?></div>
-                        </a>
-                    <?php endforeach; ?>
-                </div>
+        <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
+        $essentiel = [
+            ['📥', 'À envoyer',   'Tes réponses prêtes',        lfi_nct_app_url('a-envoyer')],
+            ['🗂', 'Dossiers',    'Le suivi des locataires',    lfi_nct_app_url('dossiers-juridiques')],
+            ['📓', 'Journal',     'Ton suivi général',          lfi_nct_app_url('journal')],
+            ['📅', 'Événements',  'Réunions & actions',         lfi_nct_app_url('evenements')],
+        ]; ?>
+        <div class="lfi-app-section">
+            <div class="lfi-app-section-title" style="font-size:1.05em">⭐ L'ESSENTIEL</div>
+            <div class="lfi-app-grid">
+                <?php foreach ($essentiel as $t): ?>
+                    <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>" style="border:2px solid #c8102e">
+                        <div class="ico"><?php echo $t[0]; ?></div>
+                        <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                        <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                    </a>
+                <?php endforeach; ?>
             </div>
-        <?php endforeach; ?>
+        </div>
+
+        <details class="lfi-app-advanced" style="margin-top:8px">
+            <summary style="cursor:pointer;font-weight:700;color:#666;padding:10px 4px;font-size:1.02em">⚙️ Tous les autres outils (avancé)</summary>
+            <?php foreach ($sections as $section_title => $tiles): ?>
+                <div class="lfi-app-section">
+                    <div class="lfi-app-section-title"><?php echo esc_html($section_title); ?></div>
+                    <div class="lfi-app-grid">
+                        <?php foreach ($tiles as $t): ?>
+                            <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+                                <div class="ico"><?php echo $t[0]; ?></div>
+                                <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                                <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </details>
 
         <div class="lfi-app-foot">
             <div>LFI Nantes Sud Clos Toreau · v<?php echo esc_html(LFI_NCT_VERSION); ?></div>
