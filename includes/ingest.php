@@ -71,7 +71,28 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_dossier_create',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/evenement-update', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_event_update',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
 });
+
+/** Met à jour un événement existant (ex : attacher le lien Action Populaire). */
+function lfi_nct_ingest_rest_event_update($request) {
+    $id = (int) $request->get_param('id');
+    if (!$id || !get_post($id)) return new WP_REST_Response(['ok' => false, 'error' => 'introuvable'], 404);
+    $ap = esc_url_raw((string) $request->get_param('ap_url'));
+    if ($ap) {
+        update_post_meta($id, '_lfi_evt_url_ap', $ap);
+        update_post_meta($id, '_lfi_evt_ap_url', $ap);
+    }
+    foreach (['date' => '_ag_event_date', 'heure' => '_ag_event_time', 'lieu' => '_ag_event_place', 'ville' => '_ag_event_city'] as $pk => $mk) {
+        $val = $request->get_param($pk);
+        if ($val !== null && $val !== '') update_post_meta($id, $mk, sanitize_text_field((string) $val));
+    }
+    return new WP_REST_Response(['ok' => true, 'id' => $id, 'url' => get_permalink($id)], 200);
+}
 
 /** Crée un dossier locataire à distance (clé d'intégration). */
 function lfi_nct_ingest_rest_dossier_create($request) {

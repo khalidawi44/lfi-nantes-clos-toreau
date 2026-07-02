@@ -246,7 +246,10 @@ function lfi_nct_event_render_content($content) {
         $bandeau .= '</div>';
     }
     if ($data['url_ap']) {
-        $bandeau .= '<div style="margin-top:.3em;font-size:.9em">↗ <a href="' . esc_url($data['url_ap']) . '" target="_blank" rel="noopener">Aussi sur Action Populaire</a></div>';
+        $bandeau .= '<div style="margin-top:.7em"><a href="' . esc_url($data['url_ap']) . '" target="_blank" rel="noopener" '
+                  . 'style="display:inline-block;background:#c8102e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700">'
+                  . '✊ S\'inscrire sur Action Populaire</a>'
+                  . '<div style="font-size:.82em;color:#777;margin-top:.3em">L\'inscription officielle se fait sur Action Populaire. Tu peux aussi confirmer ta venue ci-dessous.</div></div>';
     }
     $bandeau .= '</div>';
 
