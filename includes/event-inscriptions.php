@@ -157,34 +157,66 @@ function lfi_nct_app_view_event_sms() {
              . '. Inscris-toi ici : ' . $url;
     $msg = isset($_GET['msg']) ? sanitize_textarea_field(wp_unslash($_GET['msg'])) : $default;
 
-    /* Destinataires cloisonnés au GA : membres actifs + répondant·es d'enquête
-       ayant accepté le recontact (locataires suivis / contactés). */
+    /* Destinataires cloisonnés au GA, mais JAMAIS mélangés : d'un côté les
+       membres actifs du GA, de l'autre les locataires (répondant·es d'enquête
+       ayant accepté le recontact). On choisit son public — on ne mélange pas. */
     $mem = $wpdb->prefix . 'lfi_nct_membres';
     $rep = $wpdb->prefix . 'lfi_nct_responses';
     $mem_clause = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
     $rep_clause = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
 
-    $recips = [];
+    $membres = [];
     foreach (($wpdb->get_results("SELECT prenom, nom, tel FROM $mem WHERE tel <> ''" . $mem_clause . " ORDER BY prenom LIMIT 500") ?: []) as $r) {
-        $recips[preg_replace('/[^\d+]/', '', $r->tel)] = ['prenom' => $r->prenom, 'nom' => $r->nom, 'tel' => $r->tel, 'src' => 'Membre actif'];
+        $membres[preg_replace('/[^\d+]/', '', $r->tel)] = ['prenom' => $r->prenom, 'nom' => $r->nom, 'tel' => $r->tel];
     }
+    $locataires = [];
     foreach (($wpdb->get_results("SELECT contact_prenom AS prenom, contact_nom AS nom, contact_tel AS tel FROM $rep WHERE deleted_at IS NULL AND contact_recontact = 1 AND contact_tel <> ''" . $rep_clause . " ORDER BY submitted_at DESC LIMIT 500") ?: []) as $r) {
         $k = preg_replace('/[^\d+]/', '', $r->tel);
-        if (!isset($recips[$k])) $recips[$k] = ['prenom' => $r->prenom, 'nom' => $r->nom, 'tel' => $r->tel, 'src' => 'Locataire (recontact OK)'];
+        if ($k !== '') $locataires[$k] = ['prenom' => $r->prenom, 'nom' => $r->nom, 'tel' => $r->tel];
     }
 
+    /* Public choisi (par défaut : les membres du GA). Un seul public à la fois. */
+    $aud = isset($_GET['aud']) ? sanitize_key($_GET['aud']) : 'membres';
+    if (!in_array($aud, ['membres', 'locataires'], true)) $aud = 'membres';
+    $recips = $aud === 'locataires' ? $locataires : $membres;
+
     lfi_nct_app_screen_open('📱 Diffuser par SMS', get_the_title($post));
-    echo '<div class="lfi-app-help">Envoie le lien d\'inscription par SMS. Touche un destinataire : ton appli SMS s\'ouvre avec le message pré-rempli (<code>{prenom}</code> est remplacé). ' . count($recips) . ' destinataire(s) dans ton GA.</div>';
+    echo '<div class="lfi-app-help">Envoie le lien d\'inscription par SMS. Choisis d\'abord <strong>à qui</strong> tu écris — les <strong>membres du GA</strong> et les <strong>locataires</strong> ne sont jamais mélangés. Touche un destinataire : ton appli SMS s\'ouvre avec le message pré-rempli (<code>{prenom}</code> est remplacé).</div>';
+
+    /* Sélecteur de public : membres du GA / locataires (jamais mélangés). */
+    echo '<div class="lfi-app-filter-chips">';
+    foreach ([
+        'membres'    => '👥 Membres du GA (' . count($membres) . ')',
+        'locataires' => '🏠 Locataires — recontact OK (' . count($locataires) . ')',
+    ] as $k => $lbl) {
+        $cls = $aud === $k ? 'on' : '';
+        echo '<a class="fc ' . esc_attr($cls) . '" href="' . esc_url(lfi_nct_app_url('event-sms', ['event' => $event_id, 'aud' => $k, 'msg' => $msg])) . '">' . esc_html($lbl) . '</a>';
+    }
+    echo '</div>';
 
     /* Édition du message. */
     echo '<form method="get" class="lfi-app-form">';
-    echo '<input type="hidden" name="vue" value="event-sms"><input type="hidden" name="event" value="' . (int) $event_id . '">';
+    echo '<input type="hidden" name="vue" value="event-sms"><input type="hidden" name="event" value="' . (int) $event_id . '"><input type="hidden" name="aud" value="' . esc_attr($aud) . '">';
     echo '<label>Message (variable : {prenom})<textarea name="msg" rows="4">' . esc_textarea($msg) . '</textarea></label>';
     echo '<button type="submit" class="btn-ghost">↻ Mettre à jour le message</button>';
     echo '</form>';
 
+    /* Code couleur fort par public : impossible de se tromper de destinataires.
+       Membres du GA = violet ; Locataires = vert. */
+    $is_loc  = ($aud === 'locataires');
+    $accent  = $is_loc ? '#1e8a5a' : '#4b2e83';
+    $accbg   = $is_loc ? '#e7f5ee' : '#efeaf7';
+    $src_lbl = $is_loc ? '🏠 Locataire (recontact OK)' : '👥 Membre du GA';
+    $pub_lbl = $is_loc ? '🏠 LOCATAIRES (recontact OK)' : '👥 MEMBRES DU GA';
+
+    echo '<div style="margin-bottom:10px;padding:10px 14px;border-radius:10px;font-weight:800;'
+       . 'background:' . $accbg . ';color:' . $accent . ';border-left:5px solid ' . $accent . '">'
+       . 'Tu écris à : ' . $pub_lbl . ' — ' . count($recips) . ' destinataire(s)'
+       . '<div style="font-weight:500;font-size:.82em;margin-top:3px;color:#555">Ce public uniquement. Les '
+       . ($is_loc ? 'membres du GA' : 'locataires') . ' ne sont pas dans cette liste.</div></div>';
+
     if (empty($recips)) {
-        echo '<div class="lfi-app-empty">Aucun destinataire avec téléphone dans ce GA.</div>';
+        echo '<div class="lfi-app-empty">Aucun ' . ($is_loc ? 'locataire' : 'membre') . ' avec téléphone dans ce GA.</div>';
         lfi_nct_app_screen_close();
         return;
     }
@@ -193,9 +225,9 @@ function lfi_nct_app_view_event_sms() {
     foreach ($recips as $tel_clean => $r) {
         $body = str_replace('{prenom}', $r['prenom'] ?: '', $msg);
         $sms  = 'sms:' . $tel_clean . '?body=' . rawurlencode($body);
-        echo '<li class="lfi-app-card">';
+        echo '<li class="lfi-app-card" style="border-left:5px solid ' . $accent . '">';
         echo '<div class="head"><div class="who">' . esc_html(trim($r['prenom'] . ' ' . $r['nom']) ?: $r['tel']) . '</div>';
-        echo '<div class="when">' . esc_html($r['src']) . '</div></div>';
+        echo '<div class="when" style="color:' . $accent . ';font-weight:700">' . esc_html($src_lbl) . '</div></div>';
         echo '<div class="meta"><span class="meta-chip">📞 ' . esc_html($r['tel']) . '</span></div>';
         echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" href="' . esc_url($sms) . '">📲 Ouvrir le SMS</a></div>';
         echo '</li>';
