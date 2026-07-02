@@ -791,6 +791,7 @@ function lfi_nct_app_shortcode() {
                     case 'modules-params':        lfi_nct_app_view_modules_params();         break;
                     case 'ga-params':             lfi_nct_app_view_ga_params();              break;
                     case 'evenement-add':         lfi_nct_app_view_evenement_add();          break;
+                    case 'evenement-edit':        lfi_nct_app_view_evenement_edit();         break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
@@ -2450,6 +2451,7 @@ function lfi_nct_app_view_evenements() {
     lfi_nct_app_screen_open('📅 Événements', $total . ' événement(s)');
 
     if (!empty($_GET['evt_add'])) lfi_nct_app_flash('✅ Événement créé.');
+    if (!empty($_GET['evt_upd'])) lfi_nct_app_flash('✅ Événement mis à jour.');
     /* Créer un événement : réservé aux admins (GA admins + super-admin). */
     $ev_can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
     if ($ev_can_edit) {
@@ -2494,7 +2496,7 @@ function lfi_nct_app_view_evenements() {
                 echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('flyer', ['event' => $p->ID])) . '">🖨 Flyer + QR</a>';
                 if (!$ev_past) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-sms', ['event' => $p->ID])) . '">📱 Diffuser SMS</a>';
                 echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('event-inscrits', ['event' => $p->ID])) . '">📋 Inscrit·es</a>';
-                echo '<a class="btn-ghost" href="' . esc_url(get_edit_post_link($p->ID)) . '">✏️ Éditer</a>';
+                echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('evenement-edit', ['id' => $p->ID])) . '">✏️ Éditer</a>';
             }
             echo '</div>';
             echo '</li>';
@@ -2549,6 +2551,85 @@ function lfi_nct_app_view_evenement_add() {
     echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…"></textarea></label>';
     echo '<button type="submit" class="btn-primary">✅ Créer l\'événement</button>';
     echo '</form>';
+    lfi_nct_app_screen_close();
+}
+
+/* Vrai si l'événement $p appartient au GA actuellement en scope (cloisonnement). */
+function lfi_nct_event_in_scope($p) {
+    if (!$p) return false;
+    if (!function_exists('lfi_nct_scope_ga_slug')) return true;
+    $slug = lfi_nct_scope_ga_slug();
+    $home = ($slug === '' || $slug === 'clos-toreau');
+    $g = (string) get_post_meta($p->ID, '_lfi_evt_ga', true);
+    return $home ? ($g === '' || $g === 'clos-toreau') : ($g === $slug);
+}
+
+/* ---------- ✏️ Éditer un événement (admins) — dans l'app, pas dans wp-admin ---------- */
+function lfi_nct_app_view_evenement_edit() {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
+        wp_safe_redirect(lfi_nct_app_url('evenements'));
+        exit;
+    }
+
+    $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+    $p  = $id ? get_post($id) : null;
+    $cpts = ['ag_evenement', 'lfi_evenement'];
+    /* Événement inexistant, mauvais type, ou d'un AUTRE GA → refusé (cloisonnement). */
+    if (!$p || !in_array($p->post_type, $cpts, true) || !lfi_nct_event_in_scope($p)) {
+        lfi_nct_app_screen_open('✏️ Éditer un événement');
+        echo '<div class="lfi-app-empty">Événement introuvable dans ton groupe d\'action.</div>';
+        echo '<div style="margin-top:12px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('evenements')) . '">← Retour aux événements</a></div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    /* Enregistrement des modifications. */
+    if (!empty($_POST['lfi_evt_edit']) && check_admin_referer('lfi_evt_edit_' . $id)) {
+        $title = sanitize_text_field(wp_unslash($_POST['titre'] ?? ''));
+        if ($title !== '') {
+            wp_update_post([
+                'ID'           => $id,
+                'post_title'   => $title,
+                'post_content' => wp_kses_post(wp_unslash($_POST['description'] ?? '')),
+            ]);
+            update_post_meta($id, '_ag_event_date',  sanitize_text_field(wp_unslash($_POST['date']  ?? '')));
+            update_post_meta($id, '_ag_event_time',  sanitize_text_field(wp_unslash($_POST['heure'] ?? '')));
+            update_post_meta($id, '_ag_event_place', sanitize_text_field(wp_unslash($_POST['lieu']  ?? '')));
+            update_post_meta($id, '_ag_event_city',  sanitize_text_field(wp_unslash($_POST['ville'] ?? '')));
+            $ap = esc_url_raw(wp_unslash($_POST['ap_url'] ?? ''));
+            if ($ap) { update_post_meta($id, '_lfi_evt_ap_url', $ap); }
+            else     { delete_post_meta($id, '_lfi_evt_ap_url'); }
+            wp_safe_redirect(lfi_nct_app_url('evenements', ['evt_upd' => 1]));
+            exit;
+        }
+    }
+
+    /* Valeurs actuelles (compat clés _ag_* et _lfi_evt_*). */
+    $v_title = get_the_title($p);
+    $v_date  = get_post_meta($id, '_ag_event_date', true) ?: get_post_meta($id, '_lfi_evt_date_debut', true);
+    $v_time  = get_post_meta($id, '_ag_event_time',  true);
+    $v_place = get_post_meta($id, '_ag_event_place', true);
+    $v_city  = get_post_meta($id, '_ag_event_city',  true);
+    $v_ap    = get_post_meta($id, '_lfi_evt_ap_url', true);
+    $v_desc  = $p->post_content;
+
+    lfi_nct_app_screen_open('✏️ Éditer l\'événement', 'Corrige les informations de cet événement');
+    echo '<form method="post" class="lfi-app-form">';
+    wp_nonce_field('lfi_evt_edit_' . $id);
+    echo '<input type="hidden" name="lfi_evt_edit" value="1">';
+    echo '<label>Titre <span style="color:#c8102e">*</span><input type="text" name="titre" required value="' . esc_attr($v_title) . '"></label>';
+    echo '<label>Date<input type="date" name="date" value="' . esc_attr($v_date) . '"></label>';
+    echo '<label>Heure<input type="text" name="heure" value="' . esc_attr($v_time) . '" placeholder="Ex : 14h – 23h"></label>';
+    echo '<label>Lieu<input type="text" name="lieu" value="' . esc_attr($v_place) . '" placeholder="Ex : Parc de la Crapaudine"></label>';
+    echo '<label>Ville<input type="text" name="ville" value="' . esc_attr($v_city) . '" placeholder="Ex : Nantes"></label>';
+    echo '<label>Lien Action Populaire (inscription)<input type="url" name="ap_url" value="' . esc_attr($v_ap) . '" placeholder="https://actionpopulaire.fr/evenements/…" inputmode="url" autocapitalize="none"></label>';
+    echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…">' . esc_textarea($v_desc) . '</textarea></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
+    echo '</form>';
+    echo '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-ghost" href="' . esc_url(get_permalink($p)) . '" target="_blank" rel="noopener">🔗 Voir la page publique</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('evenements')) . '">← Retour</a>';
+    echo '</div>';
     lfi_nct_app_screen_close();
 }
 
