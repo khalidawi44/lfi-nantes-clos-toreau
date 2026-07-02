@@ -179,6 +179,15 @@ function lfi_nct_prej_compute($p) {
         'fond_min' => $p10_min, 'fond_max' => $p10_max,
         'formule' => $engmnts . ' engagement(s) × 20 000 € × systémique', 'note' => 'Art. 1143 C. civ. (violence économique).'];
 
+    /* ---- Poste 11 : astreinte journalière (fond, pour forcer les travaux) ---- */
+    $astr_jour  = $n('astreinte_jour');
+    $astr_jours = $n('astreinte_jours');
+    $p11 = $astr_jour * $astr_jours;
+    $postes[] = ['num' => 11, 'titre' => 'Astreinte journalière', 'amiable' => 0,
+        'fond_min' => 0, 'fond_max' => $p11,
+        'formule' => $astr_jour ? (number_format($astr_jour, 0, ',', ' ') . ' €/jour × ' . (int) $astr_jours . ' jours') : 'non demandée',
+        'note' => 'Levier pour contraindre le bailleur à exécuter (demandée au juge).'];
+
     $amiable = 0; $fmin = 0; $fmax = 0;
     foreach ($postes as $po) { $amiable += $po['amiable']; $fmin += $po['fond_min']; $fmax += $po['fond_max']; }
     return ['postes' => $postes, 'amiable' => $amiable, 'fond_min' => $fmin, 'fond_max' => $fmax];
@@ -191,7 +200,8 @@ function lfi_nct_prej_params_from_request() {
     $keys_num = ['annees', 'membres', 'enfants_mineurs', 'enfants_mdph', 'personnes_ald', 'loyer', 'coef',
         'enfants_scolarises', 'courriels_diffamatoires', 'engagements_contrainte',
         'p1_souffrances_cotation', 'p1_dft_taux', 'p1_dft_jours', 'p1_agrement', 'p1_esthetique_cotation',
-        'p2_intensite', 'p4_factures', 'p5_factures', 'lits_adulte', 'lits_enfant', 'sommiers', 'matelas_simple', 'matelas_double'];
+        'p2_intensite', 'p4_factures', 'p5_factures', 'lits_adulte', 'lits_enfant', 'sommiers', 'matelas_simple', 'matelas_double',
+        'astreinte_jour', 'astreinte_jours'];
     $keys_bool = ['photos', 'arrets_5j', 'dermatose', 'anxiete', 'precancereux', 'arret_scolaire', 'decrochage',
         'redoublement', 'diff_publique', 'diff_recidive', 'contrainte_systemique'];
     $p = [];
@@ -209,7 +219,45 @@ function lfi_nct_app_view_prejudice() {
     $has = !empty($_GET['calc']);
     $p   = lfi_nct_prej_params_from_request();
 
-    lfi_nct_app_screen_open('💶 Chiffrage du préjudice', 'Punaises de lit — méthode DOUCET c/ NMH · 10 postes');
+    /* Dossier rattaché (préremplissage + « verser au dossier »). */
+    $did = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+    $dossier = ($did && function_exists('lfi_nct_dossier_get')) ? lfi_nct_dossier_get($did) : null;
+
+    /* Verser le chiffrage au dossier. */
+    if ($dossier && !empty($_POST['lfi_prej_save']) && check_admin_referer('lfi_prej_save_' . $did)) {
+        global $wpdb;
+        $r = lfi_nct_prej_compute($p);
+        $notes = json_decode($dossier->notes ?? '', true);
+        if (!is_array($notes)) $notes = [];
+        $notes['prejudice'] = [
+            'date'     => wp_date('Y-m-d'),
+            'amiable'  => round($r['amiable']),
+            'fond_min' => round($r['fond_min']),
+            'fond_max' => round($r['fond_max']),
+            'params'   => $p,
+        ];
+        $wpdb->update($wpdb->prefix . 'lfi_nct_dossiers_locataires',
+            ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => $did]);
+        wp_safe_redirect(add_query_arg(array_merge($p, ['vue' => 'prejudice', 'calc' => 1, 'id' => $did, 'saved' => 1]), home_url('/' . LFI_NCT_APP_SLUG . '/')));
+        exit;
+    }
+
+    /* Préremplissage minimal depuis le dossier (ce qui existe réellement). */
+    if ($dossier && !$has) {
+        $has_med = trim((string) ($dossier->certificat_medecin ?? '') . (string) ($dossier->certificat_pathologie ?? '')) !== '';
+        if ($has_med) { $p['anxiete'] = 1; }
+    }
+
+    $sub = $dossier ? ('Dossier : ' . trim($dossier->tenant_prenom . ' ' . $dossier->tenant_nom)) : 'Punaises de lit — méthode DOUCET c/ NMH · 11 postes';
+    lfi_nct_app_screen_open('💶 Chiffrage du préjudice', $sub);
+    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Chiffrage versé au dossier.');
+
+    /* Rappel d'actualisation annuelle des barèmes. */
+    $year = (int) wp_date('Y');
+    $bareme_year = (int) get_option('lfi_nct_prej_bareme_year', 2026);
+    if ($year > $bareme_year) {
+        echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>📅 Les barèmes datent de ' . $bareme_year . '. Pense à les actualiser (Mornet + jurisprudence ' . $year . ').</small></div>';
+    }
     echo '<div class="lfi-app-help">Sortie <strong>double</strong> : un plancher <strong>amiable</strong> (postes 1–5, solides) et une <strong>fourchette au fond</strong> (10 postes). Montants = ordres de grandeur <strong>à valider avec l\'avocat</strong>.</div>';
 
     /* Formulaire. */
@@ -266,6 +314,12 @@ function lfi_nct_app_view_prejudice() {
     echo '</div>';
     echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="contrainte_systemique" value="1" ' . $ck('contrainte_systemique') . '> Contrainte systémique (plusieurs années)</label>';
 
+    echo '<h4 style="margin:12px 0 4px;color:#c8102e">Astreinte (au fond — pour forcer les travaux)</h4>';
+    echo '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<label style="flex:1;min-width:140px">Astreinte (€/jour)<input type="number" name="astreinte_jour" value="' . $v('astreinte_jour', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:140px">Nombre de jours estimé<input type="number" name="astreinte_jours" value="' . $v('astreinte_jours', '0') . '" min="0"></label>';
+    echo '</div>';
+
     echo '<button type="submit" class="btn-primary" style="margin-top:10px">💶 Calculer le chiffrage</button>';
     echo '</form>';
 
@@ -284,8 +338,29 @@ function lfi_nct_app_view_prejudice() {
         }
         echo '</ul>';
 
+        /* Pièces manquantes qui augmenteraient le chiffrage. */
+        $manque = [];
+        if (empty($p['photos']))     $manque[] = 'Photos horodatées (EXIF) — poste 1 ×1,2';
+        if (($p['p4_factures'] ?? 0) <= 0) $manque[] = 'Factures literie/textiles — solidifie le poste 4 en amiable';
+        if (empty($p['dermatose']) && empty($p['anxiete'])) $manque[] = 'Certificat médical (piqûres, anxiété, insomnie) — postes 1 et 8';
+        $manque[] = 'PV du SCHS / constat d\'huissier — pièce maîtresse';
+        $manque[] = 'Expertise entomologique (Muséum) — ancre le caractère avéré';
+        if (($p['personnes_ald'] ?? 0) <= 0 && ($p['enfants_mdph'] ?? 0) <= 0) $manque[] = 'ALD / MDPH d\'un membre — postes 1, 6, 8 (fort impact)';
+        echo '<h3 style="margin:14px 0 6px;color:#c8102e">📎 Pièces à obtenir (elles augmentent le chiffrage)</h3><ul class="lfi-app-list">';
+        foreach ($manque as $m) echo '<li class="lfi-app-card" style="padding:8px 12px"><div class="com">☐ ' . esc_html($m) . '</div></li>';
+        echo '</ul>';
+
         $rep_url = add_query_arg(array_merge($p, ['vue' => 'prejudice-report', 'calc' => 1]), home_url('/' . LFI_NCT_APP_SLUG . '/'));
-        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" href="' . esc_url($rep_url) . '" target="_blank">📑 Rapport imprimable (avec sources)</a></div>';
+        echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><a class="btn-primary" href="' . esc_url($rep_url) . '" target="_blank">📑 Rapport imprimable (avec sources)</a>';
+        if ($dossier) {
+            echo '<form method="post" style="display:inline;margin:0">';
+            wp_nonce_field('lfi_prej_save_' . $did);
+            echo '<input type="hidden" name="lfi_prej_save" value="1">';
+            foreach ($p as $k => $val) echo '<input type="hidden" name="' . esc_attr($k) . '" value="' . esc_attr($val) . '">';
+            echo '<button type="submit" class="btn-primary" style="background:#0066a3">💾 Verser ce chiffrage au dossier</button>';
+            echo '</form>';
+        }
+        echo '</div>';
         echo '<div class="lfi-app-help" style="margin-top:8px;background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ Ordres de grandeur ajustables. En amiable, ne mobilise que les postes solides. Au fond, l\'avocat sollicite le haut et négocie vers la moyenne.</small></div>';
     }
 
