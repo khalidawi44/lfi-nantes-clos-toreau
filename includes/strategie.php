@@ -173,6 +173,15 @@ function lfi_nct_app_view_strategie() {
     echo '<li style="background:#fff3cd;border-radius:6px;padding:6px 8px"><strong>⚖️ Judiciaire = dernier recours, via l\'avocat (Me Gouache)</strong>. Rappel : <strong>l\'association s\'arrête aux actes judiciaires</strong> — on prépare et on transmet, l\'avocat agit.</li>';
     echo '</ol>';
 
+    /* 5-0) Ligne de conduite (posture non négociable). */
+    echo '<h3 style="margin:18px 0 6px;color:#c8102e">🧭 Ligne de conduite (non négociable)</h3>';
+    echo '<ul class="lfi-app-list">';
+    echo '<li class="lfi-app-card" style="border-left:4px solid #c8102e"><div class="head"><div class="who">🛡️ Interlocuteur unique</div></div>'
+       . '<div class="com">Le locataire t\'a demandé de l\'aide : <strong>c\'est TOI l\'interlocuteur</strong>, pas lui/elle. On ne transmet <strong>jamais</strong> ses coordonnées. Toute prise de contact et tout accès au logement se font <strong>par ton intermédiaire et en ta présence</strong> — pour ce dossier et pour tous les suivants.</div></li>';
+    echo '<li class="lfi-app-card" style="border-left:4px solid #c8102e"><div class="head"><div class="who">⚖️ On EXIGE, on ne demande pas</div></div>'
+       . '<div class="com">Face aux institutions (SCHS, ARS, bailleur…), le ton est l\'<strong>exigence</strong>, pas la requête. Leur mission est d\'intervenir/constater sur signalement : ils <strong>n\'ont pas le choix</strong> de venir ou non. En tant que <strong>président d\'association</strong>, tu as <strong>constaté un dysfonctionnement</strong> — tu exiges qu\'ils viennent le constater à leur tour, et tu réclames une <strong>date</strong>.</div></li>';
+    echo '</ul>';
+
     /* 5bis) Alliés & rapports de force. */
     echo '<h3 style="margin:18px 0 6px;color:#c8102e">🤝 Alliés & rapports de force</h3>';
     echo '<div class="lfi-app-help">Chercher des appuis — mais chacun à sa juste place. On garde toujours la main.</div>';
