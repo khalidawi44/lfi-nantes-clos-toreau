@@ -86,6 +86,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_assign',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/dossier-reply-delete', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_reply_delete',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/membres-ga', [
         'methods'             => 'GET',
         'callback'            => 'lfi_nct_ingest_rest_membres_ga',
@@ -148,6 +153,56 @@ function lfi_nct_ingest_rest_reply_set($request) {
     return new WP_REST_Response(['ok' => true, 'count' => count($notes['replies'])], 200);
 }
 
+/**
+ * Supprime une (ou des) réponse(s) d'un dossier.
+ * @param int      $dossier_id
+ * @param int|null $index Index à supprimer (dans notes['replies']). Ignoré si $src fourni.
+ * @param string   $src   Si fourni, supprime toutes les réponses de cette source (ex: 'mailcheck').
+ * @return int Nombre de réponses restantes, ou -1 si dossier introuvable.
+ */
+function lfi_nct_reply_delete($dossier_id, $index = null, $src = '') {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", (int) $dossier_id));
+    if (!$row) return -1;
+    $notes = json_decode($row->notes ?? '', true);
+    if (!is_array($notes) || empty($notes['replies']) || !is_array($notes['replies'])) return 0;
+    if ($src !== '') {
+        $notes['replies'] = array_values(array_filter($notes['replies'], function ($r) use ($src) {
+            return (string) ($r['src'] ?? '') !== $src;
+        }));
+    } elseif ($index !== null && isset($notes['replies'][(int) $index])) {
+        array_splice($notes['replies'], (int) $index, 1);
+        $notes['replies'] = array_values($notes['replies']);
+    }
+    $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => (int) $dossier_id]);
+    return count($notes['replies']);
+}
+
+/** REST : supprimer une réponse (par index) ou purger une source (src). */
+function lfi_nct_ingest_rest_reply_delete($request) {
+    $id  = (int) $request->get_param('dossier_id');
+    $src = sanitize_key((string) $request->get_param('src'));
+    $idx = $request->get_param('index');
+    $idx = ($idx === null || $idx === '') ? null : (int) $idx;
+    $left = lfi_nct_reply_delete($id, $idx, $src);
+    if ($left === -1) return new WP_REST_Response(['ok' => false, 'error' => 'dossier_introuvable'], 404);
+    return new WP_REST_Response(['ok' => true, 'restant' => $left], 200);
+}
+
+/** Petit formulaire « supprimer ce brouillon » (usage app, nonce + capacité). */
+function lfi_nct_reply_del_form($dossier_id, $index, $back = '') {
+    $out  = '<form method="post" style="display:inline" onsubmit="return confirm(\'Supprimer ce brouillon ?\');">';
+    $out .= wp_nonce_field('lfi_reply_del', '_wpnonce', true, false);
+    $out .= '<input type="hidden" name="lfi_reply_del" value="1">';
+    $out .= '<input type="hidden" name="dossier_id" value="' . (int) $dossier_id . '">';
+    $out .= '<input type="hidden" name="reply_index" value="' . (int) $index . '">';
+    if ($back !== '') $out .= '<input type="hidden" name="back" value="' . esc_attr($back) . '">';
+    $out .= '<button type="submit" class="btn-ghost" style="padding:4px 10px;font-size:.82em;color:#c8102e">🗑 Supprimer</button>';
+    $out .= '</form>';
+    return $out;
+}
+
 /** Email principal (hub) mis en copie de chaque réponse pour tout centraliser. */
 function lfi_nct_central_email() {
     return (string) get_option('lfi_nct_central_email', 'nantessudclostoreau@gmail.com');
@@ -188,6 +243,7 @@ function lfi_nct_app_view_a_envoyer() {
     $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE owner_user_id = %d" . $ref . " ORDER BY updated_at DESC LIMIT 200", $owner)) ?: [];
 
     lfi_nct_app_screen_open('📥 À envoyer', 'Tes réponses prêtes — relis et envoie');
+    if (!empty($_GET['rdel']) && function_exists('lfi_nct_app_flash')) lfi_nct_app_flash('🗑 Brouillon supprimé.');
     $central = lfi_nct_central_email();
     $n = 0;
     echo '<ul class="lfi-app-list">';
@@ -196,7 +252,7 @@ function lfi_nct_app_view_a_envoyer() {
         $replies = (is_array($notes) && !empty($notes['replies'])) ? $notes['replies'] : [];
         if (empty($replies)) continue;
         $who = trim($r->tenant_prenom . ' ' . $r->tenant_nom) ?: ('Dossier #' . $r->id);
-        foreach (array_reverse($replies) as $rep) {
+        foreach (array_reverse($replies, true) as $ri => $rep) {
             $to  = (string) ($rep['to'] ?? '');
             $sub = (string) ($rep['subject'] ?? '');
             $bod = (string) ($rep['body'] ?? '');
@@ -211,7 +267,7 @@ function lfi_nct_app_view_a_envoyer() {
             if ($sub) echo '<div class="com"><strong>' . esc_html($sub) . '</strong></div>';
             echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire</summary>'
                . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
-            echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a></div>';
+            echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a>' . lfi_nct_reply_del_form((int) $r->id, (int) $ri, lfi_nct_app_url('a-envoyer')) . '</div>';
             echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
             echo '</li>';
         }
@@ -250,7 +306,7 @@ function lfi_nct_render_dossier_replies($row) {
         if ($sub) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($sub) . '</div>';
         echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire la réponse</summary>'
            . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
-        echo '<div class="row-actions" style="margin-top:8px"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a></div>';
+        echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a>' . lfi_nct_reply_del_form((int) $row->id, (int) $i, lfi_nct_app_url('dossier', ['uid' => (int) $row->tenant_user_id])) . '</div>';
         echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
         echo '</li>';
     }
