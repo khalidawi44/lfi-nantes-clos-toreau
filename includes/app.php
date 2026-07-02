@@ -792,6 +792,8 @@ function lfi_nct_app_shortcode() {
                     case 'ga-params':             lfi_nct_app_view_ga_params();              break;
                     case 'evenement-add':         lfi_nct_app_view_evenement_add();          break;
                     case 'evenement-edit':        lfi_nct_app_view_evenement_edit();         break;
+                    case 'integration-key':       lfi_nct_app_view_integration_key();        break;
+                    case 'dossier-piece-dl':      lfi_nct_ingest_download();                 break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;

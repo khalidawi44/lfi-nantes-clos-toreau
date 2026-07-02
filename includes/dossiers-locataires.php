@@ -1280,6 +1280,11 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</form>';
         echo '</details>';
 
+        /* === PIÈCES JOINTES (classées automatiquement par Claude) === */
+        if (function_exists('lfi_nct_ingest_render_pieces')) {
+            lfi_nct_ingest_render_pieces($row);
+        }
+
         /* === ANALYSE de la réponse NMH + document à imprimer/PDF === */
         $analyse_val = (is_array($logs) && !empty($logs['analyse_nmh'])) ? (string) $logs['analyse_nmh'] : '';
         echo '<h3 id="sec-analyse" style="margin:22px 0 6px;color:#c8102e">📑 Analyse de la réponse de NMH</h3>';
