@@ -852,6 +852,7 @@ function lfi_nct_app_shortcode() {
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
                     case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
                     case 'enquete':               lfi_nct_app_view_enquete();                break;
+                    case 'mobilisation':          lfi_nct_app_view_mobilisation();           break;
                     case 'dispos':                lfi_nct_app_view_dispos();                 break;
                     case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
                     case 'propositions':          lfi_nct_app_view_propositions();           break;
@@ -966,9 +967,8 @@ function lfi_nct_app_screen_close($more_tiles = true) {
             /* Membre simple : UNIQUEMENT ses raccourcis autorisés. Aucune donnée
                locataire (comptes, dossiers, SMS/email, stats, cache…). */
             $ml = [
-                ['💡', 'Proposer une action',      lfi_nct_app_url('propositions')],
-                ['🗓', 'Mes disponibilités',       lfi_nct_app_url('dispos')],
-                ['👥', 'Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+                ['🤝', 'Se coordonner',            lfi_nct_app_url('mobilisation')],
+                ['💡', 'Idées d\'actions',         lfi_nct_app_url('propositions')],
                 ['📅', 'Événements',               lfi_nct_app_url('evenements')],
                 ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['📸', 'Photos',                   lfi_nct_app_url('enquete-photos')],
@@ -1155,6 +1155,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+        <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
@@ -1178,11 +1179,10 @@ function lfi_nct_app_render_dashboard() {
             </div>
         </div>
 
-        <?php /* ============ COORDINATION DU GA : dispos & propositions ============ */
+        <?php /* ============ COORDINATION DU GA : se mobiliser sur les actions ============ */
         $coord = [
-            ['🗓', 'Mes dispos',     'Quand je suis libre',        lfi_nct_app_url('dispos')],
-            ['👥', 'Dispos communes','Qui est libre, quand',       lfi_nct_app_url('dispos-communes')],
-            ['💡', 'Propositions',   'Proposer / soutenir une action', lfi_nct_app_url('propositions')],
+            ['🤝', 'Se coordonner',  'Tractage, campagnes — je participe', lfi_nct_app_url('mobilisation')],
+            ['💡', 'Idées d\'actions','Proposer / soutenir une idée',   lfi_nct_app_url('propositions')],
         ]; ?>
         <div class="lfi-app-section">
             <div class="lfi-app-section-title" style="font-size:1.05em">🤝 COORDINATION</div>

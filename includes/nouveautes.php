@@ -55,6 +55,14 @@ function lfi_nct_news_seed_builtin() {
                      . 'sur 330 € de loyer, à peine 21 € reviennent à l\'entretien du logement. '
                      . 'Tu y trouves une <strong>phrase simple à dire au porte-à-porte</strong> — utile pour répondre aux gens sans te tromper.',
         ],
+        'mobilisation-2026-07' => [
+            'titre' => 'Nouveau : se coordonner facilement',
+            'corps' => 'Fini le calendrier bizarre dans le vide. Il y a maintenant <strong>🤝 Se coordonner</strong> : '
+                     . 'tu choisis une action rattachée à un <strong>événement</strong> (ex. tractage pour la kermesse du 14 juillet) '
+                     . 'ou à une <strong>campagne</strong>, tu vois les <strong>créneaux</strong> (jour + moment) et tu cliques '
+                     . '<strong>« 🙋 Je participe »</strong> sur ceux qui t\'arrangent. Tu peux aussi <strong>proposer d\'autres dates</strong>. '
+                     . 'Simple, et on voit tout de suite qui vient.',
+        ],
     ];
 
     $changed = false;

@@ -653,6 +653,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
             /* Coordination : proposer une action, dire ses dispos, voir celles
                de l'équipe. Accessible à tout membre (aucune donnée locataire). */
+            case 'mobilisation':     lfi_nct_app_view_mobilisation();     break;
             case 'propositions':     lfi_nct_app_view_propositions();     break;
             case 'dispos':           lfi_nct_app_view_dispos();           break;
             case 'dispos-communes':  lfi_nct_app_view_dispos_communes();  break;
@@ -699,11 +700,10 @@ function lfi_nct_app_view_ga_dashboard() {
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
     ];
 
-    /* Coordination : dispos & propositions d'actions (accessible à tout membre). */
+    /* Coordination : se mobiliser sur des actions liées aux événements/campagnes. */
     $coord_tiles = [
-        ['💡', 'Proposer une action',       'Collage, tractage, porte-à-porte…',   lfi_nct_app_url('propositions')],
-        ['🗓', 'Mes disponibilités',        'Dire quand je suis libre',            lfi_nct_app_url('dispos')],
-        ['👥', 'Dispos de l\'équipe',       'Qui est libre, quand',                lfi_nct_app_url('dispos-communes')],
+        ['🤝', 'Se coordonner',             'Tractage kermesse, campagnes… je participe', lfi_nct_app_url('mobilisation')],
+        ['💡', 'Idées d\'actions',          'Proposer / soutenir une idée',        lfi_nct_app_url('propositions')],
     ];
 
     $bottom_tiles = [
