@@ -188,6 +188,42 @@ function lfi_nct_prej_compute($p) {
         'formule' => $astr_jour ? (number_format($astr_jour, 0, ',', ' ') . ' €/jour × ' . (int) $astr_jours . ' jours') : 'non demandée',
         'note' => 'Levier pour contraindre le bailleur à exécuter (demandée au juge).'];
 
+    /* ---- Poste 12 : Relogement / hébergement (AMIABLE — charge bailleur) ---- */
+    $relog = $n('relogement_cout');
+    if ($relog <= 0) {
+        $rj = (int) $n('relogement_jours');
+        if ($rj > 0) $relog = $rj * 80; /* forfait hébergement 80 €/nuit à défaut de factures */
+    }
+    $postes[] = ['num' => 12, 'titre' => 'Relogement / hébergement', 'amiable' => $relog,
+        'fond_min' => $relog, 'fond_max' => $relog,
+        'formule' => $n('relogement_cout') > 0 ? 'sur factures' : ((int) $n('relogement_jours') . ' nuits × 80 €'),
+        'note' => 'À la charge du bailleur — art. L.521-3-1 du CCH ; obligation de relogement/hébergement.'];
+
+    /* ---- Poste 13 : Mise en sacs, lavage & traitement des effets (AMIABLE) ---- */
+    $trait = $n('traitement_effets');
+    if ($trait <= 0 && ($b('traitement_fait') || $membres > 0)) {
+        /* Forfait : lavage haute température + mise en sacs de tout le linge du foyer. */
+        if ($b('traitement_fait')) $trait = 150 + $membres * 120;
+    }
+    $postes[] = ['num' => 13, 'titre' => 'Mise en sacs, lavage & traitement des effets', 'amiable' => $trait,
+        'fond_min' => $trait, 'fond_max' => $trait,
+        'formule' => $n('traitement_effets') > 0 ? 'sur factures' : ($b('traitement_fait') ? ('150 € + ' . $membres . ' × 120 €') : 'non renseigné'),
+        'note' => 'Sujétions imposées par le traitement (ensachage, lavage 60°, isolement) — à la charge du bailleur.'];
+
+    /* ---- Poste 14 : Remplacement des effets personnels dégradés (AMIABLE) ---- */
+    $effets = $n('effets_remplacement');
+    $postes[] = ['num' => 14, 'titre' => 'Remplacement des effets personnels dégradés', 'amiable' => $effets,
+        'fond_min' => $effets, 'fond_max' => $effets * 1.2,
+        'formule' => 'biens personnels cassés/dégradés du fait des désordres (sur estimation/factures)',
+        'note' => 'Dégradation imputable au bailleur (art. 1719, 1231-1 C. civ.).'];
+
+    /* ---- Poste 15 : Frais d'accompagnement engagés (AMIABLE) ---- */
+    $frais = $n('frais_accompagnement');
+    $postes[] = ['num' => 15, 'titre' => 'Frais d\'accompagnement engagés', 'amiable' => $frais,
+        'fond_min' => $frais, 'fond_max' => $frais,
+        'formule' => 'déplacements, constats, courriers, temps (cumul du dossier)',
+        'note' => 'Frais engagés du fait de la défaillance du bailleur — réclamés au préjudice, jamais facturés à NMH.'];
+
     $amiable = 0; $fmin = 0; $fmax = 0;
     foreach ($postes as $po) { $amiable += $po['amiable']; $fmin += $po['fond_min']; $fmax += $po['fond_max']; }
     return ['postes' => $postes, 'amiable' => $amiable, 'fond_min' => $fmin, 'fond_max' => $fmax];
@@ -306,6 +342,20 @@ function lfi_nct_app_view_prejudice() {
     echo '<label style="flex:1;min-width:150px">Factures biens détruits (€)<input type="number" name="p4_factures" value="' . $v('p4_factures', '0') . '" min="0"></label>';
     echo '<label style="flex:1;min-width:150px">Factures produits/frais (€)<input type="number" name="p5_factures" value="' . $v('p5_factures', '0') . '" min="0"></label>';
     echo '</div>';
+
+    /* Postes AMIABLE « à la charge du bailleur » : relogement, traitement des
+       effets (mise en sacs/lavage), remplacement des effets, frais engagés. */
+    $frais_def = ($dossier && function_exists('lfi_nct_frais_total')) ? (string) round(lfi_nct_frais_total((int) $dossier->id)) : '0';
+    echo '<h4 style="margin:12px 0 4px;color:#186a3b">À la charge du bailleur (amiable)</h4>';
+    echo '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<label style="flex:1;min-width:150px">Relogement — coût (€)<input type="number" name="relogement_cout" value="' . $v('relogement_cout', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:130px">…ou nuits d\'hébergement<input type="number" name="relogement_jours" value="' . $v('relogement_jours', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:150px">Traitement des effets (€)<input type="number" name="traitement_effets" value="' . $v('traitement_effets', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:170px">Remplacement effets perso (€)<input type="number" name="effets_remplacement" value="' . $v('effets_remplacement', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:150px">Frais d\'accompagnement (€)<input type="number" name="frais_accompagnement" value="' . $v('frais_accompagnement', $frais_def) . '" min="0"></label>';
+    echo '</div>';
+    echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="traitement_fait" value="1" ' . $ck('traitement_fait') . '> Traitement subi (ensachage + lavage 60° de tout le linge) → forfait auto si montant vide</label>';
+    echo '<div class="lfi-app-help"><small>Ces postes sont <strong>à la charge du bailleur</strong> et entrent dans la demande <strong>amiable</strong> : relogement (art. L.521-3-1 CCH), sujétions du traitement, remplacement des effets dégradés, et les frais engagés (repris du dossier). La demande n\'est donc jamais « que des travaux » : elle est aussi <strong>relogement + financière</strong>.</small></div>';
 
     echo '<h4 style="margin:12px 0 4px;color:#c8102e">Pièces & aggravations (cochez ce qui s\'applique)</h4>';
     foreach ([
