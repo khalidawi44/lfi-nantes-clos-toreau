@@ -320,7 +320,12 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
            suite, rattaché à SON enquête. Ainsi elle apparaît partout (dossiers,
            « lier un compte »…) sans ressaisie, et on peut lui partager son espace. */
         $tenant_uid = function_exists('lfi_nct_ep_ensure_tenant') ? (int) lfi_nct_ep_ensure_tenant($row) : 0;
-        if ($tenant_uid && $match) update_user_meta($tenant_uid, 'lfi_nct_ga', $match['slug']);
+        /* On ne fixe le GA du compte QUE s'il n'en a pas encore — JAMAIS on ne
+           déplace un compte locataire existant (sinon il « disparaît » de son GA). */
+        if ($tenant_uid && $match) {
+            $cur_ga = (string) get_user_meta($tenant_uid, 'lfi_nct_ga', true);
+            if ($cur_ga === '') update_user_meta($tenant_uid, 'lfi_nct_ga', $match['slug']);
+        }
 
         lfi_nct_geo_queue_contact([
             'sub_id'  => $sub_id,

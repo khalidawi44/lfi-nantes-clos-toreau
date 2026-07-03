@@ -813,6 +813,26 @@ function lfi_nct_ep_ensure_tenant($row) {
     return (int) $uid;
 }
 
+/* NETTOYAGE (une fois) : un compte locataire dont le GA pointe vers un groupe
+   qui N'EXISTE PLUS (ex. un GA « auto » supprimé) a « disparu » de tout espace.
+   On le ramène à l'espace d'origine (Clos Toreau) pour qu'il réapparaisse. */
+add_action('init', 'lfi_nct_heal_orphan_tenant_ga', 16);
+function lfi_nct_heal_orphan_tenant_ga() {
+    if (get_option('lfi_nct_heal_orphan_ga_v1')) return;
+    if (!defined('LFI_NCT_ROLE_TENANT')) return;
+    $custom = function_exists('lfi_nct_groupes_custom') ? lfi_nct_groupes_custom() : [];
+    $valid = is_array($custom) ? array_keys($custom) : [];
+    $valid[] = 'clos-toreau';
+    $users = get_users(['role' => LFI_NCT_ROLE_TENANT, 'number' => 2000, 'fields' => ['ID']]);
+    foreach ($users as $u) {
+        $g = (string) get_user_meta($u->ID, 'lfi_nct_ga', true);
+        if ($g !== '' && $g !== 'clos-toreau' && !in_array($g, $valid, true)) {
+            update_user_meta($u->ID, 'lfi_nct_ga', ''); // '' = Clos Toreau (espace d'origine)
+        }
+    }
+    update_option('lfi_nct_heal_orphan_ga_v1', 1, false);
+}
+
 /** Upload des photos → attachées au locataire (meta _lfi_tenant_user_id), horodatées. */
 function lfi_nct_ep_handle_photos($tenant_uid) {
     if (empty($_FILES['photos']['name'][0])) return 0;
@@ -2586,6 +2606,25 @@ function lfi_nct_app_view_comptes_locataires() {
     if (function_exists('lfi_nct_users_ga_query')) $args_users = lfi_nct_users_ga_query($args_users);
     $users_tenant = get_users($args_users);
     $n_tenant = count($users_tenant);
+
+    /* MÉNAGE : on retire de « enquêtes sans compte » celles qui correspondent en
+       fait à un compte locataire DÉJÀ existant (même nom, email ou téléphone) —
+       même si le lien interne s'est perdu. Fini de proposer de recréer un compte
+       qui existe (ex. Gourdien). */
+    $norm = function ($s) { $s = strtolower(trim(preg_replace('/\s+/', ' ', (string) $s))); return function_exists('remove_accents') ? remove_accents($s) : $s; };
+    $tenant_idset = [];
+    foreach ($users_tenant as $tu) {
+        $nm = $norm($tu->display_name); if ($nm !== '') $tenant_idset['n:' . $nm] = 1;
+        $em = $norm($tu->user_email);  if ($em !== '') $tenant_idset['e:' . $em] = 1;
+        $tel = preg_replace('/\D/', '', (string) get_user_meta($tu->ID, 'lfi_nct_tel', true)); if ($tel !== '') $tenant_idset['t:' . $tel] = 1;
+    }
+    $unlinked_responses = array_values(array_filter($unlinked_responses, function ($r) use ($tenant_idset, $norm) {
+        $nm = $norm(trim(($r->contact_prenom ?? '') . ' ' . ($r->contact_nom ?? '')));
+        if ($nm !== '' && isset($tenant_idset['n:' . $nm])) return false;
+        $em = $norm($r->contact_email ?? ''); if ($em !== '' && isset($tenant_idset['e:' . $em])) return false;
+        $tel = preg_replace('/\D/', '', (string) ($r->contact_tel ?? '')); if ($tel !== '' && isset($tenant_idset['t:' . $tel])) return false;
+        return true;
+    }));
 
     /* Tri "avec enquête / sans enquête" : on filtre après coup */
     if ($sort === 'avec_enq' || $sort === 'sans_enq') {
