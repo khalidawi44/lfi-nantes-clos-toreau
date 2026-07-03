@@ -106,9 +106,11 @@ function lfi_nct_alertes_auto() {
             $out[] = [
                 'prio'      => 'haute',
                 'titre'     => '📞 Premier contact à faire — ' . $full,
-                'detail'    => 'La personne attend d\'être recontactée — rien n\'est encore engagé.',
+                'detail'    => 'La personne attend d\'être recontactée — invite-la sur l\'app, puis prends RDV.',
                 'url'       => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
                 'dossier_id'=> (int) $r->id,
+                /* Invitation directe (SMS + lien app) si on a le compte locataire. */
+                'invite_uid'=> $tuid > 0 ? $tuid : 0,
             ];
         }
 
@@ -214,6 +216,10 @@ function lfi_nct_render_home_alerts() {
         echo '<span style="flex:1"><strong>' . esc_html($al['titre']) . '</strong>' . (!empty($al['detail']) ? '<br><span style="font-size:.88em;color:#555">' . esc_html($al['detail']) . '</span>' : '') . '</span>';
         echo '<span style="color:#c8102e;font-weight:700;white-space:nowrap;align-self:center">Ouvrir →</span>';
         echo '</a>';
+        /* Bouton d'invitation directe : SMS pré-rédigé + lien app (parcours guidé). */
+        if (!empty($al['invite_uid'])) {
+            echo '<div style="padding:0 4px 8px 24px"><a class="btn-primary" style="background:#0066a3;padding:7px 12px;font-size:.85em" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => (int) $al['invite_uid'], 'autoshare' => 1])) . '">📲 Inviter sur l\'app (SMS pré-rédigé)</a></div>';
+        }
         /* Croix « écarter » pour les alertes liées à un dossier (fait / non pertinent). */
         if (!empty($al['dossier_id'])) {
             $du = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_alert_dismiss&did=' . (int) $al['dossier_id']), 'lfi_nct_alert_dismiss_' . (int) $al['dossier_id']);

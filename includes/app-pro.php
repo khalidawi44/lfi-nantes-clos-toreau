@@ -339,7 +339,9 @@ function lfi_nct_app_view_dossier() {
        usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
        mot de passe (onboarding) puis complète sa fiche / dépose ses pièces. */
     $share_link = '';
-    if (!empty($_POST['lfi_share_tenant']) && check_admin_referer('lfi_share_tenant')) {
+    $do_share = (!empty($_POST['lfi_share_tenant']) && check_admin_referer('lfi_share_tenant'))
+             || !empty($_GET['autoshare']); /* arrivée depuis « Inviter par SMS » */
+    if ($do_share) {
         $share_link = (function_exists('lfi_nct_login_link'))
             ? lfi_nct_login_link((int) $u->ID, function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'))
             : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
@@ -442,10 +444,13 @@ function lfi_nct_app_view_dossier() {
     echo '</div>';
     if ($share_link !== '') {
         $prenom_t = $u->first_name ?: ($row && $row->contact_prenom ? $row->contact_prenom : '');
+        $moi = wp_get_current_user();
+        $moi_nom = $moi->display_name ?: $moi->user_login;
         $intro = ($prenom_t ? 'Bonjour ' . $prenom_t . ', ' : 'Bonjour, ')
-                  . "voici votre espace personnel LFI pour suivre votre logement (gratuit, confidentiel). "
+                  . "c'est " . $moi_nom . " du Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau. "
+                  . "Comme convenu, voici votre espace personnel pour suivre votre logement (gratuit, confidentiel). "
                   . "Connexion directe (rien à taper) : " . $share_link
-                  . " — vous choisirez votre mot de passe, puis vous pourrez compléter votre dossier et envoyer vos photos. On vous recontacte, on est là pour vous accompagner.";
+                  . " — vous choisirez votre mot de passe, puis vous serez guidé·e pas à pas pour compléter votre profil, votre dossier et envoyer vos photos. On prend rendez-vous pour venir vous voir. On est là pour vous accompagner.";
         echo '<div class="lfi-app-help" style="margin-top:8px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le. <strong>Ne régénère pas</strong> après l\'envoi (ça l\'invalide).</small></div>';
         echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
         if ($tel) echo '<a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($intro) . '">📲 Envoyer par SMS</a>';
