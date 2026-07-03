@@ -101,6 +101,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_member_password',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/member-role', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_member_role',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
@@ -115,17 +120,74 @@ add_action('rest_api_init', function () {
 
 /** Liste des comptes du GA (pour affecter un référent). */
 function lfi_nct_ingest_rest_membres_ga($request) {
-    $args = ['number' => 200, 'fields' => ['ID', 'display_name', 'user_email']];
-    $users = get_users($args);
+    $role = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+    /* On filtre par rôle côté serveur (role__in) : indispensable, car avec
+       'fields' restreint les rôles ne sont PAS chargés et le filtre échouait
+       → la liste revenait toujours vide. */
+    $users = get_users(['role__in' => ['administrator', 'lfi_nct_ga', $role], 'number' => 200]);
     $out = [];
     foreach ($users as $u) {
-        $roles = (array) $u->roles;
-        /* Comptes avec accès app : admins + rôle GA. */
-        if (array_intersect($roles, ['administrator', 'lfi_nct_ga', defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga'])) {
-            $out[] = ['id' => (int) $u->ID, 'nom' => $u->display_name, 'email' => $u->user_email];
-        }
+        $out[] = ['id' => (int) $u->ID, 'nom' => $u->display_name, 'email' => $u->user_email, 'roles' => array_values((array) $u->roles)];
     }
     return new WP_REST_Response(['ok' => true, 'membres' => $out], 200);
+}
+
+/**
+ * Change le RÔLE d'un compte (membre du GA ↔ locataire) et, en option, le lie
+ * à un dossier locataire. Réservé à la clé d'intégration.
+ * Params : user_id|email, role ('tenant'|'ga'), dossier_id (option), remove_mailbox (option).
+ */
+function lfi_nct_ingest_rest_member_role($request) {
+    global $wpdb;
+    $uid   = (int) $request->get_param('user_id');
+    $email = sanitize_email((string) $request->get_param('email'));
+    if (!$uid && $email && ($u = get_user_by('email', $email))) $uid = (int) $u->ID;
+    $user = $uid ? get_userdata($uid) : null;
+    if (!$user) return new WP_REST_Response(['ok' => false, 'error' => 'compte_introuvable'], 400);
+
+    $role = sanitize_key((string) $request->get_param('role'));
+    $tenant_role = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+    $ga_role     = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+    $target = ($role === 'tenant') ? $tenant_role : (($role === 'ga') ? $ga_role : '');
+    if ($target === '' || !get_role($target)) return new WP_REST_Response(['ok' => false, 'error' => 'role_invalide'], 400);
+
+    /* set_role remplace tous les rôles : le compte devient UNIQUEMENT ce rôle
+       (on ne touche pas à un vrai administrateur par sécurité). */
+    if (in_array('administrator', (array) $user->roles, true)) {
+        return new WP_REST_Response(['ok' => false, 'error' => 'compte_admin_protege'], 400);
+    }
+    $user->set_role($target);
+
+    /* Lien au dossier locataire (tenant_user_id). */
+    $did = (int) $request->get_param('dossier_id');
+    $linked = 0;
+    if ($did) {
+        $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        if ($wpdb->get_row($wpdb->prepare("SELECT id FROM $t WHERE id = %d", $did))) {
+            $wpdb->update($t, ['tenant_user_id' => $uid], ['id' => $did]);
+            $linked = $did;
+        }
+    }
+
+    /* Retrait éventuel de sa boîte du check multi-boîtes (plus un membre). */
+    $removed_box = false;
+    if ($request->get_param('remove_mailbox')) {
+        $boxes = get_option('lfi_nct_member_mailboxes', []);
+        if (is_array($boxes) && isset($boxes[(string) $uid])) {
+            unset($boxes[(string) $uid]);
+            update_option('lfi_nct_member_mailboxes', $boxes, false);
+            $removed_box = true;
+        }
+    }
+
+    return new WP_REST_Response([
+        'ok'        => true,
+        'user_id'   => $uid,
+        'email'     => $user->user_email,
+        'role'      => $target,
+        'dossier'   => $linked,
+        'boite_retiree' => $removed_box,
+    ], 200);
 }
 
 /** Affecte un dossier à un référent (membre du GA). */
