@@ -2440,6 +2440,8 @@ function lfi_nct_app_view_comptes_locataires() {
                     $old_ville = (string) ($data['ville'] ?? '');
                     $data['ville']   = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
                     $data['enfants'] = sanitize_text_field(wp_unslash($_POST['enfants'] ?? ''));
+                    $obj_in = sanitize_key($_POST['objectif'] ?? '');
+                    if (in_array($obj_in, ['', 'travaux', 'relogement', 'indemnisation', 'a_voir'], true)) $data['objectif'] = $obj_in;
                     $upd = [
                         'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
                     ];
@@ -2772,25 +2774,28 @@ function lfi_nct_app_view_comptes_locataires() {
                 echo '</div>';
                 echo '<div class="lfi-app-help" style="margin:2px 0 6px"><small>⚠️ La <strong>ville</strong> est indispensable pour rattacher la fiche au bon groupe d\'action.</small></div>';
 
-                $type_labels = [
-                    'degats_eaux'      => '💧 Dégâts des eaux',
-                    'humidite'         => '🌫 Humidité / moisissures',
-                    'insectes'         => '🐜 Nuisibles (cafards, rats…)',
-                    'chauffage'        => '🥶 Chauffage défaillant',
-                    'electricite'      => '⚡ Électricité défectueuse',
-                    'ascenseur'        => '🛗 Ascenseur en panne',
-                    'parties_communes' => '🚪 Parties communes dégradées',
-                    'bruit'            => '🔊 Nuisances sonores',
-                    'securite'         => '🚨 Insécurité',
-                ];
+                /* Liste COMPLÈTE des types (base + appris) → les réponses déjà
+                   données dans l'enquête se retrouvent cochées, on n'a plus qu'à
+                   ajouter/enlever. On ajoute aussi tout type stocké mais inconnu
+                   pour ne RIEN perdre. */
+                $type_labels = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [];
+                foreach ($cur_types as $ct) { if (!isset($type_labels[$ct])) $type_labels[$ct] = ucfirst(str_replace('_', ' ', (string) $ct)); }
+                echo '<div class="lfi-app-help" style="margin:4px 0"><small>Ce que la personne a déjà signalé est <strong>déjà coché</strong>. Ajoute ou enlève, c\'est tout.</small></div>';
                 echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px;background:#fff;padding:10px;border-radius:6px;margin:6px 0">';
                 foreach ($type_labels as $k => $lbl) {
                     $check = in_array($k, $cur_types, true) ? 'checked' : '';
                     echo '<label style="display:flex;align-items:center;gap:6px;margin:0;padding:4px;cursor:pointer">';
                     echo '<input type="checkbox" name="problemes_types[]" value="' . esc_attr($k) . '" ' . $check . '>';
-                    echo '<span>' . esc_html($lbl) . '</span></label>';
+                    echo '<span>' . wp_kses_post($lbl) . '</span></label>';
                 }
                 echo '</div>';
+
+                /* Objectif du locataire (déjà exprimé) — modifiable, jamais à ressaisir. */
+                $cur_obj = (string) ($data['objectif'] ?? '');
+                $obj_opts = ['' => '— À décider avec la personne —', 'travaux' => '🔧 Que les travaux soient faits', 'relogement' => '🏠 Être relogé·e (déménager)', 'indemnisation' => '💶 Être indemnisé·e', 'a_voir' => '🤝 À voir ensemble'];
+                echo '<label>🎯 Ce que veut la personne<select name="objectif" style="width:100%">';
+                foreach ($obj_opts as $ok => $ol) echo '<option value="' . esc_attr($ok) . '"' . selected($ok, $cur_obj, false) . '>' . esc_html($ol) . '</option>';
+                echo '</select></label>';
                 echo '<label>Autre problème (libre)<input type="text" name="problemes_types_autre" value="' . esc_attr($cur_autre) . '"></label>';
                 echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
                 echo '<label>Gravité (0-10)<input type="number" name="problemes_gravite" min="0" max="10" value="' . esc_attr($cur_gravite) . '"></label>';
