@@ -211,19 +211,28 @@ function lfi_nct_app_view_partenaire_dashboard() {
     if (!empty($_GET['del'])) lfi_nct_app_flash('🗑 Élément retiré.');
     if (!empty($_GET['msg'])) lfi_nct_app_flash('✅ Message envoyé à Fabrice.');
 
-    echo '<div class="lfi-app-help" style="margin:0 0 14px">👋 Bienvenue dans ton espace privé. Ici, tu as une <strong>ligne directe avec Fabrice</strong> et un <strong>dossier qu\'on partage tous les deux</strong>. C\'est confidentiel, entre nous.</div>';
+    echo '<div class="lfi-app-help" style="margin:0 0 14px">👋 Bienvenue dans ton espace privé. Tout est <strong>simple et rangé par thème</strong>. Tu as une <strong>ligne directe avec Fabrice</strong>, un <strong>dossier qu\'on partage</strong>, des <strong>assistants qui travaillent pour toi</strong>, et les <strong>contacts directs</strong> des responsables de GA. C\'est confidentiel, entre nous.</div>';
 
-    /* « Billes » : ce que Fabrice partage volontairement (argumentaire public). */
-    echo '<h3 style="margin:8px 0 6px;color:#186a3b">🧰 Des billes pour toi</h3>';
+    /* 1) Thématiques prêtes à l'emploi (argumentaire public, rangé simplement). */
+    echo '<h3 style="margin:8px 0 6px;color:#c8102e">📚 Tes dossiers thématiques</h3>';
+    echo '<div class="lfi-app-help" style="margin-bottom:8px">Les infos utiles, mâchées, prêtes à ressortir en conseil ou face à la presse.</div>';
     echo '<div class="lfi-app-grid">';
-    lfi_nct_partner_tile('💶', 'Où va le loyer ?', 'L\'argumentaire chiffré sur le bailleur', lfi_nct_app_url('audit-nmh'));
+    lfi_nct_partner_tile('💶', 'Comptes de NMH', 'L\'étude du bailleur, par thème', lfi_nct_app_url('nmh'));
     if (function_exists('lfi_nct_reussites_count_published')) {
         lfi_nct_partner_tile('🏆', 'Nos victoires', lfi_nct_reussites_count_published() . ' familles aidées (anonyme)', lfi_nct_app_url('victoires'));
     }
-    lfi_nct_partner_tile('📲', 'Installer l\'app', 'La garder sur ton écran d\'accueil', lfi_nct_app_url('installer'));
     echo '</div>';
 
+    /* 2) Assistants (robots). */
+    echo '<h3 style="margin:20px 0 6px;color:#2c3e91">🤖 Tes assistants</h3>';
+    echo '<div class="lfi-app-card" style="border-left:4px solid #2c3e91"><div class="com">Des <strong>robots travaillent pour toi</strong>. Tu leur poses une question (même à la voix) : « que répondre sur le logement social ? », « prépare-moi 3 arguments sur NMH »… ils te sortent une réponse claire, appuyée sur nos données. Tu peux vraiment t\'en emparer.</div>';
+    echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#2c3e91" href="' . esc_url(lfi_nct_app_url('aide')) . '">🤖 Poser une question à un assistant</a></div></div>';
+
+    /* 3) Ligne directe + dossier partagé. */
     lfi_nct_partner_render_shared($uid, $back);
+
+    /* 4) Organigramme des responsables de GA (appel direct). */
+    lfi_nct_partner_render_organigramme();
 
     echo '<h3 style="margin:22px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>';
     echo '<div class="lfi-app-grid">';
@@ -234,6 +243,89 @@ function lfi_nct_app_view_partenaire_dashboard() {
 }
 function lfi_nct_partner_tile($ico, $tit, $sub, $url) {
     echo '<a class="lfi-app-tile" href="' . esc_url($url) . '"><div class="ico">' . $ico . '</div><div class="tit">' . esc_html($tit) . '</div><div class="sub">' . esc_html($sub) . '</div></a>';
+}
+
+/* -------------------------------------------------------------- *
+ *  Organigramme des responsables de GA (appel direct)            *
+ *  William peut appeler directement l'admin d'un GA quand besoin. *
+ * -------------------------------------------------------------- */
+function lfi_nct_partner_render_organigramme() {
+    if (!function_exists('lfi_nct_ga_admins')) return;
+    $admins = lfi_nct_ga_admins();
+    $lignes = [];
+    foreach ((array) $admins as $slug => $pair) {
+        $ga_nom = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($slug) : $slug;
+        foreach (['f', 'h'] as $k) {
+            $auid = (int) ($pair[$k] ?? 0);
+            if (!$auid) continue;
+            $u = get_userdata($auid);
+            if (!$u) continue;
+            $tel = trim((string) get_user_meta($auid, 'lfi_nct_tel', true));
+            $lignes[] = ['ga' => $ga_nom, 'nom' => $u->display_name ?: $u->user_login, 'tel' => $tel];
+        }
+    }
+    echo '<h3 style="margin:22px 0 6px;color:#186a3b">📇 Responsables des groupes d\'action</h3>';
+    echo '<div class="lfi-app-help">Les personnes qui pilotent chaque GA sur le terrain. Tu peux les <strong>appeler directement</strong> quand tu as besoin.</div>';
+    if (empty($lignes)) {
+        echo '<div class="lfi-app-help" style="color:#888">L\'annuaire se remplira à mesure que les GA nomment leurs responsables.</div>';
+        return;
+    }
+    echo '<ul class="lfi-app-list">';
+    foreach ($lignes as $l) {
+        echo '<li class="lfi-app-card" style="border-left:4px solid #186a3b">';
+        echo '<div class="head"><div class="who">' . esc_html($l['nom']) . '</div></div>';
+        echo '<div class="meta"><span class="meta-chip">🏳️ ' . esc_html($l['ga']) . '</span></div>';
+        if ($l['tel'] !== '') {
+            $telclean = preg_replace('/[^\d+]/', '', $l['tel']);
+            echo '<div style="margin-top:6px"><a class="btn-primary" style="background:#186a3b" href="tel:' . esc_attr($telclean) . '">📞 Appeler ' . esc_html($l['tel']) . '</a></div>';
+        } else {
+            echo '<div class="lfi-app-help" style="margin-top:4px"><small>Numéro non renseigné.</small></div>';
+        }
+        echo '</li>';
+    }
+    echo '</ul>';
+}
+
+/* -------------------------------------------------------------- *
+ *  VUE : l'étude des comptes de NMH, rangée SIMPLEMENT par thème  *
+ * -------------------------------------------------------------- */
+function lfi_nct_app_view_partenaire_nmh() {
+    if (!lfi_nct_user_role_partner() && !current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    lfi_nct_app_screen_open('💶 Comptes de NMH', 'L\'étude du bailleur, simple et par thème — chiffres publics, sourcés.');
+    echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('espace')) . '">← Mon espace</a></div>';
+    echo '<div class="lfi-app-help">Chaque thème tient en quelques lignes. Clique pour déplier. Tout est <strong>sourcé</strong> (Chambre régionale des comptes + comptes 2024 certifiés).</div>';
+
+    $themes = [
+        ['💰', 'L\'essentiel en une phrase',
+         'Sur un loyer moyen de <strong>330 €/mois</strong>, seulement <strong>21 € (6 %)</strong> vont vraiment à l\'entretien du logement. Le reste part surtout aux <strong>banques</strong> (intérêts de la dette, 33 %), à l\'<strong>État</strong> (taxe foncière, 16 %) et au <strong>fonctionnement</strong> de NMH (22 %).'],
+        ['📊', 'Les chiffres qui parlent',
+         '<ul style="margin:0;padding-left:18px;line-height:1.9">'
+         . '<li><strong>+23 000 logements</strong> (40 % du parc social de la métropole).</li>'
+         . '<li><strong>~939 M€</strong> de dette · <strong>+64 M€</strong> de dette nette par an.</li>'
+         . '<li>Résultat net : <strong>−90 % en 5 ans</strong> (9,1 M€ → 0,97 M€).</li>'
+         . '<li>Gros entretien : <strong>21 €/mois/logement</strong> seulement.</li></ul>'],
+        ['🏛️', 'Ta question prête pour le conseil',
+         '<em>À poser telle quelle, sans citer de loyer individuel ni l\'enquête :</em><blockquote style="border-left:3px solid #ccc;margin:8px 0;padding-left:12px;font-style:italic">« Le rapport de la Chambre régionale des comptes (ROD n°2025-134) relève que le gros entretien du parc représente environ 6 % du loyer, quand la charge de la dette en absorbe un tiers. Pour un quartier <strong>hors NPNRU</strong> comme Clos Toreau, pouvez-vous communiquer au conseil le <strong>Plan Pluriannuel de Travaux</strong> et le calendrier d\'investissement prévu ? »</blockquote><strong>Pourquoi ça marche :</strong> ce sont ses propres institutions qui répondent. Pas d\'accusation → pas de contre-attaque. L\'écart parle seul.'],
+        ['⚖️', 'Les leviers d\'action',
+         '<ul style="margin:0;padding-left:18px;line-height:1.9">'
+         . '<li><strong>CADA :</strong> demander le Plan Pluriannuel de Travaux de Clos Toreau.</li>'
+         . '<li><strong>Au CA de NMH :</strong> question écrite des représentants locataires (INDECOSA-CGT, CLCV).</li>'
+         . '<li><strong>Presse :</strong> « 21 € d\'entretien sur 330 € » + quartier hors NPNRU = inégalité documentable.</li></ul>'],
+        ['🛡️', 'Les garde-fous (à respecter)',
+         '<strong>Ratios moyens uniquement</strong> — jamais un loyer individuel. · <strong>Faits secs</strong>, pas d\'insulte (« menteuse » se retourne contre nous). · <strong>Aucun nom</strong> de locataire. On montre l\'écart entre le discours et les preuves, on n\'attaque pas les personnes.'],
+        ['📚', 'Les sources',
+         'Rapport CRC Pays de la Loire <strong>ROD n°2025-134</strong> (17 déc. 2025) · Comptes annuels NMH 2024 certifiés (CA du 26/06/2025) · Réponse officielle NMH au ROD (24 oct. 2025) · Convention NM–NMH 2023-2032.'],
+    ];
+    echo '<ul class="lfi-app-list">';
+    foreach ($themes as $i => $t) {
+        $open = $i === 0 ? ' open' : '';
+        echo '<li class="lfi-app-card" style="border-left:4px solid #c8102e;padding:0">';
+        echo '<details' . $open . '><summary style="cursor:pointer;font-weight:800;padding:12px 14px;list-style:none">' . $t[0] . ' ' . esc_html($t[1]) . '</summary>';
+        echo '<div class="com" style="padding:0 14px 14px">' . wp_kses_post($t[2]) . '</div></details></li>';
+    }
+    echo '</ul>';
+    echo '<div class="lfi-app-help" style="margin-top:8px">Besoin d\'un angle précis ou d\'un chiffre en plus ? <a href="' . esc_url(lfi_nct_app_url('espace') . '#ligne') . '">Demande-le à Fabrice sur ta ligne directe.</a></div>';
+    lfi_nct_app_screen_close();
 }
 
 /* -------------------------------------------------------------- *
@@ -312,23 +404,67 @@ function lfi_nct_app_view_partenaire_espace() {
     $p = $uid ? get_user_by('id', $uid) : null;
     if (!$p || !lfi_nct_user_role_partner($uid)) { wp_safe_redirect(lfi_nct_app_url('partenaires')); exit; }
     $back = lfi_nct_app_url('partenaire-espace', ['uid' => $uid]);
+
+    /* Mise à jour de l'email du partenaire (pour qu'il reçoive les réponses). */
+    if (!empty($_POST['lfi_partner_email']) && check_admin_referer('lfi_partner_email')) {
+        $em = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+        if (is_email($em) && (email_exists($em) === false || (int) email_exists($em) === $uid)) {
+            wp_update_user(['ID' => $uid, 'user_email' => $em]);
+        }
+        wp_safe_redirect(add_query_arg('mailok', 1, $back)); exit;
+    }
+    /* Génère (ou régénère) le lien magique — sur clic explicite uniquement,
+       car chaque génération invalide la précédente (usage unique). */
+    $fresh_link = '';
+    if (!empty($_POST['lfi_partner_genlink']) && check_admin_referer('lfi_partner_genlink')) {
+        $fresh_link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($uid, lfi_nct_app_url('espace')) : lfi_nct_app_url();
+    }
+
     lfi_nct_partner_handle_posts($uid, $back);
 
     lfi_nct_app_screen_open('🤝 ' . $p->display_name, 'Espace partagé — dossier co-géré + ligne directe');
-    if (!empty($_GET['ok']))  lfi_nct_app_flash('✅ Ajouté au dossier partagé.');
-    if (!empty($_GET['del'])) lfi_nct_app_flash('🗑 Élément retiré.');
-    if (!empty($_GET['msg'])) lfi_nct_app_flash('✅ Message envoyé.');
+    if (!empty($_GET['ok']))     lfi_nct_app_flash('✅ Ajouté au dossier partagé.');
+    if (!empty($_GET['del']))    lfi_nct_app_flash('🗑 Élément retiré.');
+    if (!empty($_GET['msg']))    lfi_nct_app_flash('✅ Message envoyé.');
+    if (!empty($_GET['mailok'])) lfi_nct_app_flash('✅ Email mis à jour.');
+    if (!empty($_GET['cree']))   lfi_nct_app_flash('✅ Compte créé — génère son lien + le message Telegram ci-dessous.');
 
-    /* Après création : le lien magique de connexion 1-clic + modèle Telegram. */
-    if (!empty($_GET['cree'])) {
-        $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($uid, lfi_nct_app_url('espace')) : lfi_nct_app_url();
-        $tg = get_user_meta($uid, 'lfi_nct_telegram', true);
-        echo '<div class="lfi-app-card" style="border:2px solid #186a3b;background:#f4fbf4">';
-        echo '<div class="com"><strong>✅ Compte créé.</strong> Voici son <strong>lien de connexion directe</strong> (1 clic, sans identifiant — usage unique, 14 jours). Colle-le dans ton message Telegram' . ($tg ? ' à <strong>' . esc_html($tg) . '</strong>' : '') . ' :</div>';
-        echo '<textarea readonly style="width:100%;height:44px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($link) . '</textarea>';
-        echo '<div class="lfi-app-help" style="margin-top:6px"><small>À la première connexion, il choisira son propre mot de passe et pourra installer l\'app sur son écran d\'accueil.</small></div>';
-        echo '</div>';
+    /* ===== Bloc « Message Telegram prêt à envoyer » ===== */
+    $tg = get_user_meta($uid, 'lfi_nct_telegram', true);
+    $is_placeholder_mail = (strpos((string) $p->user_email, '@partenaire.example') !== false);
+    echo '<div class="lfi-app-card" style="border:2px solid #4b2e83;background:#faf7ff">';
+    echo '<div class="head"><div class="who">📤 Message Telegram prêt à envoyer</div></div>';
+    if ($is_placeholder_mail) {
+        echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ Son email est un <strong>provisoire</strong>. Le lien de connexion marche quand même, mais mets son <strong>vrai email</strong> ci-dessous pour qu\'il reçoive tes réponses.</small></div>';
     }
+    /* Email éditable. */
+    echo '<form method="post" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_partner_email', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_partner_email" value="1">';
+    echo '<input type="email" name="email" value="' . esc_attr($p->user_email) . '" style="flex:1;min-width:180px;padding:8px;border:1px solid #ccc;border-radius:8px" placeholder="email de ' . esc_attr($p->display_name) . '">';
+    echo '<button type="submit" class="btn-ghost" style="padding:8px 12px">💾 Enregistrer l\'email</button></form>';
+
+    if ($fresh_link !== '') {
+        $prenom = $p->first_name ?: $p->display_name;
+        $message = "Salut " . $prenom . ",\n\n"
+                 . "On a construit un outil pour le terrain à Nantes Sud (Clos Toreau) : une appli qui structure notre action logement — l'enquête, l'argumentaire chiffré sur le bailleur, le suivi des victoires. Ça tourne, c'est concret, et je pense que ça peut te servir.\n\n"
+                 . "Je t'ai créé un espace rien qu'à toi. Dedans :\n"
+                 . "• une ligne directe avec moi (tu me poses tes questions, je réponds) ;\n"
+                 . "• un dossier qu'on partage tous les deux ;\n"
+                 . "• l'étude des comptes du bailleur rangée par thème, prête à ressortir en conseil ;\n"
+                 . "• des assistants qui bossent pour toi, et les contacts directs des responsables de GA.\n\n"
+                 . "Connexion en 1 clic, rien à taper : " . $fresh_link . "\n"
+                 . "(À la 1re ouverture, choisis ton mot de passe puis ajoute l'appli à ton écran d'accueil.)\n\n"
+                 . "L'idée : que tu t'en empares. On voit ensemble ce qu'on en fait.\n"
+                 . "À très vite,\nFabrice";
+        echo '<div class="lfi-app-help" style="margin-top:6px;background:#f4fbf4;border-left:4px solid #186a3b"><small>✅ Lien généré' . ($tg ? ' pour <strong>' . esc_html($tg) . '</strong>' : '') . '. Copie tout le message ci-dessous et colle-le dans Telegram. <strong>Ne régénère pas</strong> après l\'envoi (ça invalide le lien).</small></div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:230px;margin-top:6px;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($message) . '</textarea>';
+    } else {
+        echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_genlink', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_partner_genlink" value="1">';
+        echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🔗 Générer le lien + le message Telegram</button></form>';
+        echo '<div class="lfi-app-help" style="margin-top:4px"><small>Le lien connecte ' . esc_html($p->display_name) . ' d\'un seul clic, sans identifiant (usage unique, 14 jours).</small></div>';
+    }
+    echo '</div>';
 
     lfi_nct_partner_render_shared($uid, $back);
     lfi_nct_app_screen_close();
@@ -342,12 +478,49 @@ function lfi_nct_partner_dispatch() {
     if (!lfi_nct_user_role_partner()) return false;
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
     switch ($vue) {
+        case 'nmh':        lfi_nct_app_view_partenaire_nmh(); break;
         case 'audit-nmh':  lfi_nct_app_view_audit_nmh();  break;
         case 'victoires':  lfi_nct_app_view_victoires();  break;
+        case 'aide':       lfi_nct_app_view_aide();       break;
         case 'installer':  lfi_nct_app_view_installer();  break;
         case 'mon-profil': lfi_nct_app_view_mon_profil(); break;
         case 'espace':     /* fallthrough */
         default:           lfi_nct_app_view_partenaire_dashboard();
     }
     return true;
+}
+
+/* -------------------------------------------------------------- *
+ *  SEED : crée le compte de William Aucant une fois, au déploiement. *
+ *  Son interface est alors prête ; l'admin génère le lien Telegram   *
+ *  depuis « 🤝 Élu·es partenaires ». Mot de passe choisi par lui à   *
+ *  la 1re connexion (onboarding). Email provisoire → à compléter.    *
+ * -------------------------------------------------------------- */
+add_action('init', 'lfi_nct_partner_seed_william', 12);
+function lfi_nct_partner_seed_william() {
+    if (get_option('lfi_nct_partner_seed_william_done')) return;
+    if (!get_role(LFI_NCT_ROLE_PARTNER)) return; /* rôle pas encore prêt */
+
+    /* Déjà semé (marqueur) ? */
+    $already = get_users(['meta_key' => 'lfi_nct_partner_seed', 'meta_value' => 'william', 'number' => 1, 'fields' => 'ID']);
+    if (!empty($already)) { update_option('lfi_nct_partner_seed_william_done', 1, false); return; }
+
+    $login = username_exists('william.aucant') ? 'william.aucant.lfi' : 'william.aucant';
+    $email = 'william.aucant@partenaire.example'; /* provisoire — l'admin met le vrai */
+    if (username_exists($login) || email_exists($email)) { update_option('lfi_nct_partner_seed_william_done', 1, false); return; }
+
+    $uid = wp_insert_user([
+        'user_login'   => $login,
+        'user_email'   => $email,
+        'user_pass'    => wp_generate_password(16),
+        'display_name' => 'William Aucant',
+        'first_name'   => 'William',
+        'last_name'    => 'Aucant',
+        'role'         => LFI_NCT_ROLE_PARTNER,
+    ]);
+    if (!is_wp_error($uid)) {
+        update_user_meta($uid, 'lfi_nct_telegram', '@WilliamAucant');
+        update_user_meta($uid, 'lfi_nct_partner_seed', 'william');
+    }
+    update_option('lfi_nct_partner_seed_william_done', 1, false);
 }
