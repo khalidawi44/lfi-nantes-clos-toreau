@@ -339,3 +339,178 @@ function lfi_nct_app_view_suggestions() {
     echo '</ul>';
     lfi_nct_app_screen_close();
 }
+
+/* ============================================================== *
+ *  PREMIÈRE CONNEXION D'UN MEMBRE (ou locataire) — 2 étapes :      *
+ *   1) choisir SON mot de passe (que le téléphone/navigateur       *
+ *      l'enregistre dans le trousseau) ;                           *
+ *   2) installer l'app sur l'écran d'accueil (iPhone / Android).   *
+ *                                                                  *
+ *  Se déclenche quand quelqu'un arrive via son lien magique avec   *
+ *  un mot de passe pré-attribué : il ne connaît pas encore ses     *
+ *  identifiants, on l'invite à en choisir un qui lui appartient.   *
+ * ============================================================== */
+
+/** Membre « simple » de l'app (GA ou locataire), ni super-admin ni admin de GA. */
+function lfi_nct_member_onb_is_member() {
+    if (!is_user_logged_in()) return false;
+    if (current_user_can('manage_options')) return false;              /* super-admin */
+    if (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga()) return false; /* admin GA → son propre accueil */
+    $u = wp_get_current_user();
+    $roles = (array) $u->roles;
+    $ga = defined('LFI_NCT_ROLE_GA') && in_array(LFI_NCT_ROLE_GA, $roles, true);
+    $te = defined('LFI_NCT_ROLE_TENANT') && in_array(LFI_NCT_ROLE_TENANT, $roles, true);
+    return $ga || $te;
+}
+
+/** Faut-il montrer l'accueil membre ? (jamais fait). */
+function lfi_nct_member_onb_needed() {
+    if (!lfi_nct_member_onb_is_member()) return false;
+    return get_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', true) === '';
+}
+
+/** Étape à afficher : 'pwd' (choisir mot de passe) ou 'install' (mettre sur l'écran d'accueil). */
+function lfi_nct_member_onb_step() {
+    $uid = get_current_user_id();
+    return get_user_meta($uid, 'lfi_nct_member_pwd_set', true) === '1' ? 'install' : 'pwd';
+}
+
+/* Handlers (admin-post) : choisir le mot de passe / passer / terminer. */
+add_action('admin_post_lfi_nct_member_onb_pwd',    'lfi_nct_member_onb_handle_pwd');
+add_action('admin_post_lfi_nct_member_onb_skip',   'lfi_nct_member_onb_handle_skip');
+add_action('admin_post_lfi_nct_member_onb_finish', 'lfi_nct_member_onb_handle_finish');
+
+function lfi_nct_member_onb_handle_pwd() {
+    if (!lfi_nct_member_onb_is_member()) wp_safe_redirect(home_url('/app/'));
+    check_admin_referer('lfi_nct_member_onb');
+    $uid = get_current_user_id();
+    $pwd = (string) ($_POST['new_pwd'] ?? '');
+    $app = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    if (strlen($pwd) < 8) {
+        wp_safe_redirect(add_query_arg('onb_err', 'court', $app)); exit;
+    }
+    /* wp_set_password déconnecte : on ré-authentifie tout de suite. */
+    wp_set_password($pwd, $uid);
+    wp_set_current_user($uid);
+    wp_set_auth_cookie($uid, true);
+    update_user_meta($uid, 'lfi_nct_member_pwd_set', '1');
+    wp_safe_redirect(add_query_arg('onb', 'install', $app)); exit;
+}
+function lfi_nct_member_onb_handle_skip() {
+    if (lfi_nct_member_onb_is_member()) {
+        check_admin_referer('lfi_nct_member_onb');
+        update_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', current_time('mysql'));
+    }
+    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
+}
+function lfi_nct_member_onb_handle_finish() {
+    if (lfi_nct_member_onb_is_member()) {
+        check_admin_referer('lfi_nct_member_onb');
+        update_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', current_time('mysql'));
+    }
+    wp_safe_redirect(add_query_arg('bienvenue', 1, function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/'))); exit;
+}
+
+/** Overlay d'accueil membre — rendu globalement sur la page de l'app (pied de page),
+ *  pour couvrir aussi l'arrivée directe sur un créneau via lien magique. */
+add_action('wp_footer', 'lfi_nct_member_onb_render', 5);
+function lfi_nct_member_onb_render() {
+    if (!is_singular()) return;
+    $post = get_post();
+    if (!$post || (defined('LFI_NCT_APP_SLUG') && $post->post_name !== LFI_NCT_APP_SLUG)) return;
+    if (!lfi_nct_member_onb_needed()) return;
+
+    $u = wp_get_current_user();
+    $login = $u->user_login;
+    $step  = lfi_nct_member_onb_step();
+    $ap    = admin_url('admin-post.php');
+    $nonce = wp_create_nonce('lfi_nct_member_onb');
+    $ios   = (bool) preg_match('/iPhone|iPad|iPod/i', (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $err   = isset($_GET['onb_err']) ? sanitize_text_field(wp_unslash($_GET['onb_err'])) : '';
+    ?>
+    <div class="lfi-monb-ov" id="lfi-monb">
+      <div class="lfi-monb-modal">
+        <div class="lfi-monb-head">
+          <div class="lfi-monb-dots"><span class="d <?php echo $step==='pwd'?'on':''; ?>"></span><span class="d <?php echo $step==='install'?'on':''; ?>"></span></div>
+          <div class="lfi-monb-title">Bienvenue 👋</div>
+          <div class="lfi-monb-sub">Deux petites étapes pour bien démarrer.</div>
+        </div>
+
+        <?php if ($step === 'pwd'): ?>
+          <div class="lfi-monb-body">
+            <h3>🔐 Choisis TON mot de passe</h3>
+            <p>Tu es connecté·e automatiquement par ton lien — bravo ! Pour la prochaine fois, choisis un mot de passe <strong>à toi</strong>. Ton téléphone te proposera de l'enregistrer : accepte, tu n'auras plus jamais à le retaper.</p>
+            <?php if ($err === 'court'): ?><div class="lfi-monb-err">Le mot de passe doit faire au moins 8 caractères.</div><?php endif; ?>
+            <form method="post" action="<?php echo esc_url($ap); ?>" autocomplete="on">
+              <input type="hidden" name="action" value="lfi_nct_member_onb_pwd">
+              <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
+              <input type="text" name="username" value="<?php echo esc_attr($login); ?>" autocomplete="username" readonly hidden>
+              <label>Nouveau mot de passe
+                <input type="password" name="new_pwd" id="lfi-monb-pw" minlength="8" required autocomplete="new-password" placeholder="au moins 8 caractères">
+              </label>
+              <label class="lfi-monb-show"><input type="checkbox" id="lfi-monb-see"> Afficher le mot de passe</label>
+              <button type="submit" class="lfi-monb-go">Enregistrer mon mot de passe →</button>
+            </form>
+            <form method="post" action="<?php echo esc_url($ap); ?>" style="text-align:center;margin-top:6px">
+              <input type="hidden" name="action" value="lfi_nct_member_onb_skip">
+              <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
+              <button type="submit" class="lfi-monb-skip">Plus tard</button>
+            </form>
+          </div>
+        <?php else: ?>
+          <div class="lfi-monb-body">
+            <h3>📲 Installe l'app sur ton écran d'accueil</h3>
+            <p>Comme ça, tu la retrouves d'un seul geste, comme une vraie appli — pas besoin de chercher un lien à chaque fois.</p>
+            <?php if ($ios): ?>
+              <ol class="lfi-monb-steps">
+                <li>En bas de Safari, appuie sur <strong>Partager</strong> <span style="font-size:1.2em">⬆️</span></li>
+                <li>Fais défiler et choisis <strong>« Sur l'écran d'accueil »</strong></li>
+                <li>Appuie sur <strong>Ajouter</strong> en haut à droite ✅</li>
+              </ol>
+            <?php else: ?>
+              <ol class="lfi-monb-steps">
+                <li>Ouvre le menu <strong>⋮</strong> (en haut à droite de Chrome)</li>
+                <li>Choisis <strong>« Ajouter à l'écran d'accueil »</strong> / « Installer l'application »</li>
+                <li>Confirme <strong>Ajouter / Installer</strong> ✅</li>
+              </ol>
+            <?php endif; ?>
+            <div class="lfi-monb-hint">Tu pourras toujours refaire ça depuis « 📲 Installer l'app ».</div>
+            <form method="post" action="<?php echo esc_url($ap); ?>">
+              <input type="hidden" name="action" value="lfi_nct_member_onb_finish">
+              <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
+              <button type="submit" class="lfi-monb-go">✅ C'est bon, je commence</button>
+            </form>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <style>
+    .lfi-monb-ov{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .lfi-monb-modal{background:#fff;border-radius:18px;max-width:420px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+    .lfi-monb-head{background:#c8102e;color:#fff;padding:18px 20px;border-radius:18px 18px 0 0}
+    .lfi-monb-dots{display:flex;gap:6px;margin-bottom:8px}
+    .lfi-monb-dots .d{width:28px;height:5px;border-radius:3px;background:rgba(255,255,255,.4)}
+    .lfi-monb-dots .d.on{background:#fff}
+    .lfi-monb-title{font-weight:800;font-size:1.25em}
+    .lfi-monb-sub{opacity:.9;font-size:.9em;margin-top:2px}
+    .lfi-monb-body{padding:18px 20px}
+    .lfi-monb-body h3{margin:0 0 8px;color:#222}
+    .lfi-monb-body p{color:#555;margin:0 0 12px;line-height:1.5}
+    .lfi-monb-body label{display:flex;flex-direction:column;gap:5px;font-size:.9em;color:#555;margin:10px 0}
+    .lfi-monb-body input[type=password]{font-size:1.05em;padding:12px;border:1.5px solid #ddd;border-radius:10px;background:#fafafa}
+    .lfi-monb-show{flex-direction:row!important;align-items:center;gap:8px;color:#333!important;font-size:.85em!important}
+    .lfi-monb-show input{width:18px;height:18px}
+    .lfi-monb-go{width:100%;background:#186a3b;color:#fff;border:none;padding:13px;border-radius:12px;font-weight:800;font-size:1.02em;cursor:pointer;margin-top:6px}
+    .lfi-monb-skip{background:none;border:none;color:#999;text-decoration:underline;cursor:pointer;font-size:.9em}
+    .lfi-monb-err{background:#fdecea;color:#b71c1c;border-radius:8px;padding:8px 10px;font-size:.9em;margin-bottom:8px}
+    .lfi-monb-steps{margin:8px 0;padding-left:20px;color:#333;line-height:1.8}
+    .lfi-monb-hint{font-size:.85em;color:#888;margin:8px 0 12px}
+    </style>
+    <script>
+    (function(){
+      var see=document.getElementById('lfi-monb-see'),pw=document.getElementById('lfi-monb-pw');
+      if(see&&pw){see.addEventListener('change',function(){pw.type=see.checked?'text':'password';});}
+    })();
+    </script>
+    <?php
+}

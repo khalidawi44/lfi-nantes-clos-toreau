@@ -704,6 +704,7 @@ function lfi_nct_app_view_ga_dashboard() {
     /* Coordination : se mobiliser sur des actions liées aux événements/campagnes. */
     $coord_tiles = [
         ['🤝', 'Se coordonner',             'Tractage kermesse, campagnes… je participe', lfi_nct_app_url('mobilisation')],
+        ['🏆', 'Nos victoires',             'Ce qu\'on a obtenu ensemble',          lfi_nct_app_url('victoires')],
         ['💡', 'Idées d\'actions',          'Proposer / soutenir une idée',        lfi_nct_app_url('propositions')],
         ['🧰', 'Suggérer un outil',         'Un besoin sur ton terrain ?',         lfi_nct_app_url('suggerer-outil')],
     ];
@@ -1568,14 +1569,18 @@ function lfi_nct_find_user_by_login_token($token) {
     return $uid;
 }
 
-/** URL de connexion directe (app + jeton). '' si pas d'uid. */
-function lfi_nct_login_link($uid) {
+/** URL de connexion directe (app + jeton). '' si pas d'uid.
+ *  $next_url : destination interne (ex. le tableau d'un créneau) où atterrir
+ *  une fois connecté — évite d'avoir à re-chercher. */
+function lfi_nct_login_link($uid, $next_url = '') {
     $uid = (int) $uid;
     if (!$uid) return '';
     $token = lfi_nct_make_login_token($uid);
     if (!$token) return '';
     $base = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
-    return add_query_arg('lfi_login', $token, $base);
+    $args = ['lfi_login' => $token];
+    if ($next_url !== '') $args['lfi_next'] = rawurlencode($next_url);
+    return add_query_arg($args, $base);
 }
 
 /**
@@ -1586,7 +1591,21 @@ add_action('template_redirect', 'lfi_nct_maybe_token_login', 1);
 function lfi_nct_maybe_token_login() {
     if (empty($_GET['lfi_login'])) return;
     $token = sanitize_text_field(wp_unslash($_GET['lfi_login']));
-    $dest  = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    $app   = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    $dest  = $app;
+    /* Destination optionnelle après connexion (ex. le créneau précis à voter). */
+    if (!empty($_GET['lfi_next'])) {
+        $next = rawurldecode(wp_unslash($_GET['lfi_next']));
+        /* Sécurité : on n'autorise que des URL internes vers la page de l'app. */
+        $app_path  = wp_parse_url($app,  PHP_URL_PATH);
+        $next_path = wp_parse_url($next, PHP_URL_PATH);
+        $next_host = wp_parse_url($next, PHP_URL_HOST);
+        $home_host = wp_parse_url(home_url('/'), PHP_URL_HOST);
+        if ($next_path && $app_path && strpos($next_path, $app_path) === 0
+            && (!$next_host || $next_host === $home_host)) {
+            $dest = $next;
+        }
+    }
     $uid   = lfi_nct_find_user_by_login_token($token);
     if ($uid) {
         delete_user_meta($uid, 'lfi_nct_login_token');      // usage unique

@@ -683,6 +683,7 @@ function lfi_nct_app_shortcode() {
         'aide'                   => 'lfi_nct_app_view_aide',
         'infos-cles'             => 'lfi_nct_app_view_infos_cles',
         'signaler-bug'           => 'lfi_nct_app_view_signaler_bug',
+        'victoires'              => 'lfi_nct_app_view_victoires',
     ];
     if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
         call_user_func($public_routes[$vue_public]);
@@ -1161,6 +1162,9 @@ function lfi_nct_app_render_dashboard() {
             <?php endif; ?>
             <div class="q"><span class="n"><?php echo (int) $stats['surveys']; ?></span><span class="l">Enquêtes</span></div>
             <div class="q"><span class="n"><?php echo (int) $stats['membres']; ?></span><span class="l">Membres actifs</span></div>
+            <?php if (function_exists('lfi_nct_reussites_count_published')): ?>
+            <a class="q" href="<?php echo esc_url(lfi_nct_app_url('victoires')); ?>" style="text-decoration:none;color:inherit"><span class="n">🏆 <?php echo (int) lfi_nct_reussites_count_published(); ?></span><span class="l">Victoires</span></a>
+            <?php endif; ?>
         </div>
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
