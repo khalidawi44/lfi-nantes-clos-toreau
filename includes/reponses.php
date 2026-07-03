@@ -152,6 +152,11 @@ function lfi_nct_app_view_generer_reponse() {
             'src'     => 'ga-membre',
         ];
         $wpdb->update($t, ['notes' => wp_json_encode($notes2), 'updated_at' => current_time('mysql')], ['id' => $id]);
+        /* Frais d'accompagnement : un courrier préparé = un frais engagé,
+           capitalisé pour le préjudice (via l'avocat) — JAMAIS facturé à NMH. */
+        if (function_exists('lfi_nct_frais_log')) {
+            lfi_nct_frais_log($id, 'courrier', 'Courrier d\'accompagnement — ' . (lfi_nct_reply_intentions()[$intention] ?? $intention), null, 'auto');
+        }
         wp_safe_redirect(lfi_nct_app_url('a-envoyer', ['ok' => 1]));
         exit;
     }

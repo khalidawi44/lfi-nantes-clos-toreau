@@ -116,6 +116,26 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_journal_add',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/frais-add', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_frais_add',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/frais-list', [
+        'methods'             => 'GET',
+        'callback'            => 'lfi_nct_ingest_rest_frais_list',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/interventions-list', [
+        'methods'             => 'GET',
+        'callback'            => 'lfi_nct_ingest_rest_interventions_list',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/intervention-reclass', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_intervention_reclass',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
@@ -382,6 +402,98 @@ function lfi_nct_ingest_rest_activity_log($request) {
     /* Tri par dernière activité décroissante. */
     usort($out, function ($a, $b) { return strcmp($b['derniere'], $a['derniere']); });
     return new WP_REST_Response(['ok' => true, 'fenetre_jours' => $days, 'comptes' => count($out), 'log' => $out], 200);
+}
+
+/** Ajoute une ligne de frais d'accompagnement à un dossier (→ préjudice/avocat). */
+function lfi_nct_ingest_rest_frais_add($request) {
+    if (!function_exists('lfi_nct_frais_log')) return new WP_REST_Response(['ok' => false, 'error' => 'module_absent'], 404);
+    $did  = (int) $request->get_param('dossier_id');
+    if (!$did) return new WP_REST_Response(['ok' => false, 'error' => 'dossier_manquant'], 400);
+    $type = sanitize_key((string) $request->get_param('type'));
+    $desc = sanitize_text_field((string) $request->get_param('description'));
+    $m    = $request->get_param('montant');
+    $montant = ($m === null || $m === '') ? null : (float) $m;
+    $id = lfi_nct_frais_log($did, $type ?: 'autre', $desc, $montant, 'rest');
+    if (!$id) return new WP_REST_Response(['ok' => false, 'error' => 'insertion_impossible'], 500);
+    return new WP_REST_Response(['ok' => true, 'id' => $id, 'total' => lfi_nct_frais_total($did)], 200);
+}
+
+/** Liste des frais d'accompagnement d'un dossier + total. */
+function lfi_nct_ingest_rest_frais_list($request) {
+    if (!function_exists('lfi_nct_frais_list')) return new WP_REST_Response(['ok' => false, 'error' => 'module_absent'], 404);
+    $did = (int) $request->get_param('dossier_id');
+    $rows = lfi_nct_frais_list($did);
+    $out = [];
+    foreach ($rows as $r) {
+        $out[] = ['id' => (int) $r->id, 'date' => $r->date_frais, 'type' => $r->type, 'description' => $r->description, 'montant' => (float) $r->montant, 'src' => $r->src];
+    }
+    return new WP_REST_Response(['ok' => true, 'frais' => $out, 'total' => lfi_nct_frais_total($did)], 200);
+}
+
+/** Liste des interventions (facturation travaux) — filtre option par nom locataire. */
+function lfi_nct_ingest_rest_interventions_list($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_interventions';
+    if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $t)) !== $t) return new WP_REST_Response(['ok' => false, 'error' => 'table_absente'], 404);
+    $nom = sanitize_text_field((string) $request->get_param('tenant'));
+    if ($nom !== '') {
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE tenant_nom LIKE %s OR tenant_prenom LIKE %s ORDER BY date_intervention DESC LIMIT 200", '%' . $wpdb->esc_like($nom) . '%', '%' . $wpdb->esc_like($nom) . '%')) ?: [];
+    } else {
+        $rows = $wpdb->get_results("SELECT * FROM $t ORDER BY date_intervention DESC LIMIT 200") ?: [];
+    }
+    $out = [];
+    foreach ($rows as $r) {
+        $out[] = [
+            'id' => (int) $r->id,
+            'tenant' => trim($r->tenant_prenom . ' ' . $r->tenant_nom),
+            'date' => $r->date_intervention,
+            'type' => $r->type_travaux,
+            'categorie' => $r->categorie_travaux,
+            'total_ht' => (float) $r->total_ht,
+            'statut' => $r->statut,
+            'facture' => $r->facture_numero,
+        ];
+    }
+    return new WP_REST_Response(['ok' => true, 'interventions' => $out], 200);
+}
+
+/**
+ * Reclasse une intervention FACTURÉE en frais d'accompagnement (→ avocat) :
+ * on annule son statut de facture et on crée une ligne de frais dans le dossier
+ * du locataire. Sert à corriger des factures émises à tort à NMH.
+ */
+function lfi_nct_ingest_rest_intervention_reclass($request) {
+    global $wpdb;
+    $ti = $wpdb->prefix . 'lfi_nct_interventions';
+    $iid = (int) $request->get_param('intervention_id');
+    $r = $iid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $ti WHERE id = %d", $iid)) : null;
+    if (!$r) return new WP_REST_Response(['ok' => false, 'error' => 'intervention_introuvable'], 404);
+
+    /* Dossier cible : fourni, sinon retrouvé par nom du locataire. */
+    $did = (int) $request->get_param('dossier_id');
+    if (!$did) {
+        $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $did = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $td WHERE tenant_nom = %s ORDER BY id ASC LIMIT 1", $r->tenant_nom));
+    }
+    if (!$did) return new WP_REST_Response(['ok' => false, 'error' => 'dossier_introuvable_pour_locataire'], 400);
+
+    $type = sanitize_key((string) $request->get_param('type')) ?: 'visite';
+    $m    = $request->get_param('montant');
+    $montant = ($m === null || $m === '') ? (float) $r->total_ht : (float) $m;
+    $desc = sanitize_text_field((string) $request->get_param('description'));
+    if ($desc === '') $desc = 'Reclassement facture NMH → frais : ' . ($r->type_travaux ?: 'visite/constat') . ' du ' . $r->date_intervention;
+
+    $fid = function_exists('lfi_nct_frais_log') ? lfi_nct_frais_log($did, $type, $desc, $montant, 'reclass') : 0;
+
+    /* On annule la facture côté intervention (plus de facture directe NMH). */
+    $wpdb->update($ti, [
+        'statut'         => 'reclasse_frais',
+        'facture_numero' => null,
+        'facture_date'   => null,
+    ], ['id' => $iid]);
+
+    return new WP_REST_Response(['ok' => true, 'intervention_id' => $iid, 'dossier_id' => $did, 'frais_id' => $fid, 'montant' => $montant], 200);
 }
 
 /** Ajoute une note / un rappel dans le Journal de bord (option : épinglé). */
