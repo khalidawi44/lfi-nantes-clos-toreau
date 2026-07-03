@@ -204,13 +204,13 @@ function lfi_nct_mobi_notify_members($row, $phase, $back_args, $types, $creneaux
     $lien   = lfi_nct_app_url('mobilisation', $back_args);
     if ($phase === 'invit') {
         $subject = '🎟️ Action confirmée : ' . $tmeta[1] . ' — ' . $when;
-        $intro   = "C'est confirmé ! On compte sur toi pour cette action.";
-        $cta     = 'Voir les détails & m\'inscrire';
+        $intro   = "C'est confirmé, on y va ! On compte sur toi. 👉 Clique le bouton pour voir les détails et confirmer ta présence — c'est ton clic qui te compte parmi nous.";
+        $cta     = '🙋 Je viens (clique ici)';
         $color   = '#186a3b';
     } else {
-        $subject = '🗳 Nouvelle action proposée : ' . $tmeta[1] . ' — ' . $when;
-        $intro   = "Une nouvelle action est proposée par le Groupe d'Action. Es-tu partant·e ?";
-        $cta     = 'Voter « je participe »';
+        $subject = '🗳 Ton avis : on fait cette action ? ' . $tmeta[1] . ' — ' . $when;
+        $intro   = "Le Groupe d'Action propose une action. Es-tu partant·e ? 👉 Clique le bouton et appuie sur « 🙋 Je participe ». C'est TON CLIC qui compte (inutile de répondre à cet email) — à partir de 4 « oui », on lance !";
+        $cta     = '🗳 Je participe (clique ici)';
         $color   = '#c8102e';
     }
     $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto">'
@@ -271,6 +271,86 @@ function lfi_nct_render_home_mobilisation() {
     echo '</div>';
     echo '<div style="text-align:center;margin-top:10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">🤝 Toutes les actions & campagnes →</a></div>';
     echo '</div>';
+}
+
+/* ============================================================== *
+ *  VOTE : pop-up « on attend votre décision » (membres)          *
+ * ============================================================== */
+/** Le premier créneau EN VOTE (à venir) que l'utilisateur n'a ni voté ni écarté. */
+function lfi_nct_mobi_pending_vote_for_user() {
+    if (!is_user_logged_in()) return null;
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_mobilisation';
+    $uid = get_current_user_id();
+    $seuil = lfi_nct_mobi_vote_threshold();
+    $today = wp_date('Y-m-d');
+    $dismissed = array_map('intval', (array) get_user_meta($uid, 'lfi_nct_vote_dismissed', true));
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $t WHERE (date_creneau >= %s OR date_creneau IS NULL)" . lfi_nct_mobi_scope_clause() . " ORDER BY date_creneau ASC LIMIT 60",
+        $today)) ?: [];
+    foreach ($rows as $r) {
+        $list = lfi_nct_mobi_parts($r);
+        if (count($list) >= $seuil) continue;          /* déjà actée */
+        if (in_array((int) $uid, $list, true)) continue; /* déjà voté oui */
+        if (in_array((int) $r->id, $dismissed, true)) continue; /* écarté */
+        return $r;
+    }
+    return null;
+}
+/** Handler : « je participe » depuis le pop-up. */
+add_action('admin_post_lfi_nct_vote', 'lfi_nct_mobi_vote_handler');
+function lfi_nct_mobi_vote_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $cid = isset($_GET['cid']) ? (int) $_GET['cid'] : 0;
+    if ($cid && check_admin_referer('lfi_nct_vote_' . $cid)) {
+        global $wpdb; $t = $wpdb->prefix . 'lfi_nct_mobilisation';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
+        if ($row) {
+            $list = lfi_nct_mobi_parts($row); $uid = get_current_user_id();
+            if (!in_array($uid, $list, true)) { $list[] = $uid; $wpdb->update($t, ['participants' => wp_json_encode(array_values(array_unique($list)))], ['id' => $cid]); }
+        }
+    }
+    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
+}
+/** Handler : « pas cette fois » (écarte le pop-up pour ce créneau). */
+add_action('admin_post_lfi_nct_vote_skip', 'lfi_nct_mobi_vote_skip_handler');
+function lfi_nct_mobi_vote_skip_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $cid = isset($_GET['cid']) ? (int) $_GET['cid'] : 0;
+    if ($cid && check_admin_referer('lfi_nct_vote_skip_' . $cid)) {
+        $uid = get_current_user_id();
+        $d = array_map('intval', (array) get_user_meta($uid, 'lfi_nct_vote_dismissed', true));
+        $d[] = $cid; update_user_meta($uid, 'lfi_nct_vote_dismissed', array_values(array_unique($d)));
+    }
+    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
+}
+/** Pop-up de vote — à appeler sur l'accueil (membre & admin). */
+function lfi_nct_render_vote_popup() {
+    $r = lfi_nct_mobi_pending_vote_for_user();
+    if (!$r) return;
+    $types = lfi_nct_mobi_types(); $creneaux = lfi_nct_mobi_creneaux();
+    $tmeta = $types[$r->type] ?? ['✨', 'Action'];
+    $when  = $r->date_creneau ? ucfirst(wp_date('l j M', strtotime($r->date_creneau))) : '';
+    $moment = $creneaux[$r->creneau] ?? '';
+    $lieu  = trim((string) $r->lieu);
+    $seuil = lfi_nct_mobi_vote_threshold();
+    $nb    = count(lfi_nct_mobi_parts($r));
+    $yes = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote&cid=' . (int) $r->id), 'lfi_nct_vote_' . (int) $r->id);
+    $no  = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote_skip&cid=' . (int) $r->id), 'lfi_nct_vote_skip_' . (int) $r->id);
+    ?>
+    <div id="lfi-vote-ov" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="background:#fff;color:#1a1a1a;border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 50px rgba(0,0,0,.35);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center">
+        <div style="font-size:42px">🗳</div>
+        <div style="font-weight:900;font-size:1.2em;color:#c8102e;margin-top:4px">On attend ta décision !</div>
+        <div style="margin-top:10px;font-size:1.05em"><strong><?php echo esc_html($tmeta[0] . ' ' . $tmeta[1]); ?></strong><br><?php echo esc_html($when . ' · ' . $moment); ?><?php echo $lieu ? '<br>📍 ' . esc_html($lieu) : ''; ?></div>
+        <div style="margin-top:6px;color:#666;font-size:.9em"><?php echo (int) $nb; ?>/<?php echo (int) $seuil; ?> — encore <?php echo max(0, $seuil - $nb); ?> pour lancer l'action</div>
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:center">
+          <a href="<?php echo esc_url($yes); ?>" style="background:#186a3b;color:#fff;text-decoration:none;font-weight:800;padding:12px 22px;border-radius:12px">🙋 Je participe</a>
+          <a href="<?php echo esc_url($no); ?>" style="background:#eee;color:#555;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">Pas cette fois</a>
+        </div>
+      </div>
+    </div>
+    <?php
 }
 
 /* ---- Membres du GA (uid, nom, tel) + suivi « SMS envoyé » ---- */
@@ -346,7 +426,8 @@ function lfi_nct_app_view_mobilisation_sms($cid, $ev = 0, $theme = '') {
     $when  = $r->date_creneau ? ucfirst(wp_date('l j M', strtotime($r->date_creneau))) : '';
     $lieu_txt = trim((string) $r->lieu) !== '' ? ' (RDV ' . $r->lieu . ')' : '';
     $lien = lfi_nct_app_url('mobilisation', $back);
-    $body = 'LFI Clos Toreau — ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Tu participes ? ' . $lien;
+    $body = 'LFI Clos Toreau 👋 On organise : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Tu es partant·e ?'
+          . "\n👉 Clique le lien, puis appuie sur « 🙋 Je participe ». C'est TON CLIC qui compte (pas la peine de répondre à ce SMS !) : " . $lien;
 
     lfi_nct_app_screen_open('📲 SMS un par un', $tmeta[1] . ' — ' . $when);
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url($lien) . '">← Retour au créneau</a></div>';
@@ -555,7 +636,11 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
     lfi_nct_app_screen_open('🎟️ ' . $titre, 'Créneaux de mobilisation — clique « Je participe »');
     if (!empty($_GET['ok']))  lfi_nct_app_flash('✅ Créneau(x) ajouté(s) — tu y es inscrit·e.');
     if (!empty($_GET['del'])) lfi_nct_app_flash('🗑 Créneau supprimé.');
-    if (isset($_GET['sent'])) lfi_nct_app_flash('📧 Email envoyé à ' . (int) $_GET['sent'] . ' membre(s) du GA.');
+    if (isset($_GET['sent'])) {
+        $ns = (int) $_GET['sent'];
+        if ($ns > 0) lfi_nct_app_flash('✅ Email BIEN ENVOYÉ à ' . $ns . ' membre(s) du GA.');
+        else lfi_nct_app_flash('⚠️ Aucun email parti : soit les comptes membres n\'ont pas d\'email, soit l\'envoi serveur a échoué. Utilise le repli SMS en attendant.', 'error');
+    }
 
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">← Toutes les actions</a></div>';
 
@@ -639,6 +724,14 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         $actee = count($list) >= $seuil;
         if ($actee) {
             echo '<div style="margin-top:4px"><span style="background:#186a3b;color:#fff;font-weight:800;font-size:.75em;padding:3px 9px;border-radius:20px">✅ ACTION ACTÉE (' . count($list) . '/' . $seuil . ')</span></div>';
+            /* Étape suivante pour l'admin : officialiser sur Action Populaire. */
+            if (lfi_nct_mobi_can_mod()) {
+                $ap_place = trim((string) $r->lieu) !== '' ? $r->lieu . ', Nantes' : 'Nantes';
+                echo '<div class="lfi-app-card" style="border:2px solid #c8102e;background:#fff7f8;margin-top:6px">'
+                   . '<div class="com"><strong>🎉 C\'est parti — officialise-la sur Action Populaire.</strong><br>'
+                   . 'Crée l\'événement (titre : « ' . esc_html($tmeta[1]) . ' ' . esc_html($when) . ' » · lieu : ' . esc_html($ap_place) . ') pour qu\'il soit visible partout.</div>'
+                   . '<div style="margin-top:6px"><a class="btn-primary" style="background:#c8102e" href="https://actionpopulaire.fr/creer/evenement/" target="_blank" rel="noopener">✊ Créer sur Action Populaire</a></div></div>';
+            }
         } else {
             echo '<div style="margin-top:4px"><span style="background:#d39e00;color:#fff;font-weight:800;font-size:.75em;padding:3px 9px;border-radius:20px">🗳 EN VOTE (' . count($list) . '/' . $seuil . ') — encore ' . max(0, $seuil - count($list)) . ' pour lancer</span></div>';
         }
@@ -681,7 +774,7 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
             /* Repli SMS honnête : le texte + tous les numéros à copier (l'iPhone
                n'envoie pas à plusieurs via un lien). */
             if ($nph > 0) {
-                $sms_txt = 'LFI Clos Toreau — ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Réponds sur l\'app : ' . $lien;
+                $sms_txt = 'LFI Clos Toreau 👋 On organise : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Tu es partant·e ? 👉 Clique le lien et appuie sur « 🙋 Je participe » — c\'est ton clic qui compte (pas la peine de répondre à ce SMS) : ' . $lien;
                 echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3">📲 Par SMS (copier le texte + les ' . $nph . ' numéros)</summary>';
                 echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'iPhone n\'envoie un lien SMS qu\'au 1er numéro. Copie ce texte + ces numéros dans un groupe Messages :</small></div>';
                 echo '<textarea readonly style="width:100%;height:56px;margin-top:4px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($sms_txt) . '</textarea>';
