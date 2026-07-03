@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 2.90.0
+ * Version: 2.91.0
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '2.90.0');
+define('LFI_NCT_VERSION', '2.91.0');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -122,10 +122,14 @@ function lfi_nct_enqueue_assets() {
     $is_rdv     = ($post->post_name === 'rendez-vous');
     $is_arpege  = ($post->post_name === LFI_NCT_ARPEGE_SLUG)
                   || has_shortcode($post->post_content, 'lfi_nct_arpege');
-    if ($has_survey || $has_compte || $is_rdv || $is_arpege) {
+    /* Page de l'app : le formulaire d'enquête peut y être affiché en intégré
+       (vue « enquete ») → on y charge aussi le CSS/JS du formulaire. */
+    $is_app     = (defined('LFI_NCT_APP_SLUG') && $post->post_name === LFI_NCT_APP_SLUG)
+                  || has_shortcode($post->post_content, 'lfi_nct_app');
+    if ($has_survey || $has_compte || $is_rdv || $is_arpege || $is_app) {
         wp_enqueue_style('lfi-nct-css', LFI_NCT_URL . 'assets/css/form.css', [], LFI_NCT_VERSION);
     }
-    if ($has_survey) {
+    if ($has_survey || $is_app) {
         wp_enqueue_script('lfi-nct-js', LFI_NCT_URL . 'assets/js/form.js', [], LFI_NCT_VERSION, true);
     }
 }

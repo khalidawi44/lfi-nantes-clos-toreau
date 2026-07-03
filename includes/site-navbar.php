@@ -89,7 +89,7 @@ function lfi_nct_render_site_navbar() {
         $secondary = [
             ['🔬', 'Outils scientifiques', lfi_nct_app_url('outils')],
             ['📅', 'Mon agenda',           lfi_nct_app_url('agenda')],
-            ['📋', 'Faire passer enquête', lfi_nct_survey_url()],
+            ['📋', 'Faire passer enquête', lfi_nct_app_url('enquete')],
             ['🔄', 'Synchroniser',         admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ['🗂', 'Réponses enquêtes',    lfi_nct_app_url('dossiers')],
             ['📈', 'Stats enquêtes',       lfi_nct_app_url('stats-enquete')],
@@ -109,7 +109,7 @@ function lfi_nct_render_site_navbar() {
     else {
         $primary = [
             ['🏠', 'Mon espace',           $app_root],
-            ['📋', 'Faire passer enquête', lfi_nct_survey_url()],
+            ['📋', 'Faire passer enquête', lfi_nct_app_url('enquete')],
             ['📸', 'Photos',               lfi_nct_app_url('enquete-photos')],
             ['📅', 'Événements',           lfi_nct_app_url('evenements')],
         ];
@@ -387,7 +387,7 @@ function lfi_nct_admin_bar_menu($bar) {
         $sections = [
             ['📣 Mes actions', [
                 ['🏠 Mon espace',               $app_root],
-                ['📋 Faire passer une enquête', lfi_nct_survey_url()],
+                ['📋 Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['📸 Photos chez un locataire', lfi_nct_app_url('enquete-photos')],
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
             ]],
@@ -421,7 +421,7 @@ function lfi_nct_admin_bar_menu($bar) {
 
         if ($is_admin) {
             $sections[] = ['📣 Action politique', [
-                ['📋 Faire passer une enquête', lfi_nct_survey_url()],
+                ['📋 Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
                 ['👥 Membres actifs',           lfi_nct_app_url('membres')],
                 ['📱 SMS aux membres actifs',   lfi_nct_app_url('sms')],

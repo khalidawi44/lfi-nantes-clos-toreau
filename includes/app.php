@@ -63,6 +63,22 @@ function lfi_nct_survey_url() {
 add_action('save_post', function () { delete_transient('lfi_nct_survey_url'); });
 
 /**
+ * ÉCRAN « Faire passer une enquête » INTÉGRÉ à l'app.
+ * On affiche le formulaire DIRECTEMENT dans l'app (au lieu d'ouvrir une page
+ * externe) : plus fiable en PWA installée — aucune navigation hors de l'app,
+ * donc plus de bouton qui « n'ouvre pas ». Le formulaire poste sur l'URL
+ * courante ; le shortcode gère la soumission et affiche le récapitulatif.
+ */
+function lfi_nct_app_view_enquete() {
+    if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    lfi_nct_app_screen_open('📋 Faire passer une enquête', 'Porte-à-porte — saisis les réponses sur place');
+    echo '<div class="lfi-nct-inapp-survey">';
+    echo function_exists('lfi_nct_survey_shortcode') ? lfi_nct_survey_shortcode() : do_shortcode('[lfi_nct_survey]');
+    echo '</div>';
+    lfi_nct_app_screen_close(false);
+}
+
+/**
  * URL FIABLE de la page de l'app (là où vit le shortcode [lfi_nct_app]).
  * On ne se fie plus à un chemin fixe /app/ : si la page a un autre slug
  * (ex. « app-2 » parce que « app » était déjà pris), le lien du SMS pointait
@@ -822,6 +838,7 @@ function lfi_nct_app_shortcode() {
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
                     case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
+                    case 'enquete':               lfi_nct_app_view_enquete();                break;
                     case 'dispos':                lfi_nct_app_view_dispos();                 break;
                     case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
                     case 'propositions':          lfi_nct_app_view_propositions();           break;
@@ -937,7 +954,7 @@ function lfi_nct_app_screen_close($more_tiles = true) {
                 ['🗓', 'Mes disponibilités',       lfi_nct_app_url('dispos')],
                 ['👥', 'Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
                 ['📅', 'Événements',               lfi_nct_app_url('evenements')],
-                ['📋', 'Faire passer une enquête', lfi_nct_survey_url()],
+                ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['📸', 'Photos',                   lfi_nct_app_url('enquete-photos')],
                 ['🤖', 'Aide',                     lfi_nct_app_url('aide')],
             ];
@@ -1126,7 +1143,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
         $essentiel = [
-            ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_survey_url()],
+            ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_app_url('enquete')],
             ['📥', 'À envoyer',   'Tes réponses prêtes',        lfi_nct_app_url('a-envoyer')],
             ['🗂', 'Dossiers',    'Le suivi des locataires',    lfi_nct_app_url('dossiers-juridiques')],
             ['📓', 'Journal',     'Ton suivi général',          lfi_nct_app_url('journal')],
@@ -2085,6 +2102,25 @@ function lfi_nct_app_render_register_sw() {
     (function () {
         /* Marqueur body pour le CSS standalone */
         document.body && document.body.classList.add('page-app');
+
+        /* App DÉJÀ installée (mode standalone) : on cache les boutons « Installer
+           l'application » — incohérent de les montrer une fois installée. */
+        function lfiHideInstall() {
+            try {
+                var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                    || window.navigator.standalone === true
+                    || document.referrer.indexOf('android-app://') === 0;
+                if (!standalone) return;
+                var links = document.querySelectorAll('a[href*="vue=installer"]');
+                links.forEach(function (a) {
+                    var box = a.closest('.lfi-app-tile') || a;
+                    box.style.display = 'none';
+                });
+            } catch (e) {}
+        }
+        if (document.readyState !== 'loading') lfiHideInstall();
+        else document.addEventListener('DOMContentLoaded', lfiHideInstall);
+
         if (!('serviceWorker' in navigator)) return;
 
         /* Si l'app est DÉJÀ contrôlée par un service worker et qu'une NOUVELLE
