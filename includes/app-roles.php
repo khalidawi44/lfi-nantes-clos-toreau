@@ -726,6 +726,8 @@ function lfi_nct_app_view_ga_dashboard() {
             </div>
         </div>
 
+        <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
+
         <div class="lfi-app-help" style="margin:0 0 14px">
             👋 Tu es membre du GA. Tu fais passer l'<strong>enquête logement</strong> en porte-à-porte, et quand les gens t'invitent chez eux tu peux <strong>prendre des photos</strong>. Tout ça part directement à l'équipe. <strong>Les réponses, les dossiers et les contacts des locataires restent réservés aux administrateurs</strong> (RGPD) — tu n'y as pas accès.
         </div>

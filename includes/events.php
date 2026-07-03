@@ -116,7 +116,16 @@ function lfi_nct_event_extra_metabox_render($post) {
     $rsvp_actif = get_post_meta($post->ID, '_lfi_evt_rsvp_actif', true);
     if ($rsvp_actif === '') $rsvp_actif = '1';
     $url_ap = get_post_meta($post->ID, '_lfi_evt_url_ap', true);
+    $ga_action = get_post_meta($post->ID, '_lfi_evt_ga_action', true);
+    if ($ga_action === '') $ga_action = '1';
     ?>
+    <p style="background:#f4f8ff;border:1px solid #cfe0f5;border-radius:6px;padding:8px 10px">
+        <label>
+            <input type="checkbox" name="lfi_evt_ga_action" value="1" <?php checked($ga_action, '1'); ?>>
+            <strong>Action du GA</strong> (tractage, collage, porte-à-porte)
+        </label>
+        <br><small>Décoche si c'est un événement <em>général / externe</em> (conférence, présentation ouverte à tou·te·s) : il ne sera pas proposé comme action de mobilisation.</small>
+    </p>
     <p>
         <label><strong>Capacité max</strong> (optionnel)</label>
         <input type="number" name="lfi_evt_capacite" value="<?php echo esc_attr($capacite); ?>" min="0" class="widefat" placeholder="ex : 80">
@@ -143,6 +152,7 @@ function lfi_nct_event_extra_save($post_id, $post) {
 
     update_post_meta($post_id, '_lfi_evt_capacite',   (int) ($_POST['lfi_evt_capacite'] ?? 0));
     update_post_meta($post_id, '_lfi_evt_rsvp_actif', !empty($_POST['lfi_evt_rsvp_actif']) ? '1' : '0');
+    update_post_meta($post_id, '_lfi_evt_ga_action',  !empty($_POST['lfi_evt_ga_action']) ? '1' : '0');
     update_post_meta($post_id, '_lfi_evt_url_ap',     esc_url_raw($_POST['lfi_evt_url_ap'] ?? ''));
 }
 
