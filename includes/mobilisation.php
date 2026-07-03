@@ -274,32 +274,28 @@ function lfi_nct_render_home_mobilisation() {
         if ($d && lfi_nct_evt_is_ga_action((int) $d['id'])) $ga[] = $d;
     }
     if (empty($ga)) return;
-    $ga = array_slice($ga, 0, 6);
+    $total = count($ga);
+    $ga = array_slice($ga, 0, 3); /* compact : on n'empile pas — 3 max, le reste via « voir tout ». */
 
     echo '<div class="lfi-app-section" style="margin-top:20px">';
     echo '<div class="lfi-app-section-title" style="font-size:1.05em">📅 À VENIR — SE MOBILISER</div>';
-    echo '<div style="display:flex;flex-direction:column;gap:10px">';
+    /* Lignes COMPACTES (une par événement) : titre + date + un seul bouton. */
+    echo '<div style="display:flex;flex-direction:column;gap:6px">';
     foreach ($ga as $d) {
         $eid = (int) $d['id'];
+        $npart = 0;
         $rows = $wpdb->get_results($wpdb->prepare("SELECT participants FROM $t WHERE event_id = %d", $eid)) ?: [];
-        $ncr = count($rows); $npart = 0;
         foreach ($rows as $r) { $l = json_decode((string) $r->participants, true); if (is_array($l)) $npart += count($l); }
         $url = lfi_nct_app_url('mobilisation', ['ev' => $eid]);
-        echo '<div class="lfi-app-card" style="border-left:4px solid #c8102e">';
-        echo '<div class="head"><div class="who">📣 ' . esc_html($d['titre']) . '</div></div>';
-        echo '<div class="meta">';
-        if ($d['date_complete']) echo '<span class="meta-chip">' . esc_html(ucfirst($d['date_complete'])) . '</span>';
-        if ($d['lieu']) echo '<span class="meta-chip">📍 ' . esc_html($d['lieu']) . '</span>';
-        echo '</div>';
-        if ($ncr > 0) echo '<div class="com" style="font-size:.9em"><strong>' . $ncr . '</strong> créneau(x) · <strong>' . $npart . '</strong> participant(s)</div>';
-        else echo '<div class="com" style="font-size:.9em;color:#888">Aucun créneau encore — lance-toi.</div>';
-        echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
-        echo '<a class="btn-primary" href="' . esc_url($url) . '">🙋 Voir & participer</a>';
-        echo '<a class="btn-ghost" href="' . esc_url($url) . '">➕ Proposer un créneau</a>';
-        echo '</div></div>';
+        $sub = trim(($d['date_fr'] ?: '') . ($d['lieu'] ? ' · ' . $d['lieu'] : ''));
+        echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #eee;border-left:4px solid #c8102e;border-radius:10px;padding:9px 12px">';
+        echo '<div style="flex:1;min-width:0"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📣 ' . esc_html($d['titre']) . '</div>';
+        if ($sub !== '') echo '<div style="font-size:.82em;color:#777">' . esc_html($sub) . ($npart ? ' · ' . $npart . ' inscrit·e·s' : '') . '</div>';
+        echo '</div><div style="background:#186a3b;color:#fff;border-radius:16px;padding:5px 11px;font-size:.82em;font-weight:700;white-space:nowrap">🙋 Participer</div></a>';
     }
     echo '</div>';
-    echo '<div style="text-align:center;margin-top:10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">🤝 Toutes les actions & campagnes →</a></div>';
+    $reste = $total > 3 ? ' (' . $total . ')' : '';
+    echo '<div style="text-align:center;margin-top:8px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">🤝 Toutes les actions' . esc_html($reste) . ' →</a></div>';
     echo '</div>';
 }
 
