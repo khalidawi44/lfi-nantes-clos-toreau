@@ -400,26 +400,26 @@ function lfi_nct_temoigner_shortcode($atts) {
     $nb_pub = count(array_filter(lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
     ob_start(); ?>
     <div class="lfi-temoigner" style="max-width:760px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-      <div style="background:linear-gradient(135deg,#c8102e,#8a0b20);color:#fff;border-radius:16px;padding:26px 22px;text-align:center">
-        <div style="font-size:1.7em;font-weight:900;line-height:1.15;margin-bottom:8px">Un problème dans ton logement&nbsp;HLM&nbsp;? Tu n'es pas seul·e.</div>
-        <div style="font-size:1.05em;opacity:.95;margin-bottom:18px">Humidité, moisissures, nuisibles, chauffage, eau chaude, insécurité… On <strong>constate</strong>, on <strong>écrit au bailleur</strong>, on <strong>t'accompagne juridiquement</strong> — <strong>gratuitement</strong>. On l'a déjà fait pour tes voisin·es.</div>
-        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#fff;color:#c8102e;font-weight:900;font-size:1.15em;padding:15px 26px;border-radius:12px;text-decoration:none">📋 Témoigner de mon logement (5&nbsp;min)</a>
-        <div style="margin-top:10px;font-size:.92em;opacity:.9">Anonyme si tu veux. Et tu peux demander qu'<strong>on te recontacte</strong>.</div>
+      <div style="background:linear-gradient(135deg,#c8102e,#9d0f26);color:#fff;border-radius:16px;padding:26px 22px;text-align:center">
+        <div style="font-size:1.55em;font-weight:900;line-height:1.15;margin-bottom:8px">Un souci dans votre logement&nbsp;? On peut vous aider.</div>
+        <div style="font-size:1.05em;opacity:.95;margin-bottom:18px">Humidité, moisissures, nuisibles, chauffage, eau chaude… On vous aide à <strong>faire constater</strong>, à <strong>écrire au bailleur</strong> et à <strong>faire valoir vos droits</strong> — <strong>gratuitement</strong>.</div>
+        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#fff;color:#c8102e;font-weight:900;font-size:1.15em;padding:15px 26px;border-radius:12px;text-decoration:none">📋 Signaler mon logement (5&nbsp;min)</a>
+        <div style="margin-top:10px;font-size:.92em;opacity:.9">C'est <strong>confidentiel</strong>, et vous pouvez demander qu'<strong>on vous recontacte</strong>.</div>
       </div>
 
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px">
         <div style="flex:1;min-width:200px;background:#f7f7f7;border-radius:12px;padding:16px">
-          <div style="font-weight:800;color:#c8102e;margin-bottom:4px">🚪 Ce qu'on fait, sur le terrain</div>
-          <div style="font-size:.95em;color:#333">Porte-à-porte dans le quartier, constats photos datés, courriers et mises en demeure au bailleur, saisine du service d'hygiène, accompagnement jusqu'au bout.</div>
+          <div style="font-weight:800;color:#c8102e;margin-bottom:4px">🤝 Comment on vous aide</div>
+          <div style="font-size:.95em;color:#333">Constat de la situation, courriers au bailleur, saisine du service d'hygiène, avocat partenaire — on vous accompagne de bout en bout.</div>
         </div>
         <div style="flex:1;min-width:200px;background:#f7f7f7;border-radius:12px;padding:16px">
-          <div style="font-weight:800;color:#186a3b;margin-bottom:4px">🏆 Des résultats réels</div>
-          <div style="font-size:.95em;color:#333"><?php echo $nb_pub > 0 ? ('<strong>' . (int) $nb_pub . '</strong> réussite(s) déjà obtenue(s) et publiées ci-dessous.') : 'Relogements, travaux imposés, indemnisations — on documente chaque victoire.'; ?></div>
+          <div style="font-weight:800;color:#186a3b;margin-bottom:4px">🏆 Des résultats concrets</div>
+          <div style="font-size:.95em;color:#333"><?php echo $nb_pub > 0 ? ('<strong>' . (int) $nb_pub . '</strong> réussite(s) déjà obtenue(s), à découvrir ci-dessous.') : 'Relogements, travaux obtenus, indemnisations : on documente chaque résultat.'; ?></div>
         </div>
       </div>
 
       <div style="text-align:center;margin-top:20px">
-        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#c8102e;color:#fff;font-weight:800;padding:13px 24px;border-radius:12px;text-decoration:none">✍️ Je témoigne maintenant</a>
+        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#c8102e;color:#fff;font-weight:800;padding:13px 24px;border-radius:12px;text-decoration:none">✍️ Je signale mon logement</a>
       </div>
     </div>
     <?php

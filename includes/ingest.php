@@ -116,6 +116,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_journal_add',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/page-set', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_page_set',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/frais-add', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_frais_add',
@@ -494,6 +499,52 @@ function lfi_nct_ingest_rest_intervention_reclass($request) {
     ], ['id' => $iid]);
 
     return new WP_REST_Response(['ok' => true, 'intervention_id' => $iid, 'dossier_id' => $did, 'frais_id' => $fid, 'montant' => $montant], 200);
+}
+
+/**
+ * Crée ou met à jour une PAGE WordPress (par slug) avec un contenu (ex. un
+ * shortcode), et peut la définir comme page d'accueil du site. RÉVERSIBLE :
+ * l'ancien réglage d'accueil est sauvegardé (option lfi_nct_prev_front) et
+ * l'ancienne page n'est jamais supprimée. Réservé à la clé d'intégration.
+ */
+function lfi_nct_ingest_rest_page_set($request) {
+    $slug    = sanitize_title((string) $request->get_param('slug'));
+    $title   = sanitize_text_field((string) $request->get_param('title'));
+    $content = (string) $request->get_param('content');
+    if ($slug === '') return new WP_REST_Response(['ok' => false, 'error' => 'slug_manquant'], 400);
+
+    $existing = get_page_by_path($slug, OBJECT, 'page');
+    $arr = [
+        'post_title'   => $title !== '' ? $title : $slug,
+        'post_name'    => $slug,
+        'post_content' => $content,
+        'post_status'  => 'publish',
+        'post_type'    => 'page',
+    ];
+    if ($existing) { $arr['ID'] = (int) $existing->ID; $pid = wp_update_post($arr, true); }
+    else           { $pid = wp_insert_post($arr, true); }
+    if (is_wp_error($pid)) return new WP_REST_Response(['ok' => false, 'error' => $pid->get_error_message()], 500);
+    $pid = (int) $pid;
+
+    $front = false;
+    if ($request->get_param('set_front')) {
+        /* Sauvegarde réversible de l'accueil actuel. */
+        if (get_option('lfi_nct_prev_front', null) === null) {
+            update_option('lfi_nct_prev_front', [
+                'show_on_front' => get_option('show_on_front'),
+                'page_on_front' => (int) get_option('page_on_front'),
+            ], false);
+        }
+        update_option('show_on_front', 'page');
+        update_option('page_on_front', $pid);
+        $front = true;
+    }
+    return new WP_REST_Response([
+        'ok'    => true,
+        'id'    => $pid,
+        'url'   => get_permalink($pid),
+        'front' => $front,
+    ], 200);
 }
 
 /** Ajoute une note / un rappel dans le Journal de bord (option : épinglé). */
