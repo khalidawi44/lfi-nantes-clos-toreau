@@ -316,8 +316,15 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
     if ($match) $wpdb->update($table, ['ga' => $match['slug']], ['id' => $sub_id]);
 
     if ((int) $row->contact_recontact === 1) {
+        /* La personne veut de l'aide → on lui crée SON compte locataire tout de
+           suite, rattaché à SON enquête. Ainsi elle apparaît partout (dossiers,
+           « lier un compte »…) sans ressaisie, et on peut lui partager son espace. */
+        $tenant_uid = function_exists('lfi_nct_ep_ensure_tenant') ? (int) lfi_nct_ep_ensure_tenant($row) : 0;
+        if ($tenant_uid && $match) update_user_meta($tenant_uid, 'lfi_nct_ga', $match['slug']);
+
         lfi_nct_geo_queue_contact([
             'sub_id'  => $sub_id,
+            'tenant_uid' => $tenant_uid,
             'ga'      => $match ? $match['slug'] : '',
             'commune' => $geo['commune'],
             'nom'     => trim((string) $row->contact_prenom . ' ' . (string) $row->contact_nom),
