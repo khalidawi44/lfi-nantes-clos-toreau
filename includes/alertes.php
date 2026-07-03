@@ -54,6 +54,39 @@ function lfi_nct_alertes_auto() {
         $logs = json_decode($r->notes ?? '', true);
         $sent = (is_array($logs) && !empty($logs['email_log']))  ? $logs['email_log']  : [];
         $recu = (is_array($logs) && !empty($logs['email_recu'])) ? $logs['email_recu'] : [];
+        $statut   = (string) ($r->statut ?? '');
+        $has_lrar = !empty($r->lrar_travaux_date) || !empty($r->lrar_relogement_date);
+
+        /* 📞 PREMIER CONTACT : la personne veut de l'aide mais RIEN n'est engagé
+           (aucun courrier envoyé, aucune mise en demeure, aucun SCHS). C'est le
+           « ne pas oublier les gens à recontacter ». Disparaît dès qu'on agit. */
+        if ($statut !== 'clos' && empty($sent) && !$has_lrar && empty($r->schs_date)) {
+            $out[] = [
+                'prio'   => 'haute',
+                'titre'  => '📞 Premier contact à faire — ' . $full,
+                'detail' => 'La personne attend d\'être recontactée — rien n\'est encore engagé.',
+                'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
+            ];
+        }
+
+        /* ⚖️ ÉTAPE SUIVANTE DU PLAN : SCHS saisi mais resté sans suite depuis
+           plus de 15 jours → on passe la main à l'avocat (via toi). */
+        if (!empty($r->schs_date) && $statut !== 'clos') {
+            $schs_ts = strtotime($r->schs_date);
+            $replied_since = false;
+            foreach ($recu as $e) { if ($schs_ts && strtotime($e['date'] ?? '') > $schs_ts) { $replied_since = true; break; } }
+            if ($schs_ts && !$replied_since) {
+                $age = (int) floor(($now - $schs_ts) / 86400);
+                if ($age >= 15) {
+                    $out[] = [
+                        'prio'   => 'haute',
+                        'titre'  => '⚖️ Étape suivante : avocat — ' . $full,
+                        'detail' => 'SCHS saisi il y a ' . $age . ' j sans suite. Passe la main à l\'avocat (via toi).',
+                        'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
+                    ];
+                }
+            }
+        }
 
         /* ⏰ Délai légal NMH dépassé (à partir de la mise en demeure) → étape 4 :
            saisir le SCHS. S'affiche tant que le SCHS n'a pas été envoyé. */
