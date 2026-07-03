@@ -368,8 +368,8 @@ function lfi_nct_app_view_dossier() {
             /* Génère le parcours-type (n'ajoute que les étapes manquantes). */
             $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
             foreach (lfi_nct_dossier_parcours_template() as $tpl) {
-                if (!in_array($tpl, $existing, true)) {
-                    $steps[] = ['text' => $tpl, 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+                if (!in_array($tpl['text'], $existing, true)) {
+                    $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
                 }
             }
         }
@@ -649,52 +649,114 @@ function lfi_nct_render_home_tenant_actions() {
     $args = ['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'number' => 300, 'fields' => ['ID', 'display_name']];
     if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
     $users = get_users($args);
-    $items = [];
+    $mine = [];   /* étapes où c'est à MOI d'agir */
+    $waiting = []; /* en attente du locataire */
     foreach ($users as $u) {
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
         if (!is_array($steps) || empty($steps)) continue;
+
+        /* Auto-avance : une étape « locataire » avec auto se coche dès qu'il a
+           fait sa part (fiche + objectif). On persiste pour ne pas recalculer. */
+        $changed = false;
+        foreach ($steps as $i => $s) {
+            if (empty($s['done']) && ($s['who'] ?? 'admin') === 'tenant' && !empty($s['auto'])) {
+                if (lfi_nct_tenant_part_done((int) $u->ID)) { $steps[$i]['done'] = true; $changed = true; }
+                break; /* on ne teste que la 1re non faite */
+            }
+            if (empty($s['done'])) break;
+        }
+        if ($changed) update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+
         $idx = -1;
         foreach ($steps as $i => $s) { if (empty($s['done'])) { $idx = $i; break; } }
-        if ($idx < 0) continue;
+        if ($idx < 0) continue; /* tout est fait */
         $done_n = 0; foreach ($steps as $s) if (!empty($s['done'])) $done_n++;
-        $items[] = ['uid' => (int) $u->ID, 'name' => $u->display_name, 'idx' => $idx, 'text' => (string) $steps[$idx]['text'], 'total' => count($steps), 'donen' => $done_n];
+        $who = $steps[$idx]['who'] ?? 'admin';
+        $row = ['uid' => (int) $u->ID, 'name' => $u->display_name, 'idx' => $idx, 'text' => (string) $steps[$idx]['text'], 'total' => count($steps), 'donen' => $done_n];
+        if ($who === 'tenant') $waiting[] = $row; else $mine[] = $row;
     }
-    if (empty($items)) return;
+    if (empty($mine) && empty($waiting)) return;
 
-    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;border-radius:14px;padding:12px;margin:0 0 14px">';
-    echo '<div style="font-weight:900;color:#0066a3;margin-bottom:6px">📋 Mes actions locataires (' . count($items) . ') — la prochaine étape de chacun·e</div>';
-    echo '<div style="display:flex;flex-direction:column;gap:8px">';
-    foreach ($items as $it) {
-        $done_url = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_tenant_step_done&uid=' . $it['uid'] . '&idx=' . $it['idx']), 'lfi_nct_tstep_' . $it['uid'] . '_' . $it['idx']);
-        $open_url = lfi_nct_app_url('dossier', ['uid' => $it['uid']]);
-        echo '<div style="background:#f2f8fd;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px">';
-        echo '<div style="font-weight:700">' . esc_html($it['name']) . ' <span style="font-size:.78em;color:#888;font-weight:400">· étape ' . ($it['donen'] + 1) . '/' . $it['total'] . '</span></div>';
-        echo '<div style="font-size:.9em;color:#333;margin:2px 0 6px">👉 ' . esc_html($it['text']) . '</div>';
-        echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-        echo '<a class="btn-primary" style="background:#186a3b;padding:6px 12px;font-size:.85em" href="' . esc_url($done_url) . '">✓ Fait</a>';
-        echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em" href="' . esc_url($open_url) . '">📂 Ouvrir le dossier</a>';
+    if (!empty($mine)) {
+        echo '<div class="lfi-app-card" style="border:2px solid #0066a3;border-radius:14px;padding:12px;margin:0 0 14px">';
+        echo '<div style="font-weight:900;color:#0066a3;margin-bottom:6px">📋 Mes actions à faire (' . count($mine) . ')</div>';
+        echo '<div style="display:flex;flex-direction:column;gap:8px">';
+        foreach ($mine as $it) {
+            $done_url = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_tenant_step_done&uid=' . $it['uid'] . '&idx=' . $it['idx']), 'lfi_nct_tstep_' . $it['uid'] . '_' . $it['idx']);
+            $open_url = lfi_nct_app_url('dossier', ['uid' => $it['uid']]);
+            echo '<div style="background:#f2f8fd;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px">';
+            echo '<div style="font-weight:700">' . esc_html($it['name']) . ' <span style="font-size:.78em;color:#888;font-weight:400">· étape ' . ($it['donen'] + 1) . '/' . $it['total'] . '</span></div>';
+            echo '<div style="font-size:.9em;color:#333;margin:2px 0 6px">👉 ' . esc_html($it['text']) . '</div>';
+            echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+            echo '<a class="btn-primary" style="background:#186a3b;padding:6px 12px;font-size:.85em" href="' . esc_url($done_url) . '">✓ Fait</a>';
+            echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em" href="' . esc_url($open_url) . '">📂 Ouvrir le dossier</a>';
+            echo '</div></div>';
+        }
         echo '</div></div>';
     }
-    echo '</div></div>';
+    if (!empty($waiting)) {
+        echo '<div class="lfi-app-card" style="border:1px solid #e6c65a;background:#fffbf0;border-radius:14px;padding:12px;margin:0 0 14px">';
+        echo '<div style="font-weight:800;color:#b8860b;margin-bottom:6px">⏳ En attente du locataire (' . count($waiting) . ')</div>';
+        echo '<div class="lfi-app-help" style="margin:0 0 6px"><small>Ces personnes ont leur espace : elles remplissent leur dossier. Rien à faire de ton côté — ça avancera tout seul. Tu peux relancer si ça traîne.</small></div>';
+        echo '<div style="display:flex;flex-direction:column;gap:6px">';
+        foreach ($waiting as $it) {
+            $open_url = lfi_nct_app_url('dossier', ['uid' => $it['uid']]);
+            echo '<a href="' . esc_url($open_url) . '" style="text-decoration:none;color:inherit;display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px 10px">';
+            echo '<span><strong>' . esc_html($it['name']) . '</strong> <span style="font-size:.82em;color:#888">— ' . esc_html($it['text']) . '</span></span>';
+            echo '<span style="color:#b8860b;font-weight:700;white-space:nowrap">Relancer →</span></a>';
+        }
+        echo '</div></div>';
+    }
 }
 
 /** Le parcours-type d'un dossier locataire : la personne s'empare d'abord de sa
  *  fiche, puis on va à l'amiable (urgence d'abord), puis juridique si besoin. */
 function lfi_nct_dossier_parcours_template() {
+    /* who = 'admin' (à TOI de faire) ou 'tenant' (au LOCATAIRE de faire).
+       auto = l'étape se coche toute seule quand le locataire a fait sa part. */
     return [
-        '🔗 Partager l\'espace avec le locataire (envoyer le lien de connexion)',
-        'Le locataire complète sa fiche (le plus possible)',
-        'Le locataire dépose ses pièces + photos de chez lui',
-        'Lui faire signer l\'adhésion à l\'association (gratuite)',
-        'Avec lui : choisir l\'objectif — déménager OU être indemnisé',
-        'Passer chez le locataire pour constater (photos, relevés)',
-        'Chiffrer le préjudice ensemble (selon ses pièces)',
-        'Envoyer la mise en demeure travaux à NMH',
-        'Appeler NMH puis relancer (1re, 2e relance)',
-        'Amiable : négocier travaux / relogement / indemnisation',
-        'Si échec : saisir le SCHS (insalubrité) / l\'ARS',
-        'Préparer l\'assignation au Tribunal Judiciaire',
+        ['who' => 'admin',  'text' => "Envoyer le SMS d'invitation au locataire (lien de l'app)"],
+        ['who' => 'tenant', 'text' => "Le locataire s'empare de son dossier (fiche, objectif, photos)", 'auto' => 1],
+        ['who' => 'admin',  'text' => "Prendre contact et visiter l'appartement (constat, photos)"],
+        ['who' => 'admin',  'text' => "Faire signer l'adhésion à l'association (mandat)"],
+        ['who' => 'admin',  'text' => "Chiffrer le préjudice avec la personne (selon ses pièces)"],
+        ['who' => 'admin',  'text' => "Écrire à NMH : mise en demeure travaux (mandat requis)"],
+        ['who' => 'admin',  'text' => "Appeler NMH puis relancer (1re, 2e relance)"],
+        ['who' => 'admin',  'text' => "Amiable : négocier travaux / relogement / indemnisation"],
+        ['who' => 'admin',  'text' => "Si échec : saisir le SCHS (insalubrité) / l'ARS"],
+        ['who' => 'admin',  'text' => "Préparer l'assignation au Tribunal Judiciaire"],
     ];
+}
+/* NETTOYAGE (une fois) : les parcours créés avant le modèle « propriétaire par
+   étape » (toi / locataire) sont ré-initialisés avec le nouveau modèle cohérent. */
+add_action('init', 'lfi_nct_heal_parcours_who', 17);
+function lfi_nct_heal_parcours_who() {
+    if (get_option('lfi_nct_heal_parcours_who_v1')) return;
+    if (!defined('LFI_NCT_ROLE_TENANT')) return;
+    $users = get_users(['role' => LFI_NCT_ROLE_TENANT, 'number' => 2000, 'fields' => ['ID']]);
+    foreach ($users as $u) {
+        $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+        if (!is_array($steps) || empty($steps)) continue;
+        $needs = false; foreach ($steps as $s) { if (!isset($s['who'])) { $needs = true; break; } }
+        if (!$needs) continue;
+        $new = [];
+        foreach (lfi_nct_dossier_parcours_template() as $tpl) {
+            $new[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+        }
+        update_user_meta($u->ID, 'lfi_nct_suivi_steps', $new);
+    }
+    update_option('lfi_nct_heal_parcours_who_v1', 1, false);
+}
+
+/** Le locataire a-t-il fait sa part (fiche + objectif) ? */
+function lfi_nct_tenant_part_done($uid) {
+    global $wpdb;
+    $u = get_userdata($uid); if (!$u) return false;
+    $rid = function_exists('lfi_nct_user_tenant_response_id') ? lfi_nct_user_tenant_response_id($uid) : 0;
+    $resp = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    if (!function_exists('lfi_nct_tenant_steps_state')) return false;
+    $st = lfi_nct_tenant_steps_state($u, $resp);
+    return !empty($st['profil']) && !empty($st['objectif']);
 }
 
 function lfi_nct_dossier_render_parcours($u) {
