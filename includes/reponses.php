@@ -112,6 +112,51 @@ function lfi_nct_generate_reply_body($row, $recu, $intention, $precisions, $sign
 }
 
 /* ============================================================== *
+ *  MANDAT : on n'écrit JAMAIS à NMH au nom d'un locataire sans     *
+ *  mandat. Le mandat = adhésion signée au dossier (signature dans  *
+ *  l'enquête liée) OU coche manuelle « adhésion signée » (papier). *
+ *  Sans mandat : le bouton de génération n'apparaît même pas.      *
+ * ============================================================== */
+function lfi_nct_dossier_has_mandate($row) {
+    if (!$row) return false;
+    $man = get_option('lfi_nct_dossier_mandat', []);
+    if (is_array($man) && !empty($man[(int) $row->id])) return true; /* signé sur papier */
+    global $wpdb;
+    $tuid = (int) ($row->tenant_user_id ?? 0);
+    if (!$tuid) return false;
+    $rid = (int) get_user_meta($tuid, 'lfi_nct_response_id', true);
+    if (!$rid) return false;
+    $resp = $wpdb->get_row($wpdb->prepare("SELECT data FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+    if (!$resp) return false;
+    $data = json_decode((string) $resp->data, true);
+    $adh  = is_array($data) ? ($data['adhesion'] ?? null) : null;
+    return is_array($adh) && (!empty($adh['signed']) || !empty($adh['signature_id']));
+}
+function lfi_nct_dossier_mandat_manual($id) {
+    $man = get_option('lfi_nct_dossier_mandat', []);
+    return is_array($man) && !empty($man[(int) $id]);
+}
+function lfi_nct_dossier_mandat_set($id, $val) {
+    $man = get_option('lfi_nct_dossier_mandat', []); if (!is_array($man)) $man = [];
+    if ($val) $man[(int) $id] = 1; else unset($man[(int) $id]);
+    update_option('lfi_nct_dossier_mandat', $man, false);
+}
+/* Coche/décoche « adhésion signée (mandat) ». */
+add_action('admin_post_lfi_nct_mandat', 'lfi_nct_mandat_handler');
+function lfi_nct_mandat_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $id = (int) ($_GET['id'] ?? 0);
+    if ($id && check_admin_referer('lfi_nct_mandat_' . $id)) {
+        global $wpdb; $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id));
+        if ($row && (!function_exists('lfi_nct_dossier_can_manage') || lfi_nct_dossier_can_manage($row))) {
+            lfi_nct_dossier_mandat_set($id, !lfi_nct_dossier_mandat_manual($id));
+        }
+    }
+    wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id]) . '#sec-reponses'); exit;
+}
+
+/* ============================================================== *
  *  ÉCRAN : Générer la réponse (dans un dossier)                  *
  * ============================================================== */
 function lfi_nct_app_view_generer_reponse() {
@@ -121,6 +166,8 @@ function lfi_nct_app_view_generer_reponse() {
     $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
     $row = $id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id)) : null;
     if (!$row || !lfi_nct_dossier_can_manage($row)) { wp_safe_redirect(lfi_nct_app_url('dossiers-juridiques')); exit; }
+    /* VERROU MANDAT : pas d'accès à la génération sans adhésion signée. */
+    if (!lfi_nct_dossier_has_mandate($row)) { wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id, 'nomandat' => 1]) . '#sec-reponses'); exit; }
 
     $notes = json_decode($row->notes ?? '', true);
     $recus = (is_array($notes) && !empty($notes['email_recu'])) ? array_values($notes['email_recu']) : [];
@@ -130,6 +177,10 @@ function lfi_nct_app_view_generer_reponse() {
 
     /* Génération : on assemble et on dépose dans « À envoyer ». */
     if (!empty($_POST['lfi_gen_reply']) && check_admin_referer('lfi_gen_reply')) {
+        /* VERROU MANDAT : pas d'email à NMH sans adhésion signée au dossier. */
+        if (!lfi_nct_dossier_has_mandate($row)) {
+            wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id, 'nomandat' => 1]) . '#sec-reponses'); exit;
+        }
         $intention = sanitize_key($_POST['intention'] ?? 'autre');
         if (!isset(lfi_nct_reply_intentions()[$intention])) $intention = 'autre';
         $precisions = sanitize_textarea_field(wp_unslash($_POST['precisions'] ?? ''));

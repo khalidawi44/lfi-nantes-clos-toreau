@@ -750,8 +750,31 @@ function lfi_nct_render_dossier_replies($row) {
     $notes   = json_decode($row->notes ?? '', true);
     $replies = (is_array($notes) && !empty($notes['replies'])) ? $notes['replies'] : [];
     echo '<h3 id="sec-reponses" style="margin:22px 0 6px;color:#c8102e">✉️ Réponses à envoyer (prêtes)</h3>';
-    /* Bouton self-service : le membre a vu le locataire → il génère l'email. */
-    echo '<div style="margin:4px 0 10px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('generer-reponse', ['id' => (int) $row->id])) . '">✍️ Générer une réponse (le locataire a décidé)</a></div>';
+
+    if (!empty($_GET['nomandat']) && function_exists('lfi_nct_app_flash')) {
+        lfi_nct_app_flash('🔒 Impossible d\'écrire à NMH : il faut d\'abord le mandat (adhésion signée au dossier).', 'error');
+    }
+
+    /* VERROU MANDAT : pas d'email à NMH tant que l'adhésion n'est pas signée.
+       Aucun membre ne peut écrire à NMH sans mandat → le bouton n'apparaît pas. */
+    $has_mandate = function_exists('lfi_nct_dossier_has_mandate') ? lfi_nct_dossier_has_mandate($row) : true;
+    if (!$has_mandate) {
+        $tuid = (int) ($row->tenant_user_id ?? 0);
+        $toggle = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_mandat&id=' . (int) $row->id), 'lfi_nct_mandat_' . (int) $row->id);
+        echo '<div class="lfi-app-card" style="border:2px solid #c8102e;background:#fff7f8">';
+        echo '<div class="com"><strong>🔒 Étape 1 avant tout courrier : le mandat.</strong><br>On n\'écrit <strong>jamais</strong> à NMH au nom d\'un locataire sans son <strong>adhésion signée</strong> (c\'est ce qui nous autorise à agir pour lui). Tant qu\'elle n\'est pas au dossier, la génération d\'email est bloquée.</div>';
+        echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
+        if ($tuid) echo '<a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $tuid])) . '">📲 Inviter le locataire (SMS + RDV pour finir le dossier)</a>';
+        echo '<a class="btn-ghost" style="color:#186a3b" href="' . esc_url($toggle) . '">✅ J\'ai fait signer l\'adhésion (mandat obtenu)</a>';
+        echo '</div>';
+        echo '<div class="lfi-app-help" style="margin-top:6px"><small>Le parcours : envoie-lui son espace (il télécharge l\'app, remplit son dossier), prends RDV pour aller le voir et faire signer l\'adhésion. Ensuite seulement, tu pourras écrire à NMH.</small></div>';
+        echo '</div>';
+        /* On affiche quand même les réponses DÉJÀ générées (historique), sans bouton de génération. */
+        if (empty($replies)) return;
+    } else {
+        /* Bouton self-service : le membre a vu le locataire → il génère l'email. */
+        echo '<div style="margin:4px 0 10px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('generer-reponse', ['id' => (int) $row->id])) . '">✍️ Générer une réponse (le locataire a décidé)</a></div>';
+    }
     if (empty($replies)) {
         echo '<div class="lfi-app-help">Quand un email arrive, va voir le locataire, puis clique « Générer une réponse » : choisis ce qu\'il a décidé, l\'email complet à NMH se prépare ici. Tu le relis et tu l\'envoies depuis ta boîte.</div>';
         return;
