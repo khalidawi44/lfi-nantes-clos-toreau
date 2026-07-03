@@ -344,7 +344,17 @@ function lfi_nct_geo_queue_contact($item) {
 function lfi_nct_geo_contacts_pending() {
     $q = get_option('lfi_nct_geo_contacts', []);
     if (!is_array($q)) return [];
-    return array_values(array_filter($q, function ($e) { return empty($e['done']); }));
+    $pending = array_filter($q, function ($e) { return empty($e['done']); });
+    /* Cloisonnement : chacun ne voit QUE les inscriptions de SON GA (celui
+       actuellement affiché). Une inscription affectée à un autre GA va à cet
+       autre GA, pas à moi. */
+    $scope = function_exists('lfi_nct_scope_ga_slug') ? (string) lfi_nct_scope_ga_slug() : '';
+    if ($scope === '') $scope = 'clos-toreau';
+    $pending = array_filter($pending, function ($e) use ($scope) {
+        $g = (string) ($e['ga'] ?? ''); if ($g === '') $g = 'clos-toreau';
+        return $g === $scope;
+    });
+    return array_values($pending);
 }
 function lfi_nct_geo_contact_done($sub_id) {
     $q = get_option('lfi_nct_geo_contacts', []);

@@ -432,22 +432,36 @@ function lfi_nct_app_view_dossier() {
     /* ===== Partager l'espace avec le locataire (le fait entrer dans l'app) ===== */
     echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px">';
     echo '<div class="head"><div class="who">🔗 Partager l\'espace avec le locataire</div></div>';
+    $mail_t = sanitize_email((string) $u->user_email);
+    $has_mail = ($mail_t !== '' && is_email($mail_t) && stripos($mail_t, '@tenant.') === false && stripos($mail_t, '@partenaire.') === false);
     echo '<div class="com" style="font-size:.92em">Envoie-lui son <strong>espace personnel</strong> : il se connecte en 1 clic, choisit son mot de passe, puis <strong>complète sa fiche</strong>, <strong>dépose ses pièces</strong> et ses <strong>photos</strong>. Tout reste dans son dossier.</div>';
+    echo '<div class="meta" style="margin-top:4px">';
+    if ($tel) echo '<span class="meta-chip">📞 ' . esc_html($tel) . '</span>';
+    if ($has_mail) echo '<span class="meta-chip">✉️ ' . esc_html($mail_t) . '</span>';
+    if (!$tel && !$has_mail) echo '<span class="meta-chip" style="color:#c8102e">⚠️ aucun moyen de contact enregistré</span>';
+    echo '</div>';
     if ($share_link !== '') {
         $prenom_t = $u->first_name ?: ($row && $row->contact_prenom ? $row->contact_prenom : '');
-        $sms_body = ($prenom_t ? 'Bonjour ' . $prenom_t . ', ' : 'Bonjour, ')
+        $intro = ($prenom_t ? 'Bonjour ' . $prenom_t . ', ' : 'Bonjour, ')
                   . "voici votre espace personnel LFI pour suivre votre logement (gratuit, confidentiel). "
                   . "Connexion directe (rien à taper) : " . $share_link
-                  . " — vous choisirez votre mot de passe, puis vous pourrez compléter votre dossier et envoyer vos photos. On est là pour vous accompagner.";
-        echo '<div class="lfi-app-help" style="margin-top:8px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le par SMS. <strong>Ne régénère pas</strong> après l\'envoi (ça l\'invalide).</small></div>';
-        if ($tel) echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($sms_body) . '">📲 Envoyer le SMS pré-rempli</a></div>';
-        echo '<textarea readonly onclick="this.select()" style="width:100%;height:90px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($sms_body) . '</textarea>';
-        if (!$tel) echo '<div class="lfi-app-help" style="margin-top:4px"><small>⚠️ Pas de numéro enregistré — copie le message et envoie-le comme tu peux.</small></div>';
+                  . " — vous choisirez votre mot de passe, puis vous pourrez compléter votre dossier et envoyer vos photos. On vous recontacte, on est là pour vous accompagner.";
+        echo '<div class="lfi-app-help" style="margin-top:8px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le. <strong>Ne régénère pas</strong> après l\'envoi (ça l\'invalide).</small></div>';
+        echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
+        if ($tel) echo '<a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($intro) . '">📲 Envoyer par SMS</a>';
+        if ($has_mail) {
+            $subj = 'Votre espace personnel LFI — suivi de votre logement';
+            echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($mail_t) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($intro) . '">✉️ Envoyer par email</a>';
+        }
+        echo '</div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:90px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';
+        if (!$tel && !$has_mail) echo '<div class="lfi-app-help" style="margin-top:4px"><small>⚠️ Ni numéro ni email — copie le message et transmets-le comme tu peux.</small></div>';
     } else {
         echo '<form method="post" style="margin-top:8px">';
         wp_nonce_field('lfi_share_tenant');
         echo '<input type="hidden" name="lfi_share_tenant" value="1">';
-        echo '<button type="submit" class="btn-primary" style="background:#0066a3">🔗 Générer le lien + le SMS</button></form>';
+        $lbl = ($tel && $has_mail) ? '🔗 Générer le lien (SMS + email)' : ($has_mail ? '🔗 Générer le lien + l\'email' : '🔗 Générer le lien + le SMS');
+        echo '<button type="submit" class="btn-primary" style="background:#0066a3">' . esc_html($lbl) . '</button></form>';
         echo '<div class="lfi-app-help" style="margin-top:4px"><small>Le lien connecte ' . esc_html($u->display_name) . ' d\'un seul clic, sans identifiant (usage unique, 14 jours).</small></div>';
     }
     echo '</div>';
