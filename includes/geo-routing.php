@@ -444,6 +444,21 @@ function lfi_nct_app_view_geo_contacts() {
         wp_safe_redirect(lfi_nct_app_url('geo-contacts', ['ok' => 1]));
         exit;
     }
+    /* Ouvrir le dossier : on CRÉE (ou retrouve) automatiquement le compte
+       locataire depuis l'enquête et on va DIRECTEMENT à son dossier (parcours +
+       partage de l'espace). Zéro « lier un compte » à la main. */
+    if (!empty($_POST['lfi_geo_open']) && check_admin_referer('lfi_geo_open')) {
+        global $wpdb;
+        $sid = (int) $_POST['lfi_geo_open'];
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $sid));
+        $tuid = ($row && function_exists('lfi_nct_ep_ensure_tenant')) ? (int) lfi_nct_ep_ensure_tenant($row) : 0;
+        if ($tuid) {
+            if ($row && trim((string) $row->ga) !== '') update_user_meta($tuid, 'lfi_nct_ga', (string) $row->ga);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $tuid])); exit;
+        }
+        /* Repli : ancien formulaire si le compte n'a pas pu être créé. */
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-add', ['tenant_nom' => $row->contact_nom ?? '', 'tenant_prenom' => $row->contact_prenom ?? '', 'tenant_adresse' => $row->adresse ?? ''])); exit;
+    }
     lfi_nct_app_screen_open('🔔 Inscriptions à contacter', 'Enquêtes du site où la personne veut être recontactée');
     if (!empty($_GET['ok'])) lfi_nct_app_flash('✅ Marqué comme traité.');
 
@@ -471,15 +486,11 @@ function lfi_nct_app_view_geo_contacts() {
         if (!empty($e['email'])) $coords[] = '✉️ <a href="mailto:' . esc_attr($e['email']) . '">' . esc_html($e['email']) . '</a>';
         if ($coords) echo '<div class="com" style="font-size:.9em">' . implode(' · ', $coords) . '</div>';
 
-        $new = lfi_nct_app_url('dossier-juridique-add', array_filter([
-            'tenant_prenom'  => $e['prenom'] ?? '',
-            'tenant_nom'     => $e['nom'] ?? '',
-            'tenant_adresse' => $e['adresse'] ?? '',
-            'tenant_tel'     => $e['tel'] ?? '',
-            'tenant_email'   => $e['email'] ?? '',
-        ]));
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
-        echo '<a class="btn-primary" href="' . esc_url($new) . '">📁 Ouvrir un dossier</a>';
+        /* Un clic : crée le compte locataire + ouvre son dossier (parcours + partage). */
+        echo '<form method="post" style="display:inline">' . wp_nonce_field('lfi_geo_open', '_wpnonce', true, false)
+           . '<input type="hidden" name="lfi_geo_open" value="' . (int) $e['sub_id'] . '">'
+           . '<button type="submit" class="btn-primary">📂 Ouvrir le dossier</button></form>';
         echo '<form method="post" style="display:inline">' . wp_nonce_field('lfi_geo_done', '_wpnonce', true, false)
            . '<input type="hidden" name="lfi_geo_done" value="' . (int) $e['sub_id'] . '">'
            . '<button type="submit" class="btn-ghost" style="padding:6px 10px;font-size:.82em">✓ Traité</button></form>';
