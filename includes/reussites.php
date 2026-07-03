@@ -48,6 +48,51 @@ function lfi_nct_reussite_auto_from_dossier($dossier_id) {
     return $pref['id'];
 }
 
+/**
+ * SEED (code) des réussites déjà obtenues — insérées une seule fois (par clé),
+ * en BROUILLON anonyme : Fabrice les relit et les publie quand il veut. Aucun
+ * nom. Volet URGENCE uniquement (la réparation reste un dossier ouvert).
+ */
+add_action('init', 'lfi_nct_reussites_seed_builtin', 1400);
+function lfi_nct_reussites_seed_builtin() {
+    $seeds = [
+        'punaises-urgence-2026-07' => [
+            'titre'    => 'Punaises de lit : traitement d\'urgence obtenu — et refacturation illégale abandonnée',
+            'situation'=> "Un locataire du Clos Toreau subissait une infestation de punaises de lit. En s'appuyant sur le cadre légal (obligation de délivrer un logement décent, exempt de nuisibles — art. 6 de la loi de 1989 ; décret n° 2002-120), il a relancé directement le bailleur juste avant l'intervention. L'entreprise spécialisée est venue traiter le logement EN URGENCE. Fait décisif : contrairement aux deux fois précédentes, aucun paiement des produits n'a été exigé — alors que ces frais avaient auparavant été indûment intégrés aux charges, ce qui est contraire à la liste limitative des charges récupérables (décret n° 87-713). Le bailleur a de fait renoncé à une pratique interne qui ne tenait pas face aux arguments juridiques.",
+            'resultat' => 'travaux',
+            'resultat_detail' => 'Traitement réalisé sans frais. Le remboursement des sommes indûment facturées les fois précédentes, et la réparation du préjudice, restent à obtenir (dossier ouvert).',
+        ],
+        'blattes-relance-2026-07' => [
+            'titre'    => 'Blattes : traitement relancé après une mise en demeure appuyée sur le droit',
+            'situation'=> "Une locataire du quartier subissait une infestation de blattes depuis environ quatre ans, malgré des signalements et un traitement allégé jugé insuffisant par le technicien du bailleur lui-même. Après une mise en demeure fondée sur le cadre légal (art. 1719 du Code civil, art. L.1331-22 du Code de la santé publique, jurisprudence constante), le bailleur a relancé l'entreprise spécialisée pour un nouveau traitement à domicile.",
+            'resultat' => 'travaux',
+            'resultat_detail' => 'Traitement relancé (volet urgence). Le protocole complet, le traitement des logements voisins et la réparation du préjudice restent à verrouiller (dossier ouvert).',
+        ],
+    ];
+
+    $list = lfi_nct_reussites();
+    $have = [];
+    foreach ($list as $r) if (!empty($r['seed_key'])) $have[$r['seed_key']] = 1;
+    $changed = false; $i = 0;
+    foreach ($seeds as $key => $s) {
+        if (isset($have[$key])) continue;
+        $s['id']              = (int) round(microtime(true) * 1000) + $i++;
+        $s['seed_key']        = $key;
+        $s['leviers']         = ['accompagnement', 'courrier'];
+        $s['leviers_detail']  = '';
+        $s['resultat_detail'] = $s['resultat_detail'] ?? '';
+        $s['delai']           = '';
+        $s['quartier']        = 'Clos Toreau (Nantes Sud)';
+        $s['anonymize_names'] = '';
+        $s['publie']          = false; /* brouillon anonyme, à relire/publier */
+        $s['auto']            = true;
+        $s['date']            = current_time('mysql');
+        $list[] = $s;
+        $changed = true;
+    }
+    if ($changed) lfi_nct_reussites_save($list);
+}
+
 /** Catalogue des leviers actionnables (cases à cocher). */
 function lfi_nct_reussite_leviers() {
     return [
