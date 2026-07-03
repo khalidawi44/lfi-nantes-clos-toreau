@@ -864,6 +864,7 @@ function lfi_nct_app_shortcode() {
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
                     case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
+                    case 'audit-nmh':            lfi_nct_app_view_audit_nmh();              break;
                     case 'strategie-municipale':  lfi_nct_app_view_strategie_municipale();   break;
                     case 'strategie-nationale':   lfi_nct_app_view_strategie_nationale();    break;
                     case 'national':              lfi_nct_app_view_national();               break;
@@ -2324,6 +2325,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
             ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
+            ['💶', 'Où va mon loyer ? (audit NMH)', 'Chiffres CRC sourcés · 3 versions', lfi_nct_app_url('audit-nmh')],
             ['🌐', 'Tableau de bord du réseau', 'Tous les GA municipaux, regroupé',   lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
             ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],

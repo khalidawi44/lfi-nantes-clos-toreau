@@ -656,6 +656,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'propositions':     lfi_nct_app_view_propositions();     break;
             case 'dispos':           lfi_nct_app_view_dispos();           break;
             case 'dispos-communes':  lfi_nct_app_view_dispos_communes();  break;
+            case 'audit-nmh':        lfi_nct_app_view_audit_nmh();        break;
             case 'mon-profil':       lfi_nct_app_view_mon_profil();       break;
             case 'installer':        lfi_nct_app_view_installer();        break;
 
@@ -692,6 +693,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            lfi_nct_app_url('enquete')],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
         ['💬', 'Infos clés',                'Que répondre aux gens',               lfi_nct_app_url('infos-cles')],
+        ['💶', 'Où va mon loyer ?',         'L\'argumentaire NMH, chiffres à l\'appui', lfi_nct_app_url('audit-nmh')],
         ['🤖', 'Aide (question vocale)',    'Pose ta question, même à la voix',    lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],

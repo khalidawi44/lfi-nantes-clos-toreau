@@ -37,6 +37,36 @@ function lfi_nct_news_latest() {
     return $list ? end($list) : null;
 }
 
+/**
+ * Seed d'annonces « quoi de neuf » côté code (idempotent par flag).
+ * Chaque nouveauté qui touche les membres ajoute une entrée ici avec une clé
+ * unique ; elle n'est insérée qu'une fois, même après plusieurs déploiements.
+ */
+add_action('init', 'lfi_nct_news_seed_builtin', 1300);
+function lfi_nct_news_seed_builtin() {
+    $done = get_option('lfi_nct_news_seed_keys', []);
+    if (!is_array($done)) $done = [];
+
+    $seeds = [
+        'audit-nmh-2026-07' => [
+            'titre' => 'Nouveau : « Où va mon loyer ? »',
+            'corps' => 'Un nouvel écran <strong>💶 Où va mon loyer ?</strong> arrive dans ta console. '
+                     . 'C\'est l\'argumentaire NMH avec les <strong>vrais chiffres</strong> (rapport de la Chambre régionale des comptes) : '
+                     . 'sur 330 € de loyer, à peine 21 € reviennent à l\'entretien du logement. '
+                     . 'Tu y trouves une <strong>phrase simple à dire au porte-à-porte</strong> — utile pour répondre aux gens sans te tromper.',
+        ],
+    ];
+
+    $changed = false;
+    foreach ($seeds as $key => $a) {
+        if (in_array($key, $done, true)) continue;
+        lfi_nct_news_add($a['titre'], $a['corps']);
+        $done[] = $key;
+        $changed = true;
+    }
+    if ($changed) update_option('lfi_nct_news_seed_keys', $done, false);
+}
+
 /** AJAX : le membre a vu l'annonce → on mémorise (ne réapparaît plus). */
 add_action('wp_ajax_lfi_nct_news_seen', 'lfi_nct_news_seen_ajax');
 function lfi_nct_news_seen_ajax() {
