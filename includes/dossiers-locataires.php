@@ -946,6 +946,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
         echo '</div></div>';
     }
     if ($is_edit && $row && function_exists('lfi_nct_render_dossier_replies')) {
+        if (!empty($_GET['repok']) && function_exists('lfi_nct_app_flash')) lfi_nct_app_flash('✅ Réponse générée pour ce dossier — relis-la ci-dessous puis ouvre-la dans Gmail.');
         lfi_nct_render_dossier_replies($row);
     }
     /* Frais & temps d'accompagnement (→ préjudice / avocat, jamais facturés à NMH). */
