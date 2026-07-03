@@ -1601,6 +1601,15 @@ function lfi_nct_login_link($uid, $next_url = '') {
 add_action('template_redirect', 'lfi_nct_maybe_token_login', 1);
 function lfi_nct_maybe_token_login() {
     if (empty($_GET['lfi_login'])) return;
+    /* ANTI-BURN : quand on colle le lien magique dans Telegram/WhatsApp/Messenger,
+       leur robot d'aperçu VA CHERCHER l'URL pour générer la vignette. Comme le
+       jeton est à usage unique, cet aperçu le « brûlerait » avant même que la
+       personne clique. On détecte ces robots d'aperçu et on NE consomme PAS le
+       jeton (on ne fait rien : pas de connexion, pas d'invalidation). */
+    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $bots = 'TelegramBot|WhatsApp|facebookexternalhit|Facebot|Twitterbot|Slackbot|Discordbot|LinkedInBot|SkypeUriPreview|Google-InspectionTool|bingbot|Applebot|Pinterest|vkShare|redditbot|Embedly|preview';
+    if ($ua === '' || preg_match('~(' . $bots . ')~i', $ua)) return;
+
     $token = sanitize_text_field(wp_unslash($_GET['lfi_login']));
     $app   = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
     $dest  = $app;

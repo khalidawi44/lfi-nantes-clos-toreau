@@ -89,6 +89,7 @@ function lfi_nct_partner_handle_posts($ctx_uid, $back_url) {
                 'by' => $by, 'date' => current_time('mysql'),
             ];
             lfi_nct_partner_dossier_save($ctx_uid, $items);
+            if (!current_user_can('manage_options')) lfi_nct_partner_activity_mark($ctx_uid, 'dossier');
         }
         wp_safe_redirect(add_query_arg('ok', 1, $back_url)); exit;
     }
@@ -118,6 +119,7 @@ function lfi_nct_partner_handle_posts($ctx_uid, $back_url) {
                         "Bonjour,\n\nFabrice t'a écrit sur ta ligne directe :\n\n« " . $msg . " »\n\nRéponds directement dans ton espace : " . $link);
                 }
             } else {
+                lfi_nct_partner_activity_mark($ctx_uid, 'message');
                 $ae = lfi_nct_partner_admin_email();
                 if (is_email($ae)) {
                     wp_mail($ae, '💬 Message partenaire : ' . $by,
@@ -126,6 +128,47 @@ function lfi_nct_partner_handle_posts($ctx_uid, $back_url) {
             }
         }
         wp_safe_redirect(add_query_arg('msg', 1, $back_url)); exit;
+    }
+}
+
+/* -------------------------------------------------------------- *
+ *  Alertes pour l'ADMIN : quand un·e élu·e dépose / écrit qqch.    *
+ * -------------------------------------------------------------- */
+function lfi_nct_partner_activity_mark($uid, $type) {
+    $a = get_option('lfi_nct_partner_activity', []);
+    if (!is_array($a)) $a = [];
+    $cur = (isset($a[$uid]) && is_array($a[$uid])) ? $a[$uid] : ['msg' => 0, 'dossier' => 0, 'last' => ''];
+    if ($type === 'message') $cur['msg'] = (int) ($cur['msg'] ?? 0) + 1;
+    else                     $cur['dossier'] = (int) ($cur['dossier'] ?? 0) + 1;
+    $cur['last'] = current_time('mysql');
+    $a[$uid] = $cur;
+    update_option('lfi_nct_partner_activity', $a, false);
+}
+function lfi_nct_partner_activity_clear($uid) {
+    $a = get_option('lfi_nct_partner_activity', []);
+    if (is_array($a) && isset($a[$uid])) { unset($a[$uid]); update_option('lfi_nct_partner_activity', $a, false); }
+}
+/** Notice ludique sur le tableau de bord admin, menant à l'espace du partenaire. */
+function lfi_nct_partner_admin_notice() {
+    if (!current_user_can('manage_options')) return;
+    $a = get_option('lfi_nct_partner_activity', []);
+    if (!is_array($a) || empty($a)) return;
+    foreach ($a as $uid => $act) {
+        $u = get_user_by('id', (int) $uid);
+        if (!$u) continue;
+        $msg = (int) ($act['msg'] ?? 0); $dos = (int) ($act['dossier'] ?? 0);
+        if ($msg + $dos < 1) continue;
+        $parts = [];
+        if ($msg > 0) $parts[] = '💬 ' . $msg . ' message' . ($msg > 1 ? 's' : '');
+        if ($dos > 0) $parts[] = '📁 ' . $dos . ' dépôt' . ($dos > 1 ? 's' : '') . ' au dossier';
+        $url = lfi_nct_app_url('partenaire-espace', ['uid' => (int) $uid]);
+        echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:block">';
+        echo '<div style="margin:0 0 12px;background:linear-gradient(135deg,#4b2e83,#6f4bb0);color:#fff;border-radius:14px;padding:13px 16px;display:flex;align-items:center;gap:12px">';
+        echo '<div style="font-size:1.7em">📨</div>';
+        echo '<div style="flex:1"><div style="font-weight:900">' . esc_html($u->display_name) . ' t\'a fait signe !</div>';
+        echo '<div style="font-size:.86em;opacity:.95">' . esc_html(implode(' · ', $parts)) . ' — clique pour voir et répondre</div></div>';
+        echo '<div style="background:rgba(255,255,255,.22);border-radius:20px;padding:6px 12px;font-weight:800;font-size:.85em">Ouvrir →</div>';
+        echo '</div></a>';
     }
 }
 
@@ -530,6 +573,7 @@ function lfi_nct_app_view_partenaire_espace() {
     $p = $uid ? get_user_by('id', $uid) : null;
     if (!$p || !lfi_nct_user_role_partner($uid)) { wp_safe_redirect(lfi_nct_app_url('partenaires')); exit; }
     $back = lfi_nct_app_url('partenaire-espace', ['uid' => $uid]);
+    lfi_nct_partner_activity_clear($uid); /* l'admin consulte → on efface l'alerte */
 
     /* Mise à jour de l'email du partenaire (pour qu'il reçoive les réponses). */
     if (!empty($_POST['lfi_partner_email']) && check_admin_referer('lfi_partner_email')) {
@@ -698,28 +742,24 @@ function lfi_nct_partner_seed_william() {
 }
 
 /* -------------------------------------------------------------- *
- *  SEED : dépose dans le dossier partagé de William un mot de       *
- *  Fabrice pointant vers le Dossier NMH (comptes publics only).     *
- *  AUCUNE donnée d'enquête — juste un renvoi vers la vue « nmh ».    *
+ *  NETTOYAGE (une fois) : retire le mot auto-déposé jadis dans le    *
+ *  dossier partagé de William. Le dossier partagé ne doit contenir   *
+ *  QUE ce que William et Fabrice y mettent eux-mêmes — on n'y copie  *
+ *  rien automatiquement.                                             *
  * -------------------------------------------------------------- */
-add_action('init', 'lfi_nct_partner_seed_william_dossier', 14);
-function lfi_nct_partner_seed_william_dossier() {
-    if (get_option('lfi_nct_partner_seed_william_dossier_done')) return;
+add_action('init', 'lfi_nct_partner_cleanup_william_dossier', 14);
+function lfi_nct_partner_cleanup_william_dossier() {
+    if (get_option('lfi_nct_partner_cleanup_william_dossier_done')) return;
     $found = get_users(['meta_key' => 'lfi_nct_partner_seed', 'meta_value' => 'william', 'number' => 1, 'fields' => 'ID']);
     if (empty($found)) return; /* William pas encore créé — on retentera. */
     $uid = (int) $found[0];
     $items = lfi_nct_partner_dossier($uid);
-    foreach ($items as $it) { if (($it['id'] ?? 0) === 1 && strpos((string) ($it['titre'] ?? ''), 'Dossier NMH') !== false) { update_option('lfi_nct_partner_seed_william_dossier_done', 1, false); return; } }
-    $items[] = [
-        'id'    => lfi_nct_partner_next_id($items),
-        'titre' => '📊 Dossier NMH (comptes, gestion, argumentaires, rhétorique)',
-        'note'  => "J'ai préparé pour toi le dossier complet sur Nantes Métropole Habitat : où va le loyer, la gestion (gouvernance, dette, investissements), tes questions prêtes pour le conseil et une boîte à rhétorique. Tout est fondé sur des données PUBLIQUES (Chambre régionale des comptes, comptes certifiés) — jamais l'enquête terrain. Tu le retrouves dans l'onglet « 💶 Dossier NMH » de ton espace. On l'enrichit ensemble ici quand tu veux. — Fabrice",
-        'url'   => lfi_nct_app_url('nmh'),
-        'by'    => 'Fabrice',
-        'date'  => current_time('mysql'),
-    ];
-    lfi_nct_partner_dossier_save($uid, $items);
-    update_option('lfi_nct_partner_seed_william_dossier_done', 1, false);
+    $clean = array_values(array_filter($items, function ($it) {
+        $t = (string) ($it['titre'] ?? '');
+        return !(($it['by'] ?? '') === 'Fabrice' && strpos($t, 'Dossier NMH') !== false);
+    }));
+    if (count($clean) !== count($items)) lfi_nct_partner_dossier_save($uid, $clean);
+    update_option('lfi_nct_partner_cleanup_william_dossier_done', 1, false);
 }
 
 /* -------------------------------------------------------------- *
