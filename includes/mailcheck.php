@@ -43,24 +43,70 @@ function lfi_nct_mailcheck_senders() {
     ]);
 }
 
+/**
+ * Boîtes à surveiller : la boîte CENTRALE (tous les dossiers) + une boîte par
+ * MEMBRE (limitée à SES locataires attribués). Les identifiants (mots de passe
+ * d'application) sont stockés en option côté serveur, jamais dans Git.
+ */
+function lfi_nct_mailcheck_boxes() {
+    $boxes = [];
+    $cu = (string) get_option('lfi_nct_gmail_user', '');
+    $cp = str_replace(' ', '', (string) get_option('lfi_nct_gmail_app_pw', ''));
+    if ($cu !== '' && $cp !== '') {
+        $boxes[] = ['user' => $cu, 'pw' => $cp, 'referent' => 0, 'label' => 'centrale'];
+    }
+    $members = get_option('lfi_nct_member_mailboxes', []);
+    if (is_array($members)) {
+        foreach ($members as $m) {
+            if (empty($m['enabled'])) continue;
+            $u = (string) ($m['email'] ?? '');
+            $p = str_replace(' ', '', (string) ($m['app_pw'] ?? ''));
+            $ref = (int) ($m['user_id'] ?? 0);
+            if ($u !== '' && $p !== '') {
+                $boxes[] = ['user' => $u, 'pw' => $p, 'referent' => $ref, 'label' => $u];
+            }
+        }
+    }
+    return $boxes;
+}
+
 /** Le check lui-même (appelé par le cron, ou manuellement). Renvoie un rapport. */
 function lfi_nct_mailcheck_do() {
-    $rep = ['ok' => false, 'traites' => 0, 'prepares' => 0, 'msg' => ''];
+    $rep = ['ok' => false, 'traites' => 0, 'prepares' => 0, 'boxes' => 0, 'msg' => ''];
     if (!function_exists('imap_open')) { $rep['msg'] = 'Extension PHP imap absente sur le serveur.'; lfi_nct_mailcheck_log($rep); return $rep; }
-    $user = (string) get_option('lfi_nct_gmail_user', '');
-    $pw   = str_replace(' ', '', (string) get_option('lfi_nct_gmail_app_pw', ''));
-    if ($user === '' || $pw === '') { $rep['msg'] = 'Identifiants Gmail non configurés.'; lfi_nct_mailcheck_log($rep); return $rep; }
+    $boxes = lfi_nct_mailcheck_boxes();
+    if (empty($boxes)) { $rep['msg'] = 'Aucune boîte configurée.'; lfi_nct_mailcheck_log($rep); return $rep; }
 
-    /* /novalidate-cert : contourne le bug SNI de certains clients PHP IMAP
-       (la connexion reste chiffrée SSL). */
-    $mbox = @imap_open('{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX', $user, $pw, 0, 1);
-    if (!$mbox) { $rep['msg'] = 'Connexion IMAP échouée : ' . imap_last_error(); lfi_nct_mailcheck_log($rep); return $rep; }
-
-    /* Messages non lus des 3 derniers jours. */
-    $since = date('d-M-Y', strtotime('-3 days'));
-    $ids = @imap_search($mbox, 'UNSEEN SINCE "' . $since . '"', SE_UID) ?: [];
     $seen = get_option('lfi_nct_mailcheck_seen', []);
     if (!is_array($seen)) $seen = [];
+    $errors = [];
+    foreach ($boxes as $box) {
+        $r = lfi_nct_mailcheck_scan_box($box, $seen);
+        $rep['traites']  += $r['traites'];
+        $rep['prepares'] += $r['prepares'];
+        $rep['boxes']++;
+        if ($r['error'] !== '') $errors[] = $box['label'] . ' : ' . $r['error'];
+    }
+
+    /* On borne l'historique des vus. */
+    if (count($seen) > 800) $seen = array_slice($seen, -800);
+    update_option('lfi_nct_mailcheck_seen', $seen, false);
+    $rep['ok']  = empty($errors);
+    $rep['msg'] = $errors ? implode(' | ', $errors) : 'Terminé.';
+    lfi_nct_mailcheck_log($rep);
+    return $rep;
+}
+
+/** Scanne UNE boîte ; $seen est partagé (passé par référence) et mis à jour. */
+function lfi_nct_mailcheck_scan_box($box, &$seen) {
+    $out = ['traites' => 0, 'prepares' => 0, 'error' => ''];
+    /* /novalidate-cert : contourne le bug SNI de certains clients PHP IMAP
+       (la connexion reste chiffrée SSL). */
+    $mbox = @imap_open('{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX', $box['user'], $box['pw'], 0, 1);
+    if (!$mbox) { $out['error'] = 'connexion IMAP échouée : ' . imap_last_error(); return $out; }
+
+    $since = date('d-M-Y', strtotime('-3 days'));
+    $ids = @imap_search($mbox, 'UNSEEN SINCE "' . $since . '"', SE_UID) ?: [];
     $senders = lfi_nct_mailcheck_senders();
 
     foreach ($ids as $uid) {
@@ -74,26 +120,20 @@ function lfi_nct_mailcheck_do() {
         foreach ($senders as $s) if (strpos($from, $s) !== false) { $match = true; break; }
         if (!$match) continue;
 
-        $rep['traites']++;
+        $out['traites']++;
         $seen[] = $mid;
 
         $subject = (string) imap_utf8((string) ($o->subject ?? ''));
         $body = lfi_nct_mailcheck_body($mbox, $uid);
-        $dossier = lfi_nct_mailcheck_match_dossier($subject . ' ' . $body);
+        /* Une boîte membre ne rattache QUE les dossiers dont il/elle est référent. */
+        $dossier = lfi_nct_mailcheck_match_dossier($subject . ' ' . $body, (int) $box['referent']);
         if ($dossier) {
             lfi_nct_mailcheck_prepare_reply($dossier, $o, $subject, $body);
-            $rep['prepares']++;
+            $out['prepares']++;
         }
     }
     @imap_close($mbox);
-
-    /* On borne l'historique des vus. */
-    if (count($seen) > 500) $seen = array_slice($seen, -500);
-    update_option('lfi_nct_mailcheck_seen', $seen, false);
-    $rep['ok'] = true;
-    $rep['msg'] = 'Terminé.';
-    lfi_nct_mailcheck_log($rep);
-    return $rep;
+    return $out;
 }
 
 function lfi_nct_mailcheck_log($rep) {
@@ -109,11 +149,18 @@ function lfi_nct_mailcheck_body($mbox, $uid) {
     return mb_substr(wp_strip_all_tags((string) $body), 0, 4000);
 }
 
-/** Trouve le dossier concerné (nom du locataire présent dans le texte). */
-function lfi_nct_mailcheck_match_dossier($text) {
+/**
+ * Trouve le dossier concerné (nom du locataire présent dans le texte).
+ * $referent > 0 : on ne cherche que parmi les dossiers de ce membre.
+ */
+function lfi_nct_mailcheck_match_dossier($text, $referent = 0) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
-    $rows = $wpdb->get_results("SELECT * FROM $t ORDER BY updated_at DESC LIMIT 200") ?: [];
+    if ($referent > 0) {
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE referent_user_id = %d ORDER BY updated_at DESC LIMIT 200", $referent)) ?: [];
+    } else {
+        $rows = $wpdb->get_results("SELECT * FROM $t ORDER BY updated_at DESC LIMIT 200") ?: [];
+    }
     $low = mb_strtolower($text);
     foreach ($rows as $r) {
         $nom = trim((string) $r->tenant_nom);
@@ -137,18 +184,21 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
         $posture = $r['label'] . ' — ton conseillé : ' . $r['ton'];
     }
     $nom = trim($row->tenant_prenom . ' ' . $row->tenant_nom);
+    /* Signataire = le référent du dossier (le membre qui gère), sinon Fabrice. */
+    $ref_id = (int) ($row->referent_user_id ?? 0);
+    $ref_u  = $ref_id ? get_userdata($ref_id) : null;
+    $signataire = $ref_u ? ($ref_u->display_name ?: $ref_u->user_login) : 'Fabrice Doucet';
     /* Volet pénal (règle) : détecter intimidation / contournement illégal du
        message reçu et insérer un paragraphe de désamorçage dans la réponse. */
     $penal = function_exists('lfi_nct_penal_paragraphe') ? lfi_nct_penal_paragraphe($body) : '';
     $reply = "Madame, Monsieur,\n\n"
-        . "En accompagnement de " . $nom . ", que je suis à sa demande en tant que président de l'association Union des Quartiers Libres, je reviens vers vous.\n\n"
+        . "En accompagnement de " . $nom . ", à sa demande et en qualité d'interlocuteur unique, je reviens vers vous.\n\n"
         . "[BROUILLON AUTOMATIQUE À RELIRE ET COMPLÉTER]\n"
-        . "- Lecture de votre message : " . $posture . "\n"
         . "- Je rappelle que je suis l'interlocuteur unique de la personne accompagnée ; tout contact et tout accès au logement se font par mon intermédiaire et en ma présence.\n"
         . "- Sur le fond : un dysfonctionnement a été constaté et signalé. Il vous appartient d'intervenir/de constater ; je vous demande de me communiquer une date.\n\n"
         . ($penal !== '' ? $penal . "\n\n" : '')
         . "(Complétez ici les points précis selon le message reçu, puis envoyez.)\n\n"
-        . "Cordialement,\nFabrice Doucet\nPrésident — Association Union des Quartiers Libres\nGroupe d'Action La France Insoumise Nantes Sud – Clos Toreau";
+        . "Cordialement,\n" . $signataire . "\nInterlocuteur unique de " . $nom . "\nGroupe d'Action La France Insoumise Nantes Sud – Clos Toreau\nAssociation Union des Quartiers Libres";
 
     $notes = json_decode($row->notes ?? '', true);
     if (!is_array($notes)) $notes = [];
