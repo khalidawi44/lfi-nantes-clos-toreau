@@ -631,6 +631,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'droits':       lfi_nct_app_view_tenant_droits();   break;
             case 'notifs':       lfi_nct_app_view_tenant_notifs();   break;
             case 'mon-enquete':  lfi_nct_app_view_tenant_enquete();  break;
+            case 'mon-profil-loc': lfi_nct_app_view_tenant_profil(); break;
+            case 'mon-objectif':   lfi_nct_app_view_tenant_objectif(); break;
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             case 'installer':    lfi_nct_app_view_installer();       break;
@@ -1061,6 +1063,8 @@ function lfi_nct_app_view_tenant_dashboard() {
 
         <?php if ($tip_html) echo $tip_html; ?>
 
+        <?php if (function_exists('lfi_nct_render_tenant_parcours')) lfi_nct_render_tenant_parcours($user, $response); ?>
+
         <?php if ($problem): ?>
             <div class="lfi-app-problem" style="margin-bottom:14px">
                 <div class="prob-head">Vos problèmes signalés
@@ -1091,6 +1095,159 @@ function lfi_nct_app_view_tenant_dashboard() {
         </div>
     </div>
     <?php
+}
+
+/* ============================================================== *
+ *  PARCOURS GUIDÉ DU LOCATAIRE — simple, une étape à la fois.      *
+ *  Objectif : la personne s'empare de son dossier sans effort.     *
+ * ============================================================== */
+
+/** Combien de photos/pièces la personne a-t-elle déjà déposées ? */
+function lfi_nct_tenant_photo_count($uid) {
+    $ids = get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 1,
+        'fields' => 'ids', 'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $uid]]]);
+    return count($ids);
+}
+/** État des étapes du parcours locataire. */
+function lfi_nct_tenant_steps_state($user, $response) {
+    $uid = (int) $user->ID;
+    $data = ($response && $response->data) ? json_decode((string) $response->data, true) : [];
+    if (!is_array($data)) $data = [];
+    $has_name = trim((string) ($response->contact_prenom ?? '') . ($response->contact_nom ?? '')) !== '' || trim((string) $user->first_name . $user->last_name) !== '';
+    $has_tel  = trim((string) get_user_meta($uid, 'lfi_nct_tel', true)) !== '' || trim((string) ($response->contact_tel ?? '')) !== '';
+    return [
+        'profil'   => (get_user_meta($uid, 'lfi_nct_tenant_profil_done', true) === '1') || ($has_name && $has_tel),
+        'objectif' => trim((string) ($data['objectif'] ?? '')) !== '',
+        'photos'   => lfi_nct_tenant_photo_count($uid) > 0,
+    ];
+}
+
+function lfi_nct_render_tenant_parcours($user, $response) {
+    $st = lfi_nct_tenant_steps_state($user, $response);
+    $steps = [
+        ['key' => 'profil',   'ico' => '✏️', 'tit' => 'Compléter mon profil', 'why' => 'Qui vous êtes et comment on vous joint.', 'url' => lfi_nct_app_url('mon-profil-loc')],
+        ['key' => 'objectif', 'ico' => '🎯', 'tit' => 'Ce que je veux', 'why' => 'Être relogé·e ? Des travaux ? Une indemnisation ? On décide ensemble.', 'url' => lfi_nct_app_url('mon-objectif')],
+        ['key' => 'photos',   'ico' => '📷', 'tit' => 'Mes photos & documents', 'why' => 'Des preuves datées de vos problèmes : c\'est ce qui pèse le plus.', 'url' => lfi_nct_app_url('envoyer-photo')],
+    ];
+    $done = 0; foreach ($steps as $s) if (!empty($st[$s['key']])) $done++;
+    $total = count($steps);
+
+    if (!empty($_GET['profilok']) || !empty($_GET['objok'])) {
+        echo '<div class="lfi-app-flash ok" style="margin-bottom:10px">✅ Enregistré, merci ! Une étape de plus.</div>';
+    }
+    echo '<div class="lfi-app-card" style="border:2px solid #c8102e;border-radius:14px;padding:14px;margin-bottom:14px">';
+    if ($done >= $total) {
+        echo '<div style="font-weight:900;color:#186a3b;font-size:1.05em">✅ Bravo, votre dossier est prêt !</div>';
+        echo '<div class="lfi-app-help" style="margin-top:4px">Vous pouvez toujours ajouter des photos ou modifier vos infos. On revient vers vous très vite.</div>';
+    } else {
+        echo '<div style="font-weight:900;color:#c8102e;font-size:1.05em">👋 Bienvenue ! On avance ensemble, étape par étape.</div>';
+        /* Barre de progression simple. */
+        $pct = (int) round($done * 100 / max(1, $total));
+        echo '<div style="background:#eee;border-radius:10px;height:10px;margin:8px 0;overflow:hidden"><div style="width:' . $pct . '%;height:100%;background:#186a3b"></div></div>';
+        echo '<div style="font-size:.85em;color:#666;margin-bottom:6px">' . $done . ' / ' . $total . ' — il vous reste ' . ($total - $done) . ' étape' . (($total - $done) > 1 ? 's' : '') . '.</div>';
+    }
+    echo '<div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">';
+    $n = 0;
+    foreach ($steps as $s) {
+        $n++;
+        $ok = !empty($st[$s['key']]);
+        $bg = $ok ? '#eef7ee' : '#fff';
+        $bd = $ok ? '#a6d3a6' : '#f0c0c6';
+        echo '<a href="' . esc_url($s['url']) . '" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;background:' . $bg . ';border:1px solid ' . $bd . ';border-radius:12px;padding:11px 13px">';
+        echo '<div style="width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;background:' . ($ok ? '#186a3b' : '#c8102e') . '">' . ($ok ? '✓' : $n) . '</div>';
+        echo '<div style="flex:1"><div style="font-weight:800">' . $s['ico'] . ' ' . esc_html($s['tit']) . '</div><div style="font-size:.83em;color:#666">' . esc_html($s['why']) . '</div></div>';
+        echo '<div style="color:' . ($ok ? '#186a3b' : '#c8102e') . ';font-weight:800;white-space:nowrap">' . ($ok ? 'Fait' : 'À faire →') . '</div>';
+        echo '</a>';
+    }
+    echo '</div>';
+    echo '<div class="lfi-app-help" style="margin-top:8px"><small>🔒 Vos informations restent confidentielles. Elles ne sont partagées avec personne sans votre accord (et jamais votre situation familiale).</small></div>';
+    echo '</div>';
+}
+
+/* ---- Étape 1 : Compléter mon profil (locataire) ---- */
+function lfi_nct_app_view_tenant_profil() {
+    $user = wp_get_current_user();
+    $uid = (int) $user->ID;
+    global $wpdb;
+    $rid = lfi_nct_user_tenant_response_id($uid);
+    $row = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    $data = ($row && $row->data) ? json_decode((string) $row->data, true) : [];
+    if (!is_array($data)) $data = [];
+
+    if (!empty($_POST['lfi_tenant_profil']) && check_admin_referer('lfi_tenant_profil')) {
+        $prenom = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
+        $nom    = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+        $tel    = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
+        $naiss  = sanitize_text_field(wp_unslash($_POST['naissance'] ?? ''));
+        $adresse= sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
+        if ($tel !== '') update_user_meta($uid, 'lfi_nct_tel', $tel);
+        wp_update_user(['ID' => $uid, 'first_name' => $prenom, 'last_name' => $nom, 'display_name' => trim($prenom . ' ' . $nom) ?: $user->user_login]);
+        if ($row) {
+            $data['naissance'] = $naiss;
+            $upd = ['contact_prenom' => $prenom, 'contact_nom' => $nom, 'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)];
+            if ($tel !== '') $upd['contact_tel'] = $tel;
+            if ($adresse !== '') $upd['adresse'] = $adresse;
+            $wpdb->update("{$wpdb->prefix}lfi_nct_responses", $upd, ['id' => $rid]);
+        }
+        update_user_meta($uid, 'lfi_nct_tenant_profil_done', '1');
+        wp_safe_redirect(lfi_nct_app_url('', ['profilok' => 1])); exit;
+    }
+
+    lfi_nct_app_screen_open('✏️ Mon profil', 'Étape 1 — qui vous êtes, comment on vous joint');
+    echo '<div class="lfi-app-help">Ces infos nous permettent de vous accompagner et de vous tenir au courant. Rien n\'est partagé sans votre accord.</div>';
+    echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_tenant_profil', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_tenant_profil" value="1">';
+    echo '<label>Prénom<input type="text" name="prenom" value="' . esc_attr($user->first_name ?: ($row->contact_prenom ?? '')) . '"></label>';
+    echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($user->last_name ?: ($row->contact_nom ?? '')) . '"></label>';
+    echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr(get_user_meta($uid, 'lfi_nct_tel', true) ?: ($row->contact_tel ?? '')) . '" placeholder="06…"></label>';
+    echo '<label>Date de naissance (facultatif)<input type="text" name="naissance" value="' . esc_attr($data['naissance'] ?? '') . '" placeholder="jj/mm/aaaa"></label>';
+    echo '<label>Adresse complète<input type="text" name="adresse" value="' . esc_attr($row->adresse ?? '') . '" placeholder="N°, rue, ville"></label>';
+    echo '<div style="margin-top:12px"><button type="submit" class="btn-primary" style="background:#186a3b">✅ Enregistrer</button> <a class="btn-ghost" href="' . esc_url(lfi_nct_app_url()) . '">Retour</a></div>';
+    echo '</form>';
+    lfi_nct_app_screen_close();
+}
+
+/* ---- Étape 2 : Ce que je veux (objectif) + situation privée ---- */
+function lfi_nct_app_view_tenant_objectif() {
+    $user = wp_get_current_user();
+    $uid = (int) $user->ID;
+    global $wpdb;
+    $rid = lfi_nct_user_tenant_response_id($uid);
+    $row = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    $data = ($row && $row->data) ? json_decode((string) $row->data, true) : [];
+    if (!is_array($data)) $data = [];
+
+    $choix = [
+        'travaux'       => '🔧 Que les travaux soient faits',
+        'relogement'    => '🏠 Être relogé·e (déménager)',
+        'indemnisation' => '💶 Être indemnisé·e pour le préjudice',
+        'a_voir'        => '🤝 J\'en parle d\'abord avec le GA',
+    ];
+    if (!empty($_POST['lfi_tenant_objectif']) && check_admin_referer('lfi_tenant_objectif') && $row) {
+        $obj = sanitize_key($_POST['objectif'] ?? '');
+        if (!isset($choix[$obj])) $obj = 'a_voir';
+        $data['objectif'] = $obj;
+        /* Situation privée (enfants…) : reste au dossier, JAMAIS partagée. */
+        $data['situation_privee'] = sanitize_textarea_field(wp_unslash($_POST['situation'] ?? ''));
+        $wpdb->update("{$wpdb->prefix}lfi_nct_responses", ['data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)], ['id' => $rid]);
+        wp_safe_redirect(lfi_nct_app_url('', ['objok' => 1])); exit;
+    }
+
+    lfi_nct_app_screen_open('🎯 Ce que je veux', 'Étape 2 — votre objectif, on décide ensemble');
+    if (!$row) { echo '<div class="lfi-app-empty">Votre dossier n\'est pas encore lié. Contactez le GA.</div>'; lfi_nct_app_screen_close(); return; }
+    echo '<div class="lfi-app-help">Il n\'y a pas de mauvaise réponse. Choisissez ce qui vous parle — on l\'affinera avec vous.</div>';
+    echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_tenant_objectif', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_tenant_objectif" value="1">';
+    $cur = (string) ($data['objectif'] ?? '');
+    echo '<div style="display:flex;flex-direction:column;gap:8px;margin:6px 0">';
+    foreach ($choix as $k => $lab) {
+        echo '<label class="lfi-app-checkbox-row" style="border:1px solid ' . ($cur === $k ? '#186a3b' : '#ddd') . ';border-radius:10px;padding:11px"><input type="radio" name="objectif" value="' . esc_attr($k) . '" ' . checked($cur, $k, false) . '> ' . esc_html($lab) . '</label>';
+    }
+    echo '</div>';
+    echo '<label>🔒 Ma situation, mes enfants (facultatif — <strong>reste confidentiel, jamais partagé sauf avocat si nécessaire</strong>)<textarea name="situation" rows="4" placeholder="Ex : 2 enfants en bas âge, un problème de santé…">' . esc_textarea($data['situation_privee'] ?? '') . '</textarea></label>';
+    echo '<div style="margin-top:12px"><button type="submit" class="btn-primary" style="background:#186a3b">✅ Enregistrer</button> <a class="btn-ghost" href="' . esc_url(lfi_nct_app_url()) . '">Retour</a></div>';
+    echo '</form>';
+    lfi_nct_app_screen_close();
 }
 
 /* ============================================================== *
