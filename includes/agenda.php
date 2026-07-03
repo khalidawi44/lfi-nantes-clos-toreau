@@ -285,10 +285,14 @@ function lfi_nct_agenda_rdv_form($row) {
             'heure_fin'      => sanitize_text_field(wp_unslash($_POST['heure_fin'] ?? '')) ?: null,
             'type'           => sanitize_key($_POST['type'] ?? 'rdv'),
             'lieu'           => sanitize_text_field(wp_unslash($_POST['lieu'] ?? '')),
+            // (le point de RDV saisi est appris juste après l'enregistrement)
             'description'    => sanitize_textarea_field(wp_unslash($_POST['description'] ?? '')),
             'statut'         => sanitize_key($_POST['statut'] ?? 'planifie'),
             'notes'          => sanitize_textarea_field(wp_unslash($_POST['notes'] ?? '')),
         ];
+
+        /* Apprend le point de RDV pour le GA (dispo en liste la prochaine fois). */
+        if (!empty($data['lieu']) && function_exists('lfi_nct_rdv_learn')) lfi_nct_rdv_learn($data['lieu']);
 
         /* Auto-complète depuis l'user_id si choisi */
         if ($data['tenant_user_id'] && !$data['tenant_name']) {
@@ -378,7 +382,8 @@ function lfi_nct_agenda_rdv_form($row) {
     }
     echo '</select></label>';
 
-    echo '<label>Lieu (si autre que chez la personne)<input type="text" name="lieu" value="' . esc_attr($r->lieu) . '" placeholder="Ex: Local du GA, 5 rue X — laisse vide si chez la personne"></label>';
+    $rdv_dl_ag = function_exists('lfi_nct_rdv_datalist') ? lfi_nct_rdv_datalist('lfi-rdv-pts-ag') : '';
+    echo '<label>Lieu (si autre que chez la personne)<input type="text" name="lieu" list="lfi-rdv-pts-ag" value="' . esc_attr($r->lieu) . '" placeholder="Ex : Place du Pays Basque, local du GA — laisse vide si chez la personne">' . $rdv_dl_ag . '</label>';
 
     echo '<label>Description (vue par le locataire dans son agenda)<textarea name="description" rows="3" placeholder="Ex : Visite pour évaluer les moisissures dans la cuisine">' . esc_textarea($r->description) . '</textarea></label>';
 

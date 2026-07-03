@@ -316,6 +316,8 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
                 'participants' => wp_json_encode([$uid]), /* créateur inscrit d'office */
             ]);
         }
+        /* Apprend le point de RDV pour le GA (prochaine fois : dans la liste). */
+        if ($lieu !== '' && function_exists('lfi_nct_rdv_learn')) lfi_nct_rdv_learn($lieu, lfi_nct_mobi_ga());
         wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['ok' => 1]));
         exit;
     }
@@ -380,7 +382,11 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
     echo '</div>';
     echo '<div style="margin:6px 0"><button type="button" id="lfi-mobi-addrow" class="btn-ghost" style="padding:6px 12px">➕ Ajouter un autre jour</button></div>';
 
-    echo '<div style="margin:6px 0"><label>Point de rendez-vous (optionnel)<br><input type="text" name="lieu" maxlength="200" placeholder="ex : devant le 8 rue de Saint-Jean-de-Luz" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px"></label></div>';
+    /* Point de RDV : pré-rempli avec le point central du GA + liste déroulante
+       qui apprend (Clos Toreau = Place du Pays Basque). Le moins de saisie possible. */
+    $rdv_primary = function_exists('lfi_nct_rdv_primary') ? lfi_nct_rdv_primary() : '';
+    $rdv_dl = function_exists('lfi_nct_rdv_datalist') ? lfi_nct_rdv_datalist('lfi-rdv-pts') : '';
+    echo '<div style="margin:6px 0"><label>Point de rendez-vous<br><input type="text" name="lieu" list="lfi-rdv-pts" value="' . esc_attr($rdv_primary) . '" maxlength="200" placeholder="ex : Place du Pays Basque" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px">' . $rdv_dl . '</label><div class="lfi-app-help" style="margin-top:2px"><small>Choisis dans la liste ou tape un nouveau point — il sera mémorisé pour la prochaine fois.</small></div></div>';
     echo '<div style="margin:6px 0"><label>Note (optionnel)<br><input type="text" name="note" maxlength="255" placeholder="ex : 500 tracts à distribuer" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px"></label></div>';
     echo '<div style="margin-top:8px"><button type="submit" class="btn-primary" style="background:#186a3b">Créer le(s) créneau(x)</button></div>';
     echo '</form></details>';
