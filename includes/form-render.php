@@ -45,6 +45,10 @@ function lfi_nct_render_form() {
                 <span class="lfi-label">Numéro d'appartement</span>
                 <input type="text" name="appartement" placeholder="Ex : 32">
             </label>
+            <label class="lfi-field">
+                <span class="lfi-label">Nombre d'enfants au foyer</span>
+                <input type="number" name="enfants" min="0" placeholder="Ex : 3">
+            </label>
         </fieldset>
 
         <fieldset class="lfi-fieldset">

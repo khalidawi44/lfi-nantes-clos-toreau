@@ -3493,6 +3493,8 @@ function lfi_nct_app_view_enquete_edit() {
         $adresse = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
         if (function_exists('lfi_nct_normalize_address')) $adresse = lfi_nct_normalize_address($adresse);
         $etage = sanitize_text_field(wp_unslash($_POST['etage'] ?? ''));
+        $ville = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
+        $enfants = sanitize_text_field(wp_unslash($_POST['enfants'] ?? ''));
         $cp = sanitize_text_field(wp_unslash($_POST['contact_prenom'] ?? ''));
         $cn = sanitize_text_field(wp_unslash($_POST['contact_nom'] ?? ''));
         $ct = sanitize_text_field(wp_unslash($_POST['contact_tel'] ?? ''));
@@ -3501,6 +3503,7 @@ function lfi_nct_app_view_enquete_edit() {
 
         $data = json_decode((string) $row->data, true);
         if (!is_array($data)) $data = [];
+        $data_old_ville = (string) ($data['ville'] ?? '');
         $presence = (isset($_POST['problemes_presence']) && in_array($_POST['problemes_presence'], ['oui', 'non'], true))
             ? $_POST['problemes_presence'] : ($data['problemes_presence'] ?? 'oui');
         $data['problemes_presence'] = $presence;
@@ -3511,8 +3514,11 @@ function lfi_nct_app_view_enquete_edit() {
         $data['problemes_gravite']  = max(0, min(10, (int) ($_POST['problemes_gravite'] ?? 0)));
         $rec = sanitize_key($_POST['problemes_recurrent'] ?? '');
         if (in_array($rec, ['permanent', 'parfois', 'ponctuel', ''], true)) $data['problemes_recurrent'] = $rec;
+        /* Ville (pour le bon rattachement GA) + nombre d'enfants (composition du foyer). */
+        $data['ville'] = $ville;
+        $data['enfants'] = $enfants;
 
-        $addr_changed = (trim($adresse) !== trim((string) $row->adresse));
+        $addr_changed = (trim($adresse) !== trim((string) $row->adresse)) || (trim($ville) !== trim((string) ($data_old_ville ?? '')));
         $upd = [
             'adresse' => $adresse, 'etage' => $etage,
             'contact_prenom' => $cp, 'contact_nom' => $cn,
@@ -3520,10 +3526,12 @@ function lfi_nct_app_view_enquete_edit() {
             'contact_recontact' => $recontact,
             'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
         ];
-        /* Adresse changée → on efface les coordonnées pour un nouveau géocodage. */
+        /* Adresse/ville changée → on efface les coordonnées pour un nouveau géocodage. */
         if ($addr_changed) { $upd['lat'] = null; $upd['lng'] = null; }
         $wpdb->update($table, $upd, ['id' => $id]);
         delete_transient('lfi_nct_known_addresses');
+        /* Re-route immédiat : avec la ville, l'enquête se rattache au bon GA. */
+        if ($addr_changed && function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission($id);
         /* Note « à compléter » (ex. adhésion à faire signer). Vide = fiche OK. */
         if (function_exists('lfi_nct_enq_todo_set')) {
             $todo = sanitize_text_field(wp_unslash($_POST['acompleter_note'] ?? ''));
@@ -3550,7 +3558,12 @@ function lfi_nct_app_view_enquete_edit() {
 
     echo '<h3 style="margin:8px 0 4px">📍 Logement</h3>';
     echo '<label>Adresse<input type="text" name="adresse" value="' . esc_attr($row->adresse) . '" required></label>';
+    echo '<label>Ville / commune <span style="color:#c8102e">*</span><input type="text" name="ville" value="' . esc_attr($data['ville'] ?? '') . '" placeholder="Ex : Nantes" required></label>';
+    echo '<div class="lfi-app-help" style="margin:2px 0 0"><small>⚠️ Indispensable pour rattacher la fiche au bon groupe d\'action (sans ville, une rue homonyme part dans une autre commune).</small></div>';
     echo '<label>Étage<input type="text" name="etage" value="' . esc_attr($row->etage) . '"></label>';
+
+    echo '<h3 style="margin:14px 0 4px">👨‍👩‍👧 Foyer</h3>';
+    echo '<label>Nombre d\'enfants au foyer<input type="number" name="enfants" min="0" value="' . esc_attr($data['enfants'] ?? '') . '" placeholder="ex : 3"></label>';
 
     echo '<h3 style="margin:14px 0 4px">👤 Contact</h3>';
     echo '<label>Prénom<input type="text" name="contact_prenom" value="' . esc_attr($row->contact_prenom) . '"></label>';

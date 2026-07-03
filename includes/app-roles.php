@@ -2833,6 +2833,8 @@ function lfi_nct_app_view_temoignage_add() {
         $adresse_raw = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
         $adresse   = lfi_nct_normalize_address($adresse_raw); // auto-correction orthographique
         $etage     = sanitize_text_field(wp_unslash($_POST['etage'] ?? ''));
+        $ville     = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
+        $enfants   = sanitize_text_field(wp_unslash($_POST['enfants'] ?? ''));
         $arrivee   = (int) ($_POST['annee_arrivee'] ?? 0);
         $recontact = !empty($_POST['contact_recontact']) ? 1 : 0;
 
@@ -2865,6 +2867,8 @@ function lfi_nct_app_view_temoignage_add() {
             'saisi_par_admin'      => 1,
             'admin_user'           => wp_get_current_user()->user_login,
             'notes_admin'          => $notes,
+            'ville'                => $ville,
+            'enfants'              => $enfants,
             'adresse_brute'        => $adresse_raw !== $adresse ? $adresse_raw : null,
             'problemes_presence'   => $problems_presence,
             'problemes_types'      => $types,
@@ -2906,6 +2910,8 @@ function lfi_nct_app_view_temoignage_add() {
         ]);
         if ($ok) {
             delete_transient('lfi_nct_known_addresses'); // refresh datalist
+            /* Routage géo (avec la ville saisie) → bon GA + file « à contacter ». */
+            if (function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission((int) $wpdb->insert_id);
             wp_safe_redirect(lfi_nct_app_url('temoignage-add', ['added' => $wpdb->insert_id]));
             exit;
         }
@@ -2933,7 +2939,13 @@ function lfi_nct_app_view_temoignage_add() {
     echo lfi_nct_streets_datalist('lfi-nct-known-streets');
     echo '<div class="lfi-app-help"><small>💡 Tape pour voir les suggestions. L\'orthographe est corrigée automatiquement (ex : « Saint-Jean-de-Luse » → « Saint-Jean-de-Luz »).</small></div>';
 
+    $ville_pref = function_exists('lfi_nct_geo_perimetre') && function_exists('lfi_nct_scope_ga_slug')
+        ? (string) (lfi_nct_geo_perimetre(lfi_nct_scope_ga_slug() ?: 'clos-toreau')['commune'] ?? 'Nantes') : 'Nantes';
+    echo '<label>Ville / commune <span style="color:#c8102e">*</span><input type="text" name="ville" value="' . esc_attr($ville_pref) . '" placeholder="Ex : Nantes" required></label>';
+    echo '<div class="lfi-app-help"><small>⚠️ Indispensable : sans la ville, une rue qui existe ailleurs part dans la mauvaise commune (le bon GA ne reçoit pas la fiche).</small></div>';
+
     echo '<label>Étage<input type="text" name="etage"></label>';
+    echo '<label>Nombre d\'enfants au foyer<input type="number" name="enfants" min="0" placeholder="ex : 3"></label>';
     echo '<label>Année d\'arrivée dans le logement<input type="number" name="annee_arrivee" placeholder="ex : 2018" min="1950" max="' . date('Y') . '"></label>';
     echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="contact_recontact" value="1" checked> ✓ La personne accepte d\'être recontactée par le GA (RGPD)</label>';
 
