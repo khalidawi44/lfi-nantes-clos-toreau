@@ -911,15 +911,36 @@ function lfi_nct_app_screen_open($title, $subtitle = '') {
 
 function lfi_nct_app_screen_close($more_tiles = true) {
     if ($more_tiles) {
-        $tiles = lfi_nct_admin_get_tiles();
-        echo '<div class="lfi-app-other-shortcuts"><div class="lab">Aller à un autre écran</div><div class="row">';
-        foreach ($tiles as $t) {
-            if (strpos($t[3], '/app/?vue=') === false && strpos($t[3], 'lfi-nct') === false) continue;
-            $vue_url = $t[3];
-            if (strpos($vue_url, lfi_nct_app_url()) !== 0 && strpos($vue_url, '?vue=') === false) continue;
-            echo '<a class="chip" href="' . esc_url($vue_url) . '">' . $t[0] . ' ' . esc_html($t[1]) . '</a>';
+        $can_admin = (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga()) || current_user_can('manage_options');
+        $is_ga_member = function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga();
+        if ($can_admin) {
+            /* Admin : raccourcis complets (tuiles admin). */
+            $tiles = lfi_nct_admin_get_tiles();
+            echo '<div class="lfi-app-other-shortcuts"><div class="lab">Aller à un autre écran</div><div class="row">';
+            foreach ($tiles as $t) {
+                if (strpos($t[3], '/app/?vue=') === false && strpos($t[3], 'lfi-nct') === false) continue;
+                $vue_url = $t[3];
+                if (strpos($vue_url, lfi_nct_app_url()) !== 0 && strpos($vue_url, '?vue=') === false) continue;
+                echo '<a class="chip" href="' . esc_url($vue_url) . '">' . $t[0] . ' ' . esc_html($t[1]) . '</a>';
+            }
+            echo '</div></div>';
+        } elseif ($is_ga_member) {
+            /* Membre simple : UNIQUEMENT ses raccourcis autorisés. Aucune donnée
+               locataire (comptes, dossiers, SMS/email, stats, cache…). */
+            $ml = [
+                ['💡', 'Proposer une action',      lfi_nct_app_url('propositions')],
+                ['🗓', 'Mes disponibilités',       lfi_nct_app_url('dispos')],
+                ['👥', 'Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+                ['📅', 'Événements',               lfi_nct_app_url('evenements')],
+                ['📋', 'Faire passer une enquête', lfi_nct_survey_url()],
+                ['📸', 'Photos',                   lfi_nct_app_url('enquete-photos')],
+                ['🤖', 'Aide',                     lfi_nct_app_url('aide')],
+            ];
+            echo '<div class="lfi-app-other-shortcuts"><div class="lab">Aller à un autre écran</div><div class="row">';
+            foreach ($ml as $t) echo '<a class="chip" href="' . esc_url($t[2]) . '">' . $t[0] . ' ' . esc_html($t[1]) . '</a>';
+            echo '</div></div>';
         }
-        echo '</div></div>';
+        /* Locataire / autre : pas de raccourcis « admin ». */
     }
     echo '</div></div>';
 }
