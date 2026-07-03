@@ -159,6 +159,47 @@ function lfi_nct_mobi_sms_link($body) {
     return 'sms:&body=' . rawurlencode($body);
 }
 
+/**
+ * Section « À venir — se mobiliser » à afficher EN BAS de l'accueil (console).
+ * Les gens voient tout de suite les événements à venir + peuvent participer /
+ * proposer un créneau, sans avoir à chercher. Esprit : faciliter la tâche.
+ */
+function lfi_nct_render_home_mobilisation() {
+    if (!is_user_logged_in() || !function_exists('lfi_nct_upcoming_events')) return;
+    $events = lfi_nct_upcoming_events(6);
+    if (empty($events)) return;
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_mobilisation';
+
+    echo '<div class="lfi-app-section" style="margin-top:20px">';
+    echo '<div class="lfi-app-section-title" style="font-size:1.05em">📅 À VENIR — SE MOBILISER</div>';
+    echo '<div style="display:flex;flex-direction:column;gap:10px">';
+    foreach ($events as $e) {
+        $d = function_exists('lfi_nct_event_data') ? lfi_nct_event_data($e) : null;
+        if (!$d) continue;
+        $eid = (int) $d['id'];
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT participants FROM $t WHERE event_id = %d", $eid)) ?: [];
+        $ncr = count($rows); $npart = 0;
+        foreach ($rows as $r) { $l = json_decode((string) $r->participants, true); if (is_array($l)) $npart += count($l); }
+        $url = lfi_nct_app_url('mobilisation', ['ev' => $eid]);
+        echo '<div class="lfi-app-card" style="border-left:4px solid #c8102e">';
+        echo '<div class="head"><div class="who">📣 ' . esc_html($d['titre']) . '</div></div>';
+        echo '<div class="meta">';
+        if ($d['date_complete']) echo '<span class="meta-chip">' . esc_html(ucfirst($d['date_complete'])) . '</span>';
+        if ($d['lieu']) echo '<span class="meta-chip">📍 ' . esc_html($d['lieu']) . '</span>';
+        echo '</div>';
+        if ($ncr > 0) echo '<div class="com" style="font-size:.9em"><strong>' . $ncr . '</strong> créneau(x) · <strong>' . $npart . '</strong> participant(s)</div>';
+        else echo '<div class="com" style="font-size:.9em;color:#888">Aucun créneau encore — lance-toi.</div>';
+        echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
+        echo '<a class="btn-primary" href="' . esc_url($url) . '">🙋 Voir & participer</a>';
+        echo '<a class="btn-ghost" href="' . esc_url($url) . '">➕ Proposer un créneau</a>';
+        echo '</div></div>';
+    }
+    echo '</div>';
+    echo '<div style="text-align:center;margin-top:10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">🤝 Toutes les actions & campagnes →</a></div>';
+    echo '</div>';
+}
+
 /* ============================================================== *
  *  ROUTEUR : hub, ou tableau d'une action (événement OU campagne) *
  * ============================================================== */

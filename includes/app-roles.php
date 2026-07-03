@@ -713,6 +713,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
     ?>
+    <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
     <?php if (function_exists('lfi_nct_render_member_news_popup')) lfi_nct_render_member_news_popup(); ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
@@ -748,6 +749,8 @@ function lfi_nct_app_view_ga_dashboard() {
                 </a>
             <?php endforeach; ?>
         </div>
+
+        <?php if (function_exists('lfi_nct_render_home_mobilisation')) lfi_nct_render_home_mobilisation(); ?>
 
         <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>
         <div class="lfi-app-grid">

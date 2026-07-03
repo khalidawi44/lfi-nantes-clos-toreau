@@ -1161,6 +1161,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+        <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
         <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_dup_admin_notice')) lfi_nct_dup_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
@@ -1186,6 +1187,8 @@ function lfi_nct_app_render_dashboard() {
                 <?php endforeach; ?>
             </div>
         </div>
+
+        <?php if (function_exists('lfi_nct_render_home_mobilisation')) lfi_nct_render_home_mobilisation(); ?>
 
         <?php /* ============ COORDINATION DU GA : se mobiliser sur les actions ============ */
         $coord = [

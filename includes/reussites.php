@@ -93,6 +93,69 @@ function lfi_nct_reussites_seed_builtin() {
     if ($changed) lfi_nct_reussites_save($list);
 }
 
+/* ============================================================== *
+ *  POP-UP « FÉLICITATIONS » — à chaque nouvelle réussite publiée   *
+ * ============================================================== */
+/** Dernière réussite PUBLIÉE (par id), ou null. */
+function lfi_nct_reussite_latest_published() {
+    $best = null;
+    foreach (lfi_nct_reussites() as $r) {
+        if (empty($r['publie'])) continue;
+        if ($best === null || (int) ($r['id'] ?? 0) > (int) ($best['id'] ?? 0)) $best = $r;
+    }
+    return $best;
+}
+/** AJAX : la victoire a été vue → on mémorise (pop-up ne réapparaît plus). */
+add_action('wp_ajax_lfi_nct_reussite_seen', 'lfi_nct_reussite_seen_ajax');
+function lfi_nct_reussite_seen_ajax() {
+    check_ajax_referer('lfi_nct_reussite_seen', 'nonce');
+    $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    if ($id && get_current_user_id()) update_user_meta(get_current_user_id(), 'lfi_nct_reussite_seen_id', $id);
+    wp_send_json_success();
+}
+/**
+ * Pop-up de félicitations, affiché une fois par nouvelle victoire publiée.
+ * Anonyme (jamais de nom). À appeler dans la console (accueil).
+ */
+function lfi_nct_render_reussite_celebration() {
+    if (!is_user_logged_in()) return;
+    $r = lfi_nct_reussite_latest_published();
+    if (!$r) return;
+    $rid  = (int) ($r['id'] ?? 0);
+    $seen = (int) get_user_meta(get_current_user_id(), 'lfi_nct_reussite_seen_id', true);
+    if ($rid <= $seen) return; /* déjà vu */
+
+    /* Titre anonyme (jamais de nom). */
+    $titre_raw = (string) ($r['titre'] ?? 'une victoire');
+    $titre = (function_exists('lfi_nct_reussite_flag_names') && lfi_nct_reussite_flag_names($titre_raw))
+        ? 'une victoire pour une famille du quartier'
+        : (function_exists('lfi_nct_reussite_anonymize') ? lfi_nct_reussite_anonymize($titre_raw) : $titre_raw);
+    $quartier = $r['quartier'] ?? '';
+    $nonce = wp_create_nonce('lfi_nct_reussite_seen');
+    $ajax  = admin_url('admin-ajax.php');
+    ?>
+    <div id="lfi-rj-ov" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100001;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="background:#fff;color:#1a1a1a;border-radius:18px;max-width:440px;width:100%;padding:24px 20px;box-shadow:0 16px 50px rgba(0,0,0,.35);text-align:center;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0 0 auto;height:8px;background:linear-gradient(90deg,#c8102e,#8a6d1f,#186a3b,#4b2e83)"></div>
+        <div style="font-size:52px;line-height:1;margin-top:6px">🎉🏆</div>
+        <div style="font-weight:900;font-size:1.3em;color:#186a3b;margin-top:6px">Félicitations — on a gagné !</div>
+        <div style="margin-top:10px;line-height:1.5;font-size:1.02em"><strong><?php echo esc_html($titre); ?></strong></div>
+        <div style="margin-top:8px;color:#444">Une personne accompagnée par le Groupe d'Action<?php echo $quartier ? ' (' . esc_html($quartier) . ')' : ''; ?> a obtenu gain de cause. C'est grâce au collectif — et on continue.</div>
+        <button id="lfi-rj-ok" style="margin-top:16px;background:#186a3b;color:#fff;border:0;font-weight:800;padding:12px 26px;border-radius:12px;cursor:pointer;font-size:1em">🎊 Bravo à tous !</button>
+      </div>
+    </div>
+    <script>
+    (function(){
+      var ov=document.getElementById('lfi-rj-ov'); if(!ov) return;
+      function seen(){ try{ var fd=new FormData(); fd.append('action','lfi_nct_reussite_seen'); fd.append('nonce','<?php echo esc_js($nonce); ?>'); fd.append('id','<?php echo $rid; ?>'); fetch('<?php echo esc_url($ajax); ?>',{method:'POST',body:fd,credentials:'same-origin'}).catch(function(){}); }catch(e){} }
+      function close(){ seen(); ov.parentNode && ov.parentNode.removeChild(ov); }
+      document.getElementById('lfi-rj-ok').addEventListener('click', close);
+      ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    })();
+    </script>
+    <?php
+}
+
 /** Catalogue des leviers actionnables (cases à cocher). */
 function lfi_nct_reussite_leviers() {
     return [
