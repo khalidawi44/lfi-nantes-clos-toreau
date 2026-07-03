@@ -218,7 +218,16 @@ function lfi_nct_robot_answer_public_html($q) {
 
     $c  = lfi_nct_robot_public_contacts();
     $ql = function_exists('mb_strtolower') ? mb_strtolower($q) : strtolower($q);
-    $has = function ($needles) use ($ql) { foreach ((array) $needles as $n) if (strpos($ql, $n) !== false) return true; return false; };
+    /* Match par DÉBUT DE MOT : le mot-clé doit commencer un mot (préfixe autorisé,
+       ex. « moisiss » → « moisissures »), mais n'est PAS reconnu au milieu d'un
+       autre mot (ex. « rat » ne matche PAS « réparation »). Corrige les faux
+       positifs des mots-clés courts (rat, porte, prise, caf…). */
+    $has = function ($needles) use ($ql) {
+        foreach ((array) $needles as $n) {
+            if (preg_match('/(?<![\p{L}])' . preg_quote($n, '/') . '/u', $ql)) return true;
+        }
+        return false;
+    };
 
     $titre = '💬 Ta situation'; $texte = '';
     if ($has(['moisiss', 'humidit', 'infiltrat', 'condensation'])) {
@@ -227,6 +236,9 @@ function lfi_nct_robot_answer_public_html($q) {
     } elseif ($has(['chauff', 'eau chaude', 'froid', 'radiateur'])) {
         $titre = '🥶 Chauffage / eau chaude';
         $texte = 'Le bailleur doit garantir un <strong>chauffage et une eau chaude</strong> qui fonctionnent. Une panne durable, surtout l\'hiver ou avec des enfants, est une <strong>urgence</strong>. On t\'aide à le mettre en demeure rapidement.';
+    } elseif ($has(['toilette', 'wc', 'chasse d\'eau', 'plomb', 'robinet', 'fuite', 'évier', 'evier', 'lavabo', 'canalis', 'répara', 'repara', 'qui paie', 'qui doit payer', 'à ma charge', 'a ma charge', 'vétust', 'vetust'])) {
+        $titre = '🔧 Réparations : qui paie ?';
+        $texte = 'Le <strong>petit entretien courant</strong> est à la charge du locataire (ex. un joint, une petite fourniture). Mais les <strong>grosses réparations</strong>, la <strong>vétusté</strong>, les <strong>défauts du bâti</strong> et tout ce qui touche à la <strong>décence et à la sécurité</strong> (plomberie encastrée, canalisations, fuite d\'origine inconnue, WC hors service…) relèvent du <strong>bailleur</strong> (art. 1719 et 1720 du Code civil ; décret n° 87-712 sur les réparations locatives). En cas de doute, <strong>ne paie pas seul·e</strong> : on regarde ta situation avec toi.';
     } elseif ($has(['punais', 'cafard', 'blatte', 'rat', 'souris', 'nuisib', 'cafr'])) {
         $titre = '🐜 Nuisibles';
         $texte = 'Un logement décent doit être <strong>exempt de nuisibles</strong>. Selon les cas, le traitement incombe au bailleur. Ne paie pas seul·e un traitement coûteux sans nous en parler — on t\'oriente.';
