@@ -175,6 +175,20 @@ function lfi_nct_mobi_vote_threshold() {
     return $n > 0 ? $n : 4;
 }
 
+/** Suivi « email déjà envoyé » par créneau + phase (vote / invit) — anti-renvoi. */
+function lfi_nct_mobi_email_sent($cid) {
+    $o = get_option('lfi_nct_mobi_email_sent', []);
+    return (is_array($o) && !empty($o[$cid]) && is_array($o[$cid])) ? $o[$cid] : [];
+}
+function lfi_nct_mobi_email_mark($cid, $phase) {
+    $o = get_option('lfi_nct_mobi_email_sent', []);
+    if (!is_array($o)) $o = [];
+    $m = (isset($o[$cid]) && is_array($o[$cid])) ? $o[$cid] : [];
+    $m[$phase] = current_time('mysql');
+    $o[$cid] = $m;
+    update_option('lfi_nct_mobi_email_sent', $o, false);
+}
+
 /** Emails des MEMBRES DU GA (comptes WP du groupe), scopés. */
 function lfi_nct_mobi_member_emails() {
     $ga = function_exists('lfi_nct_scope_ga_slug') ? (string) lfi_nct_scope_ga_slug() : '';
@@ -195,8 +209,8 @@ function lfi_nct_mobi_member_emails() {
 /** Envoie l'action à tous les membres du GA par EMAIL (fiable, un clic).
  *  $phase = 'vote' (proposition) ou 'invit' (action actée). Renvoie le nb envoyé. */
 function lfi_nct_mobi_notify_members($row, $phase, $back_args, $types, $creneaux) {
-    $emails = lfi_nct_mobi_member_emails();
-    if (empty($emails)) return 0;
+    $members = lfi_nct_mobi_ga_members_full();
+    if (empty($members)) return 0;
     $tmeta  = $types[$row->type] ?? ['✨', 'Action'];
     $when   = $row->date_creneau ? ucfirst(wp_date('l j M', strtotime($row->date_creneau))) : '';
     $moment = $creneaux[$row->creneau] ?? '';
@@ -213,20 +227,29 @@ function lfi_nct_mobi_notify_members($row, $phase, $back_args, $types, $creneaux
         $cta     = '🗳 Je participe (clique ici)';
         $color   = '#c8102e';
     }
-    $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto">'
+    /* En-tête / corps communs ; le bouton (lien magique) est PROPRE à chaque membre. */
+    $head = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto">'
           . '<div style="background:' . $color . ';color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;font-weight:800;font-size:1.1em">' . esc_html($subject) . '</div>'
           . '<div style="border:1px solid #eee;border-top:0;border-radius:0 0 12px 12px;padding:18px 20px">'
           . '<p>' . esc_html($intro) . '</p>'
           . '<div style="background:#f7f7f7;border-radius:10px;padding:12px 14px;margin:10px 0">'
           . '<strong>' . esc_html($tmeta[0] . ' ' . $tmeta[1]) . '</strong><br>🗓 ' . esc_html($when . ' · ' . $moment)
-          . ($lieu ? '<br>📍 ' . esc_html($lieu) : '') . '</div>'
-          . '<div style="margin-top:14px"><a href="' . esc_url($lien) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800">' . esc_html($cta) . '</a></div>'
-          . '<div style="margin-top:14px;font-size:.82em;color:#888">Tu reçois cet email en tant que membre du Groupe d\'Action LFI Nantes Sud – Clos Toreau.</div>'
+          . ($lieu ? '<br>📍 ' . esc_html($lieu) : '') . '</div>';
+    $foot = '<div style="margin-top:14px;font-size:.82em;color:#888">Ce lien te connecte directement (rien à taper). Tu reçois cet email en tant que membre du Groupe d\'Action LFI Nantes Sud – Clos Toreau.</div>'
           . '</div></div>';
     add_filter('wp_mail_content_type', 'lfi_nct_agenda_html_ct');
     add_filter('wp_mail_from_name', 'lfi_nct_agenda_from_name');
     $sent = 0;
-    foreach ($emails as $e) if (wp_mail($e, $subject, $body)) $sent++;
+    foreach ($members as $m) {
+        $e = $m['email'] ?? '';
+        if ($e === '' || !is_email($e)) continue;
+        /* Lien magique PERSONNEL : connexion 1 clic + atterrissage sur le créneau. */
+        $mlien = (function_exists('lfi_nct_login_link') && !empty($m['uid']))
+               ? lfi_nct_login_link((int) $m['uid'], $lien) : $lien;
+        $btn = '<div style="margin-top:14px"><a href="' . esc_url($mlien) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800">' . esc_html($cta) . '</a></div>';
+        $body = $head . $btn . $foot;
+        if (wp_mail($e, $subject, $body)) $sent++;
+    }
     remove_filter('wp_mail_content_type', 'lfi_nct_agenda_html_ct');
     remove_filter('wp_mail_from_name', 'lfi_nct_agenda_from_name');
     return $sent;
@@ -365,6 +388,7 @@ function lfi_nct_mobi_ga_members_full() {
         if ($ga !== '' && $ga !== 'clos-toreau') { if ($uga !== $ga) continue; }
         else { if (!in_array($uga, ['', 'clos-toreau'], true)) continue; }
         $out[] = ['uid' => (int) $u->ID, 'nom' => ($u->display_name ?: $u->user_login),
+                  'email' => sanitize_email((string) $u->user_email),
                   'tel' => trim((string) get_user_meta($u->ID, 'lfi_nct_tel', true))];
     }
     return $out;
@@ -426,8 +450,9 @@ function lfi_nct_app_view_mobilisation_sms($cid, $ev = 0, $theme = '') {
     $when  = $r->date_creneau ? ucfirst(wp_date('l j M', strtotime($r->date_creneau))) : '';
     $lieu_txt = trim((string) $r->lieu) !== '' ? ' (RDV ' . $r->lieu . ')' : '';
     $lien = lfi_nct_app_url('mobilisation', $back);
-    $body = 'LFI Clos Toreau 👋 On organise : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Tu es partant·e ?'
-          . "\n👉 Clique le lien, puis appuie sur « 🙋 Je participe ». C'est TON CLIC qui compte (pas la peine de répondre à ce SMS !) : " . $lien;
+    /* Modèle de SMS ; %LIEN% est remplacé par le lien magique PERSONNEL de chaque membre. */
+    $body_tpl = 'LFI Clos Toreau 👋 On organise : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Tu es partant·e ?'
+          . "\n👉 Clique le lien (tu es connecté·e direct), puis appuie sur « 🙋 Je participe ». C'est TON CLIC qui compte (pas la peine de répondre à ce SMS !) : %LIEN%";
 
     lfi_nct_app_screen_open('📲 SMS un par un', $tmeta[1] . ' — ' . $when);
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url($lien) . '">← Retour au créneau</a></div>';
@@ -445,6 +470,10 @@ function lfi_nct_app_view_mobilisation_sms($cid, $ev = 0, $theme = '') {
         echo '<div class="head"><div class="who">' . ($ok ? '✅ ' : '') . esc_html($m['nom']) . '</div></div>';
         echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
         if ($m['tel'] !== '') {
+            /* Lien magique PERSONNEL : ce membre se connecte d'un clic, sans identifiant. */
+            $mlien = (function_exists('lfi_nct_login_link') && !empty($m['uid']))
+                   ? lfi_nct_login_link((int) $m['uid'], $lien) : $lien;
+            $body = str_replace('%LIEN%', $mlien, $body_tpl);
             echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($body, [$m['tel']])) . '" class="btn-primary" style="padding:7px 12px;font-size:.85em;background:#0066a3">📲 Envoyer le SMS</a>';
             echo '<form method="post" style="display:inline">' . wp_nonce_field('lfi_mobi_sms_toggle', '_wpnonce', true, false)
                . '<input type="hidden" name="lfi_mobi_sms_toggle" value="' . (int) $m['uid'] . '">'
@@ -613,6 +642,24 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args));
         exit;
     }
+    /* --- Admin : ajouter manuellement un·e participant·e (confirmé hors app,
+           ex. par SMS) — permet d'acter la présence d'un membre depuis la gestion. */
+    if (!empty($_POST['lfi_mobi_addpart']) && check_admin_referer('lfi_mobi_addpart') && lfi_nct_mobi_can_mod()) {
+        $cid  = (int) $_POST['lfi_mobi_addpart'];
+        $muid = (int) ($_POST['member_uid'] ?? 0);
+        if ($cid && $muid) {
+            $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
+            if ($row) {
+                $list = lfi_nct_mobi_parts($row);
+                if (!in_array($muid, $list, true)) {
+                    $list[] = $muid;
+                    $wpdb->update($t, ['participants' => wp_json_encode(array_values(array_unique($list)))], ['id' => $cid]);
+                }
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['added' => 1]));
+        exit;
+    }
     /* --- Suppression d'un créneau (créateur ou modérateur) --- */
     if (!empty($_POST['lfi_mobi_del']) && check_admin_referer('lfi_mobi_del')) {
         $cid = (int) $_POST['lfi_mobi_del'];
@@ -627,8 +674,15 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
     if (!empty($_POST['lfi_mobi_notify']) && check_admin_referer('lfi_mobi_notify') && lfi_nct_mobi_can_mod()) {
         $cid   = (int) $_POST['lfi_mobi_notify'];
         $phase = (($_POST['phase'] ?? 'vote') === 'invit') ? 'invit' : 'vote';
+        /* Anti-renvoi : une fois envoyé, c'est acté — on ne renvoie pas en masse. */
+        $emap = lfi_nct_mobi_email_sent($cid);
+        if (!empty($emap[$phase])) {
+            wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['already' => 1]));
+            exit;
+        }
         $row2  = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
         $sent  = $row2 ? lfi_nct_mobi_notify_members($row2, $phase, $back_args, $types, $creneaux) : 0;
+        if ($sent > 0) lfi_nct_mobi_email_mark($cid, $phase);
         wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['sent' => $sent]));
         exit;
     }
@@ -636,11 +690,13 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
     lfi_nct_app_screen_open('🎟️ ' . $titre, 'Créneaux de mobilisation — clique « Je participe »');
     if (!empty($_GET['ok']))  lfi_nct_app_flash('✅ Créneau(x) ajouté(s) — tu y es inscrit·e.');
     if (!empty($_GET['del'])) lfi_nct_app_flash('🗑 Créneau supprimé.');
+    if (!empty($_GET['added'])) lfi_nct_app_flash('✅ Participant·e ajouté·e au créneau (présence actée).');
     if (isset($_GET['sent'])) {
         $ns = (int) $_GET['sent'];
         if ($ns > 0) lfi_nct_app_flash('✅ Email BIEN ENVOYÉ à ' . $ns . ' membre(s) du GA.');
         else lfi_nct_app_flash('⚠️ Aucun email parti : soit les comptes membres n\'ont pas d\'email, soit l\'envoi serveur a échoué. Utilise le repli SMS en attendant.', 'error');
     }
+    if (!empty($_GET['already'])) lfi_nct_app_flash('ℹ️ Déjà envoyé à tous les membres — c\'est acté, on ne renvoie pas (anti-spam).');
 
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">← Toutes les actions</a></div>';
 
@@ -747,6 +803,26 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         }
         echo '</div>';
 
+        /* Admin : acter manuellement la présence d'un membre (confirmé hors app,
+           ex. Yves qui a répondu par SMS). On ne montre que les non-inscrits. */
+        if (lfi_nct_mobi_can_mod()) {
+            $all_m = lfi_nct_mobi_ga_members_full();
+            $opts = '';
+            foreach ($all_m as $m) {
+                if (in_array((int) $m['uid'], $list, true)) continue; /* déjà participant */
+                $opts .= '<option value="' . (int) $m['uid'] . '">' . esc_html($m['nom']) . '</option>';
+            }
+            if ($opts !== '') {
+                echo '<form method="post" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+                   . wp_nonce_field('lfi_mobi_addpart', '_wpnonce', true, false)
+                   . '<input type="hidden" name="lfi_mobi_addpart" value="' . (int) $r->id . '">'
+                   . '<span style="font-size:.82em;color:#666">➕ Acter la présence de :</span>'
+                   . '<select name="member_uid" style="padding:6px;border:1px solid #ccc;border-radius:8px;font-size:.85em">' . $opts . '</select>'
+                   . '<button type="submit" class="btn-ghost" style="padding:6px 10px;font-size:.82em;color:#186a3b">✅ Ajouter</button></form>';
+                echo '<div class="lfi-app-help" style="margin-top:2px"><small>Pour un membre qui a confirmé autrement (SMS, oral) — sa présence est comptée dans le vote.</small></div>';
+            }
+        }
+
         /* Admin : prévenir TOUS les membres du GA. Email = envoi de masse fiable
            (un clic, côté serveur). SMS = repli « copier les numéros » (iOS
            n'ouvre un lien sms: qu'au 1er destinataire → pas de vrai envoi groupé). */
@@ -759,12 +835,23 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
             echo '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #eee">';
             echo '<div style="font-size:.82em;color:#666;margin-bottom:4px">📣 Prévenir <strong>tous les ' . $nem . ' membres du GA</strong> :</div>';
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+            $emap = lfi_nct_mobi_email_sent((int) $r->id);
             $vote_style = $actee ? 'btn-ghost' : 'btn-primary';
             $inv_style  = $actee ? 'btn-primary' : 'btn-ghost';
-            echo '<form method="post" style="display:inline"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="vote">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
-               . '<button type="submit" class="' . $vote_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';color:#0066a3' : ';background:#d39e00') . '">🗳 Proposer au vote (email × ' . $nem . ')</button></form>';
-            echo '<form method="post" style="display:inline"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="invit">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
-               . '<button type="submit" class="' . $inv_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';background:#186a3b' : ';color:#186a3b') . '">🎟️ Inviter les ' . $nem . ' membres (email)</button></form>';
+            /* VOTE : une seule fois. */
+            if (!empty($emap['vote'])) {
+                echo '<span class="btn-ghost" style="padding:8px 12px;font-size:.85em;color:#186a3b;cursor:default">✅ Vote déjà envoyé</span>';
+            } else {
+                echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Envoyer le vote à tous les ' . $nem . ' membres ? (une seule fois)\');"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="vote">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
+                   . '<button type="submit" class="' . $vote_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';color:#0066a3' : ';background:#d39e00') . '">🗳 Proposer au vote (email × ' . $nem . ')</button></form>';
+            }
+            /* INVITATION : une seule fois. */
+            if (!empty($emap['invit'])) {
+                echo '<span class="btn-ghost" style="padding:8px 12px;font-size:.85em;color:#186a3b;cursor:default">✅ Invitation déjà envoyée</span>';
+            } else {
+                echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Envoyer l\\\'invitation à tous les ' . $nem . ' membres ? (une seule fois)\');"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="invit">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
+                   . '<button type="submit" class="' . $inv_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';background:#186a3b' : ';color:#186a3b') . '">🎟️ Inviter les ' . $nem . ' membres (email)</button></form>';
+            }
             /* SMS un par un (suivi ✅) + partage Telegram (autres GA). */
             $tg = 'https://t.me/share/url?url=' . rawurlencode($lien) . '&text=' . rawurlencode('LFI — action de terrain : ' . $tmeta[1] . ' ' . $when . $lieu_txt . '. On se mobilise, rejoignez / répliquez chez vous 👇');
             echo '<a href="' . esc_url(lfi_nct_app_url('mobilisation', $back_args + ['sms' => (int) $r->id])) . '" class="btn-ghost" style="padding:8px 12px;font-size:.85em;color:#0066a3;margin-top:6px;display:inline-block">📲 SMS un par un (suivi ✅)</a> ';

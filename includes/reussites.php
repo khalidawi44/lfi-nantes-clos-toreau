@@ -93,6 +93,22 @@ function lfi_nct_reussites_seed_builtin() {
     if ($changed) lfi_nct_reussites_save($list);
 }
 
+/** Nombre de victoires publiées (pour le compteur d'accueil). */
+function lfi_nct_reussites_count_published() {
+    $n = 0;
+    foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $n++;
+    return $n;
+}
+
+/** Vue in-app « 🏆 Nos victoires » — le tableau ludique, pour tout le monde. */
+function lfi_nct_app_view_victoires() {
+    if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    lfi_nct_app_screen_open('🏆 Nos victoires', 'Ce qu\'on a obtenu concrètement — anonyme');
+    echo '<div class="lfi-app-help">Chaque victoire = une famille qu\'on a aidée à sortir de la galère. Sans aucun nom : juste ce qu\'on a obtenu, concrètement.</div>';
+    echo do_shortcode('[lfi_nct_tableau_reussites]');
+    lfi_nct_app_screen_close();
+}
+
 /* ============================================================== *
  *  POP-UP « FÉLICITATIONS » — à chaque nouvelle réussite publiée   *
  * ============================================================== */
