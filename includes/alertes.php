@@ -70,8 +70,11 @@ function lfi_nct_alertes_auto() {
         }
 
         /* ⚖️ ÉTAPE SUIVANTE DU PLAN : SCHS saisi mais resté sans suite depuis
-           plus de 15 jours → on passe la main à l'avocat (via toi). */
-        if (!empty($r->schs_date) && $statut !== 'clos') {
+           plus de 15 jours → on passe la main à l'avocat.
+           RÈGLE : le judiciaire / l'avocat, c'est FABRICE et lui SEUL. Cette
+           alerte n'apparaît donc JAMAIS chez un membre du GA — uniquement pour
+           l'admin (Fabrice). */
+        if (!empty($r->schs_date) && $statut !== 'clos' && current_user_can('manage_options')) {
             $schs_ts = strtotime($r->schs_date);
             $replied_since = false;
             foreach ($recu as $e) { if ($schs_ts && strtotime($e['date'] ?? '') > $schs_ts) { $replied_since = true; break; } }

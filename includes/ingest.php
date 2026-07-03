@@ -592,6 +592,18 @@ function lfi_nct_reply_del_form($dossier_id, $index, $back = '') {
     return $out;
 }
 
+/**
+ * Gros bouton « LIRE LA RÉPONSE » (déplié = texte intégral). Volontairement
+ * grand et distinct du bouton d'envoi, pour qu'on ne puisse PAS envoyer sans
+ * avoir lu (le bouton d'envoi est séparé par un trait en dessous).
+ */
+function lfi_nct_reply_read_button($body) {
+    return '<details class="lfi-lire" style="margin:10px 0">'
+        . '<summary style="cursor:pointer;list-style:none;display:block;background:#0066a3;color:#fff;font-weight:800;font-size:1.05em;padding:13px 14px;border-radius:10px;text-align:center">📖 LIRE LA RÉPONSE EN ENTIER (avant d\'envoyer)</summary>'
+        . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:12px;margin-top:8px;line-height:1.5">' . esc_html((string) $body) . '</div>'
+        . '</details>';
+}
+
 /** Email principal (hub) mis en copie de chaque réponse pour tout centraliser. */
 function lfi_nct_central_email() {
     return (string) get_option('lfi_nct_central_email', 'nantessudclostoreau@gmail.com');
@@ -655,8 +667,8 @@ function lfi_nct_app_view_a_envoyer() {
             echo '<div class="head"><div class="who">🗂 ' . esc_html($who) . '</div></div>';
             echo '<div class="meta"><span class="meta-chip">À : ' . esc_html($to) . '</span></div>';
             if ($sub) echo '<div class="com"><strong>' . esc_html($sub) . '</strong></div>';
-            echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire</summary>'
-               . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
+            echo lfi_nct_reply_read_button($bod);
+            echo '<div style="height:1px;background:#e0e0e0;margin:12px 0"></div>';
             echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a>' . lfi_nct_reply_del_form((int) $r->id, (int) $ri, lfi_nct_app_url('a-envoyer')) . '</div>';
             echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
             echo '</li>';
@@ -696,8 +708,8 @@ function lfi_nct_render_dossier_replies($row) {
         if (!empty($r['objet'])) echo '<span class="meta-chip">↩︎ ' . esc_html($r['objet']) . '</span>';
         echo '</div>';
         if ($sub) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($sub) . '</div>';
-        echo '<details style="margin:6px 0"><summary style="cursor:pointer;color:#0066a3">📖 Lire la réponse</summary>'
-           . '<div class="com" style="white-space:pre-wrap;background:#f7f7f7;border-radius:6px;padding:10px;margin-top:6px">' . esc_html($bod) . '</div></details>';
+        echo lfi_nct_reply_read_button($bod);
+        echo '<div style="height:1px;background:#e0e0e0;margin:12px 0"></div>';
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn-primary" style="background:#186a3b" href="' . esc_attr($url) . '">✅ Ouvrir dans l\'appli Gmail (brouillon)</a>' . lfi_nct_reply_del_form((int) $row->id, (int) $i, lfi_nct_app_url('dossier', ['uid' => (int) $row->tenant_user_id])) . '</div>';
         echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'appli Gmail s\'ouvre avec la réponse en brouillon, au bon destinataire — relis et appuie sur Envoyer. <a href="' . esc_url($urlweb) . '" target="_blank" rel="noopener">Sinon, ouvrir dans le navigateur</a>.</small></div>';
         echo '</li>';
