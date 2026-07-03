@@ -709,6 +709,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
     ?>
+    <?php if (function_exists('lfi_nct_render_member_news_popup')) lfi_nct_render_member_news_popup(); ?>
     <div class="lfi-app">
         <div class="lfi-app-topbar">
             <div class="lfi-app-logo-mini">Φ</div>
