@@ -847,6 +847,7 @@ function lfi_nct_app_shortcode() {
                     case 'strategie':             lfi_nct_app_view_strategie();              break;
                     case 'architecte':            lfi_nct_app_view_architecte();             break;
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
+                    case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
