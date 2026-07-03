@@ -244,6 +244,7 @@ function lfi_nct_app_view_a_envoyer() {
 
     lfi_nct_app_screen_open('📥 À envoyer', 'Tes réponses prêtes — relis et envoie');
     if (!empty($_GET['rdel']) && function_exists('lfi_nct_app_flash')) lfi_nct_app_flash('🗑 Brouillon supprimé.');
+    if (!empty($_GET['ok']) && function_exists('lfi_nct_app_flash')) lfi_nct_app_flash('✅ Réponse générée — relis-la puis ouvre-la dans Gmail.');
     $central = lfi_nct_central_email();
     $n = 0;
     echo '<ul class="lfi-app-list">';
@@ -282,8 +283,10 @@ function lfi_nct_render_dossier_replies($row) {
     $notes   = json_decode($row->notes ?? '', true);
     $replies = (is_array($notes) && !empty($notes['replies'])) ? $notes['replies'] : [];
     echo '<h3 id="sec-reponses" style="margin:22px 0 6px;color:#c8102e">✉️ Réponses à envoyer (prêtes)</h3>';
+    /* Bouton self-service : le membre a vu le locataire → il génère l'email. */
+    echo '<div style="margin:4px 0 10px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('generer-reponse', ['id' => (int) $row->id])) . '">✍️ Générer une réponse (le locataire a décidé)</a></div>';
     if (empty($replies)) {
-        echo '<div class="lfi-app-help">Quand un email arrive, le psy et l\'architecte préparent ici une réponse. Tu la relis, puis tu cliques « Ouvrir dans Gmail » : Gmail s\'ouvre avec la réponse pré-remplie, tu n\'as plus qu\'à envoyer.</div>';
+        echo '<div class="lfi-app-help">Quand un email arrive, va voir le locataire, puis clique « Générer une réponse » : choisis ce qu\'il a décidé, l\'email complet à NMH se prépare ici. Tu le relis et tu l\'envoies depuis ta boîte.</div>';
         return;
     }
     echo '<ul class="lfi-app-list">';

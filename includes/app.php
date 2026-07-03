@@ -819,6 +819,7 @@ function lfi_nct_app_shortcode() {
                     case 'dispos':                lfi_nct_app_view_dispos();                 break;
                     case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
                     case 'propositions':          lfi_nct_app_view_propositions();           break;
+                    case 'generer-reponse':       lfi_nct_app_view_generer_reponse();        break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
