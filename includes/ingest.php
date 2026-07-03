@@ -96,6 +96,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_member_create',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/member-password', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_member_password',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
@@ -166,6 +171,38 @@ function lfi_nct_ingest_rest_member_create($request) {
         $existant = false;
     }
     return new WP_REST_Response(['ok' => true, 'user_id' => $uid, 'email' => $email, 'existant' => $existant], 200);
+}
+
+/**
+ * Définit le mot de passe (et éventuellement le nom / le rôle) d'un membre.
+ * Renvoie le mot de passe défini pour pouvoir le transmettre. Réservé à la clé.
+ */
+function lfi_nct_ingest_rest_member_password($request) {
+    $uid   = (int) $request->get_param('user_id');
+    $email = sanitize_email((string) $request->get_param('email'));
+    if (!$uid && $email && ($u = get_user_by('email', $email))) $uid = (int) $u->ID;
+    $user = $uid ? get_userdata($uid) : null;
+    if (!$user) return new WP_REST_Response(['ok' => false, 'error' => 'membre_introuvable'], 400);
+
+    $pw = (string) $request->get_param('password');
+    if ($pw === '') $pw = wp_generate_password(12, false); /* lisible, sans symboles */
+    $upd = ['ID' => $uid, 'user_pass' => $pw];
+    $name = sanitize_text_field((string) $request->get_param('display_name'));
+    if ($name !== '') $upd['display_name'] = $name;
+    $res = wp_update_user($upd);
+    if (is_wp_error($res)) return new WP_REST_Response(['ok' => false, 'error' => $res->get_error_message()], 500);
+
+    /* S'assure du rôle membre du GA. */
+    $role = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+    if (get_role($role) && !in_array($role, (array) $user->roles, true)) $user->add_role($role);
+
+    return new WP_REST_Response([
+        'ok'       => true,
+        'user_id'  => $uid,
+        'login'    => $user->user_login,
+        'email'    => $user->user_email,
+        'password' => $pw,
+    ], 200);
 }
 
 /**
