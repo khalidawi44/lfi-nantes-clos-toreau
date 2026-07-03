@@ -157,7 +157,9 @@ function lfi_nct_app_view_generer_reponse() {
         if (function_exists('lfi_nct_frais_log')) {
             lfi_nct_frais_log($id, 'courrier', 'Courrier d\'accompagnement — ' . (lfi_nct_reply_intentions()[$intention] ?? $intention), null, 'auto');
         }
-        wp_safe_redirect(lfi_nct_app_url('a-envoyer', ['ok' => 1]));
+        /* On revient DANS LE DOSSIER de cette personne (compartimenté), pas dans
+           la liste globale « À envoyer » où tout se mélange. */
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id, 'repok' => 1]) . '#sec-reponses');
         exit;
     }
 
