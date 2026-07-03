@@ -188,27 +188,41 @@ function lfi_nct_prej_compute($p) {
         'formule' => $astr_jour ? (number_format($astr_jour, 0, ',', ' ') . ' €/jour × ' . (int) $astr_jours . ' jours') : 'non demandée',
         'note' => 'Levier pour contraindre le bailleur à exécuter (demandée au juge).'];
 
-    /* ---- Poste 12 : Relogement / hébergement (AMIABLE — charge bailleur) ---- */
+    /* ---- Poste 12 : Relogement & déménagement (AMIABLE — charge NMH) ---- */
     $relog = $n('relogement_cout');
     if ($relog <= 0) {
         $rj = (int) $n('relogement_jours');
         if ($rj > 0) $relog = $rj * 80; /* forfait hébergement 80 €/nuit à défaut de factures */
     }
-    $postes[] = ['num' => 12, 'titre' => 'Relogement / hébergement', 'amiable' => $relog,
-        'fond_min' => $relog, 'fond_max' => $relog,
-        'formule' => $n('relogement_cout') > 0 ? 'sur factures' : ((int) $n('relogement_jours') . ' nuits × 80 €'),
-        'note' => 'À la charge du bailleur — art. L.521-3-1 du CCH ; obligation de relogement/hébergement.'];
+    $demenag = $n('demenagement_cout');
+    $relog_total = $relog + $demenag;
+    $postes[] = ['num' => 12, 'titre' => 'Relogement & déménagement (charge NMH)', 'amiable' => $relog_total,
+        'fond_min' => $relog_total, 'fond_max' => $relog_total,
+        'formule' => 'relogement' . ($n('relogement_cout') > 0 ? ' (factures)' : ((int) $n('relogement_jours') ? ' (' . (int) $n('relogement_jours') . ' nuits × 80 €)' : '')) . ($demenag > 0 ? ' + déménagement ' . number_format($demenag, 0, ',', ' ') . ' €' : ''),
+        'note' => 'À la charge du bailleur — art. L.521-3-1 du CCH. NMH supporte ET organise : relogement + déménagement (entreprise), transport des meubles et des effets personnels.'];
 
-    /* ---- Poste 13 : Mise en sacs, lavage & traitement des effets (AMIABLE) ---- */
+    /* ---- Poste 13 : Traitement des effets — ADAPTÉ AU NUISIBLE (AMIABLE) ----
+       Punaises de lit : ensachage + lavage 60-90° + congélation de tout le linge.
+       Blattes / autres : PAS d'ensachage → protection des denrées, éviction
+       temporaire pendant l'intervention. On adapte à la situation du locataire. */
+    $ttype = isset($p['traitement_type']) ? sanitize_key((string) $p['traitement_type']) : '';
+    $is_punaises = ($ttype === 'punaises');
     $trait = $n('traitement_effets');
-    if ($trait <= 0 && ($b('traitement_fait') || $membres > 0)) {
-        /* Forfait : lavage haute température + mise en sacs de tout le linge du foyer. */
-        if ($b('traitement_fait')) $trait = 150 + $membres * 120;
+    if ($trait <= 0 && $b('traitement_fait')) {
+        $trait = $is_punaises ? (150 + $membres * 120) : ($membres * 40);
     }
-    $postes[] = ['num' => 13, 'titre' => 'Mise en sacs, lavage & traitement des effets', 'amiable' => $trait,
+    $titre13 = $is_punaises
+        ? 'Mise en sacs, lavage 60-90° & congélation (punaises)'
+        : 'Sujétions du traitement (protection, éviction temporaire)';
+    $note13 = $is_punaises
+        ? 'Spécifique PUNAISES DE LIT : ensachage de tout le linge, lavage 60-90° / congélation. À la charge du bailleur.'
+        : ($ttype === 'blattes'
+            ? 'BLATTES / cafards : PAS d\'ensachage (inutile) — protection des denrées, éviction pendant le traitement, remise en état. À la charge du bailleur.'
+            : 'Adapté au nuisible/désordre du logement : sujétions réellement imposées. À la charge du bailleur.');
+    $postes[] = ['num' => 13, 'titre' => $titre13, 'amiable' => $trait,
         'fond_min' => $trait, 'fond_max' => $trait,
-        'formule' => $n('traitement_effets') > 0 ? 'sur factures' : ($b('traitement_fait') ? ('150 € + ' . $membres . ' × 120 €') : 'non renseigné'),
-        'note' => 'Sujétions imposées par le traitement (ensachage, lavage 60°, isolement) — à la charge du bailleur.'];
+        'formule' => $n('traitement_effets') > 0 ? 'sur factures' : ($b('traitement_fait') ? ($is_punaises ? ('150 € + ' . $membres . ' × 120 €') : ($membres . ' × 40 €')) : 'non renseigné'),
+        'note' => $note13];
 
     /* ---- Poste 14 : Remplacement des effets personnels dégradés (AMIABLE) ---- */
     $effets = $n('effets_remplacement');
@@ -346,16 +360,24 @@ function lfi_nct_app_view_prejudice() {
     /* Postes AMIABLE « à la charge du bailleur » : relogement, traitement des
        effets (mise en sacs/lavage), remplacement des effets, frais engagés. */
     $frais_def = ($dossier && function_exists('lfi_nct_frais_total')) ? (string) round(lfi_nct_frais_total((int) $dossier->id)) : '0';
-    echo '<h4 style="margin:12px 0 4px;color:#186a3b">À la charge du bailleur (amiable)</h4>';
+    echo '<h4 style="margin:12px 0 4px;color:#186a3b">À la charge du bailleur (amiable) — adapté à la situation</h4>';
+    $tt = $v('traitement_type', '');
     echo '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<label style="flex:1;min-width:170px">Type de nuisible / traitement<select name="traitement_type">'
+       . '<option value=""' . selected($tt, '', false) . '>— (aucun / autre désordre)</option>'
+       . '<option value="punaises"' . selected($tt, 'punaises', false) . '>🛏️ Punaises de lit (ensachage + 60-90°)</option>'
+       . '<option value="blattes"' . selected($tt, 'blattes', false) . '>🪳 Blattes / cafards (pas d\'ensachage)</option>'
+       . '<option value="autre"' . selected($tt, 'autre', false) . '>Autre désordre</option>'
+       . '</select></label>';
     echo '<label style="flex:1;min-width:150px">Relogement — coût (€)<input type="number" name="relogement_cout" value="' . $v('relogement_cout', '0') . '" min="0"></label>';
     echo '<label style="flex:1;min-width:130px">…ou nuits d\'hébergement<input type="number" name="relogement_jours" value="' . $v('relogement_jours', '0') . '" min="0"></label>';
+    echo '<label style="flex:1;min-width:150px">Déménagement / entreprise (€)<input type="number" name="demenagement_cout" value="' . $v('demenagement_cout', '0') . '" min="0"></label>';
     echo '<label style="flex:1;min-width:150px">Traitement des effets (€)<input type="number" name="traitement_effets" value="' . $v('traitement_effets', '0') . '" min="0"></label>';
     echo '<label style="flex:1;min-width:170px">Remplacement effets perso (€)<input type="number" name="effets_remplacement" value="' . $v('effets_remplacement', '0') . '" min="0"></label>';
     echo '<label style="flex:1;min-width:150px">Frais d\'accompagnement (€)<input type="number" name="frais_accompagnement" value="' . $v('frais_accompagnement', $frais_def) . '" min="0"></label>';
     echo '</div>';
-    echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="traitement_fait" value="1" ' . $ck('traitement_fait') . '> Traitement subi (ensachage + lavage 60° de tout le linge) → forfait auto si montant vide</label>';
-    echo '<div class="lfi-app-help"><small>Ces postes sont <strong>à la charge du bailleur</strong> et entrent dans la demande <strong>amiable</strong> : relogement (art. L.521-3-1 CCH), sujétions du traitement, remplacement des effets dégradés, et les frais engagés (repris du dossier). La demande n\'est donc jamais « que des travaux » : elle est aussi <strong>relogement + financière</strong>.</small></div>';
+    echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="traitement_fait" value="1" ' . $ck('traitement_fait') . '> Traitement subi → forfait auto si montant vide (ensachage+90° pour punaises ; protection/éviction pour blattes)</label>';
+    echo '<div class="lfi-app-help"><small>Ces postes sont <strong>à la charge du bailleur</strong> et entrent dans la demande <strong>amiable</strong>, <strong>adaptés à la situation du locataire</strong> : relogement <strong>+ déménagement</strong> (NMH supporte et organise, art. L.521-3-1 CCH), sujétions du traitement <strong>selon le nuisible</strong> (ensachage seulement pour les punaises), remplacement des effets dégradés, frais engagés. La demande n\'est jamais « que des travaux » : elle est aussi <strong>relogement + financière</strong>.</small></div>';
 
     echo '<h4 style="margin:12px 0 4px;color:#c8102e">Pièces & aggravations (cochez ce qui s\'applique)</h4>';
     foreach ([
