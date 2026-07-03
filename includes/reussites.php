@@ -433,6 +433,87 @@ function lfi_nct_reussites_shortcode($atts) {
 }
 
 /* ============================================================== *
+ *  SHORTCODE PUBLIC : [lfi_nct_tableau_reussites]                 *
+ *  Tableau LUDIQUE des victoires (coupe + médailles). Anonyme.    *
+ * ============================================================== */
+add_shortcode('lfi_nct_tableau_reussites', 'lfi_nct_tableau_reussites_shortcode');
+function lfi_nct_tableau_reussites_shortcode($atts) {
+    $list = array_values(array_filter(lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
+    usort($list, function ($a, $b) { return strcmp($b['date'] ?? '', $a['date'] ?? ''); });
+    $total = count($list);
+
+    /* Métadonnées par type de résultat : médaille + couleur. */
+    $meta = [
+        'relogement'    => ['🏠', 'Relogements obtenus',        '#0066a3'],
+        'travaux'       => ['🔧', 'Travaux réalisés',           '#186a3b'],
+        'indemnisation' => ['💶', 'Indemnisations / baisses de loyer', '#8a6d1f'],
+        'insalubrite'   => ['⚖️', 'Mises en demeure / arrêtés', '#c8102e'],
+        'autre'         => ['✨', 'Autres victoires',           '#4b2e83'],
+    ];
+    $counts = [];
+    foreach ($list as $r) { $k = $r['resultat'] ?? 'autre'; if (!isset($meta[$k])) $k = 'autre'; $counts[$k] = ($counts[$k] ?? 0) + 1; }
+
+    ob_start(); ?>
+    <div class="lfi-trophy-board" style="font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:920px;margin:0 auto">
+      <!-- Coupe / hero -->
+      <div style="text-align:center;background:linear-gradient(135deg,#c8102e,#7a0000);color:#fff;border-radius:20px;padding:26px 20px;box-shadow:0 12px 30px rgba(0,0,0,.18)">
+        <div style="font-size:64px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.3))">🏆</div>
+        <div style="font-size:2.6em;font-weight:900;margin-top:4px;letter-spacing:.5px"><?php echo (int) $total; ?></div>
+        <div style="font-size:1.15em;font-weight:800;text-transform:uppercase;letter-spacing:1px">victoire<?php echo $total > 1 ? 's' : ''; ?> pour les habitant·es</div>
+        <div style="opacity:.9;margin-top:6px;font-size:.98em">Des familles sorties de la galère — grâce au collectif. Et on continue.</div>
+      </div>
+
+      <!-- Médailles par type -->
+      <?php if ($counts): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:18px 0">
+        <?php foreach ($meta as $k => $m): if (empty($counts[$k])) continue; ?>
+          <div style="flex:1 1 150px;max-width:200px;text-align:center;background:#fff;border-radius:14px;padding:14px 10px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-top:5px solid <?php echo esc_attr($m[2]); ?>">
+            <div style="font-size:34px;line-height:1"><?php echo $m[0]; ?></div>
+            <div style="font-size:1.9em;font-weight:900;color:<?php echo esc_attr($m[2]); ?>"><?php echo (int) $counts[$k]; ?></div>
+            <div style="font-size:.82em;color:#444;font-weight:600"><?php echo esc_html($m[1]); ?></div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+
+      <!-- Palmarès (cartes de victoire) -->
+      <?php if ($total === 0): ?>
+        <p style="text-align:center;color:#666;margin-top:16px">Nos premières victoires s'afficheront ici très bientôt. 💪</p>
+      <?php else: ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:8px">
+          <?php $i = 0; foreach ($list as $r):
+              $k = $r['resultat'] ?? 'autre'; if (!isset($meta[$k])) $k = 'autre'; $m = $meta[$k];
+              $medaille = $i === 0 ? '🥇' : ($i === 1 ? '🥈' : ($i === 2 ? '🥉' : '🎖️')); $i++;
+              /* JAMAIS de nom en public : si le titre contient un nom (civilité +
+                 nom propre), on le remplace par un libellé générique. */
+              $titre_raw = (string) ($r['titre'] ?? 'Victoire');
+              $titre_pub = (function_exists('lfi_nct_reussite_flag_names') && lfi_nct_reussite_flag_names($titre_raw))
+                  ? 'Une victoire obtenue pour une famille'
+                  : (function_exists('lfi_nct_reussite_anonymize') ? lfi_nct_reussite_anonymize($titre_raw) : $titre_raw);
+          ?>
+            <div style="background:#fff;border-radius:14px;padding:14px 15px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-left:5px solid <?php echo esc_attr($m[2]); ?>;position:relative">
+              <div style="position:absolute;top:10px;right:12px;font-size:22px"><?php echo $medaille; ?></div>
+              <div style="display:inline-block;background:#186a3b;color:#fff;font-weight:800;padding:2px 9px;border-radius:20px;font-size:.72em">✅ GAGNÉ</div>
+              <div style="font-weight:900;font-size:1.02em;margin:8px 0 4px;color:#1a1a1a;padding-right:26px"><?php echo esc_html($titre_pub); ?></div>
+              <div style="font-size:.9em;color:<?php echo esc_attr($m[2]); ?>;font-weight:700"><?php echo $m[0] . ' ' . esc_html(lfi_nct_reussite_resultats()[$k] ?? ''); ?></div>
+              <?php if (!empty($r['quartier'])): ?><div style="font-size:.8em;color:#888;margin-top:4px">📍 <?php echo esc_html($r['quartier']); ?> · récit anonyme</div><?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <!-- CTA -->
+      <div style="text-align:center;margin-top:22px;background:#e8f5ea;border-radius:14px;padding:18px">
+        <div style="font-weight:800;font-size:1.1em;color:#186a3b">Vous vivez une situation difficile dans votre logement ?</div>
+        <div style="color:#333;margin:6px 0 12px">Vous n'êtes pas seul·e. On accompagne gratuitement — et la prochaine victoire, ce sera peut-être la vôtre.</div>
+        <a href="<?php echo esc_url(lfi_nct_reussite_contact_url()); ?>" style="display:inline-block;background:#c8102e;color:#fff;text-decoration:none;font-weight:800;padding:12px 22px;border-radius:12px">✊ Nous contacter</a>
+      </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+/* ============================================================== *
  *  SHORTCODE PUBLIC : [lfi_nct_temoigner]                         *
  *  Grande porte d'entrée du site, tournée TERRAIN : « Témoigner   *
  *  de mon logement » → déclenche toute la mécanique (enquête →    *
