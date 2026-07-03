@@ -816,6 +816,9 @@ function lfi_nct_app_shortcode() {
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
                     case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
+                    case 'dispos':                lfi_nct_app_view_dispos();                 break;
+                    case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
+                    case 'propositions':          lfi_nct_app_view_propositions();           break;
                     case 'rgpd':                  lfi_nct_app_view_rgpd();                   break;
                     case 'rgpd-registre':         lfi_nct_app_view_rgpd_registre();          break;
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
@@ -1105,6 +1108,25 @@ function lfi_nct_app_render_dashboard() {
             <div class="lfi-app-grid">
                 <?php foreach ($essentiel as $t): ?>
                     <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>" style="border:2px solid #c8102e">
+                        <div class="ico"><?php echo $t[0]; ?></div>
+                        <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                        <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <?php /* ============ COORDINATION DU GA : dispos & propositions ============ */
+        $coord = [
+            ['🗓', 'Mes dispos',     'Quand je suis libre',        lfi_nct_app_url('dispos')],
+            ['👥', 'Dispos communes','Qui est libre, quand',       lfi_nct_app_url('dispos-communes')],
+            ['💡', 'Propositions',   'Proposer / soutenir une action', lfi_nct_app_url('propositions')],
+        ]; ?>
+        <div class="lfi-app-section">
+            <div class="lfi-app-section-title" style="font-size:1.05em">🤝 COORDINATION</div>
+            <div class="lfi-app-grid">
+                <?php foreach ($coord as $t): ?>
+                    <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>" style="border:2px solid #186a3b">
                         <div class="ico"><?php echo $t[0]; ?></div>
                         <div class="tit"><?php echo esc_html($t[1]); ?></div>
                         <div class="sub"><?php echo esc_html($t[2]); ?></div>
