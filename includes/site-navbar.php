@@ -127,7 +127,7 @@ function lfi_nct_render_site_navbar() {
     ?>
     <style>
     .lfi-site-navbar {
-        position: sticky; top: 0; z-index: 9999;
+        position: static; z-index: 40;
         background: linear-gradient(135deg, #c8102e, #a30b25);
         color: #fff;
         padding: 6px 10px;
@@ -252,7 +252,7 @@ function lfi_nct_render_site_navbar_loggedout() {
     ?>
     <style>
     .lfi-pub-navbar {
-        position: sticky; top: 0; z-index: 9999;
+        position: static; z-index: 40;
         background: linear-gradient(135deg, #c8102e, #a30b25);
         color: #fff; padding: 7px 12px;
         display: flex; align-items: center; gap: 10px;
