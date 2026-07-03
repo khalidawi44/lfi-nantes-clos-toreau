@@ -650,6 +650,11 @@ function lfi_nct_app_role_dispatch(&$handled) {
         switch ($vue) {
             case 'evenements':       lfi_nct_app_view_evenements();       break;
             case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
+            /* Coordination : proposer une action, dire ses dispos, voir celles
+               de l'équipe. Accessible à tout membre (aucune donnée locataire). */
+            case 'propositions':     lfi_nct_app_view_propositions();     break;
+            case 'dispos':           lfi_nct_app_view_dispos();           break;
+            case 'dispos-communes':  lfi_nct_app_view_dispos_communes();  break;
             case 'mon-profil':       lfi_nct_app_view_mon_profil();       break;
             case 'installer':        lfi_nct_app_view_installer();        break;
 
@@ -683,14 +688,18 @@ function lfi_nct_app_view_ga_dashboard() {
     $survey_url = lfi_nct_survey_url();
 
     $tiles = [
-        /* 5e élément = _blank : l'enquête s'ouvre dans le navigateur, fiable même
-           en PWA installée sur un vieil Android (évite les blocages de navigation
-           interne / service worker). */
-        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url, '_blank'],
+        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
         ['🤖', 'Aide & contact',            'Un problème ? On t\'accompagne',      lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
+    ];
+
+    /* Coordination : dispos & propositions d'actions (accessible à tout membre). */
+    $coord_tiles = [
+        ['💡', 'Proposer une action',       'Collage, tractage, porte-à-porte…',   lfi_nct_app_url('propositions')],
+        ['🗓', 'Mes disponibilités',        'Dire quand je suis libre',            lfi_nct_app_url('dispos')],
+        ['👥', 'Dispos de l\'équipe',       'Qui est libre, quand',                lfi_nct_app_url('dispos-communes')],
     ];
 
     $bottom_tiles = [
@@ -715,6 +724,17 @@ function lfi_nct_app_view_ga_dashboard() {
         <div class="lfi-app-grid">
             <?php foreach ($tiles as $t): $tgt = !empty($t[4]) ? ' target="' . esc_attr($t[4]) . '" rel="noopener"' : ''; ?>
                 <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>"<?php echo $tgt; ?>>
+                    <div class="ico"><?php echo $t[0]; ?></div>
+                    <div class="tit"><?php echo esc_html($t[1]); ?></div>
+                    <div class="sub"><?php echo esc_html($t[2]); ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
+
+        <h3 style="margin:24px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">🤝 Coordination</h3>
+        <div class="lfi-app-grid">
+            <?php foreach ($coord_tiles as $t): ?>
+                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>" style="border:2px solid #186a3b">
                     <div class="ico"><?php echo $t[0]; ?></div>
                     <div class="tit"><?php echo esc_html($t[1]); ?></div>
                     <div class="sub"><?php echo esc_html($t[2]); ?></div>
