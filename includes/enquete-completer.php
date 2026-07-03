@@ -50,10 +50,14 @@ function lfi_nct_enq_ok_remove($id) {
  *  c'est une enquête anonyme — complète en soi, on ne la fait PAS remonter. */
 function lfi_nct_enq_row_missing($r) {
     if ((int) $r->contact_recontact !== 1) return [];
-    $miss = [];
-    if (trim((string) $r->contact_nom) === '' && trim((string) $r->contact_prenom) === '') $miss[] = 'nom de la personne';
-    if (trim((string) $r->contact_tel) === '' && trim((string) $r->contact_email) === '')   $miss[] = 'téléphone ou email';
-    return $miss;
+    /* S'il y a un moyen de contact (tél OU email), la fiche est CONTACTABLE : on
+       ne la fait pas remonter comme « à compléter » — on ira chercher le reste
+       (nom, etc.) en la contactant. On ne remonte QUE le cas bloquant : elle veut
+       être recontactée mais on n'a AUCUN moyen de la joindre. */
+    if (trim((string) $r->contact_tel) === '' && trim((string) $r->contact_email) === '') {
+        return ['aucun moyen de la contacter (ni téléphone ni email)'];
+    }
+    return [];
 }
 
 /** Fiches à compléter dans le périmètre courant (auto-incomplètes OU flaguées). */
