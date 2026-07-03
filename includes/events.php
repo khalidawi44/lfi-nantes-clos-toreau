@@ -116,15 +116,16 @@ function lfi_nct_event_extra_metabox_render($post) {
     $rsvp_actif = get_post_meta($post->ID, '_lfi_evt_rsvp_actif', true);
     if ($rsvp_actif === '') $rsvp_actif = '1';
     $url_ap = get_post_meta($post->ID, '_lfi_evt_url_ap', true);
-    $ga_action = get_post_meta($post->ID, '_lfi_evt_ga_action', true);
-    if ($ga_action === '') $ga_action = '1';
+    $evt_cat = function_exists('lfi_nct_evt_cat') ? lfi_nct_evt_cat($post->ID) : (get_post_meta($post->ID, '_lfi_evt_ga_action', true) === '0' ? 'externe' : 'ga');
     ?>
     <p style="background:#f4f8ff;border:1px solid #cfe0f5;border-radius:6px;padding:8px 10px">
-        <label>
-            <input type="checkbox" name="lfi_evt_ga_action" value="1" <?php checked($ga_action, '1'); ?>>
-            <strong>Action du GA</strong> (tractage, collage, porte-à-porte)
-        </label>
-        <br><small>Décoche si c'est un événement <em>général / externe</em> (conférence, présentation ouverte à tou·te·s) : il ne sera pas proposé comme action de mobilisation.</small>
+        <label><strong>Catégorie de l'événement</strong></label><br>
+        <select name="lfi_evt_cat" class="widefat">
+            <option value="ga"<?php selected($evt_cat, 'ga'); ?>>📣 Action du GA (tractage, collage, porte-à-porte)</option>
+            <option value="deputes"<?php selected($evt_cat, 'deputes'); ?>>🇫🇷 Événement des député·es LFI (Kerbrat, Amiot…)</option>
+            <option value="externe"<?php selected($evt_cat, 'externe'); ?>>🌐 Événement externe (hors LFI)</option>
+        </select>
+        <br><small>Seules les « actions du GA » sont proposées en mobilisation. Un tractage organisé sur un événement des député·es apparaît quand même comme action.</small>
     </p>
     <p>
         <label><strong>Capacité max</strong> (optionnel)</label>
@@ -152,7 +153,9 @@ function lfi_nct_event_extra_save($post_id, $post) {
 
     update_post_meta($post_id, '_lfi_evt_capacite',   (int) ($_POST['lfi_evt_capacite'] ?? 0));
     update_post_meta($post_id, '_lfi_evt_rsvp_actif', !empty($_POST['lfi_evt_rsvp_actif']) ? '1' : '0');
-    update_post_meta($post_id, '_lfi_evt_ga_action',  !empty($_POST['lfi_evt_ga_action']) ? '1' : '0');
+    if (isset($_POST['lfi_evt_cat']) && function_exists('lfi_nct_evt_cat_set')) {
+        lfi_nct_evt_cat_set($post_id, sanitize_key($_POST['lfi_evt_cat']));
+    }
     update_post_meta($post_id, '_lfi_evt_url_ap',     esc_url_raw($_POST['lfi_evt_url_ap'] ?? ''));
 }
 
