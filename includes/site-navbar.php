@@ -114,9 +114,8 @@ function lfi_nct_render_site_navbar() {
             ['📅', 'Événements',           lfi_nct_app_url('evenements')],
         ];
         $secondary = [
-            ['💡', 'Proposer une action',  lfi_nct_app_url('propositions')],
-            ['🗓', 'Mes disponibilités',   lfi_nct_app_url('dispos')],
-            ['👥', 'Dispos de l\'équipe',  lfi_nct_app_url('dispos-communes')],
+            ['🤝', 'Se coordonner',        lfi_nct_app_url('mobilisation')],
+            ['💡', 'Idées d\'actions',     lfi_nct_app_url('propositions')],
             ['🤖', 'Aide',                 lfi_nct_app_url('aide')],
             ['📲', 'Installer l\'app',     lfi_nct_app_url('installer')],
             ['✏️', 'Mon profil',           lfi_nct_app_url('mon-profil')],
@@ -392,9 +391,8 @@ function lfi_nct_admin_bar_menu($bar) {
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
             ]],
             ['🤝 Coordination', [
-                ['💡 Proposer une action',      lfi_nct_app_url('propositions')],
-                ['🗓 Mes disponibilités',       lfi_nct_app_url('dispos')],
-                ['👥 Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+                ['🤝 Se coordonner',            lfi_nct_app_url('mobilisation')],
+                ['💡 Idées d\'actions',         lfi_nct_app_url('propositions')],
             ]],
             ['⚙️ Mon compte', [
                 ['🤖 Aide',                     lfi_nct_app_url('aide')],

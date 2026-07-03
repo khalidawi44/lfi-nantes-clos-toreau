@@ -2299,7 +2299,9 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
-            ['💶', 'Chiffrage préjudice',    'Punaises · 10 postes · amiable + fond', lfi_nct_app_url('prejudice')],
+            /* Le chiffrage du préjudice est AUTOMATIQUE et vit DANS le dossier
+               (pré-rempli depuis les déclarations) — plus de calculateur isolé
+               hors contexte ici. On y accède depuis la fiche du locataire. */
             ['🔎', 'Jurisprudence',          'Vraies décisions (Judilibre) par dossier', lfi_nct_app_url('jurisprudence')],
             ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
@@ -2327,12 +2329,10 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
             ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
             ['💶', 'Où va mon loyer ? (audit NMH)', 'Chiffres CRC sourcés · 3 versions', lfi_nct_app_url('audit-nmh')],
-            ['🌐', 'Tableau de bord du réseau', 'Tous les GA municipaux, regroupé',   lfi_nct_app_url('reseau-ga')],
+            ['🌐', 'Tableau de bord du réseau', 'Tous les GA · stats cumulées',       lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
-            ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
-            ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
             ['💡', 'Suggestions des GA',        'Besoins remontés par les admins',    lfi_nct_app_url('suggestions')],
             ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
@@ -2347,9 +2347,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['💾', 'Sauvegarde & export',     'Télécharger les données (point fixe)', lfi_nct_app_url('sauvegarde')],
             ['🛡️', 'Cadre RGPD',              'Fichiers légaux · registre · droit à l\'oubli', lfi_nct_app_url('rgpd')],
             ['📬', 'Check emails auto',       'Surveillance boîte 24/7 · réponses prêtes', lfi_nct_app_url('mailcheck')],
-            ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
             ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
-            ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
             ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],
