@@ -106,6 +106,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_member_role',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/activity-log', [
+        'methods'             => 'GET',
+        'callback'            => 'lfi_nct_ingest_rest_activity_log',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
@@ -293,6 +298,85 @@ function lfi_nct_ingest_rest_member_mailbox_set($request) {
     $boxes[(string) $uid] = ['user_id' => $uid, 'email' => $box_email, 'app_pw' => $app_pw, 'enabled' => $enabled];
     update_option('lfi_nct_member_mailboxes', $boxes, false);
     return new WP_REST_Response(['ok' => true, 'user_id' => $uid, 'email' => $box_email, 'enabled' => $enabled, 'boites' => count($boxes)], 200);
+}
+
+/** Traduit un user-agent en libellé d'appareil court et lisible. */
+function lfi_nct_ua_device($ua) {
+    $ua = (string) $ua;
+    if ($ua === '') return 'Appareil inconnu';
+    $os = 'Autre';
+    if (preg_match('/iPhone/i', $ua)) $os = 'iPhone';
+    elseif (preg_match('/iPad/i', $ua)) $os = 'iPad';
+    elseif (preg_match('/Android/i', $ua)) $os = 'Android';
+    elseif (preg_match('/Windows/i', $ua)) $os = 'Windows';
+    elseif (preg_match('/Macintosh|Mac OS/i', $ua)) $os = 'Mac';
+    elseif (preg_match('/Linux/i', $ua)) $os = 'Linux';
+    $br = '';
+    if (preg_match('/Edg\//i', $ua)) $br = 'Edge';
+    elseif (preg_match('/CriOS|Chrome/i', $ua)) $br = 'Chrome';
+    elseif (preg_match('/FxiOS|Firefox/i', $ua)) $br = 'Firefox';
+    elseif (preg_match('/Safari/i', $ua)) $br = 'Safari';
+    return trim($os . ($br ? ' · ' . $br : ''));
+}
+
+/**
+ * Journal de connexion : quels comptes se sont connectés, depuis quels
+ * appareils, quand et d'où. Réservé à la clé d'intégration.
+ * Param option : days (fenêtre, défaut 60), limit (défaut 500).
+ */
+function lfi_nct_ingest_rest_activity_log($request) {
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_activity';
+    if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $t)) !== $t) {
+        return new WP_REST_Response(['ok' => false, 'error' => 'table_absente'], 404);
+    }
+    $days  = max(1, min(365, (int) ($request->get_param('days') ?: 60)));
+    $limit = max(1, min(2000, (int) ($request->get_param('limit') ?: 500)));
+    $since = wp_date('Y-m-d H:i:s', current_time('timestamp') - $days * DAY_IN_SECONDS);
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT user_id, event, ip, ua, created_at FROM $t WHERE created_at >= %s ORDER BY created_at DESC LIMIT %d",
+        $since, $limit
+    )) ?: [];
+
+    /* Regroupé par compte : appareils distincts, dernière activité, nb. */
+    $byuser = [];
+    foreach ($rows as $r) {
+        $uid = (int) $r->user_id;
+        if (!isset($byuser[$uid])) {
+            $u = get_userdata($uid);
+            $byuser[$uid] = [
+                'user_id'    => $uid,
+                'nom'        => $u ? ($u->display_name ?: $u->user_login) : ('#' . $uid),
+                'email'      => $u ? $u->user_email : '',
+                'connexions' => 0,
+                'derniere'   => (string) $r->created_at,
+                'appareils'  => [],
+                'ips'        => [],
+            ];
+        }
+        $byuser[$uid]['connexions']++;
+        $dev = lfi_nct_ua_device($r->ua);
+        if (!isset($byuser[$uid]['appareils'][$dev])) $byuser[$uid]['appareils'][$dev] = 0;
+        $byuser[$uid]['appareils'][$dev]++;
+        if ($r->ip) $byuser[$uid]['ips'][(string) $r->ip] = true;
+    }
+    $out = [];
+    foreach ($byuser as $u) {
+        $appareils = [];
+        foreach ($u['appareils'] as $dev => $n) $appareils[] = ['appareil' => $dev, 'fois' => $n];
+        $out[] = [
+            'user_id'    => $u['user_id'],
+            'nom'        => $u['nom'],
+            'email'      => $u['email'],
+            'connexions' => $u['connexions'],
+            'derniere'   => $u['derniere'],
+            'appareils'  => $appareils,
+            'ips'        => array_keys($u['ips']),
+        ];
+    }
+    /* Tri par dernière activité décroissante. */
+    usort($out, function ($a, $b) { return strcmp($b['derniere'], $a['derniere']); });
+    return new WP_REST_Response(['ok' => true, 'fenetre_jours' => $days, 'comptes' => count($out), 'log' => $out], 200);
 }
 
 /** Dépose une RÉPONSE PROPOSÉE (psy+architecte) dans un dossier. */
