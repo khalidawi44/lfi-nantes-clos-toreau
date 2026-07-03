@@ -796,6 +796,25 @@ function lfi_nct_ep_ensure_tenant($row) {
 
     $prenom = (string) ($row->contact_prenom ?: '');
     $nom    = (string) ($row->contact_nom ?: '');
+
+    /* ANTI-DOUBLON : un compte locataire avec le MÊME nom ET le MÊME téléphone
+       existe déjà (lien perdu) → on le réutilise au lieu d'en créer un second. */
+    $tel = preg_replace('/\D/', '', (string) $row->contact_tel);
+    if ($tel !== '' && trim($prenom . $nom) !== '') {
+        $normfn = function ($s) { $s = strtolower(trim((string) $s)); return function_exists('remove_accents') ? remove_accents($s) : $s; };
+        $want = $normfn(trim($prenom . ' ' . $nom));
+        $cands = get_users(['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant',
+            'search' => '*' . trim($nom ?: $prenom) . '*', 'search_columns' => ['display_name'], 'number' => 15, 'fields' => ['ID', 'display_name']]);
+        foreach ($cands as $c) {
+            if ($normfn($c->display_name) !== $want) continue;
+            $ctel = preg_replace('/\D/', '', (string) get_user_meta($c->ID, 'lfi_nct_tel', true));
+            if ($ctel !== '' && $ctel === $tel) {
+                if (!get_user_meta($c->ID, 'lfi_nct_response_id', true)) update_user_meta($c->ID, 'lfi_nct_response_id', (int) $row->id);
+                return (int) $c->ID;
+            }
+        }
+    }
+
     if ($prenom === '' && $nom === '') { $prenom = 'Locataire'; $nom = '#' . (int) $row->id; }
     $login = lfi_nct_app_make_username($prenom, $nom);
     $pwd   = lfi_nct_app_make_password();
@@ -883,6 +902,15 @@ function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits, $owne
         $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE tenant_user_id = %d AND owner_user_id = %d", $tenant_uid, $owner));
         if ($exists) return (int) $exists; // déjà un dossier pour ce locataire dans ce GA
     }
+    /* ANTI-DOUBLON : même personne (nom + adresse) déjà en dossier chez cet
+       owner, même si le compte locataire diffère → on ne recrée pas. */
+    $nm = trim((string) $row->contact_prenom . ' ' . (string) $row->contact_nom);
+    if ($nm !== '' && trim((string) $row->adresse) !== '') {
+        $dupe = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $t WHERE owner_user_id = %d AND LOWER(TRIM(CONCAT(tenant_prenom,' ',tenant_nom))) = LOWER(%s) AND LOWER(TRIM(tenant_adresse)) = LOWER(%s) LIMIT 1",
+            $owner, $nm, trim((string) $row->adresse)));
+        if ($dupe) return (int) $dupe;
+    }
     $data  = json_decode((string) $row->data, true) ?: [];
     $wpdb->insert($t, [
         'owner_user_id'      => $owner,
@@ -907,7 +935,7 @@ function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits, $owne
         if (!is_array($steps) || empty($steps)) {
             $steps = [];
             foreach (lfi_nct_dossier_parcours_template() as $tpl) {
-                $steps[] = ['text' => $tpl, 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+                $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
             }
             update_user_meta($tenant_uid, 'lfi_nct_suivi_steps', $steps);
         }
