@@ -859,11 +859,24 @@ function lfi_nct_ep_handle_photos($tenant_uid) {
     return $done;
 }
 
-/** Crée le dossier juridique lié — rattaché à l'ADMIN du GA (pas au membre). */
-function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits) {
+/** Propriétaire (owner) d'un dossier pour un slug de GA donné (indépendant du
+ *  scope courant) — utile à la création automatique au submit et au rattrapage. */
+function lfi_nct_ga_owner_for_slug($slug) {
+    $slug = (string) $slug;
+    if ($slug !== '' && $slug !== 'clos-toreau') {
+        if (function_exists('lfi_nct_ga_pivot_uid')) { $p = (int) lfi_nct_ga_pivot_uid($slug); if ($p) return $p; }
+        if (function_exists('lfi_nct_ga_phantom_owner')) return (int) lfi_nct_ga_phantom_owner($slug);
+    }
+    $admins = get_users(['role' => 'administrator', 'number' => 1, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => ['ID']]);
+    return !empty($admins) ? (int) (is_object($admins[0]) ? $admins[0]->ID : $admins[0]) : 1;
+}
+
+/** Crée le dossier juridique lié — rattaché à l'ADMIN du GA (pas au membre).
+ *  $owner explicite (>0) prioritaire ; sinon déduit du scope courant. */
+function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits, $owner = 0) {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
-    $owner = function_exists('lfi_nct_ga_admin_owner') ? lfi_nct_ga_admin_owner() : (int) get_current_user_id();
+    if (!$owner) $owner = function_exists('lfi_nct_ga_admin_owner') ? lfi_nct_ga_admin_owner() : (int) get_current_user_id();
     if ($tenant_uid) {
         /* Cloisonnement : on ne considère « déjà un dossier » que DANS CE GA
            (même propriétaire), sinon le contrôle fuiterait sur les autres GA. */
@@ -887,6 +900,37 @@ function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits) {
         'statut'             => 'ouvert',
     ]);
     return (int) $wpdb->insert_id;
+}
+
+/** RATTRAPAGE : pour toutes les enquêtes « à recontacter » du périmètre courant,
+ *  s'assure qu'il existe un COMPTE + un DOSSIER JURIDIQUE liés, avec les infos.
+ *  Renvoie ['accounts'=>x, 'dossiers'=>y]. */
+function lfi_nct_backfill_recontact() {
+    global $wpdb;
+    $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
+    $rows = $wpdb->get_results(
+        "SELECT * FROM {$wpdb->prefix}lfi_nct_responses
+         WHERE deleted_at IS NULL AND contact_recontact = 1 AND (contact_prenom <> '' OR contact_nom <> '')" . $sc . " LIMIT 500"
+    ) ?: [];
+    $acc = 0; $dos = 0;
+    foreach ($rows as $row) {
+        $existing = get_users(['meta_key' => 'lfi_nct_response_id', 'meta_value' => (int) $row->id, 'number' => 1, 'fields' => ['ID']]);
+        $tenant_uid = !empty($existing) ? (int) (is_object($existing[0]) ? $existing[0]->ID : $existing[0]) : 0;
+        if (!$tenant_uid) { $tenant_uid = (int) lfi_nct_ep_ensure_tenant($row); if ($tenant_uid) $acc++; }
+        if (!$tenant_uid) continue;
+        $cur_ga = (string) get_user_meta($tenant_uid, 'lfi_nct_ga', true);
+        if ($cur_ga === '' && trim((string) $row->ga) !== '') update_user_meta($tenant_uid, 'lfi_nct_ga', (string) $row->ga);
+        $owner = lfi_nct_ga_owner_for_slug((string) $row->ga);
+        $exists_d = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d AND owner_user_id = %d", $tenant_uid, $owner));
+        if (!$exists_d) {
+            $souhaits = ''; $d = json_decode((string) $row->data, true);
+            if (is_array($d) && !empty($d['objectif'])) $souhaits = 'Objectif : ' . $d['objectif'];
+            lfi_nct_ep_create_dossier($row, $tenant_uid, '', $souhaits, $owner);
+            $dos++;
+        }
+    }
+    return ['accounts' => $acc, 'dossiers' => $dos];
 }
 
 function lfi_nct_app_view_enquete_photos() {
@@ -2496,6 +2540,14 @@ function lfi_nct_app_view_comptes_locataires() {
     }
 
     /* Créer locataire depuis une réponse d'enquête */
+    /* RATTRAPAGE : générer les comptes + dossiers manquants pour toutes les
+       personnes « à recontacter » du GA (règle capitale : contact → compte +
+       dossier + dossier juridique, liés, avec les réponses). */
+    if (!empty($_POST['lfi_app_backfill']) && check_admin_referer('lfi_app_backfill')) {
+        $res = function_exists('lfi_nct_backfill_recontact') ? lfi_nct_backfill_recontact() : ['accounts' => 0, 'dossiers' => 0];
+        wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'backfilled' => (int) $res['accounts'], 'bdos' => (int) $res['dossiers']]));
+        exit;
+    }
     if (!empty($_POST['lfi_app_create_tenant']) && check_admin_referer('lfi_app_create_tenant')) {
         $resp_id = (int) ($_POST['response_id'] ?? 0);
         $row = $resp_id ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $resp_id)) : null;
@@ -2643,6 +2695,15 @@ function lfi_nct_app_view_comptes_locataires() {
     if ($created_err)              lfi_nct_app_flash('❌ ' . $created_err, 'err');
     if (!empty($_GET['edited']))   lfi_nct_app_flash('✅ Compte locataire mis à jour.');
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 Compte locataire supprimé.');
+    if (isset($_GET['backfilled'])) lfi_nct_app_flash('✅ Rattrapage : ' . (int) $_GET['backfilled'] . ' compte(s) et ' . (int) ($_GET['bdos'] ?? 0) . ' dossier(s) juridique(s) créés pour les personnes à recontacter.');
+
+    /* RATTRAPAGE en un clic : tous ceux qui veulent être recontactés → compte +
+       dossier juridique, avec leurs réponses. */
+    echo '<div class="lfi-app-card" style="border:2px solid #186a3b;background:#f4fbf4">';
+    echo '<div class="com"><strong>🔧 Règle : qui demande à être recontacté·e a droit à un compte + un dossier.</strong> Ce bouton crée automatiquement les comptes locataires et dossiers juridiques <strong>manquants</strong> pour toutes les personnes « à recontacter » de ton GA, en important leurs réponses. Sans effet sur celles qui n\'ont pas voulu être recontactées.</div>';
+    echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_app_backfill', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_app_backfill" value="1">';
+    echo '<button type="submit" class="btn-primary" style="background:#186a3b">🔧 Générer les comptes + dossiers manquants</button></form></div>';
 
     /* Credentials nouveau compte */
     if ($created) {
