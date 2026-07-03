@@ -682,6 +682,7 @@ function lfi_nct_app_shortcode() {
         'flyer'                  => 'lfi_nct_app_view_flyer',
         'aide'                   => 'lfi_nct_app_view_aide',
         'infos-cles'             => 'lfi_nct_app_view_infos_cles',
+        'signaler-bug'           => 'lfi_nct_app_view_signaler_bug',
     ];
     if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
         call_user_func($public_routes[$vue_public]);
@@ -689,6 +690,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_register_sw();
         if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
         lfi_nct_app_render_assistant_button();
+        if (function_exists('lfi_nct_app_render_feedback_button')) lfi_nct_app_render_feedback_button();
         return ob_get_clean();
     }
 
@@ -850,6 +852,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
                     case 'geo-contacts':          lfi_nct_app_view_geo_contacts();           break;
                     case 'enquete-doublons':      lfi_nct_app_view_enquete_doublons();       break;
+                    case 'bug-reports':           lfi_nct_app_view_bug_reports();            break;
                     case 'geo-perimetres':        lfi_nct_app_view_geo_perimetres();         break;
                     case 'suggerer-outil':        lfi_nct_app_view_suggerer_outil();         break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
@@ -923,6 +926,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_register_sw();
         if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
         lfi_nct_app_render_assistant_button();
+        if (function_exists('lfi_nct_app_render_feedback_button')) lfi_nct_app_render_feedback_button();
     } catch (\Throwable $e) {
         if (function_exists('error_log')) error_log('[LFI app] Erreur rendu final : ' . $e->getMessage());
     }
@@ -1164,6 +1168,7 @@ function lfi_nct_app_render_dashboard() {
         <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
         <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_dup_admin_notice')) lfi_nct_dup_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_feedback_admin_notice')) lfi_nct_feedback_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
