@@ -941,6 +941,10 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if ($is_edit && $row && function_exists('lfi_nct_render_dossier_replies')) {
         lfi_nct_render_dossier_replies($row);
     }
+    /* Frais & temps d'accompagnement (→ préjudice / avocat, jamais facturés à NMH). */
+    if ($is_edit && $row && function_exists('lfi_nct_frais_render')) {
+        lfi_nct_frais_render((int) $row->id);
+    }
 
     /* Le reste (constatations, lettres, emails, analyse…) est RANGÉ ici pour
        ne pas encombrer : on ne l'ouvre que si on en a besoin. */
