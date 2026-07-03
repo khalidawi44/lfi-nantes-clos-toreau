@@ -713,6 +713,7 @@ function lfi_nct_app_view_ga_dashboard() {
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
     ?>
+    <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
     <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
     <?php if (function_exists('lfi_nct_render_member_news_popup')) lfi_nct_render_member_news_popup(); ?>
     <div class="lfi-app">
