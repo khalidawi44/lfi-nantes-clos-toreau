@@ -899,6 +899,19 @@ function lfi_nct_ep_create_dossier($row, $tenant_uid, $constat, $souhaits, $owne
         'demandes'           => $souhaits,
         'statut'             => 'ouvert',
     ]);
+    /* Parcours de suivi auto : le locataire s'empare de sa fiche d'abord, puis
+       amiable, puis juridique. Ainsi la 1re action (envoyer le SMS) remonte
+       tout de suite dans « Mes actions » du tableau de bord. */
+    if ($tenant_uid && function_exists('lfi_nct_dossier_parcours_template')) {
+        $steps = get_user_meta($tenant_uid, 'lfi_nct_suivi_steps', true);
+        if (!is_array($steps) || empty($steps)) {
+            $steps = [];
+            foreach (lfi_nct_dossier_parcours_template() as $tpl) {
+                $steps[] = ['text' => $tpl, 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+            }
+            update_user_meta($tenant_uid, 'lfi_nct_suivi_steps', $steps);
+        }
+    }
     return (int) $wpdb->insert_id;
 }
 
