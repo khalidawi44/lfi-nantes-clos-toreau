@@ -217,7 +217,7 @@ function lfi_nct_app_view_partenaire_dashboard() {
     echo '<h3 style="margin:8px 0 6px;color:#c8102e">📚 Tes dossiers thématiques</h3>';
     echo '<div class="lfi-app-help" style="margin-bottom:8px">Les infos utiles, mâchées, prêtes à ressortir en conseil ou face à la presse.</div>';
     echo '<div class="lfi-app-grid">';
-    lfi_nct_partner_tile('💶', 'Comptes de NMH', 'L\'étude du bailleur, par thème', lfi_nct_app_url('nmh'));
+    lfi_nct_partner_tile('💶', 'Dossier NMH', 'Comptes · gestion · argumentaires · rhétorique', lfi_nct_app_url('nmh'));
     if (function_exists('lfi_nct_reussites_count_published')) {
         lfi_nct_partner_tile('🏆', 'Nos victoires', lfi_nct_reussites_count_published() . ' familles aidées (anonyme)', lfi_nct_app_url('victoires'));
     }
@@ -360,9 +360,9 @@ function lfi_nct_render_elus_directory($with_contact = false) {
  * -------------------------------------------------------------- */
 function lfi_nct_app_view_partenaire_nmh() {
     if (!lfi_nct_user_role_partner() && !current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
-    lfi_nct_app_screen_open('💶 Comptes de NMH', 'L\'étude du bailleur, simple et par thème — chiffres publics, sourcés.');
+    lfi_nct_app_screen_open('💶 Dossier NMH', 'Comptes, gestion, argumentaires & rhétorique — chiffres PUBLICS, sourcés.');
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('espace')) . '">← Mon espace</a></div>';
-    echo '<div class="lfi-app-help">Chaque thème tient en quelques lignes. Clique pour déplier. Tout est <strong>sourcé</strong> (Chambre régionale des comptes + comptes 2024 certifiés).</div>';
+    echo '<div class="lfi-app-card" style="border:2px solid #186a3b;background:#eef7ee"><div class="com"><strong>🧭 Ce dossier n\'utilise QUE des données publiques</strong> (Chambre régionale des comptes + comptes certifiés). Il ne contient <strong>aucune donnée d\'enquête terrain</strong> — c\'est une règle absolue. Chaque thème est pliable ; tout est sourcé.</div></div>';
 
     $themes = [
         ['💰', 'L\'essentiel en une phrase',
@@ -373,15 +373,36 @@ function lfi_nct_app_view_partenaire_nmh() {
          . '<li><strong>~939 M€</strong> de dette · <strong>+64 M€</strong> de dette nette par an.</li>'
          . '<li>Résultat net : <strong>−90 % en 5 ans</strong> (9,1 M€ → 0,97 M€).</li>'
          . '<li>Gros entretien : <strong>21 €/mois/logement</strong> seulement.</li></ul>'],
+        ['🏢', 'La gestion de NMH — argumentée',
+         '<p>Une critique <strong>de la gestion</strong>, appuyée sur les documents officiels (jamais sur les personnes) :</p>'
+         . '<ul style="margin:0;padding-left:18px;line-height:1.9">'
+         . '<li><strong>Gouvernance :</strong> le président du CA est aussi adjoint à l\'urbanisme de la Ville de Nantes. La CRC pointe un <strong>risque de conflit d\'intérêts</strong> (recommandation n°2).</li>'
+         . '<li><strong>Cap financier :</strong> résultat net divisé par 10 en 5 ans, dette qui progresse de +64 M€ nets/an. La <strong>charge de la dette absorbe un tiers du loyer</strong> quand l\'entretien en reçoit 6 %.</li>'
+         . '<li><strong>Arbitrage :</strong> le modèle a basculé des aides à la pierre vers l\'emprunt ; le désengagement de l\'État (Réduction de Loyer de Solidarité) ampute l\'autofinancement (impact estimé ~−4,5 M€ sur la CAF 2024). Résultat : la dette grignote ce qui devrait aller au bâti.</li>'
+         . '<li><strong>Constat CRC :</strong> la Chambre elle-même <strong>alerte sur l\'insuffisance des investissements dans le parc existant</strong>.</li></ul>'
+         . '<p style="margin-top:6px"><strong>La ligne :</strong> on ne dit pas « ils sont incompétents », on dit « voici les chiffres de leurs propres comptes, est-ce le bon équilibre ? ».</p>'],
         ['🏛️', 'Ta question prête pour le conseil',
          '<em>À poser telle quelle, sans citer de loyer individuel ni l\'enquête :</em><blockquote style="border-left:3px solid #ccc;margin:8px 0;padding-left:12px;font-style:italic">« Le rapport de la Chambre régionale des comptes (ROD n°2025-134) relève que le gros entretien du parc représente environ 6 % du loyer, quand la charge de la dette en absorbe un tiers. Pour un quartier <strong>hors NPNRU</strong> comme Clos Toreau, pouvez-vous communiquer au conseil le <strong>Plan Pluriannuel de Travaux</strong> et le calendrier d\'investissement prévu ? »</blockquote><strong>Pourquoi ça marche :</strong> ce sont ses propres institutions qui répondent. Pas d\'accusation → pas de contre-attaque. L\'écart parle seul.'],
+        ['🗣️', 'Boîte à rhétorique',
+         '<p><strong>Le principe :</strong> montrer l\'<strong>écart entre le discours et les preuves</strong>, en t\'appuyant sur LEURS documents (CRC, comptes certifiés). Tu ne portes pas d\'accusation : tu poses une question que les faits ont déjà tranchée.</p>'
+         . '<p><strong>Formules qui marchent :</strong></p>'
+         . '<ul style="margin:0;padding-left:18px;line-height:1.9">'
+         . '<li>« 6 % du loyer à l\'entretien, un tiers à la dette : est-ce le bon équilibre pour un bailleur social ? »</li>'
+         . '<li>« Je ne mets personne en cause — je cite le rapport de la Chambre régionale des comptes. »</li>'
+         . '<li>« Un quartier hors NPNRU, c\'est un quartier qui ne touche aucune subvention de rénovation quand d\'autres en reçoivent des centaines de millions. »</li></ul>'
+         . '<p style="margin-top:6px"><strong>À éviter absolument :</strong> les adjectifs (« menteuse », « incompétent ») → ça se retourne contre nous. Un loyer individuel. Et <strong>jamais, jamais l\'enquête terrain</strong>.</p>'
+         . '<p><strong>Contre-arguments &amp; réponses :</strong></p>'
+         . '<ul style="margin:0;padding-left:18px;line-height:1.9">'
+         . '<li>« C\'est la faute de l\'État. » → « En partie oui — la RLS ampute leurs moyens, raison de plus pour le porter au national. Mais le conseil d\'administration garde la main sur ses priorités d\'investissement. »</li>'
+         . '<li>« Les comptes sont certifiés. » → « Justement : je m\'appuie dessus, pas contre. C\'est ce qui rend le constat incontestable. »</li>'
+         . '<li>« Vous faites de la politique. » → « Je pose une question de gestion publique, chiffres à l\'appui. »</li></ul>'],
         ['⚖️', 'Les leviers d\'action',
          '<ul style="margin:0;padding-left:18px;line-height:1.9">'
          . '<li><strong>CADA :</strong> demander le Plan Pluriannuel de Travaux de Clos Toreau.</li>'
          . '<li><strong>Au CA de NMH :</strong> question écrite des représentants locataires (INDECOSA-CGT, CLCV).</li>'
          . '<li><strong>Presse :</strong> « 21 € d\'entretien sur 330 € » + quartier hors NPNRU = inégalité documentable.</li></ul>'],
         ['🛡️', 'Les garde-fous (à respecter)',
-         '<strong>Ratios moyens uniquement</strong> — jamais un loyer individuel. · <strong>Faits secs</strong>, pas d\'insulte (« menteuse » se retourne contre nous). · <strong>Aucun nom</strong> de locataire. On montre l\'écart entre le discours et les preuves, on n\'attaque pas les personnes.'],
+         '<strong>Ratios moyens uniquement</strong> — jamais un loyer individuel. · <strong>Jamais l\'enquête terrain</strong> (règle absolue). · <strong>Faits secs</strong>, pas d\'insulte (« menteuse » se retourne contre nous). · <strong>Aucun nom</strong> de locataire. On montre l\'écart entre le discours et les preuves, on n\'attaque pas les personnes.'],
         ['📚', 'Les sources',
          'Rapport CRC Pays de la Loire <strong>ROD n°2025-134</strong> (17 déc. 2025) · Comptes annuels NMH 2024 certifiés (CA du 26/06/2025) · Réponse officielle NMH au ROD (24 oct. 2025) · Convention NM–NMH 2023-2032.'],
     ];
@@ -624,10 +645,13 @@ function lfi_nct_partner_dispatch() {
         return false; /* garde sa console d'admin pour tout le reste */
     }
 
-    /* Élu·e « pur » (sans autre rôle) : espace dédié pour tout. */
+    /* Élu·e « pur » (sans autre rôle) : espace dédié.
+       ⚠️ RÈGLE ABSOLUE : on N'expose JAMAIS la vue « audit-nmh » complète à un·e
+       élu·e — elle contient des chiffres de l'ENQUÊTE TERRAIN. L'élu·e n'a que la
+       vue « nmh » (comptes publics + argumentaires, SANS aucune donnée d'enquête). */
     switch ($vue) {
         case 'nmh':        lfi_nct_app_view_partenaire_nmh(); break;
-        case 'audit-nmh':  lfi_nct_app_view_audit_nmh();  break;
+        case 'audit-nmh':  lfi_nct_app_view_partenaire_nmh(); break; /* redirige vers la vue sûre */
         case 'victoires':  lfi_nct_app_view_victoires();  break;
         case 'aide':       lfi_nct_app_view_aide();       break;
         case 'installer':  lfi_nct_app_view_installer();  break;
@@ -671,6 +695,31 @@ function lfi_nct_partner_seed_william() {
         update_user_meta($uid, 'lfi_nct_partner_seed', 'william');
     }
     update_option('lfi_nct_partner_seed_william_done', 1, false);
+}
+
+/* -------------------------------------------------------------- *
+ *  SEED : dépose dans le dossier partagé de William un mot de       *
+ *  Fabrice pointant vers le Dossier NMH (comptes publics only).     *
+ *  AUCUNE donnée d'enquête — juste un renvoi vers la vue « nmh ».    *
+ * -------------------------------------------------------------- */
+add_action('init', 'lfi_nct_partner_seed_william_dossier', 14);
+function lfi_nct_partner_seed_william_dossier() {
+    if (get_option('lfi_nct_partner_seed_william_dossier_done')) return;
+    $found = get_users(['meta_key' => 'lfi_nct_partner_seed', 'meta_value' => 'william', 'number' => 1, 'fields' => 'ID']);
+    if (empty($found)) return; /* William pas encore créé — on retentera. */
+    $uid = (int) $found[0];
+    $items = lfi_nct_partner_dossier($uid);
+    foreach ($items as $it) { if (($it['id'] ?? 0) === 1 && strpos((string) ($it['titre'] ?? ''), 'Dossier NMH') !== false) { update_option('lfi_nct_partner_seed_william_dossier_done', 1, false); return; } }
+    $items[] = [
+        'id'    => lfi_nct_partner_next_id($items),
+        'titre' => '📊 Dossier NMH (comptes, gestion, argumentaires, rhétorique)',
+        'note'  => "J'ai préparé pour toi le dossier complet sur Nantes Métropole Habitat : où va le loyer, la gestion (gouvernance, dette, investissements), tes questions prêtes pour le conseil et une boîte à rhétorique. Tout est fondé sur des données PUBLIQUES (Chambre régionale des comptes, comptes certifiés) — jamais l'enquête terrain. Tu le retrouves dans l'onglet « 💶 Dossier NMH » de ton espace. On l'enrichit ensemble ici quand tu veux. — Fabrice",
+        'url'   => lfi_nct_app_url('nmh'),
+        'by'    => 'Fabrice',
+        'date'  => current_time('mysql'),
+    ];
+    lfi_nct_partner_dossier_save($uid, $items);
+    update_option('lfi_nct_partner_seed_william_dossier_done', 1, false);
 }
 
 /* -------------------------------------------------------------- *
