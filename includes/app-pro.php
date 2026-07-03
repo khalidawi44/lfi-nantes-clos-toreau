@@ -335,6 +335,16 @@ function lfi_nct_app_view_dossier() {
         exit;
     }
 
+    /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
+       usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
+       mot de passe (onboarding) puis complète sa fiche / dépose ses pièces. */
+    $share_link = '';
+    if (!empty($_POST['lfi_share_tenant']) && check_admin_referer('lfi_share_tenant')) {
+        $share_link = (function_exists('lfi_nct_login_link'))
+            ? lfi_nct_login_link((int) $u->ID, function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'))
+            : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
+    }
+
     /* Parcours de suivi : ajout / coche / suppression d'étapes */
     if (!empty($_POST['lfi_app_dossier_step']) && check_admin_referer('lfi_app_dossier_step')) {
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
@@ -352,6 +362,14 @@ function lfi_nct_app_view_dossier() {
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
+        } elseif ($action === 'autofill') {
+            /* Génère le parcours-type (n'ajoute que les étapes manquantes). */
+            $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
+            foreach (lfi_nct_dossier_parcours_template() as $tpl) {
+                if (!in_array($tpl, $existing, true)) {
+                    $steps[] = ['text' => $tpl, 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+                }
+            }
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'step_saved' => 1]));
@@ -409,6 +427,29 @@ function lfi_nct_app_view_dossier() {
     if ($u->user_email) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email perso</a>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Éditer la fiche</a>';
     echo '</div>';
+    echo '</div>';
+
+    /* ===== Partager l'espace avec le locataire (le fait entrer dans l'app) ===== */
+    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px">';
+    echo '<div class="head"><div class="who">🔗 Partager l\'espace avec le locataire</div></div>';
+    echo '<div class="com" style="font-size:.92em">Envoie-lui son <strong>espace personnel</strong> : il se connecte en 1 clic, choisit son mot de passe, puis <strong>complète sa fiche</strong>, <strong>dépose ses pièces</strong> et ses <strong>photos</strong>. Tout reste dans son dossier.</div>';
+    if ($share_link !== '') {
+        $prenom_t = $u->first_name ?: ($row && $row->contact_prenom ? $row->contact_prenom : '');
+        $sms_body = ($prenom_t ? 'Bonjour ' . $prenom_t . ', ' : 'Bonjour, ')
+                  . "voici votre espace personnel LFI pour suivre votre logement (gratuit, confidentiel). "
+                  . "Connexion directe (rien à taper) : " . $share_link
+                  . " — vous choisirez votre mot de passe, puis vous pourrez compléter votre dossier et envoyer vos photos. On est là pour vous accompagner.";
+        echo '<div class="lfi-app-help" style="margin-top:8px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le par SMS. <strong>Ne régénère pas</strong> après l\'envoi (ça l\'invalide).</small></div>';
+        if ($tel) echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($sms_body) . '">📲 Envoyer le SMS pré-rempli</a></div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:90px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($sms_body) . '</textarea>';
+        if (!$tel) echo '<div class="lfi-app-help" style="margin-top:4px"><small>⚠️ Pas de numéro enregistré — copie le message et envoie-le comme tu peux.</small></div>';
+    } else {
+        echo '<form method="post" style="margin-top:8px">';
+        wp_nonce_field('lfi_share_tenant');
+        echo '<input type="hidden" name="lfi_share_tenant" value="1">';
+        echo '<button type="submit" class="btn-primary" style="background:#0066a3">🔗 Générer le lien + le SMS</button></form>';
+        echo '<div class="lfi-app-help" style="margin-top:4px"><small>Le lien connecte ' . esc_html($u->display_name) . ' d\'un seul clic, sans identifiant (usage unique, 14 jours).</small></div>';
+    }
     echo '</div>';
 
     /* Problèmes signalés */
@@ -549,6 +590,25 @@ function lfi_nct_app_view_dossier() {
 /* ============================================================== *
  *  Parcours de suivi — checklist d'étapes (numérotée, cochable)    *
  * ============================================================== */
+/** Le parcours-type d'un dossier locataire : la personne s'empare d'abord de sa
+ *  fiche, puis on va à l'amiable (urgence d'abord), puis juridique si besoin. */
+function lfi_nct_dossier_parcours_template() {
+    return [
+        '🔗 Partager l\'espace avec le locataire (envoyer le lien de connexion)',
+        'Le locataire complète sa fiche (le plus possible)',
+        'Le locataire dépose ses pièces + photos de chez lui',
+        'Lui faire signer l\'adhésion à l\'association (gratuite)',
+        'Avec lui : choisir l\'objectif — déménager OU être indemnisé',
+        'Passer chez le locataire pour constater (photos, relevés)',
+        'Chiffrer le préjudice ensemble (selon ses pièces)',
+        'Envoyer la mise en demeure travaux à NMH',
+        'Appeler NMH puis relancer (1re, 2e relance)',
+        'Amiable : négocier travaux / relogement / indemnisation',
+        'Si échec : saisir le SCHS (insalubrité) / l\'ARS',
+        'Préparer l\'assignation au Tribunal Judiciaire',
+    ];
+}
+
 function lfi_nct_dossier_render_parcours($u) {
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
@@ -578,9 +638,17 @@ function lfi_nct_dossier_render_parcours($u) {
     echo '</summary>';
     echo '<div style="padding:0 16px 16px">';
 
+    /* Génération automatique du parcours-type (le « quand je clique, ça se monte tout seul »). */
+    echo '<form method="post" style="margin:8px 0">';
+    wp_nonce_field('lfi_app_dossier_step');
+    echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="autofill">';
+    echo '<button type="submit" class="btn-primary" style="background:#186a3b;width:100%">✨ ' . (empty($steps) ? 'Générer le parcours automatique' : 'Compléter avec le parcours-type') . '</button>';
+    echo '</form>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Le parcours-type démarre par « le locataire s\'empare de sa fiche » (partage de l\'espace, pièces, adhésion, objectif) puis va à l\'amiable avant le juridique. Tu peux tout modifier.</small></div>';
+
     /* Liste des étapes */
     if (empty($steps)) {
-        echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Ajoute la 1re action à mener ci-dessous (ou choisis dans la liste).</div>';
+        echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Clique « ✨ Générer le parcours automatique » ci-dessus, ou ajoute une action à la main.</div>';
     } else {
         echo '<ol style="list-style:none;padding:0;margin:8px 0;counter-reset:lfi-step">';
         foreach ($steps as $idx => $s) {
