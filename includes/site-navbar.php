@@ -76,8 +76,8 @@ function lfi_nct_render_site_navbar() {
             ['🚪', 'Se déconnecter', wp_logout_url(home_url('/'))],
         ];
     }
-    /* === GA / ADMIN === */
-    else {
+    /* === ADMIN du GA (accès complet, y compris données locataires) === */
+    elseif ($is_admin) {
         $primary = [
             ['🏠', 'Tableau de bord', $app_root],
             ['🔧', 'Brigade',         lfi_nct_app_url('interventions')],
@@ -90,25 +90,38 @@ function lfi_nct_render_site_navbar() {
             ['🔬', 'Outils scientifiques', lfi_nct_app_url('outils')],
             ['📅', 'Mon agenda',           lfi_nct_app_url('agenda')],
             ['📋', 'Faire passer enquête', lfi_nct_survey_url()],
+            ['🔄', 'Synchroniser',         admin_url('admin-post.php?action=lfi_nct_purge_all')],
+            ['🗂', 'Réponses enquêtes',    lfi_nct_app_url('dossiers')],
+            ['📈', 'Stats enquêtes',       lfi_nct_app_url('stats-enquete')],
+            ['👥', 'Comptes GA + loc.',    lfi_nct_app_url('membres')],
+            ['📣', 'Événements',           lfi_nct_app_url('evenements')],
+            ['📱', 'SMS aux adhérents',    lfi_nct_app_url('sms')],
+            ['✉️', 'Email aux adhérents',   lfi_nct_app_url('email')],
+            ['⚙️', 'Mes paramètres',       lfi_nct_app_url('facturation-params')],
+            ['📲', 'Installer l\'app',     lfi_nct_app_url('installer')],
+            ['✏️', 'Mon profil',           lfi_nct_app_url('mon-profil')],
+            ['🚪', 'Se déconnecter',       wp_logout_url(home_url('/'))],
         ];
-        if ($is_admin) {
-            $secondary[] = ['🔄', 'Synchroniser', admin_url('admin-post.php?action=lfi_nct_purge_all')];
-        }
-        if ($is_admin) {
-            $secondary[] = ['🗂', 'Réponses enquêtes', lfi_nct_app_url('dossiers')];
-            $secondary[] = ['📈', 'Stats enquêtes',    lfi_nct_app_url('stats-enquete')];
-            $secondary[] = ['👥', 'Comptes GA + loc.', lfi_nct_app_url('membres')];
-        }
-        if ($is_ga) {
-            $secondary[] = ['👥', 'Membres actifs',  lfi_nct_app_url('membres')];
-            $secondary[] = ['📣', 'Événements', lfi_nct_app_url('evenements')];
-            $secondary[] = ['📱', 'SMS aux adhérents', lfi_nct_app_url('sms')];
-            $secondary[] = ['✉️', 'Email aux adhérents', lfi_nct_app_url('email')];
-        }
-        $secondary[] = ['⚙️', 'Mes paramètres', lfi_nct_app_url('facturation-params')];
-        $secondary[] = ['📲', 'Installer l\'app', lfi_nct_app_url('installer')];
-        $secondary[] = ['✏️', 'Mon profil',       lfi_nct_app_url('mon-profil')];
-        $secondary[] = ['🚪', 'Se déconnecter',   wp_logout_url(home_url('/'))];
+    }
+    /* === MEMBRE du GA (militant, NON-admin) : accès restreint. Aucune donnée
+       locataire (dossiers, comptes, recouvrement…), pas de SMS/email de masse.
+       Uniquement : enquête, photos, événements, coordination, aide. === */
+    else {
+        $primary = [
+            ['🏠', 'Mon espace',           $app_root],
+            ['📋', 'Faire passer enquête', lfi_nct_survey_url()],
+            ['📸', 'Photos',               lfi_nct_app_url('enquete-photos')],
+            ['📅', 'Événements',           lfi_nct_app_url('evenements')],
+        ];
+        $secondary = [
+            ['💡', 'Proposer une action',  lfi_nct_app_url('propositions')],
+            ['🗓', 'Mes disponibilités',   lfi_nct_app_url('dispos')],
+            ['👥', 'Dispos de l\'équipe',  lfi_nct_app_url('dispos-communes')],
+            ['🤖', 'Aide',                 lfi_nct_app_url('aide')],
+            ['📲', 'Installer l\'app',     lfi_nct_app_url('installer')],
+            ['✏️', 'Mon profil',           lfi_nct_app_url('mon-profil')],
+            ['🚪', 'Se déconnecter',       wp_logout_url(home_url('/'))],
+        ];
     }
 
     $hi_name = esc_html($u->display_name ?: $u->user_login);
@@ -368,6 +381,27 @@ function lfi_nct_admin_bar_menu($bar) {
                 ['📲 Installer l\'app',     lfi_nct_app_url('installer')],
             ]],
         ];
+    } elseif (!$is_admin && $is_ga) {
+        /* MEMBRE du GA (militant, non-admin) : accès restreint, aucune donnée
+           locataire, pas de SMS/email de masse. */
+        $sections = [
+            ['📣 Mes actions', [
+                ['🏠 Mon espace',               $app_root],
+                ['📋 Faire passer une enquête', lfi_nct_survey_url()],
+                ['📸 Photos chez un locataire', lfi_nct_app_url('enquete-photos')],
+                ['📅 Événements',               lfi_nct_app_url('evenements')],
+            ]],
+            ['🤝 Coordination', [
+                ['💡 Proposer une action',      lfi_nct_app_url('propositions')],
+                ['🗓 Mes disponibilités',       lfi_nct_app_url('dispos')],
+                ['👥 Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+            ]],
+            ['⚙️ Mon compte', [
+                ['🤖 Aide',                     lfi_nct_app_url('aide')],
+                ['📲 Installer l\'app',         lfi_nct_app_url('installer')],
+                ['✏️ Mon profil',               lfi_nct_app_url('mon-profil')],
+            ]],
+        ];
     } else {
         $sections = [
             ['🔧 Brigade travaux', [
@@ -385,7 +419,7 @@ function lfi_nct_admin_bar_menu($bar) {
             ]],
         ];
 
-        if ($is_admin || $is_ga) {
+        if ($is_admin) {
             $sections[] = ['📣 Action politique', [
                 ['📋 Faire passer une enquête', lfi_nct_survey_url()],
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
