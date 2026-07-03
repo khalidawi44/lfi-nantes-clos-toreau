@@ -2732,6 +2732,30 @@ function lfi_nct_app_view_comptes_locataires() {
     /* Onglets en haut */
     lfi_nct_app_comptes_tabs('locataires');
 
+    /* DÉTECTION DE DOUBLONS : comptes locataires au même nom → à vérifier/fusionner. */
+    $byname = [];
+    foreach ($users_tenant as $tu) {
+        $k = strtolower(trim(function_exists('remove_accents') ? remove_accents((string) $tu->display_name) : (string) $tu->display_name));
+        if ($k !== '' && strpos($k, 'locataire #') !== 0) $byname[$k][] = $tu;
+    }
+    $dups = array_filter($byname, function ($a) { return count($a) > 1; });
+    if (!empty($dups)) {
+        echo '<div class="lfi-app-card" style="border:2px solid #d39e00;background:#fffbf0">';
+        echo '<div class="com"><strong>⚠️ Doublons possibles</strong> — plusieurs comptes au même nom. Ouvre chacun, garde le bon, supprime l\'autre (bouton 🗑 dans la fiche).</div>';
+        foreach ($dups as $grp) {
+            echo '<div style="margin-top:6px"><strong>' . esc_html($grp[0]->display_name) . '</strong> (' . count($grp) . ' comptes) :</div>';
+            echo '<ul class="lfi-app-list" style="margin-top:4px">';
+            foreach ($grp as $tu) {
+                $has_enq = (bool) get_user_meta($tu->ID, 'lfi_nct_response_id', true);
+                echo '<li class="lfi-app-card" style="padding:8px 10px"><div class="head"><div class="who">@' . esc_html($tu->user_login) . '</div>'
+                   . '<a class="btn-ghost" style="padding:5px 10px;font-size:.82em" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $tu->ID])) . '">Ouvrir / supprimer</a></div>'
+                   . '<div class="meta"><span class="meta-chip">' . esc_html($tu->user_email) . '</span>' . ($has_enq ? '<span class="meta-chip">📋 a une enquête liée</span>' : '<span class="meta-chip" style="color:#c8102e">sans enquête</span>') . '</div></li>';
+            }
+            echo '</ul>';
+        }
+        echo '</div>';
+    }
+
     /* Flash erreur / succès */
     if ($created_err)              lfi_nct_app_flash('❌ ' . $created_err, 'err');
     if (!empty($_GET['edited']))   lfi_nct_app_flash('✅ Compte locataire mis à jour.');
