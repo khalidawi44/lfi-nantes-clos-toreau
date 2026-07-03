@@ -84,7 +84,7 @@ function lfi_nct_reussites_seed_builtin() {
         $s['delai']           = '';
         $s['quartier']        = 'Clos Toreau (Nantes Sud)';
         $s['anonymize_names'] = '';
-        $s['publie']          = false; /* brouillon anonyme, à relire/publier */
+        $s['publie']          = true;  /* victoires PARTIELLES, anonymes → visibles au tableau */
         $s['auto']            = true;
         $s['date']            = current_time('mysql');
         $list[] = $s;
