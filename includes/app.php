@@ -853,6 +853,7 @@ function lfi_nct_app_shortcode() {
                     case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
                     case 'enquete':               lfi_nct_app_view_enquete();                break;
                     case 'mobilisation':          lfi_nct_app_view_mobilisation();           break;
+                    case 'agenda-invite':         lfi_nct_app_view_agenda_invite();          break;
                     case 'dispos':                lfi_nct_app_view_dispos();                 break;
                     case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
                     case 'propositions':          lfi_nct_app_view_propositions();           break;

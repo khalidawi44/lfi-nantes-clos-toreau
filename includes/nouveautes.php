@@ -63,6 +63,12 @@ function lfi_nct_news_seed_builtin() {
                      . '<strong>« 🙋 Je participe »</strong> sur ceux qui t\'arrangent. Tu peux aussi <strong>proposer d\'autres dates</strong>. '
                      . 'Simple, et on voit tout de suite qui vient.',
         ],
+        'agenda-invite-2026-07' => [
+            'titre' => 'Les événements arrivent dans ton agenda',
+            'corps' => 'Quand un événement du GA est créé, tu reçois un <strong>email avec une invitation calendrier</strong>. '
+                     . 'Sur Gmail / Google Agenda, il s\'ajoute <strong>en un tap</strong>, avec un <strong>rappel</strong> la veille et 2 h avant. '
+                     . 'Plus besoin de le noter à la main.',
+        ],
     ];
 
     $changed = false;

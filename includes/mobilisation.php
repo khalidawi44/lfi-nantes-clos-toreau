@@ -360,6 +360,11 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
     }
     echo '</div></div>';
 
+    /* Admin : envoyer l'événement dans l'agenda des membres (invitation .ics). */
+    if ($event_id > 0 && lfi_nct_mobi_can_mod() && function_exists('lfi_nct_app_view_agenda_invite')) {
+        echo '<div style="text-align:center;margin:0 0 10px"><a class="btn-ghost" style="color:#186a3b" href="' . esc_url(lfi_nct_app_url('agenda-invite', ['ev' => $event_id])) . '">📅 Mettre dans l\'agenda des membres</a></div>';
+    }
+
     /* Formulaire : proposer un ou PLUSIEURS créneaux d'un coup. */
     echo '<details class="lfi-app-card" style="border-left:4px solid #186a3b" open><summary style="cursor:pointer;font-weight:800;color:#186a3b">➕ Proposer des dates / créneaux</summary>';
     echo '<form method="post" style="margin-top:8px">';
