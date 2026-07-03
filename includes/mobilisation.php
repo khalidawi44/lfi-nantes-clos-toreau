@@ -143,20 +143,36 @@ function lfi_nct_mobi_admin_notice() {
        . '<span style="margin-left:auto;font-size:.85em;opacity:.8">Voir →</span></a>';
 }
 
-/** Téléphones des membres à prévenir (même périmètre que l'outil SMS). */
+/** Téléphones des MEMBRES DU GA (comptes WP du groupe d'action), scopés. */
 function lfi_nct_mobi_member_phones() {
-    global $wpdb;
-    $mem = $wpdb->prefix . 'lfi_nct_membres';
-    if ($wpdb->get_var("SHOW TABLES LIKE '$mem'") !== $mem) return [];
-    $tels = $wpdb->get_col("SELECT tel FROM $mem WHERE tel <> '' AND abonne_emails = 1 AND jetable = 0 ORDER BY prenom, nom");
-    return array_values(array_filter(array_map('trim', (array) $tels)));
+    $ga = function_exists('lfi_nct_scope_ga_slug') ? (string) lfi_nct_scope_ga_slug() : '';
+    $role = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : '';
+    if ($role === '') return [];
+    $users = get_users(['role' => $role, 'number' => 500, 'fields' => ['ID']]);
+    $phones = [];
+    foreach ((array) $users as $u) {
+        $uga = (string) get_user_meta($u->ID, 'lfi_nct_ga', true);
+        if ($ga !== '' && $ga !== 'clos-toreau') { if ($uga !== $ga) continue; }
+        else { if (!in_array($uga, ['', 'clos-toreau'], true)) continue; }
+        $tel = trim((string) get_user_meta($u->ID, 'lfi_nct_tel', true));
+        if ($tel !== '') $phones[] = $tel;
+    }
+    return array_values(array_unique($phones));
 }
 
-/** Construit un lien « sms: » (iPhone) avec le corps pré-rempli. */
-function lfi_nct_mobi_sms_link($body) {
-    /* iOS : sms:&body=... ouvre Messages avec le texte prêt ; l'admin choisit
-       le groupe/destinataires. Simple et fiable cross-device pour le corps. */
-    return 'sms:&body=' . rawurlencode($body);
+/** Construit un lien « sms: » (iPhone) : destinataires + corps pré-rempli. */
+function lfi_nct_mobi_sms_link($body, $recipients = []) {
+    $nums = [];
+    foreach ((array) $recipients as $r) { $n = preg_replace('/[^\d+]/', '', (string) $r); if ($n !== '') $nums[] = $n; }
+    $addr = implode(',', array_values(array_unique($nums)));
+    /* iOS : sms:NUM1,NUM2&body=... ouvre Messages avec destinataires + texte. */
+    return 'sms:' . $addr . '&body=' . rawurlencode($body);
+}
+
+/** Seuil de « je participe » à partir duquel une action est ACTÉE (défaut 4). */
+function lfi_nct_mobi_vote_threshold() {
+    $n = (int) get_option('lfi_nct_mobi_vote_threshold', 4);
+    return $n > 0 ? $n : 4;
 }
 
 /**
@@ -467,6 +483,15 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         $names = array_map('lfi_nct_mobi_uname', $list);
         echo '<div class="com" style="font-size:.9em"><strong>👥 ' . count($list) . ' participant·e·s</strong>' . (count($names) ? ' : ' . esc_html(implode(', ', $names)) : ' — sois le/la premier·e !') . '</div>';
 
+        /* Vote → validation : à partir du seuil, l'action est ACTÉE. */
+        $seuil = lfi_nct_mobi_vote_threshold();
+        $actee = count($list) >= $seuil;
+        if ($actee) {
+            echo '<div style="margin-top:4px"><span style="background:#186a3b;color:#fff;font-weight:800;font-size:.75em;padding:3px 9px;border-radius:20px">✅ ACTION ACTÉE (' . count($list) . '/' . $seuil . ')</span></div>';
+        } else {
+            echo '<div style="margin-top:4px"><span style="background:#d39e00;color:#fff;font-weight:800;font-size:.75em;padding:3px 9px;border-radius:20px">🗳 EN VOTE (' . count($list) . '/' . $seuil . ') — encore ' . max(0, $seuil - count($list)) . ' pour lancer</span></div>';
+        }
+
         echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
         echo '<form method="post" style="display:inline">' . wp_nonce_field('lfi_mobi_join', '_wpnonce', true, false)
            . '<input type="hidden" name="lfi_mobi_join" value="' . (int) $r->id . '">'
@@ -476,14 +501,30 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
                . '<input type="hidden" name="lfi_mobi_del" value="' . (int) $r->id . '">'
                . '<button type="submit" class="btn-ghost" style="padding:6px 10px;font-size:.82em;color:#c8102e">🗑 Supprimer</button></form>';
         }
-        /* Admin : prévenir les membres par SMS (tap-to-send, corps pré-rempli). */
-        if (lfi_nct_mobi_can_mod()) {
-            $lieu_txt = trim((string) $r->lieu) !== '' ? ' (RDV ' . $r->lieu . ')' : '';
-            $sms_body = 'LFI Clos Toreau — ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt
-                      . '. Tu viens ? Dis-le sur l\'app : ' . lfi_nct_app_url('mobilisation', $back_args);
-            echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($sms_body)) . '" class="btn-ghost" style="padding:6px 10px;font-size:.82em;color:#0066a3">📣 Prévenir par SMS</a>';
-        }
         echo '</div>';
+
+        /* Admin : envoyer aux MEMBRES DU GA (vote avant, invitation une fois actée). */
+        if (lfi_nct_mobi_can_mod()) {
+            $phones = lfi_nct_mobi_member_phones();
+            $nph    = count($phones);
+            $lieu_txt = trim((string) $r->lieu) !== '' ? ' (RDV ' . $r->lieu . ')' : '';
+            $lien = lfi_nct_app_url('mobilisation', $back_args);
+            $vote_body = 'LFI Clos Toreau — Nouvelle action proposée : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt
+                       . '. Es-tu partant·e ? Vote « je participe » ici : ' . $lien;
+            $invit_body = 'LFI Clos Toreau — Action CONFIRMÉE : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt
+                        . '. On compte sur toi ! Détails & inscription : ' . $lien;
+            echo '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #eee">';
+            echo '<div style="font-size:.82em;color:#666;margin-bottom:4px">📣 Prévenir les <strong>' . $nph . ' membres du GA</strong> par SMS :</div>';
+            echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+            /* Avant l'actée : bouton VOTE mis en avant. Après : INVITATION. */
+            $vote_style = $actee ? 'btn-ghost' : 'btn-primary';
+            $inv_style  = $actee ? 'btn-primary' : 'btn-ghost';
+            echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($vote_body, $phones)) . '" class="' . $vote_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';color:#0066a3' : ';background:#d39e00') . '">🗳 Proposer au vote (' . $nph . ')</a>';
+            echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($invit_body, $phones)) . '" class="' . $inv_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';background:#186a3b' : ';color:#186a3b') . '">🎟️ Inviter les ' . $nph . ' membres</a>';
+            echo '</div>';
+            if ($nph === 0) echo '<div class="lfi-app-help" style="margin-top:4px"><small>Aucun numéro de membre enregistré — ajoute les téléphones des membres (fiche membre) pour l\'envoi groupé.</small></div>';
+            echo '</div>';
+        }
         echo '</li>';
     }
     echo '</ul>';
