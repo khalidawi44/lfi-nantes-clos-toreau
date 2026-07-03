@@ -60,11 +60,13 @@ function lfi_nct_render_form() {
                 <p class="lfi-help">Pour chaque problème coché, précisez <strong>depuis quand</strong> et <strong>combien de fois par an</strong> (estimation).</p>
                 <?php
                 $durees = [
-                    'moins_1_mois' => "Moins d'un mois",
-                    '1_6_mois'     => '1 à 6 mois',
-                    '6_12_mois'    => '6 à 12 mois',
-                    '1_5_ans'      => "Plus d'un an",
-                    'plus_5_ans'   => 'Plus de 5 ans',
+                    'moins_1_mois'        => "Moins d'un mois",
+                    '1_6_mois'            => '1 à 6 mois',
+                    '6_12_mois'           => '6 à 12 mois',
+                    '1_5_ans'             => "Plus d'un an",
+                    'plus_5_ans'          => 'Plus de 5 ans',
+                    'depuis_emmenagement' => "Depuis mon emménagement",
+                    'permanent'           => 'En permanence (toujours)',
                 ];
                 /* Sous-bloc « depuis quand + nombre de fois / an », ouvert quand on coche. */
                 $sub = function ($k) use ($durees) {
@@ -316,11 +318,13 @@ function lfi_nct_render_submission_summary($id) {
         'autre'            => 'Autre',
     ];
     $duree_labels = [
-        'moins_1_mois' => "Moins d'un mois",
-        '1_6_mois'     => '1 à 6 mois',
-        '6_12_mois'    => '6 à 12 mois',
-        '1_5_ans'      => "Plus d'un an",
-        'plus_5_ans'   => 'Plus de 5 ans',
+        'moins_1_mois'        => "Moins d'un mois",
+        '1_6_mois'            => '1 à 6 mois',
+        '6_12_mois'           => '6 à 12 mois',
+        '1_5_ans'             => "Plus d'un an",
+        'plus_5_ans'          => 'Plus de 5 ans',
+        'depuis_emmenagement' => "Depuis l'emménagement",
+        'permanent'           => 'En permanence',
     ];
     $rec_labels = [
         'permanent' => 'En permanence',

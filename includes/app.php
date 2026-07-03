@@ -766,6 +766,7 @@ function lfi_nct_app_shortcode() {
                     case 'email':           lfi_nct_app_view_email();           break;
                     case 'enquetes':        lfi_nct_app_view_enquetes();        break;
                     case 'enquete-edit':    lfi_nct_app_view_enquete_edit();    break;
+                    case 'enquetes-a-completer': lfi_nct_app_view_enquetes_a_completer(); break;
                     case 'enquetes-corbeille': lfi_nct_app_view_enquetes_corbeille(); break;
                     case 'enquetes-sms':    lfi_nct_app_view_enquetes_sms();    break;
                     case 'enquetes-email':  lfi_nct_app_view_enquetes_email();  break;
@@ -1193,6 +1194,7 @@ function lfi_nct_app_render_dashboard() {
         <?php endif; ?>
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_partner_admin_notice')) lfi_nct_partner_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_enq_todo_notice')) lfi_nct_enq_todo_notice(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
         <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
@@ -3522,6 +3524,12 @@ function lfi_nct_app_view_enquete_edit() {
         if ($addr_changed) { $upd['lat'] = null; $upd['lng'] = null; }
         $wpdb->update($table, $upd, ['id' => $id]);
         delete_transient('lfi_nct_known_addresses');
+        /* Note « à compléter » (ex. adhésion à faire signer). Vide = fiche OK. */
+        if (function_exists('lfi_nct_enq_todo_set')) {
+            $todo = sanitize_text_field(wp_unslash($_POST['acompleter_note'] ?? ''));
+            lfi_nct_enq_todo_set($id, $todo, get_current_user_id());
+            if (function_exists('lfi_nct_enq_ok_remove')) { if ($todo === '') { /* note effacée : on ne force rien */ } else lfi_nct_enq_ok_remove($id); }
+        }
         wp_safe_redirect(lfi_nct_app_url('enquetes', ['edited' => 1]));
         exit;
     }
@@ -3568,6 +3576,14 @@ function lfi_nct_app_view_enquete_edit() {
         echo '<option value="' . esc_attr($k) . '" ' . selected($cur_rec, $k, false) . '>' . esc_html($lab) . '</option>';
     }
     echo '</select></label>';
+
+    /* 🔖 À compléter : rappel pour revenir finir la fiche (ex. adhésion à signer). */
+    if (function_exists('lfi_nct_enq_todo_note')) {
+        $todo = lfi_nct_enq_todo_note($id);
+        echo '<h3 style="margin:14px 0 4px">🔖 À compléter (rappel)</h3>';
+        echo '<label>Ce qu\'il reste à faire chez cette personne<input type="text" name="acompleter_note" value="' . esc_attr($todo) . '" placeholder="ex : adhésion à faire signer, photos à prendre…"></label>';
+        echo '<div class="lfi-app-help" style="margin:2px 0 0"><small>Rempli = la fiche apparaît dans « 📝 Fiches à compléter » sur l\'accueil. Laisse vide quand tout est fait.</small></div>';
+    }
 
     echo '<div class="row-actions" style="margin-top:14px;display:flex;gap:8px">';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
