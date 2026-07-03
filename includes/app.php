@@ -72,9 +72,20 @@ add_action('save_post', function () { delete_transient('lfi_nct_survey_url'); })
 function lfi_nct_app_view_enquete() {
     if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     lfi_nct_app_screen_open('📋 Faire passer une enquête', 'Porte-à-porte — saisis les réponses sur place');
-    echo '<div class="lfi-nct-inapp-survey">';
+    /* Le rendu standalone de l'app N'IMPRIME PAS wp_head : on injecte donc
+       DIRECTEMENT le CSS et le JS du formulaire (sinon : formulaire non stylé
+       + le bloc « problèmes » ne s'ouvre pas quand on coche « Oui »). */
+    $v = LFI_NCT_VERSION;
+    echo '<link rel="stylesheet" href="' . esc_url(LFI_NCT_URL . 'assets/css/form.css?v=' . $v) . '">';
+    /* Fond clair : le formulaire est conçu pour un fond blanc, pas le thème
+       sombre de l'app → lisible et net. */
+    echo '<style>.lfi-inapp-survey{background:#fff;color:#1a1a1a;border-radius:12px;padding:14px;margin-top:6px}'
+       . '.lfi-inapp-survey input,.lfi-inapp-survey select,.lfi-inapp-survey textarea{background:#fff;color:#1a1a1a}'
+       . '.lfi-inapp-survey label,.lfi-inapp-survey h2,.lfi-inapp-survey h3,.lfi-inapp-survey legend,.lfi-inapp-survey p{color:#1a1a1a}</style>';
+    echo '<div class="lfi-inapp-survey">';
     echo function_exists('lfi_nct_survey_shortcode') ? lfi_nct_survey_shortcode() : do_shortcode('[lfi_nct_survey]');
     echo '</div>';
+    echo '<script src="' . esc_url(LFI_NCT_URL . 'assets/js/form.js?v=' . $v) . '"></script>';
     lfi_nct_app_screen_close(false);
 }
 
