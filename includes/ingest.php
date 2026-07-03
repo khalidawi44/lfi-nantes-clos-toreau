@@ -111,6 +111,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_activity_log',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/journal-add', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_journal_add',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
@@ -377,6 +382,26 @@ function lfi_nct_ingest_rest_activity_log($request) {
     /* Tri par dernière activité décroissante. */
     usort($out, function ($a, $b) { return strcmp($b['derniere'], $a['derniere']); });
     return new WP_REST_Response(['ok' => true, 'fenetre_jours' => $days, 'comptes' => count($out), 'log' => $out], 200);
+}
+
+/** Ajoute une note / un rappel dans le Journal de bord (option : épinglé). */
+function lfi_nct_ingest_rest_journal_add($request) {
+    if (!function_exists('lfi_nct_journal_add')) return new WP_REST_Response(['ok' => false, 'error' => 'journal_absent'], 404);
+    $titre = sanitize_text_field((string) $request->get_param('titre'));
+    $corps = sanitize_textarea_field((string) $request->get_param('corps'));
+    if ($titre === '' && $corps === '') return new WP_REST_Response(['ok' => false, 'error' => 'vide'], 400);
+    $args = [
+        'date_evt'  => sanitize_text_field((string) ($request->get_param('date') ?: wp_date('Y-m-d'))),
+        'categorie' => sanitize_key((string) ($request->get_param('categorie') ?: 'general')),
+        'titre'     => $titre,
+        'corps'     => $corps,
+        'pinned'    => (bool) $request->get_param('pinned'),
+    ];
+    $ga = $request->get_param('ga');
+    if ($ga !== null && $ga !== '') $args['ga'] = sanitize_text_field((string) $ga);
+    $id = (int) lfi_nct_journal_add($args);
+    if (!$id) return new WP_REST_Response(['ok' => false, 'error' => 'insertion_impossible'], 500);
+    return new WP_REST_Response(['ok' => true, 'id' => $id], 200);
 }
 
 /** Dépose une RÉPONSE PROPOSÉE (psy+architecte) dans un dossier. */
