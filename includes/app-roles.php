@@ -683,7 +683,10 @@ function lfi_nct_app_view_ga_dashboard() {
     $survey_url = lfi_nct_survey_url();
 
     $tiles = [
-        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
+        /* 5e élément = _blank : l'enquête s'ouvre dans le navigateur, fiable même
+           en PWA installée sur un vieil Android (évite les blocages de navigation
+           interne / service worker). */
+        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url, '_blank'],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
         ['🤖', 'Aide & contact',            'Un problème ? On t\'accompagne',      lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
@@ -710,8 +713,8 @@ function lfi_nct_app_view_ga_dashboard() {
 
         <h3 style="margin:18px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📣 Mes actions</h3>
         <div class="lfi-app-grid">
-            <?php foreach ($tiles as $t): ?>
-                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+            <?php foreach ($tiles as $t): $tgt = !empty($t[4]) ? ' target="' . esc_attr($t[4]) . '" rel="noopener"' : ''; ?>
+                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>"<?php echo $tgt; ?>>
                     <div class="ico"><?php echo $t[0]; ?></div>
                     <div class="tit"><?php echo esc_html($t[1]); ?></div>
                     <div class="sub"><?php echo esc_html($t[2]); ?></div>
