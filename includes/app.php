@@ -670,6 +670,7 @@ function lfi_nct_app_shortcode() {
         'inscription-ga'         => 'lfi_nct_app_view_inscription_ga',
         'flyer'                  => 'lfi_nct_app_view_flyer',
         'aide'                   => 'lfi_nct_app_view_aide',
+        'infos-cles'             => 'lfi_nct_app_view_infos_cles',
     ];
     if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
         call_user_func($public_routes[$vue_public]);
