@@ -100,7 +100,7 @@ function lfi_nct_alertes_auto() {
                 $out[] = [
                     'prio'   => 'haute',
                     'titre'  => '📈 Remonter à Christophe Jouin (CA NMH) — ' . $full,
-                    'detail' => 'Dialogue Morineau rompu (délai dépassé de ' . $late . ' j). Étape amiable : escalade au décideur (christophe.jouin@mairie-nantes.fr). On transmet les demandes, PAS le chiffrage ni les coordonnées.',
+                    'detail' => 'Dialogue Morineau rompu (délai dépassé de ' . $late . ' j). Étape amiable : escalade au décideur (christophe.jouin@mairie-nantes.fr). On donne le NOM de ce locataire + ses demandes (pas l\'enquête entière, pas le chiffrage).',
                     'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
                 ];
                 $out[] = [
