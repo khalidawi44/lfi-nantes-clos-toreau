@@ -2437,6 +2437,9 @@ function lfi_nct_app_view_comptes_locataires() {
                     $data['problemes_types_autre'] = sanitize_text_field(wp_unslash($_POST['problemes_types_autre'] ?? ''));
                     $data['problemes_gravite']    = max(0, min(10, (int) ($_POST['problemes_gravite'] ?? 0)));
                     $data['problemes_duree']      = sanitize_text_field(wp_unslash($_POST['problemes_duree'] ?? ''));
+                    $old_ville = (string) ($data['ville'] ?? '');
+                    $data['ville']   = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
+                    $data['enfants'] = sanitize_text_field(wp_unslash($_POST['enfants'] ?? ''));
                     $upd = [
                         'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
                     ];
@@ -2444,7 +2447,12 @@ function lfi_nct_app_view_comptes_locataires() {
                     $etage_in   = sanitize_text_field(wp_unslash($_POST['etage']   ?? ''));
                     if ($adresse_in !== '') $upd['adresse'] = function_exists('lfi_nct_normalize_address') ? lfi_nct_normalize_address($adresse_in) : $adresse_in;
                     if ($etage_in !== '')   $upd['etage']   = $etage_in;
+                    /* Ville renseignée/changée → on efface les coords pour re-géocoder. */
+                    $ville_changed = trim($data['ville']) !== trim($old_ville);
+                    if ($ville_changed) { $upd['lat'] = null; $upd['lng'] = null; }
                     $wpdb->update($wpdb->prefix . 'lfi_nct_responses', $upd, ['id' => $rid]);
+                    /* Re-route : avec la ville, la fiche se rattache au bon GA. */
+                    if ($ville_changed && function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission($rid);
                 }
             }
             wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'edited' => $uid, 'open' => $uid]));
@@ -2758,8 +2766,11 @@ function lfi_nct_app_view_comptes_locataires() {
                 echo '<input type="hidden" name="edit_probleme" value="1">';
                 echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
                 echo '<label>Adresse<input type="text" name="adresse" value="' . esc_attr($resp_row->adresse) . '"></label>';
+                echo '<label>Ville / commune <span style="color:#c8102e">*</span><input type="text" name="ville" value="' . esc_attr($data['ville'] ?? '') . '" placeholder="Ex : Nantes"></label>';
                 echo '<label>Étage<input type="text" name="etage" value="' . esc_attr($resp_row->etage) . '"></label>';
+                echo '<label>Nombre d\'enfants<input type="number" name="enfants" min="0" value="' . esc_attr($data['enfants'] ?? '') . '" placeholder="ex : 3"></label>';
                 echo '</div>';
+                echo '<div class="lfi-app-help" style="margin:2px 0 6px"><small>⚠️ La <strong>ville</strong> est indispensable pour rattacher la fiche au bon groupe d\'action.</small></div>';
 
                 $type_labels = [
                     'degats_eaux'      => '💧 Dégâts des eaux',
