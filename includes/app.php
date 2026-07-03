@@ -751,6 +751,7 @@ function lfi_nct_app_shortcode() {
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                     'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
+                    'partenaires', 'partenaire-espace',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
                     wp_safe_redirect(lfi_nct_app_url());
@@ -786,6 +787,8 @@ function lfi_nct_app_shortcode() {
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
                     case 'mon-profil':      lfi_nct_app_view_mon_profil();      break;
                     case 'installer':       lfi_nct_app_view_installer();       break;
+                    case 'partenaires':        lfi_nct_app_view_partenaires();        break;
+                    case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
                     case 'interventions':         lfi_nct_app_view_interventions();          break;
                     case 'intervention-add':      lfi_nct_app_view_intervention_add();       break;
                     case 'intervention-edit':     lfi_nct_app_view_intervention_edit();      break;
@@ -2352,6 +2355,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
+            ['🤝', 'Élu·es partenaires',       'Espace privé · ligne directe · dossier partagé', lfi_nct_app_url('partenaires')],
             ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
             ['💶', 'Où va mon loyer ? (audit NMH)', 'Chiffres CRC sourcés · 3 versions', lfi_nct_app_url('audit-nmh')],
             ['🌐', 'Tableau de bord du réseau', 'Tous les GA · stats cumulées',       lfi_nct_app_url('reseau-ga')],
