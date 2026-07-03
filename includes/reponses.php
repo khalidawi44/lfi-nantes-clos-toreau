@@ -57,9 +57,12 @@ function lfi_nct_generate_reply_body($row, $recu, $intention, $precisions, $sign
 
     switch ($intention) {
         case 'relogement':
+            /* IMPORTANT : on ne cite QUE des faits documentés. Aucune mention
+               d'une situation médicale — sauf si un certificat figure réellement
+               au dossier (ajouté par la clause conditionnelle plus bas). */
             $coeur = "Après échange avec la personne que j'accompagne, sa décision est claire : elle demande son RELOGEMENT dans un logement décent et adapté à sa situation.\n"
                 . "Je vous demande de m'indiquer, sous 8 jours, les possibilités de mutation correspondant à sa composition familiale, ainsi que la procédure à suivre. "
-                . "La présence de désordres affectant la décence (art. 1719 du Code civil, décret n° 2002-120) et, le cas échéant, la situation médicale attestée (art. L.521-3-1 du CCH, dispositif DALO) fondent une demande de relogement prioritaire.";
+                . "La présence de désordres affectant la décence (art. 1719 du Code civil, décret n° 2002-120) fonde une demande de relogement prioritaire.";
             break;
         case 'accepte_travaux':
             $coeur = "Après échange avec la personne que j'accompagne, elle ACCEPTE la réalisation des travaux.\n"
