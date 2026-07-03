@@ -661,6 +661,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
             /* Coordination : proposer une action, dire ses dispos, voir celles
                de l'équipe. Accessible à tout membre (aucune donnée locataire). */
             case 'mobilisation':     lfi_nct_app_view_mobilisation();     break;
+            case 'elus':             lfi_nct_app_view_elus_membre();      break;
             case 'suggerer-outil':   lfi_nct_app_view_suggerer_outil();   break;
             case 'propositions':     lfi_nct_app_view_propositions();     break;
             case 'dispos':           lfi_nct_app_view_dispos();           break;
@@ -711,6 +712,7 @@ function lfi_nct_app_view_ga_dashboard() {
     /* Coordination : se mobiliser sur des actions liées aux événements/campagnes. */
     $coord_tiles = [
         ['🤝', 'Se coordonner',             'Tractage kermesse, campagnes… je participe', lfi_nct_app_url('mobilisation')],
+        ['🏛️', 'Nos élu·es',                'À qui s\'adresser selon le secteur',   lfi_nct_app_url('elus')],
         ['🏆', 'Nos victoires',             'Ce qu\'on a obtenu ensemble',          lfi_nct_app_url('victoires')],
         ['💡', 'Idées d\'actions',          'Proposer / soutenir une idée',        lfi_nct_app_url('propositions')],
         ['🧰', 'Suggérer un outil',         'Un besoin sur ton terrain ?',         lfi_nct_app_url('suggerer-outil')],

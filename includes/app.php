@@ -752,6 +752,7 @@ function lfi_nct_app_shortcode() {
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                     'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
                     'partenaires', 'partenaire-espace',
+                    'sante', 'sante-analyse', 'sante-propositions',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
                     wp_safe_redirect(lfi_nct_app_url());
@@ -789,6 +790,11 @@ function lfi_nct_app_shortcode() {
                     case 'installer':       lfi_nct_app_view_installer();       break;
                     case 'partenaires':        lfi_nct_app_view_partenaires();        break;
                     case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
+                    case 'ase':                lfi_nct_app_view_ase();                break;
+                    case 'elus':               lfi_nct_app_view_elus_membre();        break;
+                    case 'sante':              lfi_nct_app_view_sante();              break;
+                    case 'sante-analyse':      lfi_nct_app_view_sante_analyse();      break;
+                    case 'sante-propositions': lfi_nct_app_view_sante_propositions(); break;
                     case 'interventions':         lfi_nct_app_view_interventions();          break;
                     case 'intervention-add':      lfi_nct_app_view_intervention_add();       break;
                     case 'intervention-edit':     lfi_nct_app_view_intervention_edit();      break;
@@ -1175,6 +1181,15 @@ function lfi_nct_app_render_dashboard() {
         </div>
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
+        <?php if (function_exists('lfi_nct_user_role_partner') && lfi_nct_user_role_partner() && !current_user_can('manage_options')): ?>
+            <a href="<?php echo esc_url(lfi_nct_app_url('espace')); ?>" style="text-decoration:none;color:inherit;display:block">
+              <div style="margin:0 0 14px;background:linear-gradient(135deg,#4b2e83,#6f4bb0);color:#fff;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+                <div style="font-size:1.8em">🏛️</div>
+                <div style="flex:1"><div style="font-weight:900">Mon espace élu·e</div><div style="font-size:.88em;opacity:.95">Ta ligne directe avec Fabrice + ton dossier partagé</div></div>
+                <div style="background:rgba(255,255,255,.22);border-radius:20px;padding:6px 12px;font-weight:800;font-size:.85em">Ouvrir →</div>
+              </div>
+            </a>
+        <?php endif; ?>
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
@@ -2354,6 +2369,9 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
+        '👶 VOLET PROTECTION DE L\'ENFANCE' => [
+            ['👶', 'Protection de l\'enfance', 'ASE · Conseil départemental · séparé du logement', lfi_nct_app_url('ase')],
+        ],
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
             ['🤝', 'Élu·es partenaires',       'Espace privé · ligne directe · dossier partagé', lfi_nct_app_url('partenaires')],
             ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
@@ -2367,6 +2385,8 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
         '🇫🇷 VOLET NATIONAL — député·es' => [
+            ['🤝', 'Élu·es partenaires',        'Espace privé des député·es',         lfi_nct_app_url('partenaires')],
+            ['🩺', 'Santé publique (puffs)',    'Dossier national + européen',        lfi_nct_app_url('sante')],
             ['🇫🇷', 'Stratégie nationale',      'Remonter · multi-GA · députation',   lfi_nct_app_url('strategie-nationale')],
             ['🇫🇷', 'Tableau de bord national', 'Chiffres cumulés pour argumenter',   lfi_nct_app_url('national')],
             ['🗣️', 'Éléments de langage',       'Arguments prêts à l\'emploi',        lfi_nct_app_url('national-args')],

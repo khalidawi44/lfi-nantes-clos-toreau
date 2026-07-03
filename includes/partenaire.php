@@ -231,7 +231,12 @@ function lfi_nct_app_view_partenaire_dashboard() {
     /* 3) Ligne directe + dossier partagé. */
     lfi_nct_partner_render_shared($uid, $back);
 
-    /* 4) Organigramme des responsables de GA (appel direct). */
+    /* 4) Les autres élu·es (contact direct réservé aux élu·es). */
+    echo '<h3 style="margin:22px 0 6px;color:#4b2e83">🏛️ Les autres élu·es</h3>';
+    echo '<div class="lfi-app-help">Tu peux les contacter directement (c\'est réservé aux élu·es et à Fabrice).</div>';
+    lfi_nct_render_elus_directory(true);
+
+    /* 5) Organigramme des responsables de GA (appel direct). */
     lfi_nct_partner_render_organigramme();
 
     echo '<h3 style="margin:22px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">⚙️ Mon compte</h3>';
@@ -284,6 +289,70 @@ function lfi_nct_partner_render_organigramme() {
         echo '</li>';
     }
     echo '</ul>';
+}
+
+/* Vue MEMBRE : « Nos élu·es — à qui s'adresser » (lecture seule, sans contact). */
+function lfi_nct_app_view_elus_membre() {
+    if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    lfi_nct_app_screen_open('🏛️ Nos élu·es', 'À qui s\'adresser selon le secteur');
+    echo '<div class="lfi-app-help">Tu ne sais pas vers qui te tourner pour telle question ? Voici <strong>nos élu·es</strong> et leur secteur. Tu notes ta question, l\'équipe fait le relais avec la bonne personne.</div>';
+    lfi_nct_render_elus_directory(false);
+    $elus = get_users(['role' => LFI_NCT_ROLE_PARTNER, 'number' => 1]);
+    if (empty($elus)) echo '<div class="lfi-app-empty">L\'organigramme se remplit — reviens bientôt.</div>';
+    lfi_nct_app_screen_close();
+}
+
+/* -------------------------------------------------------------- *
+ *  Niveau / secteur d'un·e élu·e partenaire                       *
+ * -------------------------------------------------------------- */
+function lfi_nct_partner_level($uid) {
+    $l = (string) get_user_meta((int) $uid, 'lfi_nct_partner_level', true);
+    return in_array($l, ['municipal', 'national', 'europeen'], true) ? $l : 'municipal';
+}
+function lfi_nct_partner_scope($uid) {
+    return trim((string) get_user_meta((int) $uid, 'lfi_nct_partner_scope', true));
+}
+
+/**
+ * Annuaire des élu·es (organigramme « à qui s'adresser »).
+ * $with_contact = true  → réservé aux ÉLU·ES et à l'ADMIN : téléphone + email.
+ * $with_contact = false → pour les MEMBRES : juste qui fait quoi, AUCUN contact
+ *   direct (ce sont les élu·es et Fabrice qui se contactent entre eux).
+ */
+function lfi_nct_render_elus_directory($with_contact = false) {
+    $elus = get_users(['role' => LFI_NCT_ROLE_PARTNER, 'orderby' => 'display_name']);
+    if (empty($elus)) return;
+    $niveaux = [
+        'municipal' => ['🏛️ Élu·es municipaux', '#4b2e83'],
+        'national'  => ['🇫🇷 Député·es (national)', '#0066a3'],
+        'europeen'  => ['🇪🇺 Député·es européen·nes', '#1a7a3a'],
+    ];
+    $grp = ['municipal' => [], 'national' => [], 'europeen' => []];
+    foreach ($elus as $u) $grp[lfi_nct_partner_level($u->ID)][] = $u;
+
+    foreach ($niveaux as $lvl => $meta) {
+        if (empty($grp[$lvl])) continue;
+        echo '<h3 style="margin:16px 0 6px;color:' . esc_attr($meta[1]) . '">' . $meta[0] . '</h3>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($grp[$lvl] as $u) {
+            $scope = lfi_nct_partner_scope($u->ID);
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . esc_attr($meta[1]) . '">';
+            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div></div>';
+            if ($scope !== '') echo '<div class="meta"><span class="meta-chip">🎯 ' . esc_html($scope) . '</span></div>';
+            if ($with_contact) {
+                $tel = trim((string) get_user_meta($u->ID, 'lfi_nct_tel', true));
+                echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
+                if ($tel !== '') echo '<a class="btn-primary" style="background:' . esc_attr($meta[1]) . '" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
+                if (is_email($u->user_email)) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email</a>';
+                echo '</div>';
+            }
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+    if (!$with_contact) {
+        echo '<div class="lfi-app-help" style="margin-top:6px"><small>Pour une question sur un secteur, note-la et passe par ton binôme d\'animation du GA — ce sont les élu·es et l\'équipe qui font le relais.</small></div>';
+    }
 }
 
 /* -------------------------------------------------------------- *
@@ -361,8 +430,23 @@ function lfi_nct_app_view_partenaires() {
         wp_safe_redirect(lfi_nct_app_url('partenaires', ['err' => 1])); exit;
     }
 
+    /* Promouvoir un COMPTE EXISTANT en élu·e partenaire (ex. Irina, déjà admin
+       du GA Dervallières) : on lui AJOUTE le rôle partenaire, sans lui retirer
+       son rôle actuel — elle garde sa console de GA + gagne son espace élu·e. */
+    if (!empty($_POST['lfi_partner_promote']) && check_admin_referer('lfi_partner_promote')) {
+        $puid = (int) ($_POST['user_id'] ?? 0);
+        $u = $puid ? get_user_by('id', $puid) : null;
+        if ($u) {
+            $u->add_role(LFI_NCT_ROLE_PARTNER);
+            $tg = sanitize_text_field(wp_unslash($_POST['telegram'] ?? ''));
+            if ($tg !== '') update_user_meta($puid, 'lfi_nct_telegram', $tg);
+            wp_safe_redirect(lfi_nct_app_url('partenaire-espace', ['uid' => $puid, 'promu' => 1])); exit;
+        }
+        wp_safe_redirect(lfi_nct_app_url('partenaires', ['err' => 1])); exit;
+    }
+
     lfi_nct_app_screen_open('🤝 Élu·es partenaires', 'Comptes privilégiés, cloisonnés — ligne directe + dossier partagé');
-    if (!empty($_GET['err'])) lfi_nct_app_flash('⚠️ Création impossible (email déjà utilisé ou invalide).', 'error');
+    if (!empty($_GET['err'])) lfi_nct_app_flash('⚠️ Opération impossible (email déjà utilisé, invalide, ou compte introuvable).', 'error');
 
     $partners = get_users(['role' => LFI_NCT_ROLE_PARTNER, 'orderby' => 'display_name']);
     if (!empty($partners)) {
@@ -392,6 +476,27 @@ function lfi_nct_app_view_partenaires() {
     echo '<div style="margin-top:8px"><button type="submit" class="btn-primary" style="background:#186a3b">Créer le compte + obtenir le lien</button></div>';
     echo '</form></details>';
 
+    /* Promouvoir un compte EXISTANT (ex. Irina, déjà admin d'un GA). */
+    $candidats = get_users(['role__in' => array_filter([
+        defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : '',
+    ]), 'orderby' => 'display_name', 'number' => 500]);
+    $opts = '';
+    foreach ($candidats as $c) {
+        if (lfi_nct_user_role_partner($c->ID)) continue; /* déjà élu·e */
+        $ga = (string) get_user_meta($c->ID, 'lfi_nct_ga', true);
+        $opts .= '<option value="' . (int) $c->ID . '">' . esc_html($c->display_name) . ($ga ? ' — ' . esc_html($ga) : '') . '</option>';
+    }
+    if ($opts !== '') {
+        echo '<details class="lfi-app-card" style="border-left:4px solid #4b2e83"><summary style="cursor:pointer;font-weight:800;color:#4b2e83">🏛️ Promouvoir un compte existant en élu·e</summary>';
+        echo '<div class="lfi-app-help" style="margin:6px 0"><small>Pour une personne <strong>déjà inscrite</strong> (ex. une admin de GA qui est aussi élue municipale). On lui <strong>ajoute</strong> son espace élu·e — elle garde son rôle actuel.</small></div>';
+        echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_promote', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_partner_promote" value="1">';
+        echo '<div style="margin:6px 0"><label>Personne<br><select name="user_id" required style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px">' . $opts . '</select></label></div>';
+        echo '<div style="margin:6px 0"><label>Telegram (optionnel)<br><input type="text" name="telegram" placeholder="@…" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px"></label></div>';
+        echo '<div style="margin-top:8px"><button type="submit" class="btn-primary" style="background:#4b2e83">🏛️ Créer son espace élu·e</button></div>';
+        echo '</form></details>';
+    }
+
     lfi_nct_app_screen_close();
 }
 
@@ -413,6 +518,16 @@ function lfi_nct_app_view_partenaire_espace() {
         }
         wp_safe_redirect(add_query_arg('mailok', 1, $back)); exit;
     }
+    /* Niveau + secteur (pour l'organigramme « à qui s'adresser »). */
+    if (!empty($_POST['lfi_partner_scope']) && check_admin_referer('lfi_partner_scope')) {
+        $lvl = sanitize_key($_POST['level'] ?? 'municipal');
+        if (!in_array($lvl, ['municipal', 'national', 'europeen'], true)) $lvl = 'municipal';
+        update_user_meta($uid, 'lfi_nct_partner_level', $lvl);
+        update_user_meta($uid, 'lfi_nct_partner_scope', sanitize_text_field(wp_unslash($_POST['scope'] ?? '')));
+        $tel = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
+        if ($tel !== '') update_user_meta($uid, 'lfi_nct_tel', $tel);
+        wp_safe_redirect(add_query_arg('scopeok', 1, $back)); exit;
+    }
     /* Génère (ou régénère) le lien magique — sur clic explicite uniquement,
        car chaque génération invalide la précédente (usage unique). */
     $fresh_link = '';
@@ -427,7 +542,9 @@ function lfi_nct_app_view_partenaire_espace() {
     if (!empty($_GET['del']))    lfi_nct_app_flash('🗑 Élément retiré.');
     if (!empty($_GET['msg']))    lfi_nct_app_flash('✅ Message envoyé.');
     if (!empty($_GET['mailok'])) lfi_nct_app_flash('✅ Email mis à jour.');
+    if (!empty($_GET['scopeok'])) lfi_nct_app_flash('✅ Niveau & secteur enregistrés.');
     if (!empty($_GET['cree']))   lfi_nct_app_flash('✅ Compte créé — génère son lien + le message Telegram ci-dessous.');
+    if (!empty($_GET['promu']))  lfi_nct_app_flash('✅ Espace élu·e créé. Elle garde son rôle actuel + accède à « 🏛️ Mon espace élu·e ». Génère son lien ci-dessous si besoin.');
 
     /* ===== Bloc « Message Telegram prêt à envoyer » ===== */
     $tg = get_user_meta($uid, 'lfi_nct_telegram', true);
@@ -466,6 +583,23 @@ function lfi_nct_app_view_partenaire_espace() {
     }
     echo '</div>';
 
+    /* ===== Niveau + secteur (pour l'organigramme « à qui s'adresser ») ===== */
+    $cur_lvl = lfi_nct_partner_level($uid);
+    $cur_scope = lfi_nct_partner_scope($uid);
+    $cur_tel = trim((string) get_user_meta($uid, 'lfi_nct_tel', true));
+    echo '<div class="lfi-app-card" style="border-left:4px solid #0066a3">';
+    echo '<div class="head"><div class="who">🎯 Niveau & secteur (organigramme)</div></div>';
+    echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_partner_scope', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_partner_scope" value="1">';
+    echo '<div style="margin:6px 0"><label>Niveau<br><select name="level" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px">';
+    foreach (['municipal' => '🏛️ Municipal', 'national' => '🇫🇷 National (député·e)', 'europeen' => '🇪🇺 Européen'] as $k => $lab) {
+        echo '<option value="' . esc_attr($k) . '"' . selected($k, $cur_lvl, false) . '>' . esc_html($lab) . '</option>';
+    }
+    echo '</select></label></div>';
+    echo '<div style="margin:6px 0"><label>Secteur / rôle (visible par les membres)<br><input type="text" name="scope" value="' . esc_attr($cur_scope) . '" maxlength="160" placeholder="ex : secteur Dervallières · logement / social" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px"></label></div>';
+    echo '<div style="margin:6px 0"><label>Téléphone (visible seulement par les élu·es et toi)<br><input type="tel" name="tel" value="' . esc_attr($cur_tel) . '" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px"></label></div>';
+    echo '<div style="margin-top:8px"><button type="submit" class="btn-ghost" style="color:#0066a3">💾 Enregistrer</button></div></form></div>';
+
     lfi_nct_partner_render_shared($uid, $back);
     lfi_nct_app_screen_close();
 }
@@ -477,6 +611,20 @@ function lfi_nct_app_view_partenaire_espace() {
 function lfi_nct_partner_dispatch() {
     if (!lfi_nct_user_role_partner()) return false;
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+
+    /* Cas d'un·e élu·e QUI EST AUSSI admin de GA (ex. Irina, admin du GA
+       Dervallières) : on ne lui confisque pas sa console. On ne prend en main
+       QUE la route « espace » (son espace élu·e) ; tout le reste passe à son
+       tableau de bord d'admin de GA. */
+    $also_admin = current_user_can('manage_options')
+               || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    if ($also_admin) {
+        if ($vue === 'espace') { lfi_nct_app_view_partenaire_dashboard(); return true; }
+        if ($vue === 'nmh')    { lfi_nct_app_view_partenaire_nmh();       return true; }
+        return false; /* garde sa console d'admin pour tout le reste */
+    }
+
+    /* Élu·e « pur » (sans autre rôle) : espace dédié pour tout. */
     switch ($vue) {
         case 'nmh':        lfi_nct_app_view_partenaire_nmh(); break;
         case 'audit-nmh':  lfi_nct_app_view_audit_nmh();  break;
@@ -523,4 +671,31 @@ function lfi_nct_partner_seed_william() {
         update_user_meta($uid, 'lfi_nct_partner_seed', 'william');
     }
     update_option('lfi_nct_partner_seed_william_done', 1, false);
+}
+
+/* -------------------------------------------------------------- *
+ *  SEED best-effort : Irina (élue municipale, déjà admin d'un GA). *
+ *  On lui AJOUTE le rôle partenaire si on la trouve SANS ambiguïté  *
+ *  (un seul compte dont le prénom/nom commence par « Irina »).      *
+ *  Sinon on ne touche à rien : l'admin la promeut via l'UI.         *
+ * -------------------------------------------------------------- */
+add_action('init', 'lfi_nct_partner_seed_irina', 13);
+function lfi_nct_partner_seed_irina() {
+    if (get_option('lfi_nct_partner_seed_irina_done')) return;
+    if (!get_role(LFI_NCT_ROLE_PARTNER)) return;
+
+    $matches = get_users(['search' => 'Irina*', 'search_columns' => ['user_login', 'display_name', 'user_nicename'], 'number' => 5]);
+    if (empty($matches)) {
+        /* Recherche complémentaire sur le prénom (meta first_name). */
+        $matches = get_users(['meta_key' => 'first_name', 'meta_value' => 'Irina', 'number' => 5]);
+    }
+    /* On n'agit QUE si exactement une candidate → aucune ambiguïté. */
+    if (count($matches) === 1) {
+        $u = $matches[0];
+        if (!lfi_nct_user_role_partner($u->ID)) $u->add_role(LFI_NCT_ROLE_PARTNER);
+        update_user_meta($u->ID, 'lfi_nct_partner_seed', 'irina');
+        update_option('lfi_nct_partner_seed_irina_done', 1, false);
+    }
+    /* Si 0 ou plusieurs : on laisse le flag à 0 pour retenter, et l'admin
+       peut promouvoir manuellement depuis « 🤝 Élu·es partenaires ». */
 }
