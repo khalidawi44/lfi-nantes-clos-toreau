@@ -281,7 +281,13 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
     $mil_perim = lfi_nct_geo_perimetre($mil_ga);
     $mil_commune = (string) ($mil_perim['commune'] ?? '');
 
-    $geo = lfi_nct_geo_geocode_detailed($row->adresse, $mil_commune);
+    /* On privilégie la VILLE saisie dans le formulaire (donnée de l'utilisateur) ;
+       à défaut, la commune du·de la militant·e. */
+    $data_arr = json_decode((string) $row->data, true);
+    $survey_ville = is_array($data_arr) ? trim((string) ($data_arr['ville'] ?? '')) : '';
+    $hint = $survey_ville !== '' ? $survey_ville : $mil_commune;
+
+    $geo = lfi_nct_geo_geocode_detailed($row->adresse, $hint);
     if (!$geo) return; /* non géocodable → on ne force rien */
     $wpdb->update($table, ['lat' => $geo['lat'], 'lng' => $geo['lng']], ['id' => $sub_id]);
 
