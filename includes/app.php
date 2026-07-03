@@ -52,8 +52,9 @@ function lfi_nct_survey_url() {
         $by = get_page_by_path('enquete-logement-clos-toreau');
         if ($by) $url = get_permalink($by);
     }
-    /* 3) Dernier recours : le slug historique (au moins ça ne casse pas le code). */
-    if (!$url) $url = lfi_nct_survey_url();
+    /* 3) Dernier recours : le slug historique en dur (JAMAIS un appel récursif —
+       sinon récursion infinie → erreur fatale si aucune page n'est trouvée). */
+    if (!$url) $url = home_url('/enquete-logement-clos-toreau/');
 
     set_transient('lfi_nct_survey_url', $url, HOUR_IN_SECONDS);
     return $url;
