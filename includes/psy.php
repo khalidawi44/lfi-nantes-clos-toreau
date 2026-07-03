@@ -21,8 +21,12 @@ if (!defined('ABSPATH')) exit;
  */
 function lfi_nct_psy_analyse($text, $type = 'institution') {
     $t = ' ' . mb_strtolower((string) $text) . ' ';
+    /* Match par DÉBUT DE MOT : évite qu'un mot-clé court soit reconnu au milieu
+       d'un autre mot (ex. « normal » ne doit PAS matcher « anormal », sens inverse). */
     $has = function ($needles) use ($t) {
-        foreach ((array) $needles as $n) if (mb_strpos($t, $n) !== false) return true;
+        foreach ((array) $needles as $n) {
+            if (preg_match('/(?<![\p{L}])' . preg_quote($n, '/') . '/u', $t)) return true;
+        }
         return false;
     };
 
