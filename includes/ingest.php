@@ -121,6 +121,11 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_page_set',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/member-news-add', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_member_news_add',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/frais-add', [
         'methods'             => 'POST',
         'callback'            => 'lfi_nct_ingest_rest_frais_add',
@@ -545,6 +550,16 @@ function lfi_nct_ingest_rest_page_set($request) {
         'url'   => get_permalink($pid),
         'front' => $front,
     ], 200);
+}
+
+/** Ajoute une annonce « quoi de neuf » (pop-up affiché aux membres du GA). */
+function lfi_nct_ingest_rest_member_news_add($request) {
+    if (!function_exists('lfi_nct_news_add')) return new WP_REST_Response(['ok' => false, 'error' => 'module_absent'], 404);
+    $titre = sanitize_text_field((string) $request->get_param('titre'));
+    $corps = (string) $request->get_param('corps');
+    if ($titre === '' && $corps === '') return new WP_REST_Response(['ok' => false, 'error' => 'vide'], 400);
+    $id = lfi_nct_news_add($titre, $corps);
+    return new WP_REST_Response(['ok' => true, 'id' => (int) $id], 200);
 }
 
 /** Ajoute une note / un rappel dans le Journal de bord (option : épinglé). */
