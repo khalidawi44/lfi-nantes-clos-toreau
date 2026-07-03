@@ -461,6 +461,15 @@ function lfi_nct_app_view_dossier() {
         echo '</div>';
         echo '<textarea readonly onclick="this.select()" style="width:100%;height:90px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';
         if (!$tel && !$has_mail) echo '<div class="lfi-app-help" style="margin-top:4px"><small>⚠️ Ni numéro ni email — copie le message et transmets-le comme tu peux.</small></div>';
+        /* Après l'envoi : marquer l'étape « partager l'espace » faite → l'action
+           disparaît du tableau de bord et l'étape suivante apparaît. */
+        $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+        $sidx = -1;
+        if (is_array($steps)) foreach ($steps as $i => $s) { if (empty($s['done']) && stripos((string) ($s['text'] ?? ''), 'partager l\'espace') !== false) { $sidx = $i; break; } }
+        if ($sidx >= 0) {
+            $du = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_tenant_step_done&uid=' . (int) $u->ID . '&idx=' . $sidx), 'lfi_nct_tstep_' . (int) $u->ID . '_' . $sidx);
+            echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url($du) . '">✅ SMS envoyé — passer à l\'étape suivante</a></div>';
+        }
     } else {
         echo '<form method="post" style="margin-top:8px">';
         wp_nonce_field('lfi_share_tenant');
@@ -609,6 +618,66 @@ function lfi_nct_app_view_dossier() {
 /* ============================================================== *
  *  Parcours de suivi — checklist d'étapes (numérotée, cochable)    *
  * ============================================================== */
+/* ============================================================== *
+ *  FIL D'ACTIONS UNIFIÉ (tableau de bord admin) — la prochaine     *
+ *  étape de CHAQUE locataire suivi, cochable en un clic.           *
+ * ============================================================== */
+
+/** Handler « ✓ Fait » : coche l'étape et passe à la suivante. */
+add_action('admin_post_lfi_nct_tenant_step_done', 'lfi_nct_tenant_step_done_handler');
+function lfi_nct_tenant_step_done_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $uid = (int) ($_GET['uid'] ?? 0);
+    $idx = (int) ($_GET['idx'] ?? -1);
+    $can = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    if ($uid && $idx >= 0 && $can && $in_scope && check_admin_referer('lfi_nct_tstep_' . $uid . '_' . $idx)) {
+        $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
+        if (is_array($steps) && isset($steps[$idx])) {
+            $steps[$idx]['done'] = true;
+            update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+        }
+    }
+    wp_safe_redirect(lfi_nct_app_url('', ['stepok' => 1])); exit;
+}
+
+/** Fil « Mes actions locataires » sur le tableau de bord : la 1re étape non faite
+ *  de chaque dossier suivi, avec « ✓ Fait » (avance) et « Ouvrir le dossier ». */
+function lfi_nct_render_home_tenant_actions() {
+    $can = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    if (!$can) return;
+    $args = ['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'number' => 300, 'fields' => ['ID', 'display_name']];
+    if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
+    $users = get_users($args);
+    $items = [];
+    foreach ($users as $u) {
+        $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+        if (!is_array($steps) || empty($steps)) continue;
+        $idx = -1;
+        foreach ($steps as $i => $s) { if (empty($s['done'])) { $idx = $i; break; } }
+        if ($idx < 0) continue;
+        $done_n = 0; foreach ($steps as $s) if (!empty($s['done'])) $done_n++;
+        $items[] = ['uid' => (int) $u->ID, 'name' => $u->display_name, 'idx' => $idx, 'text' => (string) $steps[$idx]['text'], 'total' => count($steps), 'donen' => $done_n];
+    }
+    if (empty($items)) return;
+
+    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;border-radius:14px;padding:12px;margin:0 0 14px">';
+    echo '<div style="font-weight:900;color:#0066a3;margin-bottom:6px">📋 Mes actions locataires (' . count($items) . ') — la prochaine étape de chacun·e</div>';
+    echo '<div style="display:flex;flex-direction:column;gap:8px">';
+    foreach ($items as $it) {
+        $done_url = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_tenant_step_done&uid=' . $it['uid'] . '&idx=' . $it['idx']), 'lfi_nct_tstep_' . $it['uid'] . '_' . $it['idx']);
+        $open_url = lfi_nct_app_url('dossier', ['uid' => $it['uid']]);
+        echo '<div style="background:#f2f8fd;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px">';
+        echo '<div style="font-weight:700">' . esc_html($it['name']) . ' <span style="font-size:.78em;color:#888;font-weight:400">· étape ' . ($it['donen'] + 1) . '/' . $it['total'] . '</span></div>';
+        echo '<div style="font-size:.9em;color:#333;margin:2px 0 6px">👉 ' . esc_html($it['text']) . '</div>';
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+        echo '<a class="btn-primary" style="background:#186a3b;padding:6px 12px;font-size:.85em" href="' . esc_url($done_url) . '">✓ Fait</a>';
+        echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em" href="' . esc_url($open_url) . '">📂 Ouvrir le dossier</a>';
+        echo '</div></div>';
+    }
+    echo '</div></div>';
+}
+
 /** Le parcours-type d'un dossier locataire : la personne s'empare d'abord de sa
  *  fiche, puis on va à l'amiable (urgence d'abord), puis juridique si besoin. */
 function lfi_nct_dossier_parcours_template() {
