@@ -91,6 +91,16 @@ add_action('rest_api_init', function () {
         'callback'            => 'lfi_nct_ingest_rest_reply_delete',
         'permission_callback' => 'lfi_nct_ingest_rest_auth',
     ]);
+    register_rest_route('lfi-nct/v1', '/member-create', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_member_create',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
+    register_rest_route('lfi-nct/v1', '/member-mailbox-set', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_ingest_rest_member_mailbox_set',
+        'permission_callback' => 'lfi_nct_ingest_rest_auth',
+    ]);
     register_rest_route('lfi-nct/v1', '/membres-ga', [
         'methods'             => 'GET',
         'callback'            => 'lfi_nct_ingest_rest_membres_ga',
@@ -125,6 +135,65 @@ function lfi_nct_ingest_rest_assign($request) {
     if ($ref && !get_userdata($ref)) return new WP_REST_Response(['ok' => false, 'error' => 'membre_introuvable'], 400);
     $wpdb->update($t, ['referent_user_id' => $ref ?: null], ['id' => $id]);
     return new WP_REST_Response(['ok' => true, 'dossier_id' => $id, 'referent_user_id' => $ref], 200);
+}
+
+/** Crée (ou retrouve) un compte membre du GA. */
+function lfi_nct_ingest_rest_member_create($request) {
+    $email = sanitize_email((string) $request->get_param('email'));
+    $nom   = sanitize_text_field((string) $request->get_param('nom'));
+    if (!is_email($email)) return new WP_REST_Response(['ok' => false, 'error' => 'email_invalide'], 400);
+    $role = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+
+    $existing = get_user_by('email', $email);
+    if ($existing) {
+        $uid = (int) $existing->ID;
+        if (get_role($role) && !in_array($role, (array) $existing->roles, true)) $existing->add_role($role);
+        $existant = true;
+    } else {
+        $base  = $nom !== '' ? $nom : current(explode('@', $email));
+        $login = sanitize_user(sanitize_title($base) . '_' . wp_generate_password(4, false, false), true);
+        $uid = wp_insert_user([
+            'user_login'   => $login,
+            'user_pass'    => wp_generate_password(24),
+            'user_email'   => $email,
+            'display_name' => $nom !== '' ? $nom : $login,
+            'role'         => get_role($role) ? $role : 'subscriber',
+        ]);
+        if (is_wp_error($uid)) return new WP_REST_Response(['ok' => false, 'error' => $uid->get_error_message()], 500);
+        $uid = (int) $uid;
+        $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+        if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
+        $existant = false;
+    }
+    return new WP_REST_Response(['ok' => true, 'user_id' => $uid, 'email' => $email, 'existant' => $existant], 200);
+}
+
+/**
+ * Enregistre la BOÎTE EMAIL d'un membre (email + mot de passe d'application)
+ * pour le check permanent multi-boîtes. Le secret est stocké en option serveur.
+ */
+function lfi_nct_ingest_rest_member_mailbox_set($request) {
+    $uid   = (int) $request->get_param('user_id');
+    $email = sanitize_email((string) $request->get_param('email'));
+    if (!$uid && $email && ($u = get_user_by('email', $email))) $uid = (int) $u->ID;
+    if (!$uid || !get_userdata($uid)) return new WP_REST_Response(['ok' => false, 'error' => 'membre_introuvable'], 400);
+
+    $box_email = sanitize_email((string) $request->get_param('gmail_user'));
+    if ($box_email === '') $box_email = $email;
+    if ($box_email === '') { $u = get_userdata($uid); $box_email = $u ? $u->user_email : ''; }
+    $app_pw = preg_replace('/\s+/', '', (string) $request->get_param('gmail_app_pw'));
+    $en = $request->get_param('enabled');
+    $enabled = ($en === null) ? 1 : (int) (bool) $en;
+
+    $boxes = get_option('lfi_nct_member_mailboxes', []);
+    if (!is_array($boxes)) $boxes = [];
+    /* On garde l'ancien mot de passe si aucun n'est fourni (mise à jour partielle). */
+    if ($app_pw === '' && isset($boxes[(string) $uid]['app_pw'])) $app_pw = (string) $boxes[(string) $uid]['app_pw'];
+    if ($box_email === '' || $app_pw === '') return new WP_REST_Response(['ok' => false, 'error' => 'email_ou_mdp_manquant'], 400);
+
+    $boxes[(string) $uid] = ['user_id' => $uid, 'email' => $box_email, 'app_pw' => $app_pw, 'enabled' => $enabled];
+    update_option('lfi_nct_member_mailboxes', $boxes, false);
+    return new WP_REST_Response(['ok' => true, 'user_id' => $uid, 'email' => $box_email, 'enabled' => $enabled, 'boites' => count($boxes)], 200);
 }
 
 /** Dépose une RÉPONSE PROPOSÉE (psy+architecte) dans un dossier. */
