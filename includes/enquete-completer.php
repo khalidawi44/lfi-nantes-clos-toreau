@@ -44,12 +44,15 @@ function lfi_nct_enq_ok_remove($id) {
     update_option('lfi_nct_enq_complete_ok', $s, false);
 }
 
-/** Champs obligatoires manquants sur une fiche (détection automatique). */
+/** Champs obligatoires manquants sur une fiche (détection automatique).
+ *  LOGIQUE : une enquête n'est « à compléter » QUE si la personne veut être
+ *  recontactée. Si elle a répondu sans donner son nom et sans vouloir de suite,
+ *  c'est une enquête anonyme — complète en soi, on ne la fait PAS remonter. */
 function lfi_nct_enq_row_missing($r) {
+    if ((int) $r->contact_recontact !== 1) return [];
     $miss = [];
     if (trim((string) $r->contact_nom) === '' && trim((string) $r->contact_prenom) === '') $miss[] = 'nom de la personne';
     if (trim((string) $r->contact_tel) === '' && trim((string) $r->contact_email) === '')   $miss[] = 'téléphone ou email';
-    if (trim((string) $r->adresse) === '')                                                   $miss[] = 'adresse';
     return $miss;
 }
 

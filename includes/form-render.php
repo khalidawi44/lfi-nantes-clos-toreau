@@ -21,8 +21,21 @@ function lfi_nct_render_form() {
             <legend class="lfi-legend">📍 Logement visité</legend>
             <label class="lfi-field">
                 <span class="lfi-label">Immeuble / adresse <span class="req">*</span></span>
-                <input type="text" name="adresse" required placeholder="Ex : 12 rue de Biarritz" list="lfi-nct-known-adr" autocomplete="off">
+                <input type="text" name="adresse" required placeholder="Ex : 6 rue de Saint-Jean-de-Luz" list="lfi-nct-known-adr" autocomplete="off">
                 <?php echo function_exists('lfi_nct_addresses_datalist') ? lfi_nct_addresses_datalist('lfi-nct-known-adr') : ''; ?>
+            </label>
+            <?php
+            /* Ville OBLIGATOIRE — pré-remplie avec la commune du GA (souvent Nantes).
+               Sans elle, une rue homonyme part dans la mauvaise ville. */
+            $ville_def = 'Nantes';
+            if (is_user_logged_in() && function_exists('lfi_nct_user_ga') && function_exists('lfi_nct_geo_perimetre')) {
+                $g = (string) lfi_nct_user_ga();
+                if ($g !== '') { $c = (string) (lfi_nct_geo_perimetre($g)['commune'] ?? ''); if ($c !== '') $ville_def = $c; }
+            }
+            ?>
+            <label class="lfi-field">
+                <span class="lfi-label">Ville / commune <span class="req">*</span></span>
+                <input type="text" name="ville" required value="<?php echo esc_attr($ville_def); ?>" placeholder="Ex : Nantes">
             </label>
             <label class="lfi-field">
                 <span class="lfi-label">Étage <span class="req">*</span></span>
