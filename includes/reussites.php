@@ -26,6 +26,28 @@ function lfi_nct_reussite_get($id) {
     return null;
 }
 
+/**
+ * AUTOMATISME : crée un BROUILLON de réussite à partir d'un dossier abouti,
+ * une seule fois par dossier (on marque la fiche avec dossier_id). Non publié :
+ * l'utilisateur relit et publie quand il veut. Renvoie l'id créé, ou 0.
+ */
+function lfi_nct_reussite_auto_from_dossier($dossier_id) {
+    $dossier_id = (int) $dossier_id;
+    if (!$dossier_id || !function_exists('lfi_nct_reussite_prefill_from_dossier')) return 0;
+    $list = lfi_nct_reussites();
+    foreach ($list as $r) if ((int) ($r['dossier_id'] ?? 0) === $dossier_id) return 0; /* déjà créée */
+    $pref = lfi_nct_reussite_prefill_from_dossier($dossier_id);
+    if (!is_array($pref)) return 0;
+    $pref['id']         = (int) round(microtime(true) * 1000);
+    $pref['dossier_id'] = $dossier_id;
+    $pref['publie']     = false;   /* brouillon */
+    $pref['auto']       = true;
+    $pref['date']       = current_time('mysql');
+    $list[] = $pref;
+    lfi_nct_reussites_save($list);
+    return $pref['id'];
+}
+
 /** Catalogue des leviers actionnables (cases à cocher). */
 function lfi_nct_reussite_leviers() {
     return [
@@ -363,4 +385,43 @@ function lfi_nct_reussites_shortcode($atts) {
     foreach ($list as $r) $out .= lfi_nct_reussite_article_html($r);
     $out .= '</div>';
     return $out;
+}
+
+/* ============================================================== *
+ *  SHORTCODE PUBLIC : [lfi_nct_temoigner]                         *
+ *  Grande porte d'entrée du site, tournée TERRAIN : « Témoigner   *
+ *  de mon logement » → déclenche toute la mécanique (enquête →    *
+ *  dossier → accompagnement). Une autre porte d'entrée chez les   *
+ *  gens, en plus du porte-à-porte.                                *
+ * ============================================================== */
+add_shortcode('lfi_nct_temoigner', 'lfi_nct_temoigner_shortcode');
+function lfi_nct_temoigner_shortcode($atts) {
+    $survey = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+    $nb_pub = count(array_filter(lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
+    ob_start(); ?>
+    <div class="lfi-temoigner" style="max-width:760px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+      <div style="background:linear-gradient(135deg,#c8102e,#8a0b20);color:#fff;border-radius:16px;padding:26px 22px;text-align:center">
+        <div style="font-size:1.7em;font-weight:900;line-height:1.15;margin-bottom:8px">Un problème dans ton logement&nbsp;HLM&nbsp;? Tu n'es pas seul·e.</div>
+        <div style="font-size:1.05em;opacity:.95;margin-bottom:18px">Humidité, moisissures, nuisibles, chauffage, eau chaude, insécurité… On <strong>constate</strong>, on <strong>écrit au bailleur</strong>, on <strong>t'accompagne juridiquement</strong> — <strong>gratuitement</strong>. On l'a déjà fait pour tes voisin·es.</div>
+        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#fff;color:#c8102e;font-weight:900;font-size:1.15em;padding:15px 26px;border-radius:12px;text-decoration:none">📋 Témoigner de mon logement (5&nbsp;min)</a>
+        <div style="margin-top:10px;font-size:.92em;opacity:.9">Anonyme si tu veux. Et tu peux demander qu'<strong>on te recontacte</strong>.</div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px">
+        <div style="flex:1;min-width:200px;background:#f7f7f7;border-radius:12px;padding:16px">
+          <div style="font-weight:800;color:#c8102e;margin-bottom:4px">🚪 Ce qu'on fait, sur le terrain</div>
+          <div style="font-size:.95em;color:#333">Porte-à-porte dans le quartier, constats photos datés, courriers et mises en demeure au bailleur, saisine du service d'hygiène, accompagnement jusqu'au bout.</div>
+        </div>
+        <div style="flex:1;min-width:200px;background:#f7f7f7;border-radius:12px;padding:16px">
+          <div style="font-weight:800;color:#186a3b;margin-bottom:4px">🏆 Des résultats réels</div>
+          <div style="font-size:.95em;color:#333"><?php echo $nb_pub > 0 ? ('<strong>' . (int) $nb_pub . '</strong> réussite(s) déjà obtenue(s) et publiées ci-dessous.') : 'Relogements, travaux imposés, indemnisations — on documente chaque victoire.'; ?></div>
+        </div>
+      </div>
+
+      <div style="text-align:center;margin-top:20px">
+        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#c8102e;color:#fff;font-weight:800;padding:13px 24px;border-radius:12px;text-decoration:none">✍️ Je témoigne maintenant</a>
+      </div>
+    </div>
+    <?php
+    return ob_get_clean();
 }
