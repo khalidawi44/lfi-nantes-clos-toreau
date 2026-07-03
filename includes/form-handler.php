@@ -45,6 +45,7 @@ function lfi_nct_handle_submission() {
     $structured_keys = [
         'lfi_nct_nonce', 'lfi_nct_submit', 'adresse', 'etage',
         'contact_prenom', 'contact_nom', 'contact_tel', 'contact_email',
+        'adhesion_signature', /* traité à part (image base64, volumineux) */
         '_wp_http_referer',
     ];
     $data = [];
@@ -141,6 +142,46 @@ function lfi_nct_handle_submission() {
     }
     $rid = (int) $wpdb->insert_id;
     $GLOBALS['lfi_nct_last_submission_id'] = $rid;
+
+    /* === ADHÉSION À L'ASSOCIATION (signature sur place) ===
+       Si la personne accepte le suivi, elle devient adhérente gratuite de
+       l'Union des Quartiers Libres et signe sur l'écran. On enregistre la fiche
+       (date de naissance, adresse) + l'image de la signature, rattachées à la
+       réponse. Le dossier juridique est créé juste après (mécanisme existant). */
+    $sig     = (string) ($_POST['adhesion_signature'] ?? '');
+    $consent = !empty($_POST['adhesion_consent']);
+    if ($contact_recontact && ($consent || $sig !== '')) {
+        $adh = [
+            'signed'    => false,
+            'date'      => current_time('mysql'),
+            'consent'   => $consent,
+            'naissance' => sanitize_text_field($_POST['adhesion_naissance'] ?? ''),
+            'adresse'   => sanitize_text_field($_POST['adhesion_adresse'] ?? ''),
+        ];
+        if (strpos($sig, 'data:image/png;base64,') === 0) {
+            $bin = base64_decode(substr($sig, 22), true);
+            if ($bin !== false && strlen($bin) > 100 && strlen($bin) < 2 * 1024 * 1024) {
+                $up = wp_upload_bits('adhesion-signature-' . $rid . '.png', null, $bin);
+                if (empty($up['error']) && !empty($up['file'])) {
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                    $aid = wp_insert_attachment([
+                        'post_mime_type' => 'image/png',
+                        'post_title'     => 'Signature adhésion enquête #' . $rid,
+                        'post_status'    => 'inherit',
+                    ], $up['file']);
+                    if (!is_wp_error($aid)) {
+                        @wp_update_attachment_metadata($aid, wp_generate_attachment_metadata($aid, $up['file']));
+                        $adh['signature_id']  = (int) $aid;
+                        $adh['signature_url'] = $up['url'];
+                        $adh['signed']        = true;
+                    }
+                }
+            }
+        }
+        $data['adhesion'] = $adh;
+        /* Persiste la fiche d'adhésion dans la réponse (avant création dossier). */
+        $wpdb->update($table, ['data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)], ['id' => $rid]);
+    }
 
     /* AUTO : si la personne veut être recontactée et que c'est un·e militant·e
        CONNECTÉ·E qui saisit → on crée directement, POUR L'ÉQUIPE, le compte

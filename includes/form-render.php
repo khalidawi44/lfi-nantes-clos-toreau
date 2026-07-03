@@ -196,20 +196,83 @@ function lfi_nct_render_form() {
         </fieldset>
 
         <fieldset class="lfi-fieldset">
-            <legend class="lfi-legend">Accepteriez-vous qu'on revienne ?</legend>
-            <p class="lfi-help">On peut revenir constater sur place, vous accompagner pour faire pression sur Nantes Habitat, et vous aider juridiquement pour que le problème soit réglé.</p>
-            <label class="lfi-radio"><input type="radio" name="revenir_ok" value="oui"> Oui, je suis intéressé·e</label>
+            <legend class="lfi-legend">Accepteriez-vous d'être suivi·e et accompagné·e ?</legend>
+            <p class="lfi-help">On revient constater sur place, on fait pression sur Nantes Habitat, et on vous accompagne <strong>juridiquement</strong> — <strong>gratuitement</strong>. Pour agir légalement en votre nom, vous devenez <strong>adhérent·e (gratuit·e) de l'association Union des Quartiers Libres</strong>.</p>
+            <label class="lfi-radio"><input type="radio" name="revenir_ok" value="oui"> Oui, je veux être suivi·e <span style="color:#186a3b">(adhésion gratuite)</span></label>
             <label class="lfi-radio"><input type="radio" name="revenir_ok" value="non"> Non, merci</label>
         </fieldset>
 
         <div id="lfi-bloc-contact" hidden>
+            <div class="lfi-info-box" style="background:#eef7ee;border:1px solid #186a3b">
+                👉 <strong>Militant·e</strong> : la personne devient <strong>adhérente gratuite</strong> de l'association. Remplis son identité, puis <strong>fais-lui signer sa fiche d'adhésion</strong> ci-dessous, directement sur l'écran.
+            </div>
             <fieldset class="lfi-fieldset">
-                <legend class="lfi-legend">Vos coordonnées pour qu'on prenne RDV</legend>
-                <label class="lfi-field"><span class="lfi-label">Prénom</span><input type="text" name="contact_prenom"></label>
-                <label class="lfi-field"><span class="lfi-label">Nom</span><input type="text" name="contact_nom"></label>
+                <legend class="lfi-legend">🪪 Fiche d'adhésion — Union des Quartiers Libres</legend>
+                <label class="lfi-field"><span class="lfi-label">Prénom <span class="req">*</span></span><input type="text" name="contact_prenom"></label>
+                <label class="lfi-field"><span class="lfi-label">Nom <span class="req">*</span></span><input type="text" name="contact_nom"></label>
+                <label class="lfi-field"><span class="lfi-label">Date de naissance</span><input type="date" name="adhesion_naissance"></label>
+                <label class="lfi-field"><span class="lfi-label">Adresse complète</span><input type="text" name="adhesion_adresse" placeholder="N°, rue, étage, appartement"></label>
                 <label class="lfi-field"><span class="lfi-label">Téléphone</span><input type="tel" name="contact_tel" placeholder="06 12 34 56 78"></label>
                 <label class="lfi-field"><span class="lfi-label">Email</span><input type="email" name="contact_email" placeholder="vous@email.fr"></label>
                 <p class="lfi-help">Téléphone <strong>ou</strong> email — au moins l'un des deux pour qu'on puisse vous recontacter.</p>
+            </fieldset>
+
+            <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">✍️ Signature de l'adhésion</legend>
+                <div class="lfi-info-box" style="font-size:.9em">
+                    En signant, je demande mon adhésion <strong>gratuite</strong> à l'association <strong>Union des Quartiers Libres</strong> et je l'autorise, avec le <strong>Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau</strong>, à m'<strong>accompagner et à agir en mon nom</strong> auprès du bailleur et des institutions pour la défense de mon logement. Mes données restent internes (RGPD) ; je peux retirer mon adhésion à tout moment.
+                </div>
+                <label class="lfi-check"><input type="checkbox" name="adhesion_consent" value="1"> J'ai lu et j'accepte (adhésion gratuite)</label>
+                <div style="margin-top:8px">
+                    <canvas id="lfi-sign-pad" width="600" height="180" style="width:100%;height:180px;border:2px dashed #c8102e;border-radius:10px;background:#fff;touch-action:none;display:block"></canvas>
+                    <input type="hidden" name="adhesion_signature" id="lfi-sign-data">
+                    <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+                        <button type="button" id="lfi-sign-clear" class="lfi-btn">Effacer</button>
+                        <span class="lfi-help" style="margin:0">Signez avec le doigt dans le cadre.</span>
+                    </div>
+                </div>
+                <script>
+                (function(){
+                    var cv = document.getElementById('lfi-sign-pad');
+                    var hidden = document.getElementById('lfi-sign-data');
+                    var clr = document.getElementById('lfi-sign-clear');
+                    if(!cv || !hidden) return;
+                    var ctx = cv.getContext('2d');
+                    /* Résolution réelle du canvas = taille affichée (net sur mobile). */
+                    function fit(){
+                        var r = cv.getBoundingClientRect();
+                        if(!r.width) return;
+                        var ratio = window.devicePixelRatio || 1;
+                        cv.width = r.width * ratio; cv.height = r.height * ratio;
+                        ctx.setTransform(ratio,0,0,ratio,0,0);
+                        ctx.lineWidth = 2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#111';
+                    }
+                    setTimeout(fit, 60);
+                    var drawing=false, dirty=false, last=null;
+                    function pos(e){
+                        var r = cv.getBoundingClientRect();
+                        var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+                        return { x:p.clientX - r.left, y:p.clientY - r.top };
+                    }
+                    function start(e){ e.preventDefault(); drawing=true; last=pos(e); }
+                    function move(e){ if(!drawing) return; e.preventDefault(); var p=pos(e);
+                        ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
+                        last=p; dirty=true; }
+                    function end(){ if(!drawing) return; drawing=false;
+                        if(dirty){ try{ hidden.value = cv.toDataURL('image/png'); }catch(err){} } }
+                    cv.addEventListener('mousedown',start); cv.addEventListener('mousemove',move);
+                    window.addEventListener('mouseup',end);
+                    cv.addEventListener('touchstart',start,{passive:false});
+                    cv.addEventListener('touchmove',move,{passive:false});
+                    cv.addEventListener('touchend',end);
+                    if(clr) clr.addEventListener('click',function(){ ctx.clearRect(0,0,cv.width,cv.height); hidden.value=''; dirty=false; });
+                    /* Le pavé est dans un bloc masqué au départ : on recalcule sa
+                       taille quand la personne choisit « Oui » (bloc révélé). */
+                    document.addEventListener('change', function(e){
+                        if(e.target && e.target.name === 'revenir_ok' && e.target.value === 'oui'){ setTimeout(fit, 90); }
+                    });
+                })();
+                </script>
             </fieldset>
         </div>
 
@@ -373,6 +436,21 @@ function lfi_nct_render_submission_summary($id) {
                 <?php if ($row->contact_tel !== ''): ?><li><strong>Téléphone :</strong> <?php echo esc_html($row->contact_tel); ?></li><?php endif; ?>
                 <?php if ($row->contact_email !== ''): ?><li><strong>Email :</strong> <?php echo esc_html($row->contact_email); ?></li><?php endif; ?>
             </ul>
+        <?php endif; ?>
+
+        <?php
+        $adh = (array) ($data['adhesion'] ?? []);
+        if (!empty($adh)): ?>
+            <h3>🪪 Adhésion — Union des Quartiers Libres</h3>
+            <ul class="lfi-summary-list">
+                <li><strong>Statut :</strong> <?php echo !empty($adh['signed']) ? '✅ Adhésion signée' : '🕒 À signer'; ?></li>
+                <?php if (!empty($adh['naissance'])): ?><li><strong>Date de naissance :</strong> <?php echo esc_html($adh['naissance']); ?></li><?php endif; ?>
+                <?php if (!empty($adh['adresse'])): ?><li><strong>Adresse :</strong> <?php echo esc_html($adh['adresse']); ?></li><?php endif; ?>
+                <?php if (!empty($adh['date'])): ?><li><strong>Signée le :</strong> <?php echo esc_html($adh['date']); ?></li><?php endif; ?>
+            </ul>
+            <?php if (!empty($adh['signature_url'])): ?>
+                <div><strong>Signature :</strong><br><img src="<?php echo esc_url($adh['signature_url']); ?>" alt="Signature" style="max-width:280px;border:1px solid #ccc;border-radius:8px;background:#fff"></div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
     <?php
