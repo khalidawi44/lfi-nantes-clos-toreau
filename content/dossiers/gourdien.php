@@ -1,19 +1,18 @@
 <?php
 /**
- * DOSSIER LOCATAIRE — Mme GOURDIEN  (fiche maître, gérée par le code)
+ * DOSSIER LOCATAIRE — Mme Gwenaëlle GOURDIEN (apt 93) — fiche maître (code)
  *
- * Fichier de référence du dossier de Mme Gwenaëlle Gourdien. Mise à jour : on
- * édite ce fichier et on pousse sur GitHub → la fiche « dossier-synthese?slug=
- * gourdien » et le dossier juridique lié s'actualisent automatiquement.
+ * Infestation de BLATTES depuis avril 2022, 14 rue Saint-Jean-de-Luz, 44200
+ * Nantes. Fiche produite par le pipeline (architecte + psy + pénal + bot
+ * préjudice) à partir des pièces authentiques (mise en demeure du 06/06/2026 +
+ * réponse MORINEAU du 09/06/2026 ; proposition amiable conjointe du 11/05/2026).
  *
- * Lié au dossier juridique #5 (base WordPress) via 'dossier_id' — à confirmer
- * si l'ID réel diffère (la fiche reste accessible par son slug dans tous les cas).
- *
- * MÉCANIQUE : cette fiche est le produit du pipeline (architecte + psychologue
- * + pénal + bot préjudice), pas d'une saisie manuelle. La BOUSSOLE est
- * explicite : 1) l'URGENCE (faire cesser l'infestation) — en voie de
- * résolution ; 2) ENSUITE le PRÉJUDICE, à l'AMIABLE d'abord (gardé en réserve,
- * jamais proposé à ce jour, pour ne pas braquer le bailleur).
+ * BOUSSOLE : 1) URGENCE — faire cesser l'infestation : traitement RELANCÉ
+ * (Sapiens), aujourd'hui la locataire est sans blattes, MAIS le « Protocole
+ * Curatif de Choc » préconisé par le propre prestataire de NMH (apts 83, 85,
+ * 93) n'a jamais été intégralement appliqué → à verrouiller ; 2) RÉPARATION —
+ * ouverte à l'amiable (proposition conjointe du 11/05/2026), chiffrage ANSES posé.
+ * Lié au dossier juridique #5 (à confirmer).
  */
 if (!defined('ABSPATH')) exit;
 
@@ -30,103 +29,64 @@ return [
     'adresse'     => '14 rue de Saint-Jean-de-Luz, 44200 Nantes',
     'etage'       => '',
     'appartement' => '93',
-    'anciennete'  => 'Locataire depuis avril 2022 (≈ 4 ans) — infestation de blattes depuis l\'entrée dans les lieux',
+    'anciennete'  => 'Locataire depuis avril 2022 (≈ 4 ans). Infestation de blattes depuis l\'entrée dans les lieux — signalée à de multiples reprises par téléphone, sans solution durable.',
     'bailleur'        => 'Nantes Métropole Habitat — Pôle Grand Sud',
-    'bailleur_contact'=> 'M. Yvonnic MORINEAU — Responsable Patrimoine — yvonnic.morineau@nmh.fr — Service Relation Client : 02 40 67 07 37',
-    'medical'     => 'À recueillir si effets sanitaires (le prurit / stress lié à une infestation lourde est documenté — cf. HCSP).',
-    'rdv'         => '',
+    'bailleur_contact'=> 'M. Yvonnic MORINEAU — Responsable Patrimoine — yvonnic.morineau@nmh.fr — 02 40 67 07 37',
+    'medical'     => 'À recueillir si effets sanitaires.',
+    'rdv'         => 'Co-signataire de la proposition amiable conjointe du 11/05/2026 (avec M. Doucet, apt 88).',
 
-    /* --- Objectif (ce que vise le dossier) --- */
-    'objectif_locataire' => "D'ABORD : en finir avec l'infestation de blattes (traitement COMPLET et durable). ENSUITE : être indemnisée pour les ~4 années subies.",
+    /* --- Objectif --- */
+    'objectif_locataire' => "D'ABORD : traitement COMPLET et durable des blattes (protocole préconisé par le prestataire de NMH lui-même). ENSUITE : indemnisation des ~4 années subies.",
     'objectifs_ga' => [
-        "Verrouiller par écrit le traitement complet (protocole adapté, calendrier, apparts voisins) — l'urgence.",
-        "Ouvrir le volet PRÉJUDICE à l'amiable : indemnisation du trouble de jouissance sur ~4 ans + préjudice moral.",
+        "Verrouiller l'application intégrale du « Protocole Curatif de Choc » (apts 83, 85, 93).",
+        "Faire aboutir la réparation à l'amiable (proposition conjointe du 11/05/2026), puis judiciaire si blocage.",
     ],
 
-    /* --- Les deux volets (la boussole) --- */
+    /* --- Les volets (la boussole) --- */
     'volets' => [
-        ['nom' => 'Urgence — faire cesser l\'infestation', 'statut' => 'EN VOIE DE RÉSOLUTION',
-         'detail' => 'NMH a relancé le prestataire (Sapiens) pour un nouveau rendez-vous à domicile (réponse du 09/06/2026). Reste à VERROUILLER : protocole complet (pas le préventif allégé), calendrier écrit, et traitement des apparts voisins (dont le 88, blattes constatées et photographiées le 19/05/2026) pour éviter la réinfestation.'],
-        ['nom' => 'Préjudice — réparation', 'statut' => 'À OUVRIR (amiable) — gardé en réserve',
-         'detail' => 'Jamais proposé au bailleur à ce jour (volontairement). On l\'ouvre APRÈS avoir sécurisé l\'urgence, à l\'amiable d\'abord : trouble de jouissance sur ~4  ans + préjudice moral. Judiciaire seulement en dernier recours (avocat = Fabrice).'],
+        ['nom' => 'Urgence — faire cesser l\'infestation', 'statut' => '✅ RELANCÉE (à verrouiller)',
+         'detail' => "Après la mise en demeure du 06/06/2026, NMH a relancé le prestataire (Sapiens) pour un nouveau RDV (réponse du 09/06/2026) ; la locataire est aujourd'hui sans blattes. MAIS le compte rendu du PROPRE technicien de NMH préconise un « Protocole Curatif de Choc » (deux pulvérisations dans les logements 83, 85 ET 93), à ce jour NON intégralement appliqué (interventions ponctuelles gels/appâts inefficaces). À verrouiller : application intégrale du protocole préconisé + logements mitoyens."],
+        ['nom' => 'Réparation — indemnisation', 'statut' => '⏳ OUVERTE à l\'amiable',
+         'detail' => "Le préjudice est posé dans la proposition conjointe du 11/05/2026 : trouble de jouissance sur ~4 ans (blattes), chiffrage ANSES. À défaut d'accord : judiciaire (avec M. Doucet ; l'AJ totale de M. Doucet arme le volet conjoint)."],
     ],
 
-    /* --- Désordre principal + position de NMH + notre observation --- */
+    /* --- Le désordre + le manquement central --- */
     'desordres' => [
-        ['nom' => 'Infestation de blattes (depuis avril 2022, ≈ 4 ans)',
-         'nmh' => 'Reconnaît une intervention le 23/03/2026 (traitement préventif de contrôle) ayant CONSTATÉ la présence de blattes ; garantie 6 mois ; relance du prestataire en cours.',
-         'obs' => 'Le traitement « allégé » est insuffisant : le propre technicien de NMH a recommandé par écrit un protocole COMPLET et étalé. Risque de réinfestation depuis les logements mitoyens (apt 88).'],
+        ['nom' => 'Infestation de blattes (apt 93) depuis avril 2022 (≈ 4 ans)',
+         'nmh' => 'Interventions ponctuelles (gels/appâts) inefficaces ; relance de Sapiens annoncée le 09/06/2026.',
+         'obs' => 'MANQUEMENT CENTRAL : NMH ignore les préconisations écrites de son propre prestataire — compte rendu « Préconisations Prioritaires (NMH) » recommandant un « Protocole Curatif de Choc » (2 pulvérisations dans les apts 83, 85 et 93). La locataire en détient une capture d\'écran (pièce n° 6) et en réclame l\'original. Non-respect de l\'obligation de délivrer un logement décent et exempt de nuisibles (art. 6 loi 1989 ; décret 2002-120 ; L.1331-22 CSP).'],
     ],
 
-    /* --- La conversation avec M. MORINEAU (NMH) --- */
-    'email_envoye' => [
-        'objet' => 'Apt 93 — 14 rue Saint-Jean-de-Luz — Mme GOURDIEN — Mise en demeure de traitement complet de l\'infestation de blattes (4 ans, depuis avril 2022) — art. 1719 C. civ. et L.1331-22 CSP',
-        'a'     => 'Nantes Métropole Habitat — M. Yvonnic Morineau (yvonnic.morineau@nmh.fr) · CC : nantessudclostoreau / fabrice.doucet44@gmail.com',
-        'date'  => '2026-06-06 23:06',
-        'corps' => <<<'MAIL'
-Mise en demeure (résumé fidèle). Mme Gourdien rappelle l'infestation de blattes subie depuis son entrée en avril 2022, malgré signalements répétés.
-
-I. SITUATION CONSTATÉE PAR LE TECHNICIEN DE NMH — infestation d'ampleur très importante, incompatible avec le traitement allégé mis en œuvre ; le technicien a lui-même recommandé un protocole COMPLET et étalé (recommandations écrites disponibles).
-
-II. CADRE JURIDIQUE — art. 1719 C. civ. (jouissance paisible) ; art. 6 loi du 6 juillet 1989 (logement décent, exempt de nuisibles) ; décret n° 2002-120 art. 2 ; art. L.1331-22 CSP ; loi ELAN ; Cass. 3e civ. 8 juillet 2009 n° 08-12.116 (la persistance d'une infestation non traitée engage la responsabilité du bailleur).
-
-III. DEMANDES (sous huitaine) : 1) une nouvelle intervention par une entreprise spécialisée pour un protocole COMPLET conforme aux recommandations du technicien ; 2) le détail du protocole + le calendrier des passages ; 3) l'inclusion des apparts voisins (dont le 88, blattes constatées et photographiées le 19/05/2026) ; 4) la communication des rapports d'intervention antérieurs et de la copie de la commande.
-
-IV. À DÉFAUT — saisine du SCHS de Nantes (constat d'insalubrité), du Tribunal judiciaire en référé (astreinte + indemnisation des préjudices : jouissance, moral, sanitaire), du Défenseur des droits et de l'ANCOLS, et action conjointe avec d'autres locataires affectés.
-MAIL,
-        'note' => "Envoyé le 6 juin 2026 par Mme Gourdien (Clos Toreau en copie). Texte intégral versé au dossier.",
-    ],
-    'email_recu' => [
-        'de'    => 'yvonnic.morineau@nmh.fr — Yvonnic MORINEAU, Responsable Patrimoine, Pôle Grand Sud (NMH)',
-        'date'  => '2026-06-09 08:54',
-        'corps' => <<<'MAIL'
-Bonjour
-
-Nous prenons acte de votre demande ci-dessous.
-
-Pour rappel depuis votre entrée dans les lieux en 2022, vous nous avez sollicité une seule fois au 23/10/25 pour ce sujet qui a fait l'objet d'une commande de traitement au 11/11/25 à l'entreprise Sapian puis d'une annulation au 31/12/25 faute de retour de votre part pour convenir d'un rendez-vous.
-
-L'entreprise a cependant pu intervenir au 23/03/26 dans le cadre d'un traitement préventif de contrôle et a constaté la présence de blatte et a appliqué le traitement en conséquence. Cette prestation étant garantie 6 mois nous relançons le prestataire afin qu'il conviennes d'un nouveau rendez-vous à votre domicile.
-
-Cordialement
-Yvonnic MORINEAU — Responsable Patrimoine — Pôle Grand Sud — Direction Maintenance Proximité
-MAIL,
+    /* --- Chiffrage du préjudice (méthode ANSES) --- */
+    'prejudice' => [
+        'note' => "Méthode ANSES (rapport n° 2021-SA-0147) : V = δ × (β/365) × VAV, VAV = 156 540 €. Dommage continu (avril 2022 → mai 2026). BLATTES → PAS de mise en sacs / lavage 60-90 °C (réservé aux punaises) : ici protection + remplacement d'éventuels effets sur justificatifs.",
+        'postes' => [
+            'ANSES — Mme Gourdien (blattes, 1 490 j, δ 0,05-0,10) : 31 947 à 63 894 €.',
+            'Trouble de jouissance / préjudice moral compris dans le calcul ANSES.',
+            'Remplacement / protection d\'effets éventuellement contaminés — sur justificatifs.',
+        ],
+        'fourchette_amiable' => 'Part Gourdien dans la proposition conjointe : fourchette basse ANSES ≈ 31 947 € (jusqu\'à 63 894 € au fond).',
     ],
 
-    /* --- Suivi (fait) / à faire --- */
+    /* --- Chronologie --- */
     'timeline' => [
-        ['date' => '2022-04', 'fait' => 'Entrée dans les lieux — infestation de blattes présente dès l\'origine'],
-        ['date' => '2025-10-23', 'fait' => 'Signalement à NMH (selon NMH, une sollicitation ; l\'historique de la locataire en documente davantage)'],
-        ['date' => '2025-11-11', 'fait' => 'NMH commande un traitement à l\'entreprise Sapiens'],
-        ['date' => '2025-12-31', 'fait' => 'Annulation de la commande (NMH invoque un défaut de RDV côté locataire)'],
-        ['date' => '2026-03-23', 'fait' => 'Intervention Sapiens : présence de blattes CONSTATÉE, traitement appliqué (garanti 6 mois) — le traitement allégé s\'avère insuffisant'],
-        ['date' => '2026-05-19', 'fait' => 'Blattes constatées et photographiées (horodatage) à l\'appartement voisin 88'],
-        ['date' => '2026-06-06', 'fait' => 'Mise en demeure envoyée à NMH (protocole complet + apparts voisins + rapports)'],
-        ['date' => '2026-06-09', 'fait' => '✅ VICTOIRE (partielle) : NMH relance le prestataire (Sapiens) pour un nouveau RDV à domicile'],
+        ['date' => '2022-04', 'fait' => 'Entrée dans les lieux — infestation de blattes dès l\'origine'],
+        ['date' => '2025-2026', 'fait' => 'Signalements téléphoniques répétés ; interventions ponctuelles (gels/appâts) inefficaces'],
+        ['date' => '2026-05-11', 'fait' => 'Co-signataire de la proposition amiable transactionnelle conjointe (avec M. Doucet)'],
+        ['date' => '2026-06-06', 'fait' => 'Mise en demeure individuelle envoyée à NMH (protocole complet + apparts voisins + rapports)'],
+        ['date' => '2026-06-09', 'fait' => '✅ Réponse de NMH : relance du prestataire (Sapiens) — victoire partielle, à verrouiller'],
     ],
     'prochaines_etapes' => [
-        'VOLET URGENCE — verrouiller par écrit (cette semaine) : acter la relance de Sapiens, MAIS exiger le protocole COMPLET (pas le préventif allégé) conforme aux recommandations écrites du technicien, le calendrier des passages, l\'inclusion des apparts voisins (88), et la communication des rapports + de la commande. Ton factuel, sans agressivité — l\'engagement est acquis, on le cadre.',
-        'VOLET PRÉJUDICE — à ouvrir À L\'AMIABLE une fois le traitement engagé (gardé en réserve jusqu\'ici) : proposer une indemnisation du trouble de jouissance sur ~4  ans + préjudice moral. On ne parle argent qu\'APRÈS l\'urgence, pour ne pas braquer.',
-        'Faire adhérer Mme Gourdien à l\'association + mandat écrit avant tout courrier en son nom.',
-        'À défaut d\'accord amiable sur le préjudice : SCHS de Nantes, puis Tribunal judiciaire (avocat = Fabrice, lui seul).',
-    ],
-
-    /* --- Chiffrage du préjudice (bot — AMIABLE, à l'ouverture) --- */
-    'prejudice' => [
-        'note' => "Chiffrage indicatif À L'AMIABLE (ouverture de négociation), produit par le bot préjudice. BLATTES → PAS de mise en sacs ni lavage 60-90 °C (règle réservée aux punaises de lit) : ici protection/éviction + remplacement d'éventuels effets contaminés sur justificatifs. À parfaire avec le loyer réel de Mme Gourdien.",
-        'postes' => [
-            "Trouble de jouissance (≈ 4 ans / 48 mois) — réduction de 15 à 20 % du loyer sur la période. Base loyer HLM moyen du quartier ≈ 330 €/mois (à remplacer par le loyer réel) → environ 2 400 à 3 200 €.",
-            "Préjudice moral (infestation lourde subie pendant 4 ans, stress, prurit, atteinte à la dignité du logement) — forfait amiable ≈ 500 à 1 000 €.",
-            "Remplacement / protection d'effets éventuellement contaminés — sur justificatifs (poste modeste, à documenter).",
-            "Frais d'accompagnement engagés par l'association — selon le total « frais » du dossier.",
-        ],
-        'fourchette_amiable' => 'de l\'ordre de 3 000 à 4 500 € (ouverture amiable, négociable) — à confirmer avec le loyer réel et les justificatifs.',
+        ['etape' => 'VERROUILLER l\'urgence par écrit', 'echeance' => 'cette semaine', 'detail' => 'Exiger l\'application INTÉGRALE du « Protocole Curatif de Choc » préconisé par le prestataire de NMH (apts 83, 85, 93), le calendrier des passages, et la communication du compte rendu original + des rapports.'],
+        ['etape' => 'RÉPARATION à l\'amiable', 'echeance' => 'suivi de la proposition du 11/05', 'detail' => 'Chiffrage ANSES posé (≈ 31 947 €). Escalade au-dessus de M. Morineau (DG / Président du CA) si nécessaire.'],
+        ['etape' => 'Adhésion + mandat écrit', 'echeance' => 'avant tout courrier en son nom', 'detail' => 'Condition pour agir au nom de Mme Gourdien.'],
+        ['etape' => 'À défaut : SCHS puis judiciaire', 'echeance' => 'si blocage', 'detail' => 'Volet conjoint avec M. Doucet (AJ totale). Avocat = Fabrice + avocat désigné, jamais les membres.'],
     ],
 
     'pieces' => [
-        'Mise en demeure du 06/06/2026 (envoyée) + réponse de NMH du 09/06/2026 (reçue)',
-        'Recommandations écrites du technicien NMH (protocole complet) — à demander formellement',
-        'Rapports d\'intervention Sapiens + copie de la commande — à obtenir de NMH',
-        'Photographie horodatée du 19/05/2026 (apt voisin 88)',
+        'Mise en demeure du 06/06/2026 (envoyée) + réponse NMH du 09/06/2026 (reçue) — verbatim',
+        'Proposition amiable transactionnelle conjointe du 11/05/2026 (co-signée)',
+        'Capture d\'écran du compte rendu « Préconisations Prioritaires (NMH) » — Protocole Curatif de Choc (pièce n° 6) — original à obtenir',
+        'Historique des signalements et interventions (gels/appâts)',
     ],
 ];
