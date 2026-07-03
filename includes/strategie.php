@@ -195,6 +195,10 @@ function lfi_nct_app_view_strategie() {
     echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="com">Autres appuis : <strong>ADIL 44</strong> (conseil logement), <strong>commission de conciliation</strong>, <strong>DALO</strong>, <strong>CAF/APL</strong>, <strong>élus locaux</strong>, et la <strong>presse</strong> comme levier de dernier ressort.</div></li>';
     echo '<li class="lfi-app-card" style="border-left:4px solid #c8102e"><div class="head"><div class="who">🏢 NMH (bailleur)</div></div>'
        . '<div class="com">Adversaire à <strong>convertir en partenaire par l\'amiable</strong> — le levier brigade sert exactement à ça.</div></li>';
+    echo '<li class="lfi-app-card" style="border-left:4px solid #d39e00"><div class="head"><div class="who">📈 Christophe Jouin — escalade amiable (CA de NMH)</div></div>'
+       . '<div class="com"><strong>christophe.jouin@mairie-nantes.fr</strong> — conseiller municipal ET membre du <strong>conseil d\'administration de NMH</strong> (supérieur de M. Morineau, agence Goudy). Il t\'a dit « fais-moi remonter les choses ».<br>'
+       . '<strong>Quand :</strong> <strong>seulement</strong> quand le dialogue avec Morineau est <strong>rompu</strong> (pas de réponse ou aucun mouvement après le délai — 8 j en urgence, 2 mois sinon). On ne brûle pas ce levier trop tôt.<br>'
+       . '<strong>Garde-fous</strong> (il est aussi côté NMH) : on lui transmet <strong>les demandes et le principe</strong>, <strong>pas</strong> le chiffrage du préjudice ni la stratégie judiciaire ; <strong>jamais</strong> les coordonnées des locataires (interlocuteur unique) ; <strong>tout par écrit</strong> (ça l\'engage et ça trace). Allié de circonstance : levier, pas arbitre.</div></li>';
     echo '</ul>';
 
     /* 5ter) Identité selon le contexte (qui signe quoi). */
