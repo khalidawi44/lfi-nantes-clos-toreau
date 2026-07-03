@@ -172,7 +172,14 @@ function lfi_nct_app_view_activite() {
     foreach ($rows as $r) {
         $u = get_userdata($r->user_id);
         $name = $u ? ($u->display_name ?: $u->user_login) : ('#' . $r->user_id);
-        $ga_nom = ($r->ga === '' || $r->ga === 'clos-toreau') ? 'Clos Toreau' : (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($r->ga) : $r->ga);
+        /* Un·e élu·e partenaire n'appartient à AUCUN GA : on l'étiquette « Élu·e »,
+           jamais « Clos Toreau » (empêche de le/la ranger dans un groupe d'action). */
+        $is_partner = $u && defined('LFI_NCT_ROLE_PARTNER') && in_array(LFI_NCT_ROLE_PARTNER, (array) $u->roles, true) && !in_array(defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : '__', (array) $u->roles, true);
+        if ($is_partner) {
+            $ga_nom = 'Élu·e (hors GA)';
+        } else {
+            $ga_nom = ($r->ga === '' || $r->ga === 'clos-toreau') ? 'Clos Toreau' : (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($r->ga) : $r->ga);
+        }
         $ville = lfi_nct_activity_geo($r->ip);
         echo '<li class="lfi-app-card" style="padding:9px 12px">';
         echo '<div class="head"><div class="who">' . esc_html($name) . '</div><div class="when">' . esc_html(wp_date('j M · H:i', strtotime($r->created_at))) . '</div></div>';
