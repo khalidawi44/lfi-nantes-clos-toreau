@@ -850,6 +850,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
                     case 'geo-contacts':          lfi_nct_app_view_geo_contacts();           break;
                     case 'geo-perimetres':        lfi_nct_app_view_geo_perimetres();         break;
+                    case 'suggerer-outil':        lfi_nct_app_view_suggerer_outil();         break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;

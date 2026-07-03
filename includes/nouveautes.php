@@ -63,6 +63,12 @@ function lfi_nct_news_seed_builtin() {
                      . '<strong>« 🙋 Je participe »</strong> sur ceux qui t\'arrangent. Tu peux aussi <strong>proposer d\'autres dates</strong>. '
                      . 'Simple, et on voit tout de suite qui vient.',
         ],
+        'suggerer-outil-2026-07' => [
+            'titre' => 'Nouveau : suggère un outil',
+            'corps' => 'L\'app n\'est pas que le logement. Avec <strong>🧰 Suggérer un outil</strong>, si ton terrain a besoin '
+                     . 'd\'autre chose (bailleurs privés, énergie, services publics…), tu le dis — et l\'administrateur peut '
+                     . 'le déployer pour ton GA. C\'est toi qui es sur le terrain : c\'est toi qui sais.',
+        ],
         'agenda-invite-2026-07' => [
             'titre' => 'Les événements arrivent dans ton agenda',
             'corps' => 'Quand un événement du GA est créé, tu reçois un <strong>email avec une invitation calendrier</strong>. '
