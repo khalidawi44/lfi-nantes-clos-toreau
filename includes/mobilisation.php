@@ -175,6 +175,63 @@ function lfi_nct_mobi_vote_threshold() {
     return $n > 0 ? $n : 4;
 }
 
+/** Emails des MEMBRES DU GA (comptes WP du groupe), scopés. */
+function lfi_nct_mobi_member_emails() {
+    $ga = function_exists('lfi_nct_scope_ga_slug') ? (string) lfi_nct_scope_ga_slug() : '';
+    $role = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : '';
+    if ($role === '') return [];
+    $users = get_users(['role' => $role, 'number' => 500]);
+    $emails = [];
+    foreach ((array) $users as $u) {
+        $uga = (string) get_user_meta($u->ID, 'lfi_nct_ga', true);
+        if ($ga !== '' && $ga !== 'clos-toreau') { if ($uga !== $ga) continue; }
+        else { if (!in_array($uga, ['', 'clos-toreau'], true)) continue; }
+        $e = sanitize_email((string) $u->user_email);
+        if ($e !== '' && is_email($e)) $emails[] = $e;
+    }
+    return array_values(array_unique($emails));
+}
+
+/** Envoie l'action à tous les membres du GA par EMAIL (fiable, un clic).
+ *  $phase = 'vote' (proposition) ou 'invit' (action actée). Renvoie le nb envoyé. */
+function lfi_nct_mobi_notify_members($row, $phase, $back_args, $types, $creneaux) {
+    $emails = lfi_nct_mobi_member_emails();
+    if (empty($emails)) return 0;
+    $tmeta  = $types[$row->type] ?? ['✨', 'Action'];
+    $when   = $row->date_creneau ? ucfirst(wp_date('l j M', strtotime($row->date_creneau))) : '';
+    $moment = $creneaux[$row->creneau] ?? '';
+    $lieu   = trim((string) $row->lieu);
+    $lien   = lfi_nct_app_url('mobilisation', $back_args);
+    if ($phase === 'invit') {
+        $subject = '🎟️ Action confirmée : ' . $tmeta[1] . ' — ' . $when;
+        $intro   = "C'est confirmé ! On compte sur toi pour cette action.";
+        $cta     = 'Voir les détails & m\'inscrire';
+        $color   = '#186a3b';
+    } else {
+        $subject = '🗳 Nouvelle action proposée : ' . $tmeta[1] . ' — ' . $when;
+        $intro   = "Une nouvelle action est proposée par le Groupe d'Action. Es-tu partant·e ?";
+        $cta     = 'Voter « je participe »';
+        $color   = '#c8102e';
+    }
+    $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:auto">'
+          . '<div style="background:' . $color . ';color:#fff;padding:16px 20px;border-radius:12px 12px 0 0;font-weight:800;font-size:1.1em">' . esc_html($subject) . '</div>'
+          . '<div style="border:1px solid #eee;border-top:0;border-radius:0 0 12px 12px;padding:18px 20px">'
+          . '<p>' . esc_html($intro) . '</p>'
+          . '<div style="background:#f7f7f7;border-radius:10px;padding:12px 14px;margin:10px 0">'
+          . '<strong>' . esc_html($tmeta[0] . ' ' . $tmeta[1]) . '</strong><br>🗓 ' . esc_html($when . ' · ' . $moment)
+          . ($lieu ? '<br>📍 ' . esc_html($lieu) : '') . '</div>'
+          . '<div style="margin-top:14px"><a href="' . esc_url($lien) . '" style="display:inline-block;background:' . $color . ';color:#fff;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800">' . esc_html($cta) . '</a></div>'
+          . '<div style="margin-top:14px;font-size:.82em;color:#888">Tu reçois cet email en tant que membre du Groupe d\'Action LFI Nantes Sud – Clos Toreau.</div>'
+          . '</div></div>';
+    add_filter('wp_mail_content_type', 'lfi_nct_agenda_html_ct');
+    add_filter('wp_mail_from_name', 'lfi_nct_agenda_from_name');
+    $sent = 0;
+    foreach ($emails as $e) if (wp_mail($e, $subject, $body)) $sent++;
+    remove_filter('wp_mail_content_type', 'lfi_nct_agenda_html_ct');
+    remove_filter('wp_mail_from_name', 'lfi_nct_agenda_from_name');
+    return $sent;
+}
+
 /**
  * Section « À venir — se mobiliser » à afficher EN BAS de l'accueil (console).
  * Les gens voient tout de suite les événements à venir + peuvent participer /
@@ -401,10 +458,20 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['del' => 1]));
         exit;
     }
+    /* --- Envoi groupé par EMAIL à tous les membres du GA (vote / invitation) --- */
+    if (!empty($_POST['lfi_mobi_notify']) && check_admin_referer('lfi_mobi_notify') && lfi_nct_mobi_can_mod()) {
+        $cid   = (int) $_POST['lfi_mobi_notify'];
+        $phase = (($_POST['phase'] ?? 'vote') === 'invit') ? 'invit' : 'vote';
+        $row2  = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
+        $sent  = $row2 ? lfi_nct_mobi_notify_members($row2, $phase, $back_args, $types, $creneaux) : 0;
+        wp_safe_redirect(lfi_nct_app_url('mobilisation', $back_args + ['sent' => $sent]));
+        exit;
+    }
 
     lfi_nct_app_screen_open('🎟️ ' . $titre, 'Créneaux de mobilisation — clique « Je participe »');
     if (!empty($_GET['ok']))  lfi_nct_app_flash('✅ Créneau(x) ajouté(s) — tu y es inscrit·e.');
     if (!empty($_GET['del'])) lfi_nct_app_flash('🗑 Créneau supprimé.');
+    if (isset($_GET['sent'])) lfi_nct_app_flash('📧 Email envoyé à ' . (int) $_GET['sent'] . ' membre(s) du GA.');
 
     echo '<div style="text-align:center;margin:4px 0 10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('mobilisation')) . '">← Toutes les actions</a></div>';
 
@@ -503,26 +570,36 @@ function lfi_nct_app_view_mobilisation_board($ctx) {
         }
         echo '</div>';
 
-        /* Admin : envoyer aux MEMBRES DU GA (vote avant, invitation une fois actée). */
+        /* Admin : prévenir TOUS les membres du GA. Email = envoi de masse fiable
+           (un clic, côté serveur). SMS = repli « copier les numéros » (iOS
+           n'ouvre un lien sms: qu'au 1er destinataire → pas de vrai envoi groupé). */
         if (lfi_nct_mobi_can_mod()) {
+            $emails = lfi_nct_mobi_member_emails();
             $phones = lfi_nct_mobi_member_phones();
-            $nph    = count($phones);
+            $nem = count($emails); $nph = count($phones);
             $lieu_txt = trim((string) $r->lieu) !== '' ? ' (RDV ' . $r->lieu . ')' : '';
             $lien = lfi_nct_app_url('mobilisation', $back_args);
-            $vote_body = 'LFI Clos Toreau — Nouvelle action proposée : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt
-                       . '. Es-tu partant·e ? Vote « je participe » ici : ' . $lien;
-            $invit_body = 'LFI Clos Toreau — Action CONFIRMÉE : ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt
-                        . '. On compte sur toi ! Détails & inscription : ' . $lien;
             echo '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #eee">';
-            echo '<div style="font-size:.82em;color:#666;margin-bottom:4px">📣 Prévenir les <strong>' . $nph . ' membres du GA</strong> par SMS :</div>';
-            echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
-            /* Avant l'actée : bouton VOTE mis en avant. Après : INVITATION. */
+            echo '<div style="font-size:.82em;color:#666;margin-bottom:4px">📣 Prévenir <strong>tous les ' . $nem . ' membres du GA</strong> :</div>';
+            echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
             $vote_style = $actee ? 'btn-ghost' : 'btn-primary';
             $inv_style  = $actee ? 'btn-primary' : 'btn-ghost';
-            echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($vote_body, $phones)) . '" class="' . $vote_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';color:#0066a3' : ';background:#d39e00') . '">🗳 Proposer au vote (' . $nph . ')</a>';
-            echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($invit_body, $phones)) . '" class="' . $inv_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';background:#186a3b' : ';color:#186a3b') . '">🎟️ Inviter les ' . $nph . ' membres</a>';
+            echo '<form method="post" style="display:inline"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="vote">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
+               . '<button type="submit" class="' . $vote_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';color:#0066a3' : ';background:#d39e00') . '">🗳 Proposer au vote (email × ' . $nem . ')</button></form>';
+            echo '<form method="post" style="display:inline"><input type="hidden" name="lfi_mobi_notify" value="' . (int) $r->id . '"><input type="hidden" name="phase" value="invit">' . wp_nonce_field('lfi_mobi_notify', '_wpnonce', true, false)
+               . '<button type="submit" class="' . $inv_style . '" style="padding:8px 12px;font-size:.85em' . ($actee ? ';background:#186a3b' : ';color:#186a3b') . '">🎟️ Inviter les ' . $nem . ' membres (email)</button></form>';
             echo '</div>';
-            if ($nph === 0) echo '<div class="lfi-app-help" style="margin-top:4px"><small>Aucun numéro de membre enregistré — ajoute les téléphones des membres (fiche membre) pour l\'envoi groupé.</small></div>';
+            if ($nem === 0) echo '<div class="lfi-app-help" style="margin-top:4px"><small>Aucun email de membre trouvé — vérifie que les comptes des membres du GA ont bien un email.</small></div>';
+            /* Repli SMS honnête : le texte + tous les numéros à copier (l'iPhone
+               n'envoie pas à plusieurs via un lien). */
+            if ($nph > 0) {
+                $sms_txt = 'LFI Clos Toreau — ' . $tmeta[1] . ' ' . $when . ' ' . ($creneaux[$r->creneau] ?? '') . $lieu_txt . '. Réponds sur l\'app : ' . $lien;
+                echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3">📲 Par SMS (copier le texte + les ' . $nph . ' numéros)</summary>';
+                echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'iPhone n\'envoie un lien SMS qu\'au 1er numéro. Copie ce texte + ces numéros dans un groupe Messages :</small></div>';
+                echo '<textarea readonly style="width:100%;height:56px;margin-top:4px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($sms_txt) . '</textarea>';
+                echo '<textarea readonly style="width:100%;height:56px;margin-top:4px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea(implode(', ', $phones)) . '</textarea>';
+                echo '</details>';
+            }
             echo '</div>';
         }
         echo '</li>';
