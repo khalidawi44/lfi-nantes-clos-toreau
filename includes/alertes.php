@@ -88,16 +88,25 @@ function lfi_nct_alertes_auto() {
             }
         }
 
-        /* ⏰ Délai légal NMH dépassé (à partir de la mise en demeure) → étape 4 :
-           saisir le SCHS. S'affiche tant que le SCHS n'a pas été envoyé. */
+        /* ⏰ Délai légal NMH dépassé (à partir de la mise en demeure). Dialogue
+           avec Morineau rompu → deux leviers, dans l'ordre : d'abord REMONTER en
+           AMIABLE à Christophe Jouin (CA de NMH, décideur), puis saisir le SCHS. */
         if (!empty($r->lrar_travaux_date) && empty($r->schs_date) && ($r->statut ?? '') !== 'clos' && function_exists('lfi_nct_nmh_deadline')) {
             $deadline = lfi_nct_nmh_deadline($r->lrar_travaux_date, $r->nmh_urgence ?: 'bailleur');
             if ($deadline && strtotime($deadline) < $now) {
                 $late = (int) floor(($now - strtotime($deadline)) / 86400);
+                /* Étape amiable : escalade au CA (Christophe Jouin) — plus de
+                   pouvoir de décision, parle directement au conseil d'administration. */
+                $out[] = [
+                    'prio'   => 'haute',
+                    'titre'  => '📈 Remonter à Christophe Jouin (CA NMH) — ' . $full,
+                    'detail' => 'Dialogue Morineau rompu (délai dépassé de ' . $late . ' j). Étape amiable : escalade au décideur (christophe.jouin@mairie-nantes.fr). On transmet les demandes, PAS le chiffrage ni les coordonnées.',
+                    'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
+                ];
                 $out[] = [
                     'prio'   => 'haute',
                     'titre'  => '⏰ Délai NMH dépassé — ' . $full,
-                    'detail' => 'Mise en demeure sans effet (date limite : ' . wp_date('j M Y', strtotime($deadline)) . ', dépassée de ' . $late . ' j). Étape 4 : saisir le SCHS.',
+                    'detail' => 'Mise en demeure sans effet (date limite : ' . wp_date('j M Y', strtotime($deadline)) . ', dépassée de ' . $late . ' j). Si l\'amiable (Jouin) n\'aboutit pas : saisir le SCHS.',
                     'url'    => lfi_nct_app_url('dossier-doc-schs', ['id' => $r->id]),
                 ];
             }
