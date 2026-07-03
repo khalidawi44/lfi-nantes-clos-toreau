@@ -743,6 +743,7 @@ function lfi_nct_app_shortcode() {
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
+                    'strategie-municipale', 'strategie-nationale',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
                     wp_safe_redirect(lfi_nct_app_url());
@@ -863,6 +864,8 @@ function lfi_nct_app_shortcode() {
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
                     case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
+                    case 'strategie-municipale':  lfi_nct_app_view_strategie_municipale();   break;
+                    case 'strategie-nationale':   lfi_nct_app_view_strategie_nationale();    break;
                     case 'national':              lfi_nct_app_view_national();               break;
                     case 'national-args':         lfi_nct_app_view_national_args();          break;
                     case 'national-etudes':       lfi_nct_app_view_national_etudes();        break;
@@ -2320,6 +2323,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
+            ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
             ['🌐', 'Tableau de bord du réseau', 'Tous les GA municipaux, regroupé',   lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
             ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
@@ -2330,6 +2334,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
         '🇫🇷 VOLET NATIONAL — député·es' => [
+            ['🇫🇷', 'Stratégie nationale',      'Remonter · multi-GA · députation',   lfi_nct_app_url('strategie-nationale')],
             ['🇫🇷', 'Tableau de bord national', 'Chiffres cumulés pour argumenter',   lfi_nct_app_url('national')],
             ['🗣️', 'Éléments de langage',       'Arguments prêts à l\'emploi',        lfi_nct_app_url('national-args')],
             ['📚', 'Études & données',           'Documents · données scientifiques',  lfi_nct_app_url('national-etudes')],
