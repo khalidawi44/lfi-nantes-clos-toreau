@@ -360,7 +360,8 @@ function lfi_nct_member_onb_is_member() {
     $roles = (array) $u->roles;
     $ga = defined('LFI_NCT_ROLE_GA') && in_array(LFI_NCT_ROLE_GA, $roles, true);
     $te = defined('LFI_NCT_ROLE_TENANT') && in_array(LFI_NCT_ROLE_TENANT, $roles, true);
-    return $ga || $te;
+    $pa = defined('LFI_NCT_ROLE_PARTNER') && in_array(LFI_NCT_ROLE_PARTNER, $roles, true);
+    return $ga || $te || $pa;
 }
 
 /** Faut-il montrer l'accueil membre ? (jamais fait). */
