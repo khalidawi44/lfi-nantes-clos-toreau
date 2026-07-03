@@ -727,6 +727,10 @@ function lfi_nct_app_shortcode() {
     } else {
         /* Journalise l'usage de l'app (1 fois/jour/utilisateur). */
         if (function_exists('lfi_nct_activity_track_app')) lfi_nct_activity_track_app();
+        /* Accueil « première connexion » membre/locataire (choisir son mot de
+           passe + installer l'app) — la coquille app n'exécute pas wp_footer,
+           donc on rend l'overlay ici, avant le routeur, sur toutes les vues. */
+        if (function_exists('lfi_nct_member_onb_render')) lfi_nct_member_onb_render();
         $handled = false;
         if (function_exists('lfi_nct_app_role_dispatch')) {
             lfi_nct_app_role_dispatch($handled);
@@ -1168,6 +1172,7 @@ function lfi_nct_app_render_dashboard() {
         </div>
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
+        <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
         <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>

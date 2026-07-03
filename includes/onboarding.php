@@ -411,13 +411,10 @@ function lfi_nct_member_onb_handle_finish() {
     wp_safe_redirect(add_query_arg('bienvenue', 1, function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/'))); exit;
 }
 
-/** Overlay d'accueil membre — rendu globalement sur la page de l'app (pied de page),
- *  pour couvrir aussi l'arrivée directe sur un créneau via lien magique. */
-add_action('wp_footer', 'lfi_nct_member_onb_render', 5);
+/** Overlay d'accueil membre — appelé DANS le rendu de l'app (la page de l'app est
+ *  une coquille autonome qui n'exécute pas wp_footer). Couvre toutes les vues,
+ *  y compris l'arrivée directe sur un créneau via lien magique. */
 function lfi_nct_member_onb_render() {
-    if (!is_singular()) return;
-    $post = get_post();
-    if (!$post || (defined('LFI_NCT_APP_SLUG') && $post->post_name !== LFI_NCT_APP_SLUG)) return;
     if (!lfi_nct_member_onb_needed()) return;
 
     $u = wp_get_current_user();

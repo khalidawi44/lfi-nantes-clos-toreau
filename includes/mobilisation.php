@@ -262,17 +262,24 @@ function lfi_nct_mobi_notify_members($row, $phase, $back_args, $types, $creneaux
  */
 function lfi_nct_render_home_mobilisation() {
     if (!is_user_logged_in() || !function_exists('lfi_nct_upcoming_events')) return;
-    $events = lfi_nct_upcoming_events(6);
+    $events = lfi_nct_upcoming_events(8);
     if (empty($events)) return;
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_mobilisation';
 
+    /* On ne garde QUE les actions du GA (pas les événements généraux/externes). */
+    $ga = [];
+    foreach ($events as $e) {
+        $d = function_exists('lfi_nct_event_data') ? lfi_nct_event_data($e) : null;
+        if ($d && lfi_nct_evt_is_ga_action((int) $d['id'])) $ga[] = $d;
+    }
+    if (empty($ga)) return;
+    $ga = array_slice($ga, 0, 6);
+
     echo '<div class="lfi-app-section" style="margin-top:20px">';
     echo '<div class="lfi-app-section-title" style="font-size:1.05em">📅 À VENIR — SE MOBILISER</div>';
     echo '<div style="display:flex;flex-direction:column;gap:10px">';
-    foreach ($events as $e) {
-        $d = function_exists('lfi_nct_event_data') ? lfi_nct_event_data($e) : null;
-        if (!$d) continue;
+    foreach ($ga as $d) {
         $eid = (int) $d['id'];
         $rows = $wpdb->get_results($wpdb->prepare("SELECT participants FROM $t WHERE event_id = %d", $eid)) ?: [];
         $ncr = count($rows); $npart = 0;
@@ -299,6 +306,57 @@ function lfi_nct_render_home_mobilisation() {
 /* ============================================================== *
  *  VOTE : pop-up « on attend votre décision » (membres)          *
  * ============================================================== */
+/** Tous les créneaux EN VOTE (à venir) que l'utilisateur n'a PAS encore votés.
+ *  IGNORE l'écartement du pop-up (croix) : sert au bandeau persistant d'accueil,
+ *  pour qu'un vote ne soit jamais « perdu » parce qu'on a fermé la fenêtre. */
+function lfi_nct_mobi_open_votes_for_user() {
+    if (!is_user_logged_in()) return [];
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_mobilisation';
+    $uid = get_current_user_id();
+    $seuil = lfi_nct_mobi_vote_threshold();
+    $today = wp_date('Y-m-d');
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $t WHERE (date_creneau >= %s OR date_creneau IS NULL)" . lfi_nct_mobi_scope_clause() . " ORDER BY date_creneau ASC LIMIT 60",
+        $today)) ?: [];
+    $out = [];
+    foreach ($rows as $r) {
+        $list = lfi_nct_mobi_parts($r);
+        if (count($list) >= $seuil) continue;            /* déjà actée */
+        if (in_array((int) $uid, $list, true)) continue; /* déjà voté oui */
+        $out[] = $r;
+    }
+    return $out;
+}
+
+/** Bandeau PERSISTANT d'accueil : « tu as N vote(s) en attente ».
+ *  Toujours visible tant qu'il reste un vote non tranché — même si le pop-up
+ *  a été fermé d'un clic sur la croix. C'est le filet de sécurité du vote. */
+function lfi_nct_render_home_vote_banner() {
+    $open = lfi_nct_mobi_open_votes_for_user();
+    if (empty($open)) return;
+    $n = count($open);
+    $first = $open[0];
+    $types = lfi_nct_mobi_types(); $creneaux = lfi_nct_mobi_creneaux();
+    $tmeta = $types[$first->type] ?? ['✨', 'Action'];
+    $when  = $first->date_creneau ? ucfirst(wp_date('l j M', strtotime($first->date_creneau))) : '';
+    $moment = $creneaux[$first->creneau] ?? '';
+    /* Le clic mène au créneau (via l'événement / la campagne). */
+    $ev = (int) $first->event_id;
+    $url = $ev > 0 ? lfi_nct_app_url('mobilisation', ['ev' => $ev])
+                   : lfi_nct_app_url('mobilisation', ['theme' => (string) $first->theme]);
+    echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:block">';
+    echo '<div style="margin:0 0 14px;background:linear-gradient(135deg,#c8102e,#e0455e);color:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 4px 14px rgba(200,16,46,.25);display:flex;align-items:center;gap:12px">';
+    echo '<div style="font-size:1.9em;line-height:1">🗳</div>';
+    echo '<div style="flex:1">';
+    echo '<div style="font-weight:900;font-size:1.05em">' . ($n > 1 ? ('Tu as ' . $n . ' votes en attente') : 'On attend ta décision !') . '</div>';
+    echo '<div style="font-size:.9em;opacity:.95;margin-top:2px">' . esc_html($tmeta[0] . ' ' . $tmeta[1] . ($when ? ' · ' . $when : '') . ($moment ? ' · ' . $moment : '')) . '</div>';
+    echo '<div style="font-size:.82em;opacity:.9;margin-top:3px">👉 Appuie pour voir et voter — ton clic compte.</div>';
+    echo '</div>';
+    echo '<div style="background:rgba(255,255,255,.22);border-radius:20px;padding:6px 12px;font-weight:800;font-size:.85em;white-space:nowrap">Voter →</div>';
+    echo '</div></a>';
+}
+
 /** Le premier créneau EN VOTE (à venir) que l'utilisateur n'a ni voté ni écarté. */
 function lfi_nct_mobi_pending_vote_for_user() {
     if (!is_user_logged_in()) return null;
@@ -406,6 +464,14 @@ function lfi_nct_mobi_sms_toggle($cid, $uid) {
     update_option('lfi_nct_mobi_sms_sent', $o, false);
 }
 
+/** Un événement est-il une ACTION du GA (tractage, collage, porte-à-porte) —
+ *  par opposition à un événement général/externe (conférence, présentation…) ?
+ *  Par défaut OUI (opt-out) pour ne pas faire disparaître les actions existantes.
+ *  L'admin bascule un événement « général » d'un clic depuis le hub. */
+function lfi_nct_evt_is_ga_action($eid) {
+    return get_post_meta((int) $eid, '_lfi_evt_ga_action', true) !== '0';
+}
+
 /* ============================================================== *
  *  ROUTEUR : hub, tableau, ou SMS membre-par-membre              *
  * ============================================================== */
@@ -416,6 +482,16 @@ function lfi_nct_app_view_mobilisation() {
     if (!empty($_POST['lfi_mobi_theme_add']) && check_admin_referer('lfi_mobi_theme_add')) {
         $slug = lfi_nct_mobi_theme_add($_POST['theme_label'] ?? '');
         if ($slug !== '') { wp_safe_redirect(lfi_nct_app_url('mobilisation', ['theme' => $slug])); exit; }
+        wp_safe_redirect(lfi_nct_app_url('mobilisation')); exit;
+    }
+
+    /* Admin : basculer un événement « action du GA » ⇄ « événement général ». */
+    if (!empty($_POST['lfi_evt_toggle_ga']) && check_admin_referer('lfi_evt_toggle_ga') && lfi_nct_mobi_can_mod()) {
+        $eid = (int) $_POST['lfi_evt_toggle_ga'];
+        if ($eid) {
+            $cur = lfi_nct_evt_is_ga_action($eid);
+            update_post_meta($eid, '_lfi_evt_ga_action', $cur ? '0' : '1');
+        }
         wp_safe_redirect(lfi_nct_app_url('mobilisation')); exit;
     }
 
@@ -511,26 +587,53 @@ function lfi_nct_app_view_mobilisation_hub() {
         $agg[$key]['parts'] += count(lfi_nct_mobi_parts($r));
     }
 
-    /* --- Section AGENDA : un événement = une action possible --- */
+    /* --- Section AGENDA : on SÉPARE les actions du GA (tractage, collage…) des
+           événements généraux/externes (conférence, présentation…). Les actions
+           du GA sont mises en avant ; les autres sont dans un volet à part. --- */
     $events = function_exists('lfi_nct_upcoming_events') ? lfi_nct_upcoming_events(20) : [];
-    echo '<h3 style="margin:14px 0 6px;color:#c8102e">📅 Pour nos événements</h3>';
-    if (empty($events)) {
-        echo '<div class="lfi-app-help">Aucun événement à venir dans l\'agenda pour l\'instant.</div>';
+    $ga_evts = []; $gen_evts = [];
+    foreach ($events as $e) {
+        $d = lfi_nct_event_data($e);
+        if (!$d) continue;
+        if (lfi_nct_evt_is_ga_action((int) $d['id'])) $ga_evts[] = $d; else $gen_evts[] = $d;
+    }
+    $can_mod = lfi_nct_mobi_can_mod();
+
+    echo '<h3 style="margin:14px 0 6px;color:#c8102e">📅 Nos actions du GA</h3>';
+    if (empty($ga_evts)) {
+        echo '<div class="lfi-app-help">Aucune action du GA à venir. ' . ($gen_evts ? 'Regarde les autres événements plus bas.' : 'Crée-en une ci-dessous.') . '</div>';
     } else {
         echo '<ul class="lfi-app-list">';
-        foreach ($events as $e) {
-            $d = lfi_nct_event_data($e);
-            if (!$d) continue;
+        foreach ($ga_evts as $d) {
             $eid = (int) $d['id'];
             $a = $agg['e' . $eid] ?? ['creneaux' => 0, 'parts' => 0];
             lfi_nct_mobi_hub_card(
                 '📣 Tractage / collage pour : ' . $d['titre'],
                 trim(ucfirst((string) $d['date_complete']) . ($d['lieu'] ? ' · 📍 ' . $d['lieu'] : '')),
                 $a,
-                lfi_nct_app_url('mobilisation', ['ev' => $eid])
+                lfi_nct_app_url('mobilisation', ['ev' => $eid]),
+                $can_mod ? $eid : 0, true
             );
         }
         echo '</ul>';
+    }
+
+    /* Volet « événements généraux » : pas de tractage, juste à relayer / y aller. */
+    if (!empty($gen_evts)) {
+        echo '<details class="lfi-app-card" style="border-left:4px solid #0066a3;margin-top:10px"><summary style="cursor:pointer;font-weight:800;color:#0066a3">🎓 Autres événements de l\'agenda (' . count($gen_evts) . ') — à relayer, sans tractage</summary>';
+        echo '<div class="lfi-app-help" style="margin:6px 0">Ces événements ne sont pas des actions du GA (ex. une conférence, une présentation ouverte à tou·te·s). On peut les <strong>partager</strong>, mais on n\'organise pas de tractage dessus.</div>';
+        echo '<ul class="lfi-app-list">';
+        foreach ($gen_evts as $d) {
+            $eid = (int) $d['id'];
+            echo '<li class="lfi-app-card" style="border-left:4px solid #0066a3">';
+            echo '<div class="head"><div class="who">🎓 ' . esc_html($d['titre']) . '</div></div>';
+            echo '<div class="meta"><span class="meta-chip">' . esc_html(trim(ucfirst((string) $d['date_complete']) . ($d['lieu'] ? ' · 📍 ' . $d['lieu'] : ''))) . '</span></div>';
+            echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
+            if (!empty($d['url'])) echo '<a class="btn-ghost" href="' . esc_url($d['url']) . '" style="padding:6px 12px;font-size:.85em">👁 Voir / partager</a>';
+            if ($can_mod) echo lfi_nct_evt_toggle_form($eid, false);
+            echo '</div></li>';
+        }
+        echo '</ul></details>';
     }
 
     /* --- Section CAMPAGNES --- */
@@ -555,8 +658,9 @@ function lfi_nct_app_view_mobilisation_hub() {
     lfi_nct_app_screen_close();
 }
 
-/** Une carte du hub (titre, sous-titre, agrégat, url). */
-function lfi_nct_mobi_hub_card($titre, $sous, $a, $url) {
+/** Une carte du hub (titre, sous-titre, agrégat, url).
+ *  $eid > 0 + $is_ga => affiche à l'admin le bouton « déplacer vers événements généraux ». */
+function lfi_nct_mobi_hub_card($titre, $sous, $a, $url, $eid = 0, $is_ga = false) {
     $accent = ($a['creneaux'] > 0) ? '#186a3b' : '#0066a3';
     echo '<li class="lfi-app-card" style="border-left:4px solid ' . esc_attr($accent) . '">';
     echo '<div class="head"><div class="who">' . esc_html($titre) . '</div></div>';
@@ -566,8 +670,19 @@ function lfi_nct_mobi_hub_card($titre, $sous, $a, $url) {
     } else {
         echo '<div class="com" style="font-size:.9em;color:#888">Pas encore de créneau — <strong>lance le premier</strong>.</div>';
     }
-    echo '<div style="margin-top:8px"><a class="btn-primary" style="background:' . esc_attr($accent) . '" href="' . esc_url($url) . '">🎟️ Organiser / participer</a></div>';
+    echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><a class="btn-primary" style="background:' . esc_attr($accent) . '" href="' . esc_url($url) . '">🎟️ Organiser / participer</a>';
+    if ($eid > 0) echo lfi_nct_evt_toggle_form((int) $eid, $is_ga);
+    echo '</div>';
     echo '</li>';
+}
+
+/** Petit formulaire de bascule GA-action ⇄ événement général (admin). */
+function lfi_nct_evt_toggle_form($eid, $is_ga) {
+    $label = $is_ga ? '↪︎ Pas une action du GA' : '↩︎ En faire une action du GA';
+    return '<form method="post" style="display:inline">'
+         . wp_nonce_field('lfi_evt_toggle_ga', '_wpnonce', true, false)
+         . '<input type="hidden" name="lfi_evt_toggle_ga" value="' . (int) $eid . '">'
+         . '<button type="submit" class="btn-ghost" style="padding:6px 10px;font-size:.8em;color:#0066a3">' . esc_html($label) . '</button></form>';
 }
 
 /* ============================================================== *
