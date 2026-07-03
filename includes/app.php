@@ -849,6 +849,7 @@ function lfi_nct_app_shortcode() {
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
                     case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
                     case 'geo-contacts':          lfi_nct_app_view_geo_contacts();           break;
+                    case 'enquete-doublons':      lfi_nct_app_view_enquete_doublons();       break;
                     case 'geo-perimetres':        lfi_nct_app_view_geo_perimetres();         break;
                     case 'suggerer-outil':        lfi_nct_app_view_suggerer_outil();         break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
@@ -1161,6 +1162,7 @@ function lfi_nct_app_render_dashboard() {
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_dup_admin_notice')) lfi_nct_dup_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 

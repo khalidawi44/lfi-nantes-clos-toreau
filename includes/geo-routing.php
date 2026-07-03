@@ -194,6 +194,9 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
     $table = $wpdb->prefix . 'lfi_nct_responses';
     $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $sub_id));
     if (!$row || trim((string) $row->adresse) === '') return;
+    /* Doublon détecté (validation prioritaire) → ne pas router ni mettre en
+       file « à contacter » tant que le référent n'a pas tranché. */
+    if (function_exists('lfi_nct_dup_is_flagged') && lfi_nct_dup_is_flagged($sub_id)) return;
 
     $geo = lfi_nct_geo_geocode_detailed($row->adresse);
     if (!$geo) return; /* non géocodable → on ne force rien */

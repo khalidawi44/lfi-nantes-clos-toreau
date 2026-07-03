@@ -310,6 +310,12 @@ function lfi_nct_app_view_dossier_synthese() {
         echo '<p style="background:#7a0000;color:#fff;font-weight:700;text-align:center;padding:5px;border-radius:4px;font-size:.85em">DOCUMENT CONFIDENTIEL — réservé à l\'avocat · Ne pas communiquer à Nantes Métropole Habitat</p>';
     }
     echo '<h1>Dossier de synthèse — ' . esc_html($nom) . '</h1>';
+    /* VOLET : un dossier peut appartenir à un combat distinct (logement,
+       aide sociale à l'enfance…). On ne mélange JAMAIS les volets, même à nom
+       identique. Bandeau explicite en tête. */
+    if (!empty($d['volet'])) {
+        echo '<p style="background:#2c3e91;color:#fff;font-weight:800;text-align:center;padding:7px;border-radius:6px">VOLET : ' . esc_html($d['volet']) . ' — dossier distinct, à ne jamais mélanger avec un autre volet</p>';
+    }
     if (!empty($d['rdv'])) echo '<p style="text-align:center">Rendez-vous : ' . esc_html($d['rdv']) . '</p>';
 
     /* 1. Identité */
