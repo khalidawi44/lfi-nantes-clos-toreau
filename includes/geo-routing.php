@@ -34,17 +34,46 @@ function lfi_nct_geo_norm($s) {
 /* -------------------------------------------------------------- *
  *  Géocodage détaillé : adresse → [lat, lng, commune]             *
  * -------------------------------------------------------------- */
-function lfi_nct_geo_geocode_detailed($address) {
+/**
+ * Géocode une adresse française.
+ * $hint_commune : commune du·de la militant·e qui a saisi (pour lever
+ * l'ambiguïté quand l'adresse ne précise ni ville ni code postal — ex.
+ * « 6 rue de Saint-Jean-de-Luz » qui existe dans plusieurs communes).
+ * On utilise d'abord la Base Adresse Nationale (autoritaire pour la France),
+ * puis Nominatim en repli.
+ */
+function lfi_nct_geo_geocode_detailed($address, $hint_commune = '') {
     $address = trim((string) $address);
     if ($address === '') return null;
-    $params = [
-        'q'              => $address . ', France',
-        'format'         => 'json',
-        'addressdetails' => 1,
-        'limit'          => 1,
-        'countrycodes'   => 'fr',
-    ];
-    $url  = 'https://nominatim.openstreetmap.org/search?' . http_build_query($params);
+    $has_cp = (bool) preg_match('/\b\d{5}\b/', $address);
+    $hint_commune = trim((string) $hint_commune);
+    /* Sans code postal ET sans mention de la commune → on ajoute l'indice. */
+    $q = $address;
+    if (!$has_cp && $hint_commune !== '' && stripos($address, $hint_commune) === false) {
+        $q = $address . ', ' . $hint_commune;
+    }
+
+    /* 1) Base Adresse Nationale (data.gouv.fr) — la meilleure pour la France. */
+    $ban_url = 'https://api-adresse.data.gouv.fr/search/?' . http_build_query(['q' => $q, 'limit' => 1, 'autocomplete' => 0]);
+    $r = wp_remote_get($ban_url, ['timeout' => 12, 'headers' => ['User-Agent' => 'LFI-Nantes-Clos-Toreau/1.0', 'Accept' => 'application/json']]);
+    if (!is_wp_error($r)) {
+        $b = json_decode(wp_remote_retrieve_body($r), true);
+        $f = $b['features'][0] ?? null;
+        if (is_array($f) && !empty($f['geometry']['coordinates'][0]) && isset($f['geometry']['coordinates'][1])) {
+            $p = $f['properties'] ?? [];
+            return [
+                'lat'     => (float) $f['geometry']['coordinates'][1],
+                'lng'     => (float) $f['geometry']['coordinates'][0],
+                'commune' => (string) ($p['city'] ?? $p['municipality'] ?? ''),
+                'score'   => (float) ($p['score'] ?? 0),
+            ];
+        }
+    }
+
+    /* 2) Repli : Nominatim. */
+    $url  = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+        'q' => $q . ', France', 'format' => 'json', 'addressdetails' => 1, 'limit' => 1, 'countrycodes' => 'fr',
+    ]);
     $resp = wp_remote_get($url, ['timeout' => 12, 'headers' => [
         'User-Agent' => 'LFI-Nantes-Clos-Toreau-Survey/1.0 (https://lfi-nantes-clostoreau.fr)',
         'Accept'     => 'application/json',
@@ -54,7 +83,7 @@ function lfi_nct_geo_geocode_detailed($address) {
     if (!is_array($body) || empty($body[0]) || !isset($body[0]['lat'], $body[0]['lon'])) return null;
     $a = $body[0]['address'] ?? [];
     $commune = $a['city'] ?? $a['town'] ?? $a['village'] ?? $a['municipality'] ?? $a['suburb'] ?? '';
-    return ['lat' => (float) $body[0]['lat'], 'lng' => (float) $body[0]['lon'], 'commune' => (string) $commune];
+    return ['lat' => (float) $body[0]['lat'], 'lng' => (float) $body[0]['lon'], 'commune' => (string) $commune, 'score' => 0.0];
 }
 
 /* -------------------------------------------------------------- *
@@ -184,6 +213,52 @@ function lfi_nct_geo_autocreate_ga($commune, $lat, $lng) {
 }
 
 /* ============================================================== *
+ *  NETTOYAGE (une fois) : répare les enquêtes mal routées vers un  *
+ *  GA créé automatiquement à partir d'une adresse AMBIGUË (sans    *
+ *  code postal). On les rattache au GA de celui·celle qui a saisi, *
+ *  et on supprime les GA auto désormais vides.                     *
+ * ============================================================== */
+add_action('init', 'lfi_nct_geo_cleanup_bad_autoga', 15);
+function lfi_nct_geo_cleanup_bad_autoga() {
+    if (get_option('lfi_nct_geo_cleanup_autoga_v1')) return;
+    $custom = function_exists('lfi_nct_groupes_custom') ? lfi_nct_groupes_custom() : get_option('lfi_nct_ga_custom', []);
+    if (!is_array($custom)) $custom = [];
+    $auto = [];
+    foreach ($custom as $slug => $g) if (!empty($g['auto'])) $auto[] = $slug;
+    if (empty($auto)) { update_option('lfi_nct_geo_cleanup_autoga_v1', 1, false); return; }
+
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_responses';
+    $in = implode(',', array_fill(0, count($auto), '%s'));
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT id, adresse, militant_user_id, ga FROM $t WHERE ga IN ($in) AND deleted_at IS NULL", $auto)) ?: [];
+    $queue = get_option('lfi_nct_geo_contacts', []); if (!is_array($queue)) $queue = [];
+    foreach ($rows as $r) {
+        if (preg_match('/\b\d{5}\b/', (string) $r->adresse)) continue; /* adresse explicite → on respecte */
+        $mg = trim((string) get_user_meta((int) $r->militant_user_id, 'lfi_nct_ga', true));
+        if ($mg === '') $mg = 'clos-toreau';
+        if ($mg === (string) $r->ga) continue;
+        $wpdb->update($t, ['ga' => $mg], ['id' => (int) $r->id]);
+        foreach ($queue as &$q) { if ((int) ($q['sub_id'] ?? 0) === (int) $r->id) { $q['ga'] = $mg; $q['couvert'] = 1; $q['auto'] = 0; } }
+        unset($q);
+    }
+    update_option('lfi_nct_geo_contacts', $queue, false);
+
+    /* Retire les GA auto devenus vides (aucune enquête, aucun membre). */
+    $mem = $wpdb->prefix . 'lfi_nct_membres';
+    $changed = false;
+    $per = get_option('lfi_nct_ga_perimetres', []); if (!is_array($per)) $per = [];
+    foreach ($auto as $slug) {
+        $nr = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE ga = %s AND deleted_at IS NULL", $slug));
+        $nm = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $mem WHERE ga = %s", $slug));
+        if ($nr === 0 && $nm === 0) {
+            unset($custom[$slug]); if (isset($per[$slug])) unset($per[$slug]); $changed = true;
+        }
+    }
+    if ($changed) { update_option('lfi_nct_ga_custom', $custom, false); update_option('lfi_nct_ga_perimetres', $per, false); }
+    update_option('lfi_nct_geo_cleanup_autoga_v1', 1, false);
+}
+
+/* ============================================================== *
  *  HOOK : une enquête vient d'être enregistrée → on la route      *
  * ============================================================== */
 add_action('lfi_nct_submission_created', 'lfi_nct_geo_route_submission', 10, 2);
@@ -198,17 +273,39 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
        file « à contacter » tant que le référent n'a pas tranché. */
     if (function_exists('lfi_nct_dup_is_flagged') && lfi_nct_dup_is_flagged($sub_id)) return;
 
-    $geo = lfi_nct_geo_geocode_detailed($row->adresse);
+    /* ANCRAGE : le·la militant·e qui a saisi enquête forcément DANS SA ZONE.
+       On s'en sert pour (a) lever l'ambiguïté du géocodage et (b) éviter de
+       créer un GA lointain à partir d'une adresse partielle. */
+    $mil_ga = trim((string) get_user_meta((int) $row->militant_user_id, 'lfi_nct_ga', true));
+    if ($mil_ga === '' ) $mil_ga = 'clos-toreau';
+    $mil_perim = lfi_nct_geo_perimetre($mil_ga);
+    $mil_commune = (string) ($mil_perim['commune'] ?? '');
+
+    $geo = lfi_nct_geo_geocode_detailed($row->adresse, $mil_commune);
     if (!$geo) return; /* non géocodable → on ne force rien */
     $wpdb->update($table, ['lat' => $geo['lat'], 'lng' => $geo['lng']], ['id' => $sub_id]);
 
     $match = lfi_nct_geo_match($geo['lat'], $geo['lng'], $geo['commune']);
 
-    /* Phase 3 : aucune zone ne couvre + la personne veut de l'aide → créer un GA. */
+    /* L'adresse nomme-t-elle explicitement une AUTRE commune que celle du·de la
+       militant·e ? (code postal présent ET commune géocodée différente). */
+    $has_cp = (bool) preg_match('/\b\d{5}\b/', (string) $row->adresse);
+    $norm = function ($s) { return function_exists('remove_accents') ? strtolower(trim(remove_accents((string) $s))) : strtolower(trim((string) $s)); };
+    $diff_commune = ($geo['commune'] !== '' && $mil_commune !== '' && $norm($geo['commune']) !== $norm($mil_commune));
+
     $auto = false;
-    if (!$match && (int) $row->contact_recontact === 1 && $geo['commune'] !== '' && lfi_nct_geo_autocreate_on()) {
-        $slug = lfi_nct_geo_autocreate_ga($geo['commune'], $geo['lat'], $geo['lng']);
-        if ($slug !== '') { $match = ['slug' => $slug, 'nom' => 'GA LFI ' . $geo['commune'], 'how' => 'commune', 'dist' => 0]; $auto = true; }
+    if (!$match) {
+        /* On NE crée un GA lointain QUE si l'adresse désigne clairement une autre
+           commune (code postal + commune différente). Sinon (adresse partielle,
+           ambiguë), on rattache au GA de celui·celle qui a saisi — pas d'invention. */
+        if ($has_cp && $diff_commune && (int) $row->contact_recontact === 1 && $geo['commune'] !== '' && lfi_nct_geo_autocreate_on()) {
+            $slug = lfi_nct_geo_autocreate_ga($geo['commune'], $geo['lat'], $geo['lng']);
+            if ($slug !== '') { $match = ['slug' => $slug, 'nom' => 'GA LFI ' . $geo['commune'], 'how' => 'commune', 'dist' => 0]; $auto = true; }
+        }
+        if (!$match) {
+            /* Filet : on rattache au GA du·de la militant·e (sa connexion). */
+            $match = ['slug' => $mil_ga, 'nom' => (function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($mil_ga) : $mil_ga), 'how' => 'militant', 'dist' => 0];
+        }
     }
     if ($match) $wpdb->update($table, ['ga' => $match['slug']], ['id' => $sub_id]);
 
