@@ -648,6 +648,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
            dossiers, recouvrement, appels NMH… → réservés aux admins et à toi. */
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
+            case 'enquete':          lfi_nct_app_view_enquete();          break;
             case 'evenements':       lfi_nct_app_view_evenements();       break;
             case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
             /* Coordination : proposer une action, dire ses dispos, voir celles
@@ -688,7 +689,7 @@ function lfi_nct_app_view_ga_dashboard() {
     $survey_url = lfi_nct_survey_url();
 
     $tiles = [
-        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            $survey_url],
+        ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            lfi_nct_app_url('enquete')],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
         ['🤖', 'Aide & contact',            'Un problème ? On t\'accompagne',      lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
