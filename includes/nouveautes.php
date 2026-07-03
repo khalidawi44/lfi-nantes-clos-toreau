@@ -37,6 +37,56 @@ function lfi_nct_news_latest() {
     return $list ? end($list) : null;
 }
 
+/**
+ * Seed d'annonces « quoi de neuf » côté code (idempotent par flag).
+ * Chaque nouveauté qui touche les membres ajoute une entrée ici avec une clé
+ * unique ; elle n'est insérée qu'une fois, même après plusieurs déploiements.
+ */
+add_action('init', 'lfi_nct_news_seed_builtin', 1300);
+function lfi_nct_news_seed_builtin() {
+    $done = get_option('lfi_nct_news_seed_keys', []);
+    if (!is_array($done)) $done = [];
+
+    $seeds = [
+        'audit-nmh-2026-07' => [
+            'titre' => 'Nouveau : « Où va mon loyer ? »',
+            'corps' => 'Un nouvel écran <strong>💶 Où va mon loyer ?</strong> arrive dans ta console. '
+                     . 'C\'est l\'argumentaire NMH avec les <strong>vrais chiffres</strong> (rapport de la Chambre régionale des comptes) : '
+                     . 'sur 330 € de loyer, à peine 21 € reviennent à l\'entretien du logement. '
+                     . 'Tu y trouves une <strong>phrase simple à dire au porte-à-porte</strong> — utile pour répondre aux gens sans te tromper.',
+        ],
+        'mobilisation-2026-07' => [
+            'titre' => 'Nouveau : se coordonner facilement',
+            'corps' => 'Fini le calendrier bizarre dans le vide. Il y a maintenant <strong>🤝 Se coordonner</strong> : '
+                     . 'tu choisis une action rattachée à un <strong>événement</strong> (ex. tractage pour la kermesse du 14 juillet) '
+                     . 'ou à une <strong>campagne</strong>, tu vois les <strong>créneaux</strong> (jour + moment) et tu cliques '
+                     . '<strong>« 🙋 Je participe »</strong> sur ceux qui t\'arrangent. Tu peux aussi <strong>proposer d\'autres dates</strong>. '
+                     . 'Simple, et on voit tout de suite qui vient.',
+        ],
+        'suggerer-outil-2026-07' => [
+            'titre' => 'Nouveau : suggère un outil',
+            'corps' => 'L\'app n\'est pas que le logement. Avec <strong>🧰 Suggérer un outil</strong>, si ton terrain a besoin '
+                     . 'd\'autre chose (bailleurs privés, énergie, services publics…), tu le dis — et l\'administrateur peut '
+                     . 'le déployer pour ton GA. C\'est toi qui es sur le terrain : c\'est toi qui sais.',
+        ],
+        'agenda-invite-2026-07' => [
+            'titre' => 'Les événements arrivent dans ton agenda',
+            'corps' => 'Quand un événement du GA est créé, tu reçois un <strong>email avec une invitation calendrier</strong>. '
+                     . 'Sur Gmail / Google Agenda, il s\'ajoute <strong>en un tap</strong>, avec un <strong>rappel</strong> la veille et 2 h avant. '
+                     . 'Plus besoin de le noter à la main.',
+        ],
+    ];
+
+    $changed = false;
+    foreach ($seeds as $key => $a) {
+        if (in_array($key, $done, true)) continue;
+        lfi_nct_news_add($a['titre'], $a['corps']);
+        $done[] = $key;
+        $changed = true;
+    }
+    if ($changed) update_option('lfi_nct_news_seed_keys', $done, false);
+}
+
 /** AJAX : le membre a vu l'annonce → on mémorise (ne réapparaît plus). */
 add_action('wp_ajax_lfi_nct_news_seen', 'lfi_nct_news_seen_ajax');
 function lfi_nct_news_seen_ajax() {

@@ -159,4 +159,69 @@ Constat de visite + photographies datées ; certificat médical ; copie du signa
 AVO,
     ],
 
+    'gourdien' => [
+        'titre'      => 'Mme Gourdien — réponse de M. MORINEAU (NMH) : relance du traitement blattes',
+        'dossier_id' => 5,
+        'date'       => '2026-07-03',
+        'emails'     => [
+            [
+                'sens'  => 'envoye',
+                'to'    => 'yvonnic.morineau@nmh.fr (NMH — Pôle Grand Sud) · CC Clos Toreau',
+                'date'  => '2026-06-06 23:06',
+                'objet' => 'Apt 93 — 14 rue Saint-Jean-de-Luz — Mise en demeure de traitement complet de l\'infestation de blattes (4 ans)',
+                'corps' => "Mise en demeure de Mme Gourdien : infestation de blattes depuis avril 2022. Le propre technicien de NMH a constaté une infestation « très importante », incompatible avec le traitement allégé, et a recommandé PAR ÉCRIT un protocole complet et étalé. Demandes sous huitaine : (1) intervention par une entreprise spécialisée pour un protocole COMPLET ; (2) détail du protocole + calendrier ; (3) inclusion des apparts voisins (dont le 88, blattes photographiées le 19/05/2026) ; (4) communication des rapports antérieurs et de la copie de la commande. À défaut : SCHS, Tribunal judiciaire en référé (astreinte + indemnisation), Défenseur des droits, ANCOLS. Fondements : art. 1719 C. civ., art. 6 loi 1989, décret 2002-120, L.1331-22 CSP, loi ELAN, Cass. 3e civ. 8 juillet 2009 n° 08-12.116.",
+            ],
+            [
+                'sens'  => 'recu',
+                'de'    => 'yvonnic.morineau@nmh.fr — Yvonnic MORINEAU, Responsable Patrimoine, Pôle Grand Sud (NMH)',
+                'date'  => '2026-06-09 08:54',
+                'objet' => 'Réponse de NMH — relance du prestataire',
+                'corps' => <<<'MAIL'
+Bonjour
+
+Nous prenons acte de votre demande ci-dessous.
+
+Pour rappel depuis votre entrée dans les lieux en 2022, vous nous avez sollicité une seule fois au 23/10/25 pour ce sujet qui a fait l'objet d'une commande de traitement au 11/11/25 à l'entreprise Sapian puis d'une annulation au 31/12/25 faute de retour de votre part pour convenir d'un rendez-vous.
+
+L'entreprise a cependant pu intervenir au 23/03/26 dans le cadre d'un traitement préventif de contrôle et a constaté la présence de blatte et a appliqué le traitement en conséquence. Cette prestation étant garantie 6 mois nous relançons le prestataire afin qu'il conviennes d'un nouveau rendez-vous à votre domicile.
+
+Cordialement
+Yvonnic MORINEAU — Responsable Patrimoine — Pôle Grand Sud — Direction Maintenance Proximité
+MAIL,
+            ],
+        ],
+        'analyse'    => <<<'TXT'
+ANALYSE DE LA RÉPONSE DE NMH (M. Yvonnic MORINEAU) — dossier Mme Gourdien
+
+I. CE QUE DIT LA RÉPONSE — UNE AVANCÉE RÉELLE, MAIS PARTIELLE
+M. MORINEAU prend acte de la mise en demeure et annonce RELANCER le prestataire (Sapiens) pour un nouveau rendez-vous à domicile, la prestation du 23/03/2026 étant garantie 6 mois. C'est une VICTOIRE PARTIELLE : le traitement va reprendre. Mais la réponse n'accorde explicitement NI le protocole complet demandé, NI le calendrier, NI le traitement des apparts voisins, NI la communication des rapports et de la commande, NI un mot sur le préjudice.
+
+II. SUR LA FORME (lecture psychologique) — administratif, légèrement défensif
+Le ton reste courtois mais minimise : « vous nous avez sollicité une seule fois » et « annulation […] faute de retour de votre part » reportent la responsabilité sur la locataire. Ce n'est ni de l'hostilité ni une manœuvre d'intimidation — inutile de sur-réagir. La bonne posture : ACTER l'engagement (la relance), rester factuel, et VERROUILLER par écrit ce qui manque.
+
+III. SUR LE FOND — POINT PAR POINT
+1) « Une seule sollicitation » — inopérant. L'obligation d'entretien et de délivrance d'un logement décent (art. 1719-1720 C. civ. ; décret 2002-120) est PERMANENTE et ne dépend pas du nombre de signalements. Surtout, NMH RECONNAÎT lui-même que son prestataire a constaté la présence de blattes : la carence est établie indépendamment du décompte des relances.
+2) « Annulation faute de retour de votre part » (31/12/25) — à documenter et, au besoin, contester ; en tout état de cause, un bailleur diligent relance (ce que NMH fait enfin). L'essentiel : le traitement reprend.
+3) « Traitement préventif de contrôle », « garanti 6 mois » — c'est précisément le traitement ALLÉGÉ que le propre technicien de NMH a jugé insuffisant. On n'accepte pas une simple reconduction du préventif : on exige le PROTOCOLE COMPLET recommandé par écrit par ce technicien.
+4) SILENCES à lever, factuellement : protocole complet, calendrier des passages, apparts voisins (88 — réinfestation garantie sinon), rapports d'intervention + copie de la commande.
+
+IV. CONCLUSION — LA BOUSSOLE
+Volet URGENCE : en voie de résolution — à verrouiller par écrit cette semaine (protocole complet + calendrier + voisins + rapports). Volet PRÉJUDICE : on l'ouvre ENSUITE, à l'amiable d'abord (jamais proposé à ce jour, gardé en réserve), pour ne pas braquer le bailleur pendant qu'il agit sur l'urgence. Judiciaire en dernier recours seulement.
+TXT,
+
+        'timeline' => [
+            ['date' => '2022-04', 'fait' => 'Entrée dans les lieux — infestation de blattes dès l\'origine', 'detail' => 'Point de départ du trouble de jouissance.'],
+            ['date' => '2025-11-11', 'fait' => 'NMH commande un traitement à Sapiens', 'detail' => 'Puis annulé le 31/12/2025 (NMH invoque un défaut de RDV côté locataire).'],
+            ['date' => '2026-03-23', 'fait' => 'Intervention Sapiens : blattes constatées, traitement appliqué', 'detail' => 'Traitement préventif « allégé » — jugé insuffisant par le technicien lui-même.'],
+            ['date' => '2026-06-06', 'fait' => 'Mise en demeure envoyée à NMH', 'detail' => 'Protocole complet + calendrier + apparts voisins + rapports.'],
+            ['date' => '2026-06-09', 'fait' => '✅ Réponse de NMH : relance du prestataire (victoire partielle)', 'detail' => 'Le traitement va reprendre ; le reste est à verrouiller.'],
+        ],
+        'prochaines_etapes' => [
+            ['etape' => 'VERROUILLER L\'URGENCE par écrit', 'echeance' => 'cette semaine', 'detail' => 'Réponse factuelle : remercier de la relance, MAIS exiger le protocole COMPLET (recommandé par le technicien NMH), le calendrier des passages, l\'inclusion des apparts voisins (88), et la communication des rapports + de la commande. Sans agressivité — l\'engagement est acquis, on le cadre.'],
+            ['etape' => 'OUVRIR LE PRÉJUDICE à l\'amiable', 'echeance' => 'une fois le traitement engagé', 'detail' => 'Gardé en réserve jusqu\'ici. Proposer une indemnisation amiable du trouble de jouissance (~4 ans) + préjudice moral. On ne parle argent qu\'APRÈS l\'urgence, pour ne pas braquer. Chiffrage : voir la fiche (bot préjudice).'],
+            ['etape' => 'Adhésion + mandat écrit', 'echeance' => 'avant tout courrier en son nom', 'detail' => 'Condition pour écrire au nom de Mme Gourdien.'],
+            ['etape' => 'À défaut d\'accord amiable sur le préjudice : SCHS puis judiciaire', 'echeance' => 'si blocage', 'detail' => 'Avocat = Fabrice, lui seul. Jamais les membres.'],
+        ],
+    ],
+
 ];

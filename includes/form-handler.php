@@ -143,6 +143,13 @@ function lfi_nct_handle_submission() {
     $rid = (int) $wpdb->insert_id;
     $GLOBALS['lfi_nct_last_submission_id'] = $rid;
 
+    /* Géo-routage : rattacher l'enquête au bon GA selon l'adresse, et notifier
+       l'admin si la personne veut être recontactée (voir geo-routing.php). */
+    do_action('lfi_nct_submission_created', $rid, [
+        'adresse'           => $adresse,
+        'contact_recontact' => $contact_recontact,
+    ]);
+
     /* === ADHÉSION À L'ASSOCIATION (signature sur place) ===
        Si la personne accepte le suivi, elle devient adhérente gratuite de
        l'Union des Quartiers Libres et signe sur l'écran. On enregistre la fiche

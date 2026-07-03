@@ -743,7 +743,7 @@ function lfi_nct_app_shortcode() {
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
-                    'strategie-municipale', 'strategie-nationale',
+                    'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
                     wp_safe_redirect(lfi_nct_app_url());
@@ -847,11 +847,18 @@ function lfi_nct_app_shortcode() {
                     case 'strategie':             lfi_nct_app_view_strategie();              break;
                     case 'architecte':            lfi_nct_app_view_architecte();             break;
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
+                    case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
+                    case 'geo-contacts':          lfi_nct_app_view_geo_contacts();           break;
+                    case 'enquete-doublons':      lfi_nct_app_view_enquete_doublons();       break;
+                    case 'geo-perimetres':        lfi_nct_app_view_geo_perimetres();         break;
+                    case 'suggerer-outil':        lfi_nct_app_view_suggerer_outil();         break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
                     case 'a-envoyer':             lfi_nct_app_view_a_envoyer();              break;
                     case 'enquete':               lfi_nct_app_view_enquete();                break;
+                    case 'mobilisation':          lfi_nct_app_view_mobilisation();           break;
+                    case 'agenda-invite':         lfi_nct_app_view_agenda_invite();          break;
                     case 'dispos':                lfi_nct_app_view_dispos();                 break;
                     case 'dispos-communes':       lfi_nct_app_view_dispos_communes();        break;
                     case 'propositions':          lfi_nct_app_view_propositions();           break;
@@ -864,6 +871,7 @@ function lfi_nct_app_shortcode() {
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
                     case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
+                    case 'audit-nmh':            lfi_nct_app_view_audit_nmh();              break;
                     case 'strategie-municipale':  lfi_nct_app_view_strategie_municipale();   break;
                     case 'strategie-nationale':   lfi_nct_app_view_strategie_nationale();    break;
                     case 'national':              lfi_nct_app_view_national();               break;
@@ -965,9 +973,8 @@ function lfi_nct_app_screen_close($more_tiles = true) {
             /* Membre simple : UNIQUEMENT ses raccourcis autorisés. Aucune donnée
                locataire (comptes, dossiers, SMS/email, stats, cache…). */
             $ml = [
-                ['💡', 'Proposer une action',      lfi_nct_app_url('propositions')],
-                ['🗓', 'Mes disponibilités',       lfi_nct_app_url('dispos')],
-                ['👥', 'Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+                ['🤝', 'Se coordonner',            lfi_nct_app_url('mobilisation')],
+                ['💡', 'Idées d\'actions',         lfi_nct_app_url('propositions')],
                 ['📅', 'Événements',               lfi_nct_app_url('evenements')],
                 ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['📸', 'Photos',                   lfi_nct_app_url('enquete-photos')],
@@ -1154,6 +1161,9 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+        <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_dup_admin_notice')) lfi_nct_dup_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
@@ -1177,11 +1187,10 @@ function lfi_nct_app_render_dashboard() {
             </div>
         </div>
 
-        <?php /* ============ COORDINATION DU GA : dispos & propositions ============ */
+        <?php /* ============ COORDINATION DU GA : se mobiliser sur les actions ============ */
         $coord = [
-            ['🗓', 'Mes dispos',     'Quand je suis libre',        lfi_nct_app_url('dispos')],
-            ['👥', 'Dispos communes','Qui est libre, quand',       lfi_nct_app_url('dispos-communes')],
-            ['💡', 'Propositions',   'Proposer / soutenir une action', lfi_nct_app_url('propositions')],
+            ['🤝', 'Se coordonner',  'Tractage, campagnes — je participe', lfi_nct_app_url('mobilisation')],
+            ['💡', 'Idées d\'actions','Proposer / soutenir une idée',   lfi_nct_app_url('propositions')],
         ]; ?>
         <div class="lfi-app-section">
             <div class="lfi-app-section-title" style="font-size:1.05em">🤝 COORDINATION</div>
@@ -2297,7 +2306,9 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
-            ['💶', 'Chiffrage préjudice',    'Punaises · 10 postes · amiable + fond', lfi_nct_app_url('prejudice')],
+            /* Le chiffrage du préjudice est AUTOMATIQUE et vit DANS le dossier
+               (pré-rempli depuis les déclarations) — plus de calculateur isolé
+               hors contexte ici. On y accède depuis la fiche du locataire. */
             ['🔎', 'Jurisprudence',          'Vraies décisions (Judilibre) par dossier', lfi_nct_app_url('jurisprudence')],
             ['🧭', 'Nouveau dossier (guidé)', 'Assistant pas-à-pas + plan d\'action', lfi_nct_app_url('dossier-wizard')],
             ['🏠', 'Comptes Locataires',     'Créer · éditer · reset',              lfi_nct_app_url('comptes-locataires')],
@@ -2324,12 +2335,12 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🏛️ VOLET MUNICIPAL — élus locaux' => [
             ['🏛️', 'Stratégie municipale',     'William · le conseil · l\'audit NMH', lfi_nct_app_url('strategie-municipale')],
-            ['🌐', 'Tableau de bord du réseau', 'Tous les GA municipaux, regroupé',   lfi_nct_app_url('reseau-ga')],
+            ['💶', 'Où va mon loyer ? (audit NMH)', 'Chiffres CRC sourcés · 3 versions', lfi_nct_app_url('audit-nmh')],
+            ['🌐', 'Tableau de bord du réseau', 'Tous les GA · stats cumulées',       lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
-            ['👁', 'Entrer dans un GA',         'Voir comme un autre GA',             lfi_nct_app_url('reseau-ga')],
+            ['🎯', 'Périmètres des GA',        'Rayon d\'action · routage enquêtes', lfi_nct_app_url('geo-perimetres')],
             ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
-            ['📈', 'Statistiques cumulées',     'Tous les GA additionnés',            lfi_nct_app_url('reseau-ga')],
             ['💡', 'Suggestions des GA',        'Besoins remontés par les admins',    lfi_nct_app_url('suggestions')],
             ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
@@ -2344,9 +2355,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['💾', 'Sauvegarde & export',     'Télécharger les données (point fixe)', lfi_nct_app_url('sauvegarde')],
             ['🛡️', 'Cadre RGPD',              'Fichiers légaux · registre · droit à l\'oubli', lfi_nct_app_url('rgpd')],
             ['📬', 'Check emails auto',       'Surveillance boîte 24/7 · réponses prêtes', lfi_nct_app_url('mailcheck')],
-            ['🗺️', 'Groupes d\'action',       'Le réseau des GA',                    lfi_nct_app_url('groupes')],
             ['🧩', 'Modules',                'Activer / retirer les outils',        lfi_nct_app_url('modules-params')],
-            ['📖', 'Guide d\'utilisation',   'Tout l\'outil, pas à pas',            lfi_nct_app_url('guide')],
             ['🔄', 'Synchroniser',           'Forcer la maj sur tous mes appareils', admin_url('admin-post.php?action=lfi_nct_purge_all')],
             ['👁', 'Aperçu de l\'app',       'Voir comme un locataire / GA',        lfi_nct_app_url('preview')],
             ['📈', 'Stats globales',         'Tous les compteurs',                  lfi_nct_app_url('stats')],

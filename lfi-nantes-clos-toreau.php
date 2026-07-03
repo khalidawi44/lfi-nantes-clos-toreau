@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LFI Nantes Clos Toreau — Outils du GA
  * Description: Outils numériques du Groupe d'Action LFI Nantes Sud Clos Toreau (formulaire enquête logement HLM, modules futurs).
- * Version: 2.99.8
+ * Version: 3.7.2
  * Author: Khalid Awi (LFI Nantes Sud Clos Toreau)
  * License: GPL v2 or later
  * Text Domain: lfi-nct
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('LFI_NCT_VERSION', '2.99.8');
+define('LFI_NCT_VERSION', '3.7.2');
 define('LFI_NCT_PATH', plugin_dir_path(__FILE__));
 define('LFI_NCT_URL', plugin_dir_url(__FILE__));
 
@@ -79,10 +79,16 @@ require_once LFI_NCT_PATH . 'includes/prejudice.php';
 require_once LFI_NCT_PATH . 'includes/jurisprudence.php';
 require_once LFI_NCT_PATH . 'includes/mailcheck.php';
 require_once LFI_NCT_PATH . 'includes/coordination.php';
+require_once LFI_NCT_PATH . 'includes/mobilisation.php';
+require_once LFI_NCT_PATH . 'includes/agenda-sync.php';
 require_once LFI_NCT_PATH . 'includes/reponses.php';
 require_once LFI_NCT_PATH . 'includes/frais.php';
 require_once LFI_NCT_PATH . 'includes/accueil.php';
 require_once LFI_NCT_PATH . 'includes/strategie-politique.php';
+require_once LFI_NCT_PATH . 'includes/audit-nmh.php';
+require_once LFI_NCT_PATH . 'includes/dossier-scientifique.php';
+require_once LFI_NCT_PATH . 'includes/geo-routing.php';
+require_once LFI_NCT_PATH . 'includes/enquete-validation.php';
 require_once LFI_NCT_PATH . 'includes/nouveautes.php';
 
 register_activation_hook(__FILE__, 'lfi_nct_activate');

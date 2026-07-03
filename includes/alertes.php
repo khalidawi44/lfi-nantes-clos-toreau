@@ -39,6 +39,32 @@ function lfi_nct_alertes_manual() {
     return $out;
 }
 
+/** Dossiers dont l'alerte « à faire » a été écartée à la main (par gestionnaire). */
+function lfi_nct_alertes_dismissed() {
+    $owner = function_exists('lfi_nct_dossier_owner_id') ? (int) lfi_nct_dossier_owner_id() : 0;
+    $all = get_option('lfi_nct_alertes_dismissed', []);
+    $d = (is_array($all) && !empty($all[$owner])) ? $all[$owner] : [];
+    return array_map('intval', (array) $d);
+}
+function lfi_nct_alertes_dismiss($dossier_id) {
+    $owner = function_exists('lfi_nct_dossier_owner_id') ? (int) lfi_nct_dossier_owner_id() : 0;
+    $all = get_option('lfi_nct_alertes_dismissed', []);
+    if (!is_array($all)) $all = [];
+    $cur = isset($all[$owner]) && is_array($all[$owner]) ? $all[$owner] : [];
+    $cur[] = (int) $dossier_id;
+    $all[$owner] = array_values(array_unique(array_map('intval', $cur)));
+    update_option('lfi_nct_alertes_dismissed', $all, false);
+}
+/** Handler : écarter une alerte de dossier. */
+add_action('admin_post_lfi_nct_alert_dismiss', 'lfi_nct_alert_dismiss_handler');
+function lfi_nct_alert_dismiss_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $did = isset($_GET['did']) ? (int) $_GET['did'] : 0;
+    if ($did && check_admin_referer('lfi_nct_alert_dismiss_' . $did)) lfi_nct_alertes_dismiss($did);
+    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/'));
+    exit;
+}
+
 /** Alertes déduites automatiquement de l'état des dossiers. */
 function lfi_nct_alertes_auto() {
     global $wpdb;
@@ -57,15 +83,32 @@ function lfi_nct_alertes_auto() {
         $statut   = (string) ($r->statut ?? '');
         $has_lrar = !empty($r->lrar_travaux_date) || !empty($r->lrar_relogement_date);
 
+        /* Ne pas générer d'alerte « premier contact » quand :
+           - le dossier a été écarté à la main (croix) ;
+           - le « locataire » est en fait un admin / membre du GA (ex. le
+             gestionnaire lui-même) → on ne se contacte pas soi-même ;
+           - c'est un dossier de démonstration (« modèle », « démo », « test »). */
+        $skip_contact = false;
+        if (in_array((int) $r->id, lfi_nct_alertes_dismissed(), true)) $skip_contact = true;
+        $tuid = (int) ($r->tenant_user_id ?? 0);
+        if ($tuid) {
+            if ($tuid === $owner) $skip_contact = true;
+            $tu = get_userdata($tuid);
+            if ($tu && (in_array('administrator', (array) $tu->roles, true)
+                || (defined('LFI_NCT_ROLE_GA') && in_array(LFI_NCT_ROLE_GA, (array) $tu->roles, true)))) $skip_contact = true;
+        }
+        if (preg_match('/mod[eè]le|d[ée]mo|\btest\b|exemple|sp[eé]cimen/iu', $full)) $skip_contact = true;
+
         /* 📞 PREMIER CONTACT : la personne veut de l'aide mais RIEN n'est engagé
            (aucun courrier envoyé, aucune mise en demeure, aucun SCHS). C'est le
            « ne pas oublier les gens à recontacter ». Disparaît dès qu'on agit. */
-        if ($statut !== 'clos' && empty($sent) && !$has_lrar && empty($r->schs_date)) {
+        if (!$skip_contact && $statut !== 'clos' && empty($sent) && !$has_lrar && empty($r->schs_date)) {
             $out[] = [
-                'prio'   => 'haute',
-                'titre'  => '📞 Premier contact à faire — ' . $full,
-                'detail' => 'La personne attend d\'être recontactée — rien n\'est encore engagé.',
-                'url'    => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
+                'prio'      => 'haute',
+                'titre'     => '📞 Premier contact à faire — ' . $full,
+                'detail'    => 'La personne attend d\'être recontactée — rien n\'est encore engagé.',
+                'url'       => lfi_nct_app_url('dossier-juridique-edit', ['id' => $r->id]),
+                'dossier_id'=> (int) $r->id,
             ];
         }
 
@@ -171,6 +214,11 @@ function lfi_nct_render_home_alerts() {
         echo '<span style="flex:1"><strong>' . esc_html($al['titre']) . '</strong>' . (!empty($al['detail']) ? '<br><span style="font-size:.88em;color:#555">' . esc_html($al['detail']) . '</span>' : '') . '</span>';
         echo '<span style="color:#c8102e;font-weight:700;white-space:nowrap;align-self:center">Ouvrir →</span>';
         echo '</a>';
+        /* Croix « écarter » pour les alertes liées à un dossier (fait / non pertinent). */
+        if (!empty($al['dossier_id'])) {
+            $du = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_alert_dismiss&did=' . (int) $al['dossier_id']), 'lfi_nct_alert_dismiss_' . (int) $al['dossier_id']);
+            echo '<div style="text-align:right;margin:-6px 4px 2px"><a href="' . esc_url($du) . '" onclick="return confirm(\'Écarter cette alerte (déjà fait / non pertinent) ?\');" style="font-size:.78em;color:#888;text-decoration:none">✕ écarter</a></div>';
+        }
     }
     echo '</div>';
 }

@@ -150,6 +150,41 @@ function lfi_nct_mailcheck_body($mbox, $uid) {
 }
 
 /**
+ * Retire l'HISTORIQUE CITÉ d'un email de réponse (le « > » et le bloc
+ * « Le … a écrit : »). Sans ça, la réponse de NMH importée contenait AUSSI
+ * notre propre message cité en dessous → on croyait que « notre réponse »
+ * s'était importée au lieu de la sienne. On ne garde que le message NEUF.
+ */
+function lfi_nct_mailcheck_strip_quote($body) {
+    $body = (string) $body;
+    if ($body === '') return $body;
+    /* Séparateurs de citation les plus courants (FR/EN, Gmail/Outlook). */
+    $seps = [
+        '/^\s*Le\s.+\sa\s.crit\s*:.*$/mu',              // Gmail FR : « Le 3 juil. 2026 …, X a écrit : »
+        '/^\s*On\s.+\swrote:.*$/mu',                     // Gmail EN
+        '/^\s*-{2,}\s*Message d\'origine\s*-{2,}.*$/miu', // Outlook FR
+        '/^\s*-{2,}\s*Original Message\s*-{2,}.*$/miu',   // Outlook EN
+        '/^\s*_{5,}\s*$/mu',                              // Outlook séparateur
+        '/^\s*De\s*:.*$/mu',                             // en-tête Outlook FR (De : … Envoyé : …)
+        '/^\s*From:.*$/mu',                              // en-tête Outlook EN
+        '/^\s*>.*$/mu',                                  // lignes citées « > »
+        '/^\s*Envoy.\sdepuis\smon\s.+$/miu',             // signatures mobiles
+    ];
+    $cut = mb_strlen($body);
+    foreach ($seps as $re) {
+        if (preg_match($re, $body, $m, PREG_OFFSET_CAPTURE)) {
+            /* offset en octets → position caractère. */
+            $pos = mb_strlen(substr($body, 0, $m[0][1]));
+            if ($pos < $cut) $cut = $pos;
+        }
+    }
+    $new = trim(mb_substr($body, 0, $cut));
+    /* Garde-fou : si on a presque tout coupé, on garde l'original (mieux vaut
+       trop que rien). */
+    return (mb_strlen($new) >= 15) ? $new : trim($body);
+}
+
+/**
  * Trouve le dossier concerné (nom du locataire présent dans le texte).
  * $referent > 0 : on ne cherche que parmi les dossiers de ce membre.
  */
@@ -181,10 +216,15 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
     $to = '';
     if (!empty($o->from) && preg_match('/[\w.\-+]+@[\w.\-]+/', (string) $o->from, $m)) $to = $m[0];
 
+    /* On ne garde QUE le message neuf de l'expéditeur (sans notre propre message
+       cité en dessous) → l'email reçu affiché et l'analyse portent sur SA
+       réponse, pas sur la nôtre. */
+    $body_new = lfi_nct_mailcheck_strip_quote($body);
+
     $rep_subject = (stripos($subject, 'Re:') === 0) ? $subject : ('Re: ' . $subject);
     $posture = '';
     if (function_exists('lfi_nct_psy_analyse')) {
-        $r = lfi_nct_psy_analyse($body, 'institution');
+        $r = lfi_nct_psy_analyse($body_new, 'institution');
         $posture = $r['label'] . ' — ton conseillé : ' . $r['ton'];
     }
     $nom = trim($row->tenant_prenom . ' ' . $row->tenant_nom);
@@ -194,7 +234,7 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
     $signataire = $ref_u ? ($ref_u->display_name ?: $ref_u->user_login) : 'Fabrice Doucet';
     /* Volet pénal (règle) : détecter intimidation / contournement illégal du
        message reçu et insérer un paragraphe de désamorçage dans la réponse. */
-    $penal = function_exists('lfi_nct_penal_paragraphe') ? lfi_nct_penal_paragraphe($body) : '';
+    $penal = function_exists('lfi_nct_penal_paragraphe') ? lfi_nct_penal_paragraphe($body_new) : '';
     $reply = "Madame, Monsieur,\n\n"
         . "En accompagnement de " . $nom . ", à sa demande et en qualité d'interlocuteur unique, je reviens vers vous.\n\n"
         . "[BROUILLON AUTOMATIQUE À RELIRE ET COMPLÉTER]\n"
@@ -208,7 +248,7 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
     if (!is_array($notes)) $notes = [];
     /* On archive aussi l'email reçu. */
     $notes['email_recu'] = isset($notes['email_recu']) && is_array($notes['email_recu']) ? $notes['email_recu'] : [];
-    $notes['email_recu'][] = ['date' => wp_date('Y-m-d'), 'de' => $to, 'objet' => $subject, 'corps' => mb_substr($body, 0, 2000), 'src' => 'mailcheck'];
+    $notes['email_recu'][] = ['date' => wp_date('Y-m-d'), 'de' => $to, 'objet' => $subject, 'corps' => mb_substr($body_new, 0, 2000), 'src' => 'mailcheck'];
     $notes['replies'] = isset($notes['replies']) && is_array($notes['replies']) ? $notes['replies'] : [];
     $notes['replies'][] = ['to' => $to, 'subject' => $rep_subject, 'body' => $reply, 'objet' => 'Auto : ' . mb_substr($subject, 0, 60), 'date' => wp_date('Y-m-d'), 'src' => 'mailcheck'];
     $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => (int) $row->id]);

@@ -48,6 +48,51 @@ function lfi_nct_reussite_auto_from_dossier($dossier_id) {
     return $pref['id'];
 }
 
+/**
+ * SEED (code) des réussites déjà obtenues — insérées une seule fois (par clé),
+ * en BROUILLON anonyme : Fabrice les relit et les publie quand il veut. Aucun
+ * nom. Volet URGENCE uniquement (la réparation reste un dossier ouvert).
+ */
+add_action('init', 'lfi_nct_reussites_seed_builtin', 1400);
+function lfi_nct_reussites_seed_builtin() {
+    $seeds = [
+        'punaises-urgence-2026-07' => [
+            'titre'    => 'Punaises de lit : traitement d\'urgence obtenu — et refacturation illégale abandonnée',
+            'situation'=> "Un locataire du Clos Toreau subissait une infestation de punaises de lit. En s'appuyant sur le cadre légal (obligation de délivrer un logement décent, exempt de nuisibles — art. 6 de la loi de 1989 ; décret n° 2002-120), il a relancé directement le bailleur juste avant l'intervention. L'entreprise spécialisée est venue traiter le logement EN URGENCE. Fait décisif : contrairement aux deux fois précédentes, aucun paiement des produits n'a été exigé — alors que ces frais avaient auparavant été indûment intégrés aux charges, ce qui est contraire à la liste limitative des charges récupérables (décret n° 87-713). Le bailleur a de fait renoncé à une pratique interne qui ne tenait pas face aux arguments juridiques.",
+            'resultat' => 'travaux',
+            'resultat_detail' => 'Traitement réalisé sans frais. Le remboursement des sommes indûment facturées les fois précédentes, et la réparation du préjudice, restent à obtenir (dossier ouvert).',
+        ],
+        'blattes-relance-2026-07' => [
+            'titre'    => 'Blattes : traitement relancé après une mise en demeure appuyée sur le droit',
+            'situation'=> "Une locataire du quartier subissait une infestation de blattes depuis environ quatre ans, malgré des signalements et un traitement allégé jugé insuffisant par le technicien du bailleur lui-même. Après une mise en demeure fondée sur le cadre légal (art. 1719 du Code civil, art. L.1331-22 du Code de la santé publique, jurisprudence constante), le bailleur a relancé l'entreprise spécialisée pour un nouveau traitement à domicile.",
+            'resultat' => 'travaux',
+            'resultat_detail' => 'Traitement relancé (volet urgence). Le protocole complet, le traitement des logements voisins et la réparation du préjudice restent à verrouiller (dossier ouvert).',
+        ],
+    ];
+
+    $list = lfi_nct_reussites();
+    $have = [];
+    foreach ($list as $r) if (!empty($r['seed_key'])) $have[$r['seed_key']] = 1;
+    $changed = false; $i = 0;
+    foreach ($seeds as $key => $s) {
+        if (isset($have[$key])) continue;
+        $s['id']              = (int) round(microtime(true) * 1000) + $i++;
+        $s['seed_key']        = $key;
+        $s['leviers']         = ['accompagnement', 'courrier'];
+        $s['leviers_detail']  = '';
+        $s['resultat_detail'] = $s['resultat_detail'] ?? '';
+        $s['delai']           = '';
+        $s['quartier']        = 'Clos Toreau (Nantes Sud)';
+        $s['anonymize_names'] = '';
+        $s['publie']          = true;  /* victoires PARTIELLES, anonymes → visibles au tableau */
+        $s['auto']            = true;
+        $s['date']            = current_time('mysql');
+        $list[] = $s;
+        $changed = true;
+    }
+    if ($changed) lfi_nct_reussites_save($list);
+}
+
 /** Catalogue des leviers actionnables (cases à cocher). */
 function lfi_nct_reussite_leviers() {
     return [
@@ -385,6 +430,87 @@ function lfi_nct_reussites_shortcode($atts) {
     foreach ($list as $r) $out .= lfi_nct_reussite_article_html($r);
     $out .= '</div>';
     return $out;
+}
+
+/* ============================================================== *
+ *  SHORTCODE PUBLIC : [lfi_nct_tableau_reussites]                 *
+ *  Tableau LUDIQUE des victoires (coupe + médailles). Anonyme.    *
+ * ============================================================== */
+add_shortcode('lfi_nct_tableau_reussites', 'lfi_nct_tableau_reussites_shortcode');
+function lfi_nct_tableau_reussites_shortcode($atts) {
+    $list = array_values(array_filter(lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
+    usort($list, function ($a, $b) { return strcmp($b['date'] ?? '', $a['date'] ?? ''); });
+    $total = count($list);
+
+    /* Métadonnées par type de résultat : médaille + couleur. */
+    $meta = [
+        'relogement'    => ['🏠', 'Relogements obtenus',        '#0066a3'],
+        'travaux'       => ['🔧', 'Travaux réalisés',           '#186a3b'],
+        'indemnisation' => ['💶', 'Indemnisations / baisses de loyer', '#8a6d1f'],
+        'insalubrite'   => ['⚖️', 'Mises en demeure / arrêtés', '#c8102e'],
+        'autre'         => ['✨', 'Autres victoires',           '#4b2e83'],
+    ];
+    $counts = [];
+    foreach ($list as $r) { $k = $r['resultat'] ?? 'autre'; if (!isset($meta[$k])) $k = 'autre'; $counts[$k] = ($counts[$k] ?? 0) + 1; }
+
+    ob_start(); ?>
+    <div class="lfi-trophy-board" style="font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:920px;margin:0 auto">
+      <!-- Coupe / hero -->
+      <div style="text-align:center;background:linear-gradient(135deg,#c8102e,#7a0000);color:#fff;border-radius:20px;padding:26px 20px;box-shadow:0 12px 30px rgba(0,0,0,.18)">
+        <div style="font-size:64px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.3))">🏆</div>
+        <div style="font-size:2.6em;font-weight:900;margin-top:4px;letter-spacing:.5px"><?php echo (int) $total; ?></div>
+        <div style="font-size:1.15em;font-weight:800;text-transform:uppercase;letter-spacing:1px">victoire<?php echo $total > 1 ? 's' : ''; ?> pour les habitant·es</div>
+        <div style="opacity:.9;margin-top:6px;font-size:.98em">Des familles sorties de la galère — grâce au collectif. Et on continue.</div>
+      </div>
+
+      <!-- Médailles par type -->
+      <?php if ($counts): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:18px 0">
+        <?php foreach ($meta as $k => $m): if (empty($counts[$k])) continue; ?>
+          <div style="flex:1 1 150px;max-width:200px;text-align:center;background:#fff;border-radius:14px;padding:14px 10px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-top:5px solid <?php echo esc_attr($m[2]); ?>">
+            <div style="font-size:34px;line-height:1"><?php echo $m[0]; ?></div>
+            <div style="font-size:1.9em;font-weight:900;color:<?php echo esc_attr($m[2]); ?>"><?php echo (int) $counts[$k]; ?></div>
+            <div style="font-size:.82em;color:#444;font-weight:600"><?php echo esc_html($m[1]); ?></div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+
+      <!-- Palmarès (cartes de victoire) -->
+      <?php if ($total === 0): ?>
+        <p style="text-align:center;color:#666;margin-top:16px">Nos premières victoires s'afficheront ici très bientôt. 💪</p>
+      <?php else: ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:8px">
+          <?php $i = 0; foreach ($list as $r):
+              $k = $r['resultat'] ?? 'autre'; if (!isset($meta[$k])) $k = 'autre'; $m = $meta[$k];
+              $medaille = $i === 0 ? '🥇' : ($i === 1 ? '🥈' : ($i === 2 ? '🥉' : '🎖️')); $i++;
+              /* JAMAIS de nom en public : si le titre contient un nom (civilité +
+                 nom propre), on le remplace par un libellé générique. */
+              $titre_raw = (string) ($r['titre'] ?? 'Victoire');
+              $titre_pub = (function_exists('lfi_nct_reussite_flag_names') && lfi_nct_reussite_flag_names($titre_raw))
+                  ? 'Une victoire obtenue pour une famille'
+                  : (function_exists('lfi_nct_reussite_anonymize') ? lfi_nct_reussite_anonymize($titre_raw) : $titre_raw);
+          ?>
+            <div style="background:#fff;border-radius:14px;padding:14px 15px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-left:5px solid <?php echo esc_attr($m[2]); ?>;position:relative">
+              <div style="position:absolute;top:10px;right:12px;font-size:22px"><?php echo $medaille; ?></div>
+              <div style="display:inline-block;background:#186a3b;color:#fff;font-weight:800;padding:2px 9px;border-radius:20px;font-size:.72em">✅ GAGNÉ</div>
+              <div style="font-weight:900;font-size:1.02em;margin:8px 0 4px;color:#1a1a1a;padding-right:26px"><?php echo esc_html($titre_pub); ?></div>
+              <div style="font-size:.9em;color:<?php echo esc_attr($m[2]); ?>;font-weight:700"><?php echo $m[0] . ' ' . esc_html(lfi_nct_reussite_resultats()[$k] ?? ''); ?></div>
+              <?php if (!empty($r['quartier'])): ?><div style="font-size:.8em;color:#888;margin-top:4px">📍 <?php echo esc_html($r['quartier']); ?> · récit anonyme</div><?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <!-- CTA -->
+      <div style="text-align:center;margin-top:22px;background:#e8f5ea;border-radius:14px;padding:18px">
+        <div style="font-weight:800;font-size:1.1em;color:#186a3b">Vous vivez une situation difficile dans votre logement ?</div>
+        <div style="color:#333;margin:6px 0 12px">Vous n'êtes pas seul·e. On accompagne gratuitement — et la prochaine victoire, ce sera peut-être la vôtre.</div>
+        <a href="<?php echo esc_url(lfi_nct_reussite_contact_url()); ?>" style="display:inline-block;background:#c8102e;color:#fff;text-decoration:none;font-weight:800;padding:12px 22px;border-radius:12px">✊ Nous contacter</a>
+      </div>
+    </div>
+    <?php
+    return ob_get_clean();
 }
 
 /* ============================================================== *

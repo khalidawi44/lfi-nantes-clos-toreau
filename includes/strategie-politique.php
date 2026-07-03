@@ -50,6 +50,8 @@ function lfi_nct_app_view_strategie_municipale() {
     }
     echo '</ul>';
 
+    echo '<div style="text-align:center;margin:14px 0"><a class="lfi-app-btn" style="display:inline-block;background:#c8102e;color:#fff;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none" href="' . esc_url(lfi_nct_app_url('audit-nmh')) . '">💶 Ouvrir l\'audit « Où va mon loyer ? »</a></div>';
+
     echo '<h3 style="margin:16px 0 6px;color:#c8102e">Garde-fous</h3>';
     echo '<div class="lfi-app-card"><div class="com"><strong>RGPD :</strong> jamais de nom ni de situation individuelle sans accord écrit. — <strong>Sécheresse chirurgicale :</strong> des faits, pas d\'adjectifs (« menteuse/incompétente » = poison qui se retourne). — <strong>Ne pas doubler William :</strong> tu l\'armes, tu ne freelances pas devant lui. — <strong>Ne pas braquer NMH</strong> au point que ça retombe sur les locataires que tu défends.</div></div>';
 

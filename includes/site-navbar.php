@@ -114,9 +114,8 @@ function lfi_nct_render_site_navbar() {
             ['📅', 'Événements',           lfi_nct_app_url('evenements')],
         ];
         $secondary = [
-            ['💡', 'Proposer une action',  lfi_nct_app_url('propositions')],
-            ['🗓', 'Mes disponibilités',   lfi_nct_app_url('dispos')],
-            ['👥', 'Dispos de l\'équipe',  lfi_nct_app_url('dispos-communes')],
+            ['🤝', 'Se coordonner',        lfi_nct_app_url('mobilisation')],
+            ['💡', 'Idées d\'actions',     lfi_nct_app_url('propositions')],
             ['🤖', 'Aide',                 lfi_nct_app_url('aide')],
             ['📲', 'Installer l\'app',     lfi_nct_app_url('installer')],
             ['✏️', 'Mon profil',           lfi_nct_app_url('mon-profil')],
@@ -128,7 +127,7 @@ function lfi_nct_render_site_navbar() {
     ?>
     <style>
     .lfi-site-navbar {
-        position: sticky; top: 0; z-index: 9999;
+        position: static; z-index: 40;
         background: linear-gradient(135deg, #c8102e, #a30b25);
         color: #fff;
         padding: 6px 10px;
@@ -253,7 +252,7 @@ function lfi_nct_render_site_navbar_loggedout() {
     ?>
     <style>
     .lfi-pub-navbar {
-        position: sticky; top: 0; z-index: 9999;
+        position: static; z-index: 40;
         background: linear-gradient(135deg, #c8102e, #a30b25);
         color: #fff; padding: 7px 12px;
         display: flex; align-items: center; gap: 10px;
@@ -392,9 +391,8 @@ function lfi_nct_admin_bar_menu($bar) {
                 ['📅 Événements',               lfi_nct_app_url('evenements')],
             ]],
             ['🤝 Coordination', [
-                ['💡 Proposer une action',      lfi_nct_app_url('propositions')],
-                ['🗓 Mes disponibilités',       lfi_nct_app_url('dispos')],
-                ['👥 Dispos de l\'équipe',      lfi_nct_app_url('dispos-communes')],
+                ['🤝 Se coordonner',            lfi_nct_app_url('mobilisation')],
+                ['💡 Idées d\'actions',         lfi_nct_app_url('propositions')],
             ]],
             ['⚙️ Mon compte', [
                 ['🤖 Aide',                     lfi_nct_app_url('aide')],

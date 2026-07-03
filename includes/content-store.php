@@ -310,6 +310,12 @@ function lfi_nct_app_view_dossier_synthese() {
         echo '<p style="background:#7a0000;color:#fff;font-weight:700;text-align:center;padding:5px;border-radius:4px;font-size:.85em">DOCUMENT CONFIDENTIEL — réservé à l\'avocat · Ne pas communiquer à Nantes Métropole Habitat</p>';
     }
     echo '<h1>Dossier de synthèse — ' . esc_html($nom) . '</h1>';
+    /* VOLET : un dossier peut appartenir à un combat distinct (logement,
+       aide sociale à l'enfance…). On ne mélange JAMAIS les volets, même à nom
+       identique. Bandeau explicite en tête. */
+    if (!empty($d['volet'])) {
+        echo '<p style="background:#2c3e91;color:#fff;font-weight:800;text-align:center;padding:7px;border-radius:6px">VOLET : ' . esc_html($d['volet']) . ' — dossier distinct, à ne jamais mélanger avec un autre volet</p>';
+    }
     if (!empty($d['rdv'])) echo '<p style="text-align:center">Rendez-vous : ' . esc_html($d['rdv']) . '</p>';
 
     /* 1. Identité */
@@ -336,6 +342,16 @@ function lfi_nct_app_view_dossier_synthese() {
         echo '</div>';
     }
 
+    /* 2 bis. Où en est le dossier — les volets (urgence / réparation / pénal) */
+    if (!empty($d['volets'])) {
+        echo '<h2>Où en est le dossier — les volets</h2>';
+        foreach ($d['volets'] as $v) {
+            echo '<div class="citations" style="margin:8px 0"><strong>' . esc_html($v['nom'] ?? '') . ' — ' . esc_html($v['statut'] ?? '') . '</strong>';
+            if (!empty($v['detail'])) echo '<br>' . nl2br(esc_html($v['detail']));
+            echo '</div>';
+        }
+    }
+
     /* 3. La conversation (les emails D'ABORD) */
     if (!empty($d['email_envoye']) || !empty($d['email_recu'])) {
         echo '<h2>3. La conversation avec NMH</h2>';
@@ -360,6 +376,50 @@ function lfi_nct_app_view_dossier_synthese() {
             echo '<tr><td>' . esc_html($dz['nom'] ?? '') . '</td><td><em>' . esc_html($dz['nmh'] ?? '') . '</em></td><td>' . esc_html($dz['obs'] ?? '') . '</td></tr>';
         }
         echo '</table>';
+    }
+
+    /* 4 bis. Chiffrage du préjudice */
+    if (!empty($d['prejudice'])) {
+        $pj = $d['prejudice'];
+        echo '<h2>Chiffrage du préjudice</h2>';
+        if (!empty($pj['note']))   echo '<p>' . esc_html($pj['note']) . '</p>';
+        if (!empty($pj['postes'])) { echo '<ul>'; foreach ((array) $pj['postes'] as $po) echo '<li>' . esc_html($po) . '</li>'; echo '</ul>'; }
+        if (!empty($pj['fourchette_amiable'])) echo '<p><strong>Proposition amiable :</strong> ' . esc_html($pj['fourchette_amiable']) . '</p>';
+    }
+
+    /* 4 ter. Chronologie */
+    if (!empty($d['timeline'])) {
+        echo '<h2>Chronologie</h2><ul>';
+        foreach ($d['timeline'] as $t) {
+            echo '<li>' . (!empty($t['date']) ? '<strong>' . esc_html($t['date']) . '</strong> — ' : '') . esc_html($t['fait'] ?? '');
+            if (!empty($t['detail'])) echo '<br><span class="small">' . esc_html($t['detail']) . '</span>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* 4 quater. Prochaines étapes */
+    if (!empty($d['prochaines_etapes'])) {
+        echo '<h2>Prochaines étapes</h2><ul>';
+        foreach ($d['prochaines_etapes'] as $e) {
+            if (is_array($e)) {
+                echo '<li><strong>' . esc_html($e['etape'] ?? '') . '</strong>' . (!empty($e['echeance']) ? ' <em>(' . esc_html($e['echeance']) . ')</em>' : '');
+                if (!empty($e['detail'])) echo '<br><span class="small">' . esc_html($e['detail']) . '</span>';
+                echo '</li>';
+            } else {
+                echo '<li>' . esc_html($e) . '</li>';
+            }
+        }
+        echo '</ul>';
+    }
+
+    /* 4 quinquies. À qui adresser la réclamation (orientation architecte) */
+    if (!empty($d['escalade'])) {
+        $es = $d['escalade'];
+        echo '<h2>À qui adresser la réclamation (orientation)</h2>';
+        if (!empty($es['principe'])) echo '<p><strong>' . esc_html($es['principe']) . '</strong></p>';
+        if (!empty($es['cibles'])) { echo '<ul>'; foreach ((array) $es['cibles'] as $c) echo '<li>' . esc_html($c) . '</li>'; echo '</ul>'; }
+        if (!empty($es['note'])) echo '<p class="small">' . esc_html($es['note']) . '</p>';
     }
 
     /* 5. Enquête */

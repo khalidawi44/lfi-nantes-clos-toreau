@@ -1291,15 +1291,24 @@ function lfi_nct_app_dossier_juridique_form($row) {
             echo '<ul class="lfi-app-list">';
             foreach ($timeline as $e) {
                 $is_recu = ($e['sens'] === 'recu');
+                /* Direction TRÈS claire : une pastille pleine + une phrase en
+                   langage courant (qui a écrit à qui), pour ne jamais confondre
+                   « je l'ai envoyé » et « il m'a répondu ». */
+                $pill = $is_recu
+                    ? '<span style="background:#0066a3;color:#fff;font-weight:800;font-size:.72em;padding:3px 9px;border-radius:20px;letter-spacing:.3px">📥 REÇU</span>'
+                    : '<span style="background:#186a3b;color:#fff;font-weight:800;font-size:.72em;padding:3px 9px;border-radius:20px;letter-spacing:.3px">📤 ENVOYÉ PAR VOUS</span>';
+                $qui_recu = !empty($e['de']) ? $e['de'] : 'NMH';
+                $qui_env  = !empty($e['to']) ? $e['to'] : 'NMH';
                 echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($is_recu ? '#0066a3' : '#186a3b') . '">';
                 echo '<div class="head" style="align-items:center">';
-                echo '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="lfi-corr-cb" name="del[]" value="' . esc_attr($e['sens'] . ':' . (int) $e['_idx']) . '"> <span class="who">' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</span></label>';
+                echo '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" class="lfi-corr-cb" name="del[]" value="' . esc_attr($e['sens'] . ':' . (int) $e['_idx']) . '"> ' . $pill . '</label>';
                 echo '<div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
-                echo '<div class="meta">';
-                if ($is_recu && !empty($e['de'])) echo '<span class="meta-chip">de ' . esc_html($e['de']) . '</span>';
-                if (!$is_recu && !empty($e['to'])) echo '<span class="meta-chip">à ' . esc_html($e['to']) . '</span>';
-                echo '</div>';
-                if (!empty($e['objet'])) echo '<div class="com"><strong>' . esc_html($e['objet']) . '</strong></div>';
+                echo '<div class="com" style="font-weight:700;margin-top:4px;color:' . ($is_recu ? '#0066a3' : '#186a3b') . '">'
+                   . ($is_recu
+                        ? '↩️ ' . esc_html($qui_recu) . ' vous a répondu'
+                        : '➡️ Vous avez envoyé à ' . esc_html($qui_env))
+                   . '</div>';
+                if (!empty($e['objet'])) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($e['objet']) . '</div>';
                 if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
                 echo '</li>';
             }
@@ -1343,7 +1352,8 @@ function lfi_nct_app_dossier_juridique_form($row) {
             echo '<span class="meta-chip">' . esc_html($prej['date'] ?? '') . '</span></div></div>';
         }
         echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('prejudice', ['id' => (int) $row->id])) . '">💶 ' . ($prej ? 'Recalculer' : 'Chiffrer le préjudice') . '</a>';
-        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('jurisprudence', ['id' => (int) $row->id])) . '">🔎 Jurisprudence</a></div>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('jurisprudence', ['id' => (int) $row->id])) . '">🔎 Jurisprudence</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-scientifique', ['id' => (int) $row->id])) . '">🔬 Dossier scientifique</a></div>';
 
         /* === PIÈCES JOINTES (classées automatiquement par Claude) === */
         if (function_exists('lfi_nct_ingest_render_pieces')) {
@@ -3023,10 +3033,12 @@ function lfi_nct_app_view_dossier_doc_analyse_nmh() {
         foreach ($timeline as $e) {
             $is_recu = (($e['sens'] ?? '') === 'recu');
             echo '<div class="citations" style="margin:8px 0">';
-            echo '<strong>' . ($is_recu ? '📥 Reçu' : '📤 Envoyé') . '</strong>';
+            if ($is_recu) {
+                echo '<strong style="color:#0066a3">📥 REÇU — ' . esc_html(!empty($e['de']) ? $e['de'] : 'NMH') . ' a répondu</strong>';
+            } else {
+                echo '<strong style="color:#186a3b">📤 ENVOYÉ par nous — à ' . esc_html(!empty($e['to']) ? $e['to'] : 'NMH') . '</strong>';
+            }
             if (!empty($e['date'])) echo ' — ' . esc_html($e['date']);
-            if ($is_recu && !empty($e['de'])) echo ' — de ' . esc_html($e['de']);
-            if (!$is_recu && !empty($e['to'])) echo ' — à ' . esc_html($e['to']);
             if (!empty($e['objet'])) echo '<br><strong>Objet :</strong> ' . esc_html($e['objet']);
             if (!empty($e['corps'])) echo '<br>' . nl2br(esc_html(mb_substr($e['corps'], 0, 1500)));
             echo '</div>';
