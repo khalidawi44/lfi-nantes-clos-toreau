@@ -164,7 +164,11 @@ function lfi_nct_mailcheck_match_dossier($text, $referent = 0) {
     $low = mb_strtolower($text);
     foreach ($rows as $r) {
         $nom = trim((string) $r->tenant_nom);
-        if ($nom !== '' && mb_strpos($low, mb_strtolower($nom)) !== false) return $r;
+        if ($nom === '' || mb_strlen($nom) < 2) continue;
+        /* Le nom doit apparaître comme MOT ENTIER (bornes des deux côtés) : évite
+           qu'un nom court (« Ba », « Roy ») matche « bail », « Royan »… et classe
+           le courrier dans le mauvais dossier. */
+        if (preg_match('/(?<![\p{L}])' . preg_quote(mb_strtolower($nom), '/') . '(?![\p{L}])/u', $low)) return $r;
     }
     return null;
 }

@@ -2056,14 +2056,33 @@ function lfi_nct_app_render_register_sw() {
     ?>
     <script>
     (function () {
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () {
-                navigator.serviceWorker.register('<?php echo $sw; ?>', { scope: '/' })
-                    .catch(function (err) { console.warn('SW register failed', err); });
-            });
-        }
         /* Marqueur body pour le CSS standalone */
         document.body && document.body.classList.add('page-app');
+        if (!('serviceWorker' in navigator)) return;
+
+        /* Si l'app est DÉJÀ contrôlée par un service worker et qu'une NOUVELLE
+           version prend la main, on recharge une seule fois → la PWA installée
+           (ex. le téléphone d'un membre) se met à jour toute seule, sans avoir
+           à désinstaller/réinstaller. Pas de rechargement à la 1re installation. */
+        var hadController = !!navigator.serviceWorker.controller;
+        var reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+            if (reloaded || !hadController) return;
+            reloaded = true;
+            window.location.reload();
+        });
+
+        window.addEventListener('load', function () {
+            /* updateViaCache:'none' = le script du SW n'est jamais servi depuis le
+               cache HTTP → la nouvelle version est détectée immédiatement. */
+            navigator.serviceWorker.register('<?php echo $sw; ?>', { scope: '/', updateViaCache: 'none' })
+                .then(function (reg) {
+                    /* Force un contrôle de mise à jour à chaque ouverture. */
+                    try { reg.update(); } catch (e) {}
+                    setInterval(function () { try { reg.update(); } catch (e) {} }, 60 * 60 * 1000);
+                })
+                .catch(function (err) { console.warn('SW register failed', err); });
+        });
     })();
     </script>
     <?php
@@ -2929,7 +2948,7 @@ function lfi_nct_app_view_email() {
                  WHERE email <> '' AND abonne_emails = 1 AND jetable = 0" . $gac
             ) ?: [];
             $sent = 0; $errs = 0;
-            add_filter('wp_mail_content_type', '__return_html');
+            add_filter('wp_mail_content_type', function () { return 'text/html'; });
             add_filter('wp_mail_from_name', function() { return 'LFI Nantes Sud Clos Toreau'; });
             foreach ($recipients as $r) {
                 if (!is_email($r->email)) { $errs++; continue; }
@@ -3677,7 +3696,7 @@ function lfi_nct_app_view_enquetes_email() {
             }
 
             $sent = 0; $errs = 0;
-            add_filter('wp_mail_content_type', '__return_html');
+            add_filter('wp_mail_content_type', function () { return 'text/html'; });
             add_filter('wp_mail_from_name', function() { return 'LFI Nantes Sud Clos Toreau'; });
             foreach ($recipients as $r) {
                 if (!is_email($r->contact_email)) { $errs++; continue; }
