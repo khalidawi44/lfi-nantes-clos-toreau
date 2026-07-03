@@ -712,7 +712,7 @@ function lfi_nct_app_view_ga_dashboard() {
             <div class="lfi-app-logo-mini">Φ</div>
             <div>
                 <div class="lfi-app-hi">Bonjour <?php echo esc_html($user->display_name ?: $user->user_login); ?></div>
-                <div class="lfi-app-sub2">Membre du GA · console restreinte</div>
+                <div class="lfi-app-sub2">Groupe d'Action LFI Nantes Sud – Clos Toreau</div>
             </div>
         </div>
 

@@ -236,6 +236,11 @@ self.addEventListener('fetch', e => {
     if (url.pathname.startsWith('/wp-admin/') ||
         url.pathname.startsWith('/wp-login.php') ||
         url.pathname.startsWith('/wp-json/')) return;
+    /* Navigations vers une page HORS de l'app (ex. le formulaire d'enquête) :
+       on NE médiatise PAS — le navigateur ouvre nativement. Évite les blocages
+       de navigation en PWA installée (le bouton « Faire passer une enquête »). */
+    var APP_PATH = new URL('<?php echo esc_url_raw($app); ?>').pathname;
+    if (e.request.mode === 'navigate' && url.pathname.indexOf(APP_PATH) !== 0) return;
     e.respondWith(
         fetch(e.request)
             .then(r => {
@@ -1121,6 +1126,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
         $essentiel = [
+            ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_survey_url()],
             ['📥', 'À envoyer',   'Tes réponses prêtes',        lfi_nct_app_url('a-envoyer')],
             ['🗂', 'Dossiers',    'Le suivi des locataires',    lfi_nct_app_url('dossiers-juridiques')],
             ['📓', 'Journal',     'Ton suivi général',          lfi_nct_app_url('journal')],
