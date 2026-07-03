@@ -292,9 +292,10 @@ function lfi_nct_app_view_assistant() {
     lfi_nct_app_screen_open('🤖 Assistant', 'Demande-moi un dossier, une enquête, des stats, un contact…');
 
     /* Barre de recherche. */
-    echo '<form method="get" class="lfi-app-searchbar" style="margin-bottom:10px">';
+    echo '<form method="get" class="lfi-app-searchbar" id="lfi-assist-form" style="margin-bottom:10px">';
     echo '<input type="hidden" name="vue" value="assistant">';
-    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Ex : dossier locataire 27 · enquête RE01 · stats · contacts NMH">';
+    echo '<input type="search" id="lfi-assist-q" name="q" value="' . esc_attr($q) . '" placeholder="Ex : dossier locataire 27 · enquête RE01 · stats · contacts NMH">';
+    echo lfi_nct_robot_voice_button_html('lfi-assist-q', 'lfi-assist-form');
     echo '<button type="submit">🔎</button>';
     echo '</form>';
 
@@ -333,12 +334,16 @@ function lfi_nct_app_view_aide() {
     echo '<a class="btn-ghost" href="' . esc_url($c['rdv']) . '">📅 Prendre rendez-vous</a>';
     echo '</div></div>';
 
-    /* --- Recherche du problème --- */
-    echo '<form method="get" class="lfi-app-searchbar" style="margin:12px 0 8px">';
+    /* --- Recherche du problème (avec dictée vocale) --- */
+    echo '<form method="get" class="lfi-app-searchbar" id="lfi-aide-form" style="margin:12px 0 8px">';
     echo '<input type="hidden" name="vue" value="aide">';
-    echo '<input type="search" name="q" value="' . esc_attr($q) . '" placeholder="Décris ton problème : moisissures, chauffage, punaises, loyer…">';
+    echo '<input type="search" id="lfi-aide-q" name="q" value="' . esc_attr($q) . '" placeholder="Pose ta question ou décris ton problème…">';
+    echo lfi_nct_robot_voice_button_html('lfi-aide-q', 'lfi-aide-form');
     echo '<button type="submit">🔎</button>';
     echo '</form>';
+
+    /* Accès rapide « Infos clés » — quoi répondre aux gens. */
+    echo '<div style="text-align:center;margin:4px 0 8px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('infos-cles')) . '">💬 Infos clés : que répondre aux gens</a></div>';
 
     if ($q === '') {
         echo '<div class="lfi-app-filter-chips">';
@@ -351,6 +356,87 @@ function lfi_nct_app_view_aide() {
     }
 
     echo lfi_nct_robot_answer_public_html($q);
+    lfi_nct_app_screen_close(false);
+}
+
+/**
+ * Bouton MICRO (dictée vocale). Remplit le champ $input_id avec ce qui est dit
+ * et soumet le formulaire $form_id. Utilise l'API Web Speech quand elle existe
+ * (Chrome Android, Safari iOS récents). Si absente, le bouton se masque.
+ */
+function lfi_nct_robot_voice_button_html($input_id, $form_id) {
+    ob_start(); ?>
+<button type="button" id="<?php echo esc_attr($input_id); ?>-mic" title="Parler" aria-label="Dicter à la voix"
+    style="border:0;background:#eee;border-radius:8px;padding:0 12px;font-size:1.2em;cursor:pointer">🎤</button>
+<script>
+(function(){
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var mic = document.getElementById('<?php echo esc_js($input_id); ?>-mic');
+  var input = document.getElementById('<?php echo esc_js($input_id); ?>');
+  var form = document.getElementById('<?php echo esc_js($form_id); ?>');
+  if (!mic || !input) return;
+  if (!SR) { mic.style.display = 'none'; return; }  /* pas supporté → on cache */
+  var rec = new SR();
+  rec.lang = 'fr-FR'; rec.interimResults = false; rec.maxAlternatives = 1;
+  var listening = false;
+  mic.addEventListener('click', function(){
+    if (listening) { try { rec.stop(); } catch(e){} return; }
+    try { rec.start(); } catch(e){}
+  });
+  rec.onstart = function(){ listening = true; mic.textContent = '🔴'; input.placeholder = 'Parle…'; };
+  rec.onend   = function(){ listening = false; mic.textContent = '🎤'; };
+  rec.onerror = function(){ listening = false; mic.textContent = '🎤'; };
+  rec.onresult = function(e){
+    var t = (e.results && e.results[0] && e.results[0][0] && e.results[0][0].transcript) ? e.results[0][0].transcript : '';
+    if (t) { input.value = t; if (form) { if (form.requestSubmit) form.requestSubmit(); else form.submit(); } }
+  };
+})();
+</script>
+<?php
+    return ob_get_clean();
+}
+
+/* ============================================================== *
+ *  VUE : INFOS CLÉS — que répondre aux gens (porte-à-porte)      *
+ * ============================================================== */
+function lfi_nct_app_view_infos_cles() {
+    $c = lfi_nct_robot_public_contacts();
+    lfi_nct_app_screen_open('💬 Infos clés', 'Quoi dire aux gens — au porte-à-porte, sur le pas de la porte');
+
+    echo '<div class="lfi-app-help">Des réponses simples et communes, pour parler d\'une même voix. Tu peux aussi poser une question (au clavier ou à la voix) sur l\'écran « Aide ».</div>';
+
+    /* 1) Le but de l'action. */
+    echo '<h3 style="margin:16px 0 6px;color:#c8102e">🎯 Le but de notre action</h3>';
+    echo '<div class="lfi-app-card"><div class="com">Nous sommes le <strong>Groupe d\'Action La France Insoumise Nantes Sud – Clos Toreau</strong> et l\'association <strong>Union des Quartiers Libres</strong>. On aide les locataires à <strong>faire respecter leurs droits</strong> face au bailleur (Nantes Métropole Habitat), <strong>gratuitement</strong>. On recense les problèmes de logement (humidité, chauffage, nuisibles…) pour <strong>peser collectivement</strong> et obtenir des réparations et, quand il le faut, des relogements.</div></div>';
+
+    /* 2) Quoi dire sur le pas de la porte. */
+    echo '<h3 style="margin:16px 0 6px;color:#c8102e">🚪 Sur le pas de la porte</h3>';
+    echo '<ul class="lfi-app-list">';
+    foreach ([
+        ['👋 Se présenter', '« Bonjour, on est un collectif d\'habitants et la France Insoumise du quartier. On fait le tour des logements pour recenser les problèmes (humidité, chauffage, nuisibles). C\'est gratuit et anonyme. »'],
+        ['📋 Proposer l\'enquête', '« Ça prend 3 minutes : je vous pose quelques questions sur votre logement. Ça nous aide à faire bouger le bailleur, tous ensemble. »'],
+        ['🔒 Rassurer', '« Vos réponses restent confidentielles. On ne donne jamais vos coordonnées à personne, et surtout pas au bailleur. »'],
+        ['🤝 Proposer de l\'aide', '« Si vous avez un souci précis, on peut vous accompagner gratuitement pour écrire au bailleur et faire valoir vos droits. »'],
+    ] as $it) {
+        echo '<li class="lfi-app-card"><div class="head"><div class="who">' . $it[0] . '</div></div><div class="com" style="font-style:italic">' . esc_html($it[1]) . '</div></li>';
+    }
+    echo '</ul>';
+
+    /* 3) Problèmes fréquents → réponse type (réutilise le robot). */
+    echo '<h3 style="margin:16px 0 6px;color:#c8102e">🛠 Problèmes fréquents — quoi répondre</h3>';
+    echo '<div class="lfi-app-help">Réponses types (ce n\'est pas un avis juridique — on accompagne pour la suite).</div>';
+    foreach (['moisissures', 'chauffage', 'punaises', 'qui doit payer la réparation', 'loyer'] as $sujet) {
+        echo lfi_nct_robot_answer_public_html($sujet);
+    }
+
+    /* 4) Si la personne veut de l'aide. */
+    echo '<h3 style="margin:16px 0 6px;color:#c8102e">✅ Si la personne veut de l\'aide</h3>';
+    echo '<div class="lfi-app-card" style="border:2px solid #186a3b"><div class="com">Oriente-la vers nous — <strong>ne prends pas en charge toi-même</strong> le dossier. On s\'en occupe.</div>';
+    echo '<div class="row-actions" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
+    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('enquete')) . '">📋 Faire passer l\'enquête</a>';
+    echo '<a class="btn-ghost" href="' . esc_url($c['contact']) . '">✍️ Demander de l\'aide</a>';
+    echo '</div></div>';
+
     lfi_nct_app_screen_close(false);
 }
 

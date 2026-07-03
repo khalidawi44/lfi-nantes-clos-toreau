@@ -691,7 +691,8 @@ function lfi_nct_app_view_ga_dashboard() {
     $tiles = [
         ['📋', 'Faire passer une enquête',  'Formulaire porte-à-porte',            lfi_nct_app_url('enquete')],
         ['📸', 'Photos chez un locataire',  'Après l\'enquête · pour l\'équipe',    lfi_nct_app_url('enquete-photos')],
-        ['🤖', 'Aide & contact',            'Un problème ? On t\'accompagne',      lfi_nct_app_url('aide')],
+        ['💬', 'Infos clés',                'Que répondre aux gens',               lfi_nct_app_url('infos-cles')],
+        ['🤖', 'Aide (question vocale)',    'Pose ta question, même à la voix',    lfi_nct_app_url('aide')],
         ['📅', 'Événements',                'Voir & partager',                     lfi_nct_app_url('evenements')],
         ['📲', 'Installer l\'app',          'iPhone / Android',                    lfi_nct_app_url('installer')],
     ];
