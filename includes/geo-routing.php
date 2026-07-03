@@ -326,6 +326,15 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
             $cur_ga = (string) get_user_meta($tenant_uid, 'lfi_nct_ga', true);
             if ($cur_ga === '') update_user_meta($tenant_uid, 'lfi_nct_ga', $match['slug']);
         }
+        /* RÈGLE : qui veut être contacté → compte + dossier juridique, liés,
+           avec les réponses de l'enquête. On rattache le dossier au bon GA. */
+        if ($tenant_uid && function_exists('lfi_nct_ep_create_dossier')) {
+            $owner = function_exists('lfi_nct_ga_owner_for_slug') ? lfi_nct_ga_owner_for_slug($match ? $match['slug'] : '') : 0;
+            $souhaits = '';
+            $data_r = json_decode((string) $row->data, true);
+            if (is_array($data_r) && !empty($data_r['objectif'])) $souhaits = 'Objectif : ' . $data_r['objectif'];
+            lfi_nct_ep_create_dossier($row, $tenant_uid, '', $souhaits, $owner);
+        }
 
         lfi_nct_geo_queue_contact([
             'sub_id'  => $sub_id,
