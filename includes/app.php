@@ -743,7 +743,7 @@ function lfi_nct_app_shortcode() {
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
-                    'strategie-municipale', 'strategie-nationale',
+                    'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
                 ];
                 if (in_array($vue, $super_only, true) && !current_user_can('manage_options')) {
                     wp_safe_redirect(lfi_nct_app_url());
@@ -848,6 +848,8 @@ function lfi_nct_app_shortcode() {
                     case 'architecte':            lfi_nct_app_view_architecte();             break;
                     case 'prejudice':             lfi_nct_app_view_prejudice();              break;
                     case 'dossier-scientifique':  lfi_nct_app_view_dossier_scientifique();   break;
+                    case 'geo-contacts':          lfi_nct_app_view_geo_contacts();           break;
+                    case 'geo-perimetres':        lfi_nct_app_view_geo_perimetres();         break;
                     case 'prejudice-report':      lfi_nct_app_view_prejudice_report();       break;
                     case 'jurisprudence':         lfi_nct_app_view_jurisprudence();          break;
                     case 'mailcheck':             lfi_nct_app_view_mailcheck();              break;
@@ -1157,6 +1159,7 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_ga_switcher')) lfi_nct_render_ga_switcher(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
+        <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
@@ -2332,6 +2335,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['💶', 'Où va mon loyer ? (audit NMH)', 'Chiffres CRC sourcés · 3 versions', lfi_nct_app_url('audit-nmh')],
             ['🌐', 'Tableau de bord du réseau', 'Tous les GA · stats cumulées',       lfi_nct_app_url('reseau-ga')],
             ['🗺️', 'Annuaire & créer un GA',   'Liste · création · binôme',          lfi_nct_app_url('groupes')],
+            ['🎯', 'Périmètres des GA',        'Rayon d\'action · routage enquêtes', lfi_nct_app_url('geo-perimetres')],
             ['🗺️', 'Carte générale (tous les GA)', 'Toutes les enquêtes, une carte 3D', lfi_nct_app_url('reseau-carte')],
             ['📊', 'Stats enquête — réseau',    'Toutes les enquêtes additionnées',   lfi_nct_app_url('reseau-stats-enquete')],
             ['💡', 'Suggestions des GA',        'Besoins remontés par les admins',    lfi_nct_app_url('suggestions')],
