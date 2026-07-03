@@ -221,9 +221,15 @@ function lfi_nct_social_event_payload($post_id) {
     if ($excerpt)   $caption .= "\n\n" . $excerpt;
     $caption .= "\n\n👉 " . $permalink;
 
-    $image_url = null;
+    $image_url = null; $image_w = 0; $image_h = 0;
     if (has_post_thumbnail($post_id)) {
-        $image_url = get_the_post_thumbnail_url($post_id, 'large');
+        /* Grande version paysage pour l'aperçu réseaux sociaux (évite le crop
+           du logo carré) : on prend la plus grande dispo et on renvoie ses
+           dimensions réelles pour que les plateformes affichent la bonne carte. */
+        $tid = get_post_thumbnail_id($post_id);
+        $src = $tid ? wp_get_attachment_image_src($tid, 'full') : false;
+        if ($src) { $image_url = $src[0]; $image_w = (int) $src[1]; $image_h = (int) $src[2]; }
+        else { $image_url = get_the_post_thumbnail_url($post_id, 'large'); }
     }
 
     return [
@@ -231,6 +237,8 @@ function lfi_nct_social_event_payload($post_id) {
         'caption'   => $caption,
         'permalink' => $permalink,
         'image_url' => $image_url,
+        'image_w'   => $image_w,
+        'image_h'   => $image_h,
         'excerpt'   => $excerpt,
     ];
 }
@@ -524,6 +532,13 @@ function lfi_nct_social_og_meta() {
     }
     if ($payload['image_url']) {
         echo '<meta property="og:image" content="' . esc_url($payload['image_url']) . '">' . "\n";
+        echo '<meta property="og:image:secure_url" content="' . esc_url($payload['image_url']) . '">' . "\n";
+        /* Dimensions réelles → les plateformes (Telegram, FB…) affichent la
+           bonne carte au lieu de rogner au hasard. */
+        if (!empty($payload['image_w']) && !empty($payload['image_h'])) {
+            echo '<meta property="og:image:width" content="' . (int) $payload['image_w'] . '">' . "\n";
+            echo '<meta property="og:image:height" content="' . (int) $payload['image_h'] . '">' . "\n";
+        }
         echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
     }
     echo '<meta property="og:url" content="' . esc_url($payload['permalink']) . '">' . "\n";
