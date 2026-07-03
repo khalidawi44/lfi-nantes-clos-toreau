@@ -746,6 +746,13 @@ function lfi_nct_app_dossier_juridique_form($row) {
             $wpdb->insert($t, $data);
             $saved_id = (int) $wpdb->insert_id;
         }
+        /* AUTOMATISME : dossier passé à « abouti » → on crée tout seul un
+           BROUILLON de fiche réussite (anonyme, non publié) pré-rempli à partir
+           du dossier. Tu n'as plus à y penser : elle apparaît dans « Réussites »,
+           tu la relis et tu la publies quand tu veux. */
+        if ($saved_id && ($data['statut'] ?? '') === 'abouti' && function_exists('lfi_nct_reussite_auto_from_dossier')) {
+            lfi_nct_reussite_auto_from_dossier($saved_id);
+        }
         /* Enchaînement depuis une intervention planifiée : aller directement à
            l'email pré-rempli pour le service choisi. */
         $next_service = sanitize_key($_POST['next_service'] ?? '');
