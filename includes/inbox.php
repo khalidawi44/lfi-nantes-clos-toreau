@@ -165,6 +165,35 @@ function lfi_nct_inbox_unmatched_save($list) {
     update_option('lfi_nct_inbox_unmatched', array_slice(array_values($list), -200), false);
 }
 
+/* -------------------------------------------------------------- *
+ *  LISTE NOIRE (« boîte noire ») — expéditeurs à ne JAMAIS        *
+ *  importer : newsletters, no-reply, alertes automatiques…       *
+ *  On stocke des ADRESSES exactes ou des DOMAINES.               *
+ * -------------------------------------------------------------- */
+function lfi_nct_inbox_blocklist() {
+    $b = get_option('lfi_nct_inbox_blocklist', []);
+    return is_array($b) ? $b : [];
+}
+function lfi_nct_inbox_blocklist_save($list) {
+    $clean = [];
+    foreach ((array) $list as $a) { $a = strtolower(trim($a)); if ($a !== '') $clean[$a] = 1; }
+    update_option('lfi_nct_inbox_blocklist', array_keys($clean), false);
+}
+/** Une de ces adresses est-elle en liste noire (par adresse OU par domaine) ? */
+function lfi_nct_inbox_is_blocklisted($addresses) {
+    $bl = lfi_nct_inbox_blocklist();
+    if (!$bl) return false;
+    foreach ((array) $addresses as $a) {
+        $a = strtolower(trim($a));
+        if ($a === '') continue;
+        if (in_array($a, $bl, true)) return true;
+        $at = strrchr($a, '@');
+        $dom = $at ? substr($at, 1) : '';
+        if ($dom !== '' && in_array($dom, $bl, true)) return true;
+    }
+    return false;
+}
+
 /**
  * Range un email dans le bon dossier. Renvoie ['matched'=>bool,'dossier_id'=>int].
  */
@@ -175,6 +204,10 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
     $cc_a   = lfi_nct_inbox_emails($cc);
     $all    = array_values(array_unique(array_merge($from_a, $to_a, $cc_a)));
     $text   = $subject . "\n" . $body;
+
+    /* Expéditeur en liste noire → on l'ignore totalement (jamais importé, jamais
+       mis en file « à rattacher »). */
+    if (lfi_nct_inbox_is_blocklisted($from_a)) return ['matched' => false, 'dossier_id' => 0, 'blocked' => true];
 
     $tenant_uid = lfi_nct_inbox_find_tenant($all, $text);
     $collector  = strtolower(lfi_nct_inbox_collector());
@@ -317,6 +350,35 @@ function lfi_nct_app_view_inbox_import() {
         if ($qid && $tid && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($tid))) lfi_nct_inbox_assign($qid, $tid);
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['assigned' => 1])); exit;
     }
+    /* 🚫 Liste noire : bannir l'expéditeur d'un email de la file (newsletter,
+       no-reply…) → on le retire ET on supprime tous les emails du même
+       expéditeur, présents comme à venir. */
+    if (!empty($_POST['lfi_inbox_block']) && check_admin_referer('lfi_inbox_assign')) {
+        $qid = (int) ($_POST['queue_id'] ?? 0);
+        $q = lfi_nct_inbox_unmatched(); $sender = '';
+        foreach ($q as $e) { if ((int) ($e['id'] ?? 0) === $qid) { $a = lfi_nct_inbox_emails($e['from'] ?? ''); $sender = strtolower($a[0] ?? ''); break; } }
+        if ($sender !== '') {
+            $bl = lfi_nct_inbox_blocklist(); $bl[] = $sender; lfi_nct_inbox_blocklist_save($bl);
+            $q = array_values(array_filter($q, function ($e) use ($sender) {
+                $a = array_map('strtolower', lfi_nct_inbox_emails($e['from'] ?? ''));
+                return !in_array($sender, $a, true);
+            }));
+            lfi_nct_inbox_unmatched_save($q);
+        }
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blocked' => 1])); exit;
+    }
+    /* Ajout / retrait manuel dans la liste noire (adresse ou domaine). */
+    if (!empty($_POST['lfi_inbox_block_add']) && check_admin_referer('lfi_inbox_bl')) {
+        $addr = strtolower(sanitize_text_field(wp_unslash($_POST['addr'] ?? '')));
+        if ($addr !== '') { $bl = lfi_nct_inbox_blocklist(); $bl[] = $addr; lfi_nct_inbox_blocklist_save($bl); }
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['bladd' => 1])); exit;
+    }
+    if (!empty($_POST['lfi_inbox_unblock']) && check_admin_referer('lfi_inbox_bl')) {
+        $addr = strtolower(sanitize_text_field(wp_unslash($_POST['addr'] ?? '')));
+        $bl = array_values(array_filter(lfi_nct_inbox_blocklist(), function ($a) use ($addr) { return $a !== $addr; }));
+        lfi_nct_inbox_blocklist_save($bl);
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blrm' => 1])); exit;
+    }
 
     $collector = lfi_nct_inbox_collector();
     $key       = function_exists('lfi_nct_ingest_key') ? lfi_nct_ingest_key() : '';
@@ -328,6 +390,9 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['regen']))   lfi_nct_app_flash('🔑 Nouvelle clé générée — remets-la dans le script.');
     if (!empty($_GET['cleared'])) lfi_nct_app_flash('File « à rattacher » vidée.');
     if (!empty($_GET['assigned'])) lfi_nct_app_flash('✅ Email rangé — le robot a mémorisé cette adresse pour la prochaine fois.');
+    if (!empty($_GET['blocked'])) lfi_nct_app_flash('🚫 Expéditeur mis en liste noire — ses emails ne seront plus jamais importés.');
+    if (!empty($_GET['bladd']))   lfi_nct_app_flash('🚫 Ajouté à la liste noire.');
+    if (!empty($_GET['blrm']))    lfi_nct_app_flash('Retiré de la liste noire.');
 
     echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
 
@@ -388,11 +453,33 @@ function lfi_nct_app_view_inbox_import() {
             foreach ($tsel as $tu) echo '<option value="' . (int) $tu->ID . '">' . esc_html($tu->display_name) . '</option>';
             echo '</select>';
             echo '<button type="submit" class="btn-primary" style="background:#186a3b">✅ Ranger + apprendre</button></form>';
+            /* 🚫 Bannir l'expéditeur (newsletter, no-reply…) : disparaît de la file
+               et ne reviendra plus. */
+            echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Mettre cet expéditeur en LISTE NOIRE ? Ses emails ne seront plus jamais importés.\')">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_inbox_block" value="1"><input type="hidden" name="queue_id" value="' . (int) ($e['id'] ?? 0) . '">';
+            echo '<button type="submit" class="btn-ghost" style="font-size:.8em;color:#c8102e;border-color:#f0b6c1">🚫 Liste noire (ignorer cet expéditeur)</button></form>';
             echo '</li>';
         }
         echo '</ul>';
         echo '<form method="post" onsubmit="return confirm(\'Vider la file à rattacher ?\')">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_clear" value="1"><button type="submit" class="btn-ghost" style="font-size:.82em">🗑 Vider la file</button></form>';
     }
+
+    /* -------- Liste noire (boîte noire) -------- */
+    $bl = lfi_nct_inbox_blocklist();
+    echo '<h3 style="margin:18px 0 6px">🚫 Liste noire (' . count($bl) . ')</h3>';
+    echo '<div class="lfi-app-help"><small>Adresses ou domaines dont les emails ne sont <strong>jamais</strong> importés (newsletters, no-reply, alertes automatiques…). Mets un domaine entier comme <code>lafranceinsoumise.fr</code> ou une adresse exacte.</small></div>';
+    if (!empty($bl)) {
+        echo '<ul class="lfi-app-list">';
+        foreach ($bl as $addr) {
+            echo '<li class="lfi-app-card" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="meta-chip">' . esc_html($addr) . '</span>';
+            echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_inbox_bl', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_unblock" value="1"><input type="hidden" name="addr" value="' . esc_attr($addr) . '"><button type="submit" class="btn-ghost" style="font-size:.78em">Retirer</button></form></li>';
+        }
+        echo '</ul>';
+    }
+    echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_inbox_bl', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_inbox_block_add" value="1">';
+    echo '<input type="text" name="addr" placeholder="adresse@exemple.fr ou domaine.fr" style="flex:1;min-width:200px;padding:9px;border:1.5px solid #ddd;border-radius:8px">';
+    echo '<button type="submit" class="btn-ghost" style="font-size:.82em">➕ Ajouter à la liste noire</button></form>';
 
     lfi_nct_app_screen_close();
 }

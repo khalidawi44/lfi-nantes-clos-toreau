@@ -122,6 +122,11 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         $hay  = $from . ' ' . $to . ' ' . $cc;
         $is_central = ((int) $box['referent'] === 0); /* la boîte collectrice dédiée */
 
+        /* Liste noire (« boîte noire ») : expéditeur banni → on ignore et on
+           marque vu pour ne plus jamais le réévaluer. */
+        if (function_exists('lfi_nct_inbox_is_blocklisted') && function_exists('lfi_nct_inbox_emails')
+            && lfi_nct_inbox_is_blocklisted(lfi_nct_inbox_emails($from))) { $seen[] = $mid; continue; }
+
         /* On capte : une réponse d'un expéditeur suivi (NMH/institution/avocat,
            en From OU To/Cc → les deux sens), OU un email impliquant un MEMBRE du
            GA (ex. Fabrice Doucet qui envoie) — pas seulement les réponses reçues. */
