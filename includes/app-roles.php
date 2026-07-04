@@ -1968,6 +1968,34 @@ function lfi_nct_app_credentials_message($login, $pwd, $ga_label = 'LFI Nantes S
     return $msg;
 }
 
+/**
+ * Message d'ACCUEIL d'un nouveau membre : bienvenue + ce qu'on fait + lien de
+ * connexion directe (1 clic → choisir son mot de passe = onboarding) + appel
+ * direct à l'admin + invitation à dire ce qu'il/elle veut faire.
+ * $link : passer un lien déjà généré pour éviter d'en créer plusieurs.
+ */
+function lfi_nct_member_welcome_text($uid, $link = '') {
+    $uid = (int) $uid; $u = get_userdata($uid); if (!$u) return '';
+    $prenom   = $u->first_name ?: $u->display_name;
+    $ga       = (string) get_user_meta($uid, 'lfi_nct_ga', true);
+    $ga_label = ($ga && function_exists('lfi_nct_ga_nom')) ? lfi_nct_ga_nom($ga) : 'La France Insoumise Nantes Sud – Clos Toreau';
+    if ($link === '') $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($uid) : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
+    $me         = wp_get_current_user();
+    $admin_name = $me->display_name ?: 'Fabrice';
+    $admin_tel  = trim((string) get_user_meta($me->ID, 'lfi_nct_tel', true));
+
+    $t  = 'Bonjour ' . $prenom . ",\n\n";
+    $t .= 'Bienvenue dans le Groupe d\'Action ' . $ga_label . " 👋\n";
+    $t .= "On défend les locataires du quartier face à leur bailleur — gratuitement, entre voisins.\n\n";
+    $t .= "📲 Ton accès direct à l'appli (1 clic, rien à taper) :\n" . $link . "\n";
+    $t .= "→ Ouvre le lien : tu es connecté·e automatiquement, puis tu choisis ton mot de passe. Pense à « Ajouter à l'écran d'accueil » pour installer l'appli (iPhone : Partager ▸ Sur l'écran d'accueil · Android : bouton « Installer »).\n\n";
+    if ($admin_tel !== '') $t .= '📞 Appelle-moi quand tu veux pour qu\'on se parle : ' . $admin_tel . "\n";
+    else $t .= "📞 Réponds à ce message pour qu'on s'appelle et qu'on fasse connaissance.\n";
+    $t .= "Je t'expliquerai ce qu'on fait — et surtout, dis-moi ce que TOI tu aimerais faire avec nous.\n\n";
+    $t .= 'À très vite,' . "\n" . $admin_name;
+    return $t;
+}
+
 function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte créé') {
     $login = $created['login']; $pwd = $created['pwd']; $tel = $created['tel'] ?? '';
     $site_app = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
@@ -2115,6 +2143,21 @@ function lfi_nct_app_view_comptes_ga() {
             update_user_meta($euid, 'lfi_nct_tel', $te);
         }
         wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['edited' => 1, 'open' => $euid]) . '#m-' . $euid); exit;
+    }
+
+    /* Email d'ACCUEIL d'un membre (lien magique + parcours + appel direct). */
+    if (!empty($_POST['lfi_app_welcome_email']) && check_admin_referer('lfi_app_welcome_email')) {
+        $wuid = (int) ($_POST['uid'] ?? 0);
+        $wu   = $wuid ? get_userdata($wuid) : null;
+        $sent = false;
+        if ($wu && is_email($wu->user_email) && function_exists('lfi_nct_member_welcome_text')) {
+            $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($wuid) : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
+            $txt  = lfi_nct_member_welcome_text($wuid, $link);
+            $html = str_replace(esc_html($link), '<a href="' . esc_url($link) . '" style="color:#186a3b;font-weight:700">' . esc_html($link) . '</a>', nl2br(esc_html($txt)));
+            $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;color:#222;line-height:1.6">' . $html . '</div>';
+            $sent = wp_mail($wu->user_email, 'Bienvenue dans le Groupe d\'Action 👋', $html, ['Content-Type: text/html; charset=UTF-8']);
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes-ga', [($sent ? 'welcomed' : 'welcomefail') => 1, 'open' => $wuid]) . '#m-' . $wuid); exit;
     }
 
     /* Import depuis le RÉPERTOIRE TÉLÉPHONE : fiches contact (.vcf) +
@@ -2391,7 +2434,10 @@ function lfi_nct_app_view_comptes_ga() {
     if (!empty($_GET['moved']))     lfi_nct_app_flash('↪️ Membre déplacé vers son nouveau groupe d\'action.');
     if (!empty($_GET['created_uid'])) { $nu = get_userdata((int) $_GET['created_uid']); if ($nu) lfi_nct_app_flash('✅ Membre du GA créé depuis un email : ' . esc_html($nu->display_name) . ' — sa fiche est ouverte plus bas, complète l\'email et le téléphone.'); }
     if (!empty($_GET['edited']))    lfi_nct_app_flash('✅ Fiche du membre mise à jour.');
-    $open_uid = (int) ($_GET['open'] ?? ($_GET['created_uid'] ?? 0));
+    if (!empty($_GET['welcomed']))    lfi_nct_app_flash('✅ Email d\'accueil envoyé (lien de connexion + parcours inclus).');
+    if (!empty($_GET['welcomefail'])) lfi_nct_app_flash('⚠️ Email non envoyé (adresse manquante ou invalide — complète la fiche).', 'error');
+    $open_uid = (int) ($_GET['open'] ?? ($_GET['created_uid'] ?? ($_GET['welcome_sms'] ?? 0)));
+    $welcome_sms = (int) ($_GET['welcome_sms'] ?? 0);
 
     /* Batch après import en masse */
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
@@ -2578,6 +2624,26 @@ function lfi_nct_app_view_comptes_ga() {
             echo '<input type="hidden" name="lfi_app_reset_pwd" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
             echo '<button type="submit" class="btn-ghost" onclick="return confirm(\'Générer un nouveau mot de passe pour ' . esc_js($u->display_name) . ' ?\');">🔑 Réinitialiser &amp; renvoyer</button>';
             echo '</form>';
+            /* 👋 Accueil du membre : SMS + email (lien 1 clic → choisir mdp = parcours). */
+            if ($u->user_email || $mtel) {
+                echo '<div style="flex-basis:100%;height:0"></div><div style="font-size:.78em;color:#6f4bb0;font-weight:700;width:100%;margin-top:2px">👋 Accueil (installer l\'appli + connexion configurée)</div>';
+                if ($mtel) {
+                    /* Lien qui PRÉPARE le SMS (génère le lien magique au clic seulement). */
+                    echo '<a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('comptes-ga', ['welcome_sms' => $u->ID, 'open' => $u->ID]) . '#m-' . $u->ID) . '">📱 Préparer le SMS d\'accueil</a>';
+                }
+                if ($u->user_email) {
+                    echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_welcome_email', '_wpnonce', true, false);
+                    echo '<input type="hidden" name="lfi_app_welcome_email" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+                    echo '<button type="submit" class="btn-ghost" style="color:#0066a3;border-color:#a9cdea" onclick="return confirm(\'Envoyer l\\\'email d\\\'accueil à ' . esc_js($u->user_email) . ' ?\')">✉️ Email d\'accueil</button></form>';
+                }
+            }
+            /* SMS d'accueil préparé pour CE membre (mint 1 lien à la demande). */
+            if ($welcome_sms === (int) $u->ID && $mtel && function_exists('lfi_nct_member_welcome_text')) {
+                $wbody = lfi_nct_member_welcome_text($u->ID);
+                echo '<div style="flex-basis:100%;height:0"></div><div class="lfi-app-help" style="width:100%;background:#eef7ee;border-left:4px solid #186a3b;margin-top:6px"><small>📱 SMS d\'accueil prêt (lien de connexion inclus, usage unique) — ouvre-le sur ton téléphone, ou copie le texte.</small>';
+                echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"><a class="btn-primary" style="background:#186a3b" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $mtel)) . '?body=' . rawurlencode($wbody) . '">📲 Ouvrir le SMS</a>' . lfi_nct_copy_button($wbody, '📋 Copier le texte') . '</div>';
+                echo '<textarea readonly onclick="this.select()" style="width:100%;height:150px;margin-top:6px;font-size:.8em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($wbody) . '</textarea></div>';
+            }
             /* Promouvoir / révoquer admin (uniquement dans un GA précis) */
             if ($cur_slug !== '' && (int) $u->ID !== $cur_uid) {
                 echo '<form method="post" style="margin:0">';

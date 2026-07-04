@@ -740,6 +740,34 @@ function lfi_nct_app_view_partenaires() {
 /* -------------------------------------------------------------- *
  *  ADMIN : espace partagé d'UN partenaire (co-gestion + réponse) *
  * -------------------------------------------------------------- */
+/**
+ * Message d'invitation d'un·e élu·e : explique l'outil, MONTRE le travail
+ * accompli (résultats anonymes) et l'invite à DÉCOUVRIR (lien 1 clic → visite
+ * guidée). Même contenu pour le copier-coller Telegram et pour l'email.
+ */
+function lfi_nct_partner_invite_message($p, $link) {
+    $prenom = $p->first_name ?: $p->display_name;
+    $bilan  = '';
+    if (function_exists('lfi_nct_demo_stats')) {
+        $st = lfi_nct_demo_stats();
+        $bilan = "📊 Ce qu'on a DÉJÀ obtenu (données anonymes) : "
+               . (int) ($st['victoires'] ?? 0) . " bataille(s) gagnée(s), "
+               . (int) ($st['suivis'] ?? 0) . " locataire(s) suivi(s), "
+               . (int) ($st['publiees'] ?? 0) . " victoire(s) racontée(s).\n\n";
+    }
+    return "Salut " . $prenom . ",\n\n"
+        . "On a construit au Clos Toreau (Nantes Sud) un outil de terrain pour défendre les locataires : de la porte du locataire jusqu'au tribunal — enquête, dossier monté tout seul, argumentaire chiffré sur le bailleur, relogement, victoires. Ça tourne, c'est concret.\n\n"
+        . $bilan
+        . "Je t'ai créé un espace rien qu'à toi pour DÉCOUVRIR l'outil : une visite guidée en 3 min (ce qu'on fait, comment ça marche, et ce qu'on a gagné). Dedans aussi :\n"
+        . "• une ligne directe avec moi ;\n"
+        . "• un dossier qu'on partage ;\n"
+        . "• l'étude des comptes du bailleur, prête à ressortir en conseil.\n\n"
+        . "👉 Connexion en 1 clic, rien à taper : " . $link . "\n"
+        . "(À la 1re ouverture, choisis ton mot de passe, puis ajoute l'appli à ton écran d'accueil.)\n\n"
+        . "L'idée : que tu découvres, que tu t'en empares. On voit ensemble ce qu'on en fait — et dis-moi ce que toi tu en penses.\n"
+        . "À très vite,\nFabrice";
+}
+
 function lfi_nct_app_view_partenaire_espace() {
     if (!current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     $uid = isset($_GET['uid']) ? (int) $_GET['uid'] : 0;
@@ -747,6 +775,19 @@ function lfi_nct_app_view_partenaire_espace() {
     if (!$p || !lfi_nct_user_role_partner($uid)) { wp_safe_redirect(lfi_nct_app_url('partenaires')); exit; }
     $back = lfi_nct_app_url('partenaire-espace', ['uid' => $uid]);
     lfi_nct_partner_activity_clear($uid); /* l'admin consulte → on efface l'alerte */
+
+    /* Envoi de l'invitation par EMAIL (même message, lien 1 clic inclus). */
+    if (!empty($_POST['lfi_partner_send_invite']) && check_admin_referer('lfi_partner_send_invite')) {
+        $sent = false;
+        if (is_email($p->user_email) && strpos((string) $p->user_email, '@partenaire.example') === false) {
+            $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($uid, lfi_nct_app_url('espace')) : lfi_nct_app_url();
+            $txt  = lfi_nct_partner_invite_message($p, $link);
+            $html = str_replace(esc_html($link), '<a href="' . esc_url($link) . '" style="color:#4b2e83;font-weight:700">' . esc_html($link) . '</a>', nl2br(esc_html($txt)));
+            $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;color:#222;line-height:1.6">' . $html . '</div>';
+            $sent = wp_mail($p->user_email, 'Découvre notre outil de défense des locataires 👋', $html, ['Content-Type: text/html; charset=UTF-8']);
+        }
+        wp_safe_redirect(add_query_arg($sent ? 'invsent' : 'invfail', 1, $back)); exit;
+    }
 
     /* Mise à jour de l'email du partenaire (pour qu'il reçoive les réponses). */
     if (!empty($_POST['lfi_partner_email']) && check_admin_referer('lfi_partner_email')) {
@@ -783,6 +824,18 @@ function lfi_nct_app_view_partenaire_espace() {
     if (!empty($_GET['scopeok'])) lfi_nct_app_flash('✅ Niveau & secteur enregistrés.');
     if (!empty($_GET['cree']))   lfi_nct_app_flash('✅ Compte créé — génère son lien + le message Telegram ci-dessous.');
     if (!empty($_GET['promu']))  lfi_nct_app_flash('✅ Espace élu·e créé. Elle garde son rôle actuel + accède à « 🏛️ Mon espace élu·e ». Génère son lien ci-dessous si besoin.');
+    if (!empty($_GET['invsent'])) lfi_nct_app_flash('✅ Email d\'invitation envoyé (avec le bilan + le lien de découverte).');
+    if (!empty($_GET['invfail'])) lfi_nct_app_flash('⚠️ Envoi impossible (email provisoire ou invalide — mets son vrai email d\'abord).', 'error');
+
+    /* ===== Présentation du travail accompli (à montrer / envoyer / PDF) ===== */
+    echo '<div class="lfi-app-card" style="border:2px solid #186a3b;background:#f2fbf4">';
+    echo '<div class="head"><div class="who">🎁 Lui montrer le travail accompli</div></div>';
+    echo '<div style="font-size:.9em;color:#333;margin:4px 0 8px">Le but : <strong>expliquer et l\'inviter à découvrir l\'outil</strong>. Trois façons :</div>';
+    echo '<div style="display:flex;flex-direction:column;gap:6px">';
+    echo '<div>🔗 <strong>Son espace</strong> : le lien de connexion ci-dessous l\'amène direct sur la <strong>visite guidée</strong> (ce qu\'on fait + ce qu\'on a gagné).</div>';
+    echo '<div>✉️ <strong>Par email</strong> : bouton « Envoyer l\'invitation par email » (le message inclut le bilan chiffré).</div>';
+    echo '<a class="btn-ghost" style="color:#c8102e;border-color:#f0b6c1;align-self:flex-start" href="' . esc_url(lfi_nct_app_url('kit-national')) . '" target="_blank" rel="noopener">📄 Ouvrir la présentation (à enregistrer en PDF)</a>';
+    echo '</div></div>';
 
     /* ===== Bloc « Message Telegram prêt à envoyer » ===== */
     $tg = get_user_meta($uid, 'lfi_nct_telegram', true);
@@ -799,25 +852,20 @@ function lfi_nct_app_view_partenaire_espace() {
     echo '<button type="submit" class="btn-ghost" style="padding:8px 12px">💾 Enregistrer l\'email</button></form>';
 
     if ($fresh_link !== '') {
-        $prenom = $p->first_name ?: $p->display_name;
-        $message = "Salut " . $prenom . ",\n\n"
-                 . "On a construit un outil pour le terrain à Nantes Sud (Clos Toreau) : une appli qui structure notre action logement — l'enquête, l'argumentaire chiffré sur le bailleur, le suivi des victoires. Ça tourne, c'est concret, et je pense que ça peut te servir.\n\n"
-                 . "Je t'ai créé un espace rien qu'à toi. Dedans :\n"
-                 . "• une ligne directe avec moi (tu me poses tes questions, je réponds) ;\n"
-                 . "• un dossier qu'on partage tous les deux ;\n"
-                 . "• l'étude des comptes du bailleur rangée par thème, prête à ressortir en conseil ;\n"
-                 . "• des assistants qui bossent pour toi, et les contacts directs des responsables de GA.\n\n"
-                 . "Connexion en 1 clic, rien à taper : " . $fresh_link . "\n"
-                 . "(À la 1re ouverture, choisis ton mot de passe puis ajoute l'appli à ton écran d'accueil.)\n\n"
-                 . "L'idée : que tu t'en empares. On voit ensemble ce qu'on en fait.\n"
-                 . "À très vite,\nFabrice";
+        $message = lfi_nct_partner_invite_message($p, $fresh_link);
         echo '<div class="lfi-app-help" style="margin-top:6px;background:#f4fbf4;border-left:4px solid #186a3b"><small>✅ Lien généré' . ($tg ? ' pour <strong>' . esc_html($tg) . '</strong>' : '') . '. Copie tout le message ci-dessous et colle-le dans Telegram. <strong>Ne régénère pas</strong> après l\'envoi (ça invalide le lien).</small></div>';
-        echo '<textarea readonly onclick="this.select()" style="width:100%;height:230px;margin-top:6px;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($message) . '</textarea>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:250px;margin-top:6px;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($message) . '</textarea>';
     } else {
         echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_genlink', '_wpnonce', true, false);
         echo '<input type="hidden" name="lfi_partner_genlink" value="1">';
         echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🔗 Générer le lien + le message Telegram</button></form>';
         echo '<div class="lfi-app-help" style="margin-top:4px"><small>Le lien connecte ' . esc_html($p->display_name) . ' d\'un seul clic, sans identifiant (usage unique, 14 jours).</small></div>';
+    }
+    /* Envoi direct par email (le message inclut le bilan + le lien de découverte). */
+    if (is_email($p->user_email) && !$is_placeholder_mail) {
+        echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_partner_send_invite', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_partner_send_invite" value="1">';
+        echo '<button type="submit" class="btn-primary" style="background:#0066a3" onclick="return confirm(\'Envoyer l\\\'invitation (bilan + lien de découverte) par email à ' . esc_js($p->user_email) . ' ?\')">✉️ Envoyer l\'invitation par email</button></form>';
     }
     echo '</div>';
 
