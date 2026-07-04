@@ -383,6 +383,7 @@ function lfi_nct_app_view_avocats() {
     if (!empty($_GET['created']))  lfi_nct_app_flash('✅ Avocat·e ajouté·e. Renseigne son email puis génère son lien.');
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('Avocat·e supprimé·e.');
     echo '<div class="lfi-app-help">Chaque avocat·e a un espace dédié : la liste des dossiers que tu lui confies, la note structurée + les pièces, et une ligne directe avec toi. <strong>Il/elle ne voit rien d\'autre</strong> (ni l\'enquête terrain, ni les autres locataires).</div>';
+    echo '<div style="margin:6px 0 12px"><a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('avocat-invites')) . '">📨 Inviter les 2 avocat·es (liens + mail + PDF prêts)</a></div>';
 
     $avocats = lfi_nct_avocat_list();
     if (empty($avocats)) {
@@ -433,12 +434,14 @@ function lfi_nct_app_view_avocats() {
         echo '<input type="hidden" name="lfi_avocat_link" value="1"><input type="hidden" name="avocat_uid" value="' . (int) $av->ID . '">';
         echo '<button type="submit" class="btn-primary" style="background:#0066a3">🔗 Générer son lien de connexion (SMS / email / Telegram)</button></form>';
         if ((int) $magic['uid'] === (int) $av->ID && $magic['link'] !== '') {
-            $intro = "Bonjour Maître, voici votre accès direct à votre espace avocat·e (dossiers confiés par le Groupe d'Action LFI Nantes Sud) — rien à taper, vous choisirez votre mot de passe : " . $magic['link'];
-            echo '<div class="lfi-app-help" style="margin-top:6px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le. Ne régénère pas après l\'envoi.</small></div>';
+            $intro = lfi_nct_avocat_invite_text($magic['link']);
+            $subj  = 'Votre espace de travail — défense des locataires (LFI Nantes Sud – Clos Toreau)';
+            echo '<div class="lfi-app-help" style="margin-top:6px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Le message complet est <strong>déjà pré-rempli</strong> — clique « Envoyer par email », tu n\'as rien à écrire. Ne régénère pas après l\'envoi.</small></div>';
             echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
-            if ($has_mail) echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($av->user_email) . '?subject=' . rawurlencode('Votre espace avocat·e — LFI Nantes Sud') . '&body=' . rawurlencode($intro) . '">✉️ Envoyer par email</a>';
+            if ($has_mail) echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($av->user_email) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($intro) . '">✉️ Envoyer par email (pré-rempli)</a>';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('avocat-invite-pdf', ['uid' => (int) $av->ID, 'link' => rawurlencode($magic['link'])])) . '" target="_blank">📄 Version imprimable (PDF)</a>';
             echo '</div>';
-            echo '<textarea readonly onclick="this.select()" style="width:100%;height:80px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';
+            echo '<textarea readonly onclick="this.select()" style="width:100%;height:220px;margin-top:6px;font-size:.8em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';
         }
         echo '</div>';
     }
@@ -510,6 +513,81 @@ function lfi_nct_app_view_avocat_espace() {
         echo '</div></div>';
     }
     lfi_nct_app_screen_close();
+}
+
+/** Texte d'invitation complet (mail + PDF), avec le lien de connexion. */
+function lfi_nct_avocat_invite_text($link) {
+    $t  = "Maître,\n\n";
+    $t .= "Notre Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau accompagne gratuitement des locataires du parc social face à leur bailleur. Quand un dossier vous est confié, il arrive DÉJÀ monté et documenté : constat, chronologie, préjudice chiffré, pièces datées, base légale.\n\n";
+    $t .= "Je vous ai créé un ESPACE DE TRAVAIL personnel, simple et confidentiel. En un clic sur le lien ci-dessous :\n\n";
+    $t .= "1) Vous êtes connecté·e sans rien taper, puis vous choisissez votre mot de passe (enregistré sur votre appareil).\n";
+    $t .= "2) Vous accédez à VOS dossiers (uniquement les vôtres) : note structurée, pièces classées par date de prise de vue, dossier de conciliation déjà préparé.\n";
+    $t .= "3) La jurisprudence Judilibre est intégrée : les décisions liées au problème du locataire s'affichent automatiquement, avec le lien officiel.\n";
+    $t .= "4) Une ligne directe avec le Groupe d'Action, dossier par dossier.\n\n";
+    $t .= "Tout est expliqué en une page à votre première connexion.\n\n";
+    $t .= "Votre accès direct :\n" . $link . "\n\n";
+    $t .= "Bien confraternellement,\n";
+    $t .= "Fabrice Doucet — Groupe d'Action LFI Nantes Sud – Clos Toreau · Union des Quartiers Libres";
+    return $t;
+}
+
+/** Page « invitations » : les DEUX avocats prêts à envoyer (lien + texte + PDF). */
+function lfi_nct_app_view_avocat_invites() {
+    if (!lfi_nct_avocat_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    lfi_nct_app_screen_open('📨 Inviter les avocat·es', 'Tout est prêt — un envoi par avocat·e');
+    echo '<div class="lfi-app-help">Pour chaque avocat·e : le <strong>lien de connexion direct</strong> (usage unique), le <strong>message déjà rédigé</strong> (bouton email) et la <strong>version PDF</strong>. Envoie, c\'est tout. <strong>Ne régénère pas</strong> la page après avoir envoyé (ça crée un nouveau lien et invalide l\'ancien).</div>';
+    $avocats = lfi_nct_avocat_list();
+    if (empty($avocats)) { echo '<div class="lfi-app-empty">Aucun·e avocat·e. Ajoute-les depuis « ⚖️ Avocat·es partenaires ».</div>'; lfi_nct_app_screen_close(); return; }
+    $space = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    foreach ($avocats as $av) {
+        $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link((int) $av->ID, $space) : $space;
+        $txt  = lfi_nct_avocat_invite_text($link);
+        $mail = sanitize_email((string) $av->user_email);
+        $has_mail = ($mail !== '' && is_email($mail) && stripos($mail, '@avocat.') === false);
+        $subj = 'Votre espace de travail — défense des locataires (LFI Nantes Sud – Clos Toreau)';
+        echo '<div class="lfi-app-card" style="border-left:4px solid #6a1b9a">';
+        echo '<div class="head"><div class="who">⚖️ ' . esc_html($av->display_name) . '</div>';
+        echo '<div class="badge">' . ($has_mail ? esc_html($mail) : '⚠️ email à renseigner') . '</div></div>';
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">';
+        if ($has_mail) echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($mail) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($txt) . '">✉️ Envoyer par email (pré-rempli)</a>';
+        echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('avocat-invite-pdf', ['uid' => (int) $av->ID, 'link' => rawurlencode($link)])) . '" target="_blank">📄 PDF</a>';
+        echo '</div>';
+        echo '<div class="lfi-app-help" style="margin:2px 0"><small>🔗 Lien de connexion direct (copie-le pour SMS / Telegram) :</small></div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:44px;font-size:.78em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($link) . '</textarea>';
+        echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-weight:700;color:#6a1b9a">📄 Voir le message complet</summary>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:220px;margin-top:6px;font-size:.8em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($txt) . '</textarea></details>';
+        echo '</div>';
+    }
+    lfi_nct_app_screen_close();
+}
+
+/** Version imprimable (PDF via impression navigateur) de l'invitation. */
+function lfi_nct_app_view_avocat_invite_pdf() {
+    if (!lfi_nct_avocat_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $aid  = (int) ($_GET['uid'] ?? 0);
+    $av   = $aid ? get_userdata($aid) : null;
+    $link = isset($_GET['link']) ? esc_url_raw(rawurldecode((string) $_GET['link'])) : '';
+    if (!$av || !lfi_nct_user_role_avocat($aid)) { wp_safe_redirect(lfi_nct_app_url('avocats')); exit; }
+    $txt = lfi_nct_avocat_invite_text($link ?: '[lien de connexion]');
+    nocache_headers();
+    ?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Invitation — <?php echo esc_html($av->display_name); ?></title>
+    <style>
+      body{font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;max-width:720px;margin:32px auto;padding:0 24px;line-height:1.6}
+      .hd{border-bottom:3px solid #c8102e;padding-bottom:12px;margin-bottom:20px}
+      .hd .t{font-weight:900;color:#c8102e;font-size:1.15em}
+      .hd .s{color:#555;font-size:.9em}
+      pre{white-space:pre-wrap;font-family:inherit;font-size:1.02em;margin:0}
+      .lk{word-break:break-all;color:#0066a3}
+      @media print{.noprint{display:none}}
+      .noprint{margin-top:24px;text-align:center}
+      .btn{background:#c8102e;color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:800;cursor:pointer;font-size:1em}
+    </style></head><body>
+    <div class="hd"><div class="t">⚖️ Groupe d'Action La France Insoumise — Nantes Sud · Clos Toreau</div><div class="s">Union des Quartiers Libres — défense des locataires</div></div>
+    <pre><?php echo esc_html($txt); ?></pre>
+    <div class="noprint"><button class="btn" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>
+    </body></html><?php
+    exit;
 }
 
 /* -------------------------------------------------------------- *
