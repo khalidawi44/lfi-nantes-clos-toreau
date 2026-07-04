@@ -2085,6 +2085,48 @@ function lfi_nct_parse_vcards($text) {
     return $out;
 }
 
+/* ============================================================== *
+ *  SOUS-RÔLES DU GA — l'interface s'adapte au rôle.               *
+ *  Superadmin (toi) = manage_options, INTOUCHABLE (non affiché).  *
+ *  RÈGLE ABSOLUE : aucun sous-rôle ne donne accès à l'ENQUÊTE ni  *
+ *  aux DOSSIERS locataires — réservés au superadmin.             *
+ * ============================================================== */
+function lfi_nct_ga_roles_def() {
+    return [
+        'membre'    => ['👤', 'Membre', 'Participe : réunions, événements, infos du GA.'],
+        'admin'     => ['⭐', 'Admin du GA', 'Gère les membres, valide les réunions, gère les événements, envois groupés. Jamais l\'enquête.'],
+        'tresorier' => ['💰', 'Trésorier', 'Finances uniquement (facturation, recouvrement). Rien d\'autre.'],
+        'reunions'  => ['📅', 'Responsable réunions/événements', 'Crée et valide réunions & événements, envoie les convocations.'],
+    ];
+}
+function lfi_nct_ga_role($uid = 0) {
+    $uid = $uid ?: get_current_user_id();
+    if (user_can($uid, 'manage_options')) return 'superadmin';
+    $r = (string) get_user_meta($uid, 'lfi_nct_ga_role', true);
+    $def = lfi_nct_ga_roles_def();
+    return (isset($def[$r]) && $r !== 'membre') ? $r : 'membre';
+}
+function lfi_nct_ga_role_save($uid, $role) {
+    $uid = (int) $uid;
+    if (!$uid || user_can($uid, 'manage_options')) return; /* superadmin intouchable */
+    $role = in_array($role, ['admin', 'tresorier', 'reunions'], true) ? $role : 'membre';
+    if ($role === 'membre') delete_user_meta($uid, 'lfi_nct_ga_role');
+    else update_user_meta($uid, 'lfi_nct_ga_role', $role);
+}
+/** Capacité accordée par le sous-rôle. L'enquête/dossiers n'y figure JAMAIS. */
+function lfi_nct_role_can($cap, $uid = 0) {
+    $r = lfi_nct_ga_role($uid);
+    if ($r === 'superadmin') return true;
+    $matrix = [
+        'membres'    => ['admin'],
+        'reunions'   => ['admin', 'reunions'],
+        'evenements' => ['admin', 'reunions'],
+        'envois'     => ['admin'],
+        'finances'   => ['tresorier'],
+    ];
+    return in_array($r, $matrix[$cap] ?? [], true);
+}
+
 function lfi_nct_app_view_comptes_ga() {
     $can = function_exists('lfi_nct_is_ga_admin') ? lfi_nct_is_ga_admin() : current_user_can('manage_options');
     if (!$can) return;

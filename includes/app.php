@@ -749,7 +749,7 @@ function lfi_nct_app_shortcode() {
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
-                    'demo-national', 'demo-preview', 'kit-national',
+                    'demo-national', 'demo-preview', 'kit-national', 'kit-technique',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                     'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
                     'partenaires', 'partenaire-espace',
@@ -796,6 +796,7 @@ function lfi_nct_app_shortcode() {
                     case 'kit-national':       lfi_nct_app_view_kit_national();       break;
                     case 'demo-national':      lfi_nct_app_view_demo_hub();           break;
                     case 'demo-preview':       lfi_nct_app_view_demo_national();      break;
+                    case 'kit-technique':      lfi_nct_app_view_kit_technique();      break;
                     case 'avocats':            lfi_nct_app_view_avocats();            break;
                     case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
                     case 'avocat-invites':     lfi_nct_app_view_avocat_invites();     break;
