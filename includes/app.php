@@ -1170,6 +1170,24 @@ function lfi_nct_app_render_dashboard() {
             </div>
         </div>
 
+        <?php /* Barre d'actions rapides EN HAUT — plus besoin de scroller tout en bas. */ ?>
+        <div style="display:flex;gap:8px;overflow-x:auto;margin:0 0 12px;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+            <?php
+            $quick_actions = [
+                ['➕', 'Saisir une enquête', lfi_nct_app_url('temoignage-add')],
+                ['🏠', 'Enquêtes',          lfi_nct_app_url('enquetes')],
+                ['🪪', 'Comptes',           lfi_nct_app_url('comptes', ['tab' => 'locataires'])],
+                ['🗂', 'Dossiers',          lfi_nct_app_url('dossiers')],
+                ['🗺️', 'Carte',            lfi_nct_app_url('carte')],
+            ];
+            foreach ($quick_actions as $qa): ?>
+                <a href="<?php echo esc_url($qa[2]); ?>" style="flex:0 0 auto;text-decoration:none;background:#fff;border:1px solid #eee;border-radius:12px;padding:9px 13px;text-align:center;min-width:74px;color:#1a1a1a">
+                    <div style="font-size:1.25em"><?php echo $qa[0]; ?></div>
+                    <div style="font-size:.74em;font-weight:700;white-space:nowrap"><?php echo esc_html($qa[1]); ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
+
         <div class="lfi-app-quick">
             <?php $reunion_past = function_exists('lfi_nct_reunion_confluences_is_past') && lfi_nct_reunion_confluences_is_past(); ?>
             <?php if (!$reunion_past) : ?>
