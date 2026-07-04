@@ -787,6 +787,7 @@ function lfi_nct_app_shortcode() {
                     case 'carte':           lfi_nct_app_view_carte();           break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
+                    case 'sms-blocklist':   lfi_nct_app_view_sms_blocklist();   break;
                     case 'mon-profil':      lfi_nct_app_view_mon_profil();      break;
                     case 'installer':       lfi_nct_app_view_installer();       break;
                     case 'partenaires':        lfi_nct_app_view_partenaires();        break;
@@ -2380,6 +2381,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🗂', 'Dossiers & suivi',       'Tout par locataire · photos',         lfi_nct_app_url('dossiers')],
             ['📥', 'Importer un email',      'Colle l\'email → bon dossier auto',    lfi_nct_app_url('email-import')],
             ['📲', 'SMS aux locataires',     'Vouvoiement · 7 modèles',             lfi_nct_app_url('sms-locataires')],
+            ['🚫', 'Liste noire SMS',        'Ceux qui refusent les SMS (RGPD)',    lfi_nct_app_url('sms-blocklist')],
         ],
         '🔧 ESPACE INTERVENTION (brigade)' => [
             ['🔧', 'Interventions',          'Travaux chez les locataires',         lfi_nct_app_url('interventions')],
@@ -3067,7 +3069,11 @@ function lfi_nct_app_view_sms() {
     }
     echo '</form>';
 
-    if ($membre && $body) {
+    if ($membre && $body && function_exists('lfi_nct_sms_is_blocked') && lfi_nct_sms_is_blocked($membre->tel)) {
+        echo '<div class="lfi-app-card" style="border-left:4px solid #c8102e"><div class="head"><div class="who">🚫 ' . esc_html(trim($membre->prenom . ' ' . $membre->nom)) . '</div><div class="badge">' . esc_html($membre->tel) . '</div></div>';
+        echo '<div class="com">Cette personne a demandé à <strong>ne plus recevoir de SMS</strong> (liste noire). Envoi désactivé.</div>';
+        echo '<div style="margin-top:6px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('sms-blocklist')) . '">Gérer la liste noire →</a></div></div>';
+    } elseif ($membre && $body) {
         $sms_url = 'sms:' . preg_replace('/[^\d+]/', '', $membre->tel) . '?body=' . rawurlencode($body);
         echo '<div class="lfi-app-card sms-preview">';
         echo '<div class="head"><div class="who">📱 ' . esc_html(trim($membre->prenom . ' ' . $membre->nom)) . '</div><div class="badge">' . esc_html($membre->tel) . '</div></div>';
@@ -3726,6 +3732,10 @@ function lfi_nct_app_view_enquetes_sms() {
                AND contact_recontact = 1" . $enq_scope . "
          ORDER BY submitted_at DESC"
     ) ?: [];
+    /* Liste noire SMS : on exclut les personnes qui ont dit « plus de SMS ». */
+    if (function_exists('lfi_nct_sms_is_blocked')) {
+        $contacts = array_values(array_filter($contacts, function ($c) { return !lfi_nct_sms_is_blocked($c->contact_tel); }));
+    }
     $n = count($contacts);
 
     $i    = isset($_GET['i'])    ? max(0, min(max(0, $n - 1), (int) $_GET['i'])) : 0;
