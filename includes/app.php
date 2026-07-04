@@ -1978,7 +1978,9 @@ function lfi_nct_app_render_assistant_button() {
          le bouton flottant recouvre le contenu et les autres boutons. */
       .lfi-app-pcswitch{display:none}
       @media(min-width:1024px){
-        .lfi-app-pcswitch{position:fixed;bottom:20px;right:16px;z-index:99990;background:#1a1a1a;color:#fff;padding:12px 16px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.35);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-weight:700;font-size:.9em;display:inline-flex;align-items:center;gap:8px;transition:transform .12s}
+        /* Empilé À GAUCHE, au-dessus de l'assistant : le coin bas-DROITE reste
+           libre pour la « remontée rapide » du thème (plus de recouvrement). */
+        .lfi-app-pcswitch{position:fixed;bottom:82px;left:16px;z-index:99990;background:#1a1a1a;color:#fff;padding:12px 16px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.35);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-weight:700;font-size:.9em;display:inline-flex;align-items:center;gap:8px;transition:transform .12s}
         .lfi-app-pcswitch:hover,.lfi-app-pcswitch:focus{color:#fff;transform:scale(1.05)}
         .lfi-app-pcswitch .ico{font-size:1.15em}
       }
