@@ -25,6 +25,31 @@ function lfi_nct_hero_top_css() {
        . '</style>';
 }
 
+/* La bannière (.ag-asso-hero) est REPLACÉE par JS juste sous l'en-tête du thème :
+   le CSS `order` ne marche que si le parent est en flex — pas fiable. On déplace
+   donc le nœud lui-même en tête du contenu (marche aussi pour l'admin connecté,
+   pour qui la barre fixe ci-dessous ne s'affiche pas). */
+add_action('wp_footer', 'lfi_nct_hero_relocate_js', 6);
+function lfi_nct_hero_relocate_js() {
+    if (is_admin() || !is_front_page()) return;
+    ?>
+    <script>
+    (function(){
+      function place(){
+        var hero=document.querySelector('.ag-asso-hero'); if(!hero) return;
+        var header=document.querySelector('#masthead, .site-header, header[role="banner"], header');
+        try{
+          if(header && header.parentNode){ header.parentNode.insertBefore(hero, header.nextSibling); }
+          else if(document.body){ document.body.insertBefore(hero, document.body.firstChild); }
+        }catch(e){}
+      }
+      if(document.readyState!=='loading') place();
+      else document.addEventListener('DOMContentLoaded', place);
+    })();
+    </script>
+    <?php
+}
+
 /* Bandeau compact FIXE (indépendant du thème → reste figé quoi qu'il arrive) :
    apparaît en haut dès qu'on descend, avec le bouton « Signaler ». */
 add_action('wp_footer', 'lfi_nct_fixed_hero_bar', 20);

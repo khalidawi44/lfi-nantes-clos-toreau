@@ -72,7 +72,7 @@ function lfi_nct_mailcheck_boxes() {
 
 /** Le check lui-même (appelé par le cron, ou manuellement). Renvoie un rapport. */
 function lfi_nct_mailcheck_do() {
-    $rep = ['ok' => false, 'traites' => 0, 'prepares' => 0, 'boxes' => 0, 'msg' => ''];
+    $rep = ['ok' => false, 'traites' => 0, 'prepares' => 0, 'unmatched' => 0, 'boxes' => 0, 'msg' => ''];
     if (!function_exists('imap_open')) { $rep['msg'] = 'Extension PHP imap absente sur le serveur.'; lfi_nct_mailcheck_log($rep); return $rep; }
     $boxes = lfi_nct_mailcheck_boxes();
     if (empty($boxes)) { $rep['msg'] = 'Aucune boîte configurée.'; lfi_nct_mailcheck_log($rep); return $rep; }
@@ -82,8 +82,9 @@ function lfi_nct_mailcheck_do() {
     $errors = [];
     foreach ($boxes as $box) {
         $r = lfi_nct_mailcheck_scan_box($box, $seen);
-        $rep['traites']  += $r['traites'];
-        $rep['prepares'] += $r['prepares'];
+        $rep['traites']   += $r['traites'];
+        $rep['prepares']  += $r['prepares'];
+        $rep['unmatched'] += ($r['unmatched'] ?? 0);
         $rep['boxes']++;
         if ($r['error'] !== '') $errors[] = $box['label'] . ' : ' . $r['error'];
     }
@@ -130,6 +131,29 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         if ($dossier) {
             lfi_nct_mailcheck_prepare_reply($dossier, $o, $subject, $body);
             $out['prepares']++;
+        } elseif (function_exists('lfi_nct_inbox_unmatched')) {
+            /* Aucun dossier trouvé → file « à rattacher » : l'email n'est PAS
+               perdu, il remonte sur l'accueil et tu le ranges toi-même (le robot
+               apprend l'adresse pour la prochaine fois). */
+            $q = lfi_nct_inbox_unmatched();
+            $dup = false;
+            foreach ($q as $e) if ($mid !== '' && ($e['message_id'] ?? '') === $mid) { $dup = true; break; }
+            if (!$dup) {
+                $q[] = [
+                    'id'         => (int) round(microtime(true) * 1000) + ($uid % 1000),
+                    'from'       => (string) ($o->from ?? ''),
+                    'to'         => (string) ($o->to ?? ''),
+                    'cc'         => (string) ($o->cc ?? ''),
+                    'objet'      => $subject,
+                    'body'       => mb_substr($body, 0, 12000),
+                    'message_id' => $mid,
+                    'date'       => wp_date('Y-m-d H:i'),
+                    'extrait'    => mb_substr($body, 0, 200),
+                    'src'        => 'mailcheck',
+                ];
+                lfi_nct_inbox_unmatched_save($q);
+                $out['unmatched'] = ($out['unmatched'] ?? 0) + 1;
+            }
         }
     }
     @imap_close($mbox);
@@ -353,7 +377,7 @@ function lfi_nct_mailcheck_peche_flash() {
     $col = $ok ? '#186a3b' : '#c8102e';
     $bg  = $ok ? '#eef7ee' : '#fdeef0';
     $txt = ($ok ? '✅ Pêche terminée' : '⚠️ Pêche : ' . esc_html($rep['msg'] ?? 'souci'));
-    $det = (int) ($rep['traites'] ?? 0) . ' mail(s) vus · ' . (int) ($rep['prepares'] ?? 0) . ' réponse(s) préparée(s) · ' . (int) ($rep['boxes'] ?? 0) . ' boîte(s) lue(s)';
+    $det = (int) ($rep['traites'] ?? 0) . ' mail(s) vus · ' . (int) ($rep['prepares'] ?? 0) . ' réponse(s) préparée(s) · ' . (int) ($rep['unmatched'] ?? 0) . ' à rattacher · ' . (int) ($rep['boxes'] ?? 0) . ' boîte(s) lue(s)';
     return '<div style="background:' . $bg . ';border-left:4px solid ' . $col . ';border-radius:10px;padding:10px 12px;margin-bottom:12px"><strong style="color:' . $col . '">' . $txt . '</strong><div style="font-size:.9em;color:#444;margin-top:2px">' . $det . '</div></div>';
 }
 
