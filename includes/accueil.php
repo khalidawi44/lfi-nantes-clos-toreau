@@ -15,25 +15,37 @@ if (!defined('ABSPATH')) exit;
 /* La bannière hero du thème (.ag-asso-hero) doit être TOUT EN HAUT, collée sous
    le menu. Le thème n'étant pas dans ce dépôt, on force sa position par une
    injection CSS depuis le plugin (page d'accueil, front uniquement). */
+/* La bannière du thème reste collée en haut (flush). */
 add_action('wp_head', 'lfi_nct_hero_top_css', 99);
 function lfi_nct_hero_top_css() {
     if (is_admin()) return;
+    echo '<style id="lfi-hero-top">'
+       . '.ag-asso-hero{margin-top:0 !important;order:-1}'
+       . 'body.home main, body.home #main, body.home .site-main, body.home .entry-content{padding-top:0 !important;margin-top:0 !important}'
+       . '</style>';
+}
+
+/* Bandeau compact FIXE (indépendant du thème → reste figé quoi qu'il arrive) :
+   apparaît en haut dès qu'on descend, avec le bouton « Signaler ». */
+add_action('wp_footer', 'lfi_nct_fixed_hero_bar', 20);
+function lfi_nct_fixed_hero_bar() {
+    if (is_admin() || !is_front_page()) return;
+    if (is_user_logged_in()) return; /* réservé aux visiteurs du site public */
+    $survey = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
     ?>
-    <style id="lfi-hero-top">
-      /* Bannière tout en haut, collée sous le menu. */
-      .ag-asso-hero{margin-top:0 !important;order:-1;position:sticky;top:0;z-index:50;transition:min-height .25s ease,padding .25s ease}
-      body.home main, body.home #main, body.home .site-main, body.home .entry-content{padding-top:0 !important;margin-top:0 !important}
-      /* Quand on descend : la bannière RESTE FIGÉE mais devient compacte
-         (on garde le titre, on masque le sous-texte et le bouton). */
-      body.lfi-hero-shrunk .ag-asso-hero{min-height:0 !important;height:auto !important;padding-top:10px !important;padding-bottom:10px !important}
-      body.lfi-hero-shrunk .ag-asso-hero__sub, body.lfi-hero-shrunk .ag-asso-hero__ctas{display:none !important}
-      body.lfi-hero-shrunk .ag-asso-hero__title{font-size:1.25em !important;margin:0 !important;line-height:1.1 !important}
-    </style>
+    <div id="lfi-fixbar" style="position:fixed;top:0;left:0;right:0;z-index:99997;transform:translateY(-110%);transition:transform .28s ease;background:linear-gradient(135deg,#c8102e,#9d0f26);color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.25);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+      <div style="max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:9px 16px">
+        <strong style="font-size:.98em;white-space:nowrap">🏠 LFI Nantes Sud — Clos Toreau</strong>
+        <span style="flex:1"></span>
+        <a href="<?php echo esc_url($survey); ?>" style="background:#fff;color:#c8102e;font-weight:800;padding:8px 16px;border-radius:10px;text-decoration:none;white-space:nowrap;font-size:.92em">📋 Signaler mon logement</a>
+      </div>
+    </div>
+    <style>@media(max-width:520px){#lfi-fixbar strong{font-size:.82em}#lfi-fixbar a{padding:7px 11px;font-size:.82em}}</style>
     <script>
     (function(){
-      function upd(){ document.body.classList.toggle('lfi-hero-shrunk', (window.scrollY||document.documentElement.scrollTop) > 140); }
-      window.addEventListener('scroll', upd, {passive:true});
-      if(document.readyState!=='loading') upd(); else document.addEventListener('DOMContentLoaded', upd);
+      var bar=document.getElementById('lfi-fixbar'); if(!bar) return;
+      function upd(){ var y=window.scrollY||document.documentElement.scrollTop; bar.style.transform = (y>220)?'translateY(0)':'translateY(-110%)'; }
+      window.addEventListener('scroll', upd, {passive:true}); upd();
     })();
     </script>
     <?php
