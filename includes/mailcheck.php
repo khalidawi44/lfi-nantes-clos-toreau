@@ -293,23 +293,92 @@ function lfi_nct_mailcheck_rest_run($request) {
 /* ============================================================== *
  *  Écran d'état (super-admin)                                     *
  * ============================================================== */
+/* Bouton « Aller à la pêche maintenant » — utilisable depuis N'IMPORTE quelle
+   page (l'accueil, l'écran mailcheck). Lance le check à la demande et revient. */
+add_action('admin_post_lfi_nct_mailcheck_run', 'lfi_nct_mailcheck_run_handler');
+function lfi_nct_mailcheck_run_handler() {
+    if (!current_user_can('manage_options')) wp_die('Non autorisé');
+    check_admin_referer('lfi_nct_mailcheck_run');
+    $rep = lfi_nct_mailcheck_do();
+    set_transient('lfi_nct_peche_' . get_current_user_id(), $rep, 180);
+    $back = wp_get_referer();
+    if (!$back) $back = lfi_nct_app_url();
+    wp_safe_redirect(add_query_arg('peche', 1, remove_query_arg('peche', $back)));
+    exit;
+}
+
+/** Le petit bouton « pêche maintenant » (formulaire POST vers admin-post). */
+function lfi_nct_mailcheck_run_button($label = '🎣 Aller à la pêche maintenant', $bg = '#0066a3') {
+    if (!current_user_can('manage_options')) return '';
+    $u = admin_url('admin-post.php');
+    return '<form method="post" action="' . esc_url($u) . '" style="margin:0">'
+        . wp_nonce_field('lfi_nct_mailcheck_run', '_wpnonce', true, false)
+        . '<input type="hidden" name="action" value="lfi_nct_mailcheck_run">'
+        . '<button type="submit" class="btn-primary" style="background:' . esc_attr($bg) . '">' . esc_html($label) . '</button></form>';
+}
+
+/** Rapport de la dernière pêche manuelle (transient éphémère) → HTML ou ''. */
+function lfi_nct_mailcheck_peche_flash() {
+    if (empty($_GET['peche'])) return '';
+    $rep = get_transient('lfi_nct_peche_' . get_current_user_id());
+    if (!is_array($rep)) return '';
+    delete_transient('lfi_nct_peche_' . get_current_user_id());
+    $ok  = !empty($rep['ok']);
+    $col = $ok ? '#186a3b' : '#c8102e';
+    $bg  = $ok ? '#eef7ee' : '#fdeef0';
+    $txt = ($ok ? '✅ Pêche terminée' : '⚠️ Pêche : ' . esc_html($rep['msg'] ?? 'souci'));
+    $det = (int) ($rep['traites'] ?? 0) . ' mail(s) vus · ' . (int) ($rep['prepares'] ?? 0) . ' réponse(s) préparée(s) · ' . (int) ($rep['boxes'] ?? 0) . ' boîte(s) lue(s)';
+    return '<div style="background:' . $bg . ';border-left:4px solid ' . $col . ';border-radius:10px;padding:10px 12px;margin-bottom:12px"><strong style="color:' . $col . '">' . $txt . '</strong><div style="font-size:.9em;color:#444;margin-top:2px">' . $det . '</div></div>';
+}
+
 function lfi_nct_app_view_mailcheck() {
     if (!current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
-    lfi_nct_app_screen_open('📬 Check permanent des emails', 'Surveillance automatique de la boîte (serveur, 24/7)');
+
+    /* Enregistrer la boîte + le mot de passe d'application + l'activation. */
+    if (!empty($_POST['lfi_mailcheck_cfg']) && check_admin_referer('lfi_mailcheck_cfg')) {
+        update_option('lfi_nct_gmail_user', sanitize_email(wp_unslash($_POST['gmail_user'] ?? '')), false);
+        $ppw = (string) wp_unslash($_POST['app_pw'] ?? '');
+        if ($ppw !== '' && strpos($ppw, '•') === false) update_option('lfi_nct_gmail_app_pw', str_replace(' ', '', $ppw), false);
+        update_option('lfi_nct_mailcheck_enabled', empty($_POST['enabled']) ? '0' : '1', false);
+        if (function_exists('lfi_nct_mailcheck_cron_setup')) lfi_nct_mailcheck_cron_setup();
+        wp_safe_redirect(lfi_nct_app_url('mailcheck', ['saved' => 1])); exit;
+    }
+
+    lfi_nct_app_screen_open('📬 Check des emails', 'Automatique 24/7 + pêche à la demande');
+    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Réglages enregistrés.');
+    echo lfi_nct_mailcheck_peche_flash();
+
     $en   = get_option('lfi_nct_mailcheck_enabled') === '1';
     $user = (string) get_option('lfi_nct_gmail_user', '');
     $pw   = get_option('lfi_nct_gmail_app_pw', '') !== '';
     $imap = function_exists('imap_open');
     $last = get_option('lfi_nct_mailcheck_last', []);
 
+    /* Pêche à la demande — le gros bouton, tout en haut. */
+    echo '<div style="margin-bottom:12px">' . lfi_nct_mailcheck_run_button('🎣 Aller à la pêche maintenant') . '</div>';
+
     echo '<ul class="lfi-app-list">';
-    echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($en ? '#186a3b' : '#999') . '"><div class="head"><div class="who">' . ($en ? '🟢 Activé' : '⚪ Désactivé') . '</div></div><div class="com">Le check tourne toutes les 4 h 30 sur le serveur.</div></li>';
+    echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($en ? '#186a3b' : '#999') . '"><div class="head"><div class="who">' . ($en ? '🟢 Surveillance auto activée' : '⚪ Surveillance auto désactivée') . '</div></div><div class="com">Le check tourne tout seul toutes les 4 h 30 sur le serveur — et tu peux pêcher à la main quand tu veux (bouton ci-dessus).</div></li>';
     echo '<li class="lfi-app-card"><div class="meta"><span class="meta-chip">Boîte : ' . esc_html($user ?: '—') . '</span><span class="meta-chip">Mot de passe : ' . ($pw ? '✅ enregistré' : '❌ manquant') . '</span><span class="meta-chip">IMAP serveur : ' . ($imap ? '✅' : '❌ absent') . '</span></div></li>';
     if ($last) {
         echo '<li class="lfi-app-card"><div class="head"><div class="who">Dernier passage</div></div><div class="com">' . esc_html($last['at'] ?? '') . ' — ' . esc_html($last['msg'] ?? '') . ' (' . (int) ($last['traites'] ?? 0) . ' mail(s) vus, ' . (int) ($last['prepares'] ?? 0) . ' réponse(s) préparée(s))</div></li>';
     }
     echo '</ul>';
-    if (!$imap) echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ L\'extension PHP <code>imap</code> n\'est pas active sur l\'hébergement. À activer chez Hostinger (ou on passera par l\'API Gmail).</small></div>';
-    echo '<div class="lfi-app-help"><small>Les réponses préparées apparaissent dans chaque dossier concerné, avec le bouton « Ouvrir dans Gmail ». Ce sont des brouillons auto à relire.</small></div>';
+
+    /* Réglages boîte (indispensable pour que la pêche marche). */
+    echo '<h3 style="margin:14px 0 6px">⚙️ Réglages de la boîte</h3>';
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px">' . wp_nonce_field('lfi_mailcheck_cfg', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_mailcheck_cfg" value="1">';
+    echo '<label>📮 Boîte Gmail de l\'association<input type="email" name="gmail_user" value="' . esc_attr($user) . '" placeholder="nantessudclostoreau@gmail.com"></label>';
+    echo '<label>🔑 Mot de passe d\'application Gmail (16 lettres)<input type="text" name="app_pw" autocomplete="off" value="" placeholder="' . ($pw ? '•••••••••••••••• (déjà enregistré — laisser vide pour garder)' : 'xxxx xxxx xxxx xxxx') . '"></label>';
+    echo '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" name="enabled" value="1" ' . checked($en, true, false) . '> <span>Activer la surveillance automatique (toutes les 4 h 30)</span></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button></form>';
+    echo '<div class="lfi-app-help"><small>Le mot de passe d\'application se crée dans le compte Google de la boîte : <strong>Gérer le compte → Sécurité → Validation en 2 étapes → Mots de passe des applications</strong>. Ce n\'est pas le mot de passe habituel.</small></div>';
+
+    if (!$imap) echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ L\'extension PHP <code>imap</code> n\'est pas active sur l\'hébergement : tant qu\'elle n\'est pas activée (chez Hostinger), la pêche IMAP ne peut pas lire la boîte. C\'est probablement pourquoi rien n\'est remonté.</small></div>';
+
+    /* Ce que la pêche attrape / n'attrape pas — pour ne pas se tromper. */
+    echo '<div class="lfi-app-help" style="background:#eef4fb;border-left:4px solid #0066a3"><small>ℹ️ Cette pêche surveille les <strong>réponses de NMH, des institutions et des avocats</strong> (elle prépare un brouillon dans le bon dossier). Un email que <em>tu</em> t\'envoies depuis ta propre boîte pour tester ne sera pas reconnu ici. Les <strong>pièces jointes / photos</strong> ne sont pas encore importées automatiquement (seul le texte l\'est).</small></div>';
+
     lfi_nct_app_screen_close();
 }
