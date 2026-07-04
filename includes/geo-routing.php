@@ -258,6 +258,29 @@ function lfi_nct_geo_cleanup_bad_autoga() {
     update_option('lfi_nct_geo_cleanup_autoga_v1', 1, false);
 }
 
+/* NETTOYAGE (une fois) : toutes les fiches du Clos Toreau sans ville → « Nantes »
+   automatiquement. On protège le point de TEST situé dans une autre commune :
+   si la fiche est géolocalisée à plus de 15 km de Nantes, on n'y touche pas. */
+add_action('init', 'lfi_nct_heal_ville_nantes', 18);
+function lfi_nct_heal_ville_nantes() {
+    if (get_option('lfi_nct_heal_ville_nantes_v1')) return;
+    global $wpdb;
+    $rows = $wpdb->get_results(
+        "SELECT id, data, lat, lng FROM {$wpdb->prefix}lfi_nct_responses
+         WHERE deleted_at IS NULL AND (ga = '' OR ga IS NULL OR ga = 'clos-toreau') LIMIT 3000") ?: [];
+    $nla = 47.2184; $nlo = -1.5536; /* centre de Nantes */
+    foreach ($rows as $r) {
+        $data = json_decode((string) $r->data, true); if (!is_array($data)) $data = [];
+        if (trim((string) ($data['ville'] ?? '')) !== '') continue; /* déjà une ville */
+        if ($r->lat !== null && $r->lng !== null && function_exists('lfi_nct_geo_haversine')) {
+            if (lfi_nct_geo_haversine((float) $r->lat, (float) $r->lng, $nla, $nlo) > 15) continue; /* test / autre ville */
+        }
+        $data['ville'] = 'Nantes';
+        $wpdb->update($wpdb->prefix . 'lfi_nct_responses', ['data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)], ['id' => (int) $r->id]);
+    }
+    update_option('lfi_nct_heal_ville_nantes_v1', 1, false);
+}
+
 /* ============================================================== *
  *  HOOK : une enquête vient d'être enregistrée → on la route      *
  * ============================================================== */

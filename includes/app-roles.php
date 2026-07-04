@@ -2532,6 +2532,13 @@ function lfi_nct_app_view_comptes_locataires() {
             ]);
             if ($tel !== '') update_user_meta($uid, 'lfi_nct_tel', $tel);
 
+            /* Lier une enquête à cette fiche (si demandé et pas déjà liée). */
+            $link_rid = (int) ($_POST['link_response'] ?? 0);
+            if ($link_rid && !get_user_meta($uid, 'lfi_nct_response_id', true)) {
+                $ok_link = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d AND deleted_at IS NULL", $link_rid));
+                if ($ok_link) update_user_meta($uid, 'lfi_nct_response_id', $link_rid);
+            }
+
             /* Édition du problème principal (si enquête liée) */
             $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
             if ($rid && isset($_POST['edit_probleme'])) {
@@ -2927,6 +2934,33 @@ function lfi_nct_app_view_comptes_locataires() {
             echo '<label>Email<input type="email" name="email" value="' . esc_attr($u->user_email) . '"></label>';
             echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr($tel) . '"></label>';
             echo '</div>';
+
+            /* Pas d'enquête liée → proposer de la LIER (ex. Gwenaëlle : son dossier
+               existe mais l'enquête n'est pas rattachée). On liste les enquêtes du
+               GA non encore rattachées + celles au même nom en priorité. */
+            if (!$resp_row) {
+                global $wpdb;
+                $sc_l = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause('militant_user_id') : '';
+                $linked = $wpdb->get_col("SELECT meta_value FROM {$wpdb->usermeta} WHERE meta_key='lfi_nct_response_id'") ?: [];
+                $lin = $linked ? '(' . implode(',', array_map('intval', $linked)) . ')' : '(0)';
+                $cands = $wpdb->get_results("SELECT id, contact_prenom, contact_nom, adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE deleted_at IS NULL AND id NOT IN $lin" . $sc_l . " ORDER BY submitted_at DESC LIMIT 100") ?: [];
+                if (!empty($cands)) {
+                    $wantn = strtolower(trim(function_exists('remove_accents') ? remove_accents((string) $u->display_name) : (string) $u->display_name));
+                    echo '<h4 style="margin:14px 0 4px;color:#0066a3">🔗 Lier une enquête à cette fiche</h4>';
+                    echo '<div class="lfi-app-help" style="margin:0 0 4px"><small>Cette fiche n\'a pas d\'enquête rattachée. Choisis-en une (celle au même nom est proposée en premier).</small></div>';
+                    echo '<label>Enquête à rattacher<select name="link_response"><option value="">— aucune —</option>';
+                    usort($cands, function ($a, $b) use ($wantn) {
+                        $na = strtolower(trim(($a->contact_prenom ?? '') . ' ' . ($a->contact_nom ?? '')));
+                        $nb = strtolower(trim(($b->contact_prenom ?? '') . ' ' . ($b->contact_nom ?? '')));
+                        return (strpos($nb, $wantn) !== false) <=> (strpos($na, $wantn) !== false);
+                    });
+                    foreach ($cands as $c) {
+                        $nm = trim(($c->contact_prenom ?? '') . ' ' . ($c->contact_nom ?? '')) ?: ('Enquête #' . $c->id);
+                        echo '<option value="' . (int) $c->id . '">#' . (int) $c->id . ' — ' . esc_html($nm . ($c->adresse ? ' · ' . $c->adresse : '')) . '</option>';
+                    }
+                    echo '</select></label>';
+                }
+            }
 
             /* Édition du problème si enquête liée */
             if ($resp_row) {
