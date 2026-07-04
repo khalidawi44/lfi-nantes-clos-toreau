@@ -1043,6 +1043,12 @@ function lfi_nct_dossier_render_batailles($u, $row) {
     } else {
         echo '<div style="margin-top:3px;color:#c8102e;font-weight:600">à définir avec le locataire — <a href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">renseigner l\'objectif</a></div>';
     }
+    /* Objectif = relogement → l'étape « déménagement » ne passe pas que par NMH :
+       demande unique + Action Logement + DALO (relogement d'urgence). */
+    if ($obj_key === 'relogement') {
+        if (function_exists('lfi_nct_relogement_ensure_steps')) lfi_nct_relogement_ensure_steps($u->ID);
+        echo '<a class="btn-primary" style="background:#0066a3;display:block;text-align:center;margin-top:8px;box-sizing:border-box" href="' . esc_url(lfi_nct_app_url('relogement', ['uid' => $u->ID])) . '">🏠 Relogement / déménagement (demande unique + DALO urgence)</a>';
+    }
     echo '</div>';
 
     /* Quand l'urgence est GAGNÉE, on déploie le volet indemnisation : on greffe
