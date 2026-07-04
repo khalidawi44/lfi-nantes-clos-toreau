@@ -799,8 +799,13 @@ function lfi_nct_app_dossier_juridique_form($row) {
                 'date'  => current_time('Y-m-d H:i'),
             ];
             $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => $row->id, 'owner_user_id' => $owner]);
+            /* 🏆 Détection auto : NMH acte notre demande → coupe du volet urgence. */
+            $won = 0;
+            if (function_exists('lfi_nct_victoire_detect_from_email') && (int) $row->tenant_user_id) {
+                $won = lfi_nct_victoire_detect_from_email((int) $row->tenant_user_id, $objet, $corps, (int) $row->id);
+            }
         }
-        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'email_recu_ok' => 1]));
+        wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $row->id, 'email_recu_ok' => 1] + (!empty($won) ? ['victoire_auto' => 1] : [])));
         exit;
     }
 
@@ -981,6 +986,7 @@ function lfi_nct_app_dossier_juridique_form($row) {
     if (!empty($_GET['email_sent']))     lfi_nct_app_flash('📧 Email envoyé au nom du Groupe d\'Action LFI.');
     if (!empty($_GET['gmail_open']))     lfi_nct_app_flash('📨 Email consigné dans le dossier. Termine l\'envoi dans l\'onglet Gmail qui vient de s\'ouvrir.');
     if (!empty($_GET['email_recu_ok']))  lfi_nct_app_flash('📥 Email reçu enregistré dans le dossier.');
+    if (!empty($_GET['victoire_auto']))  lfi_nct_app_flash('🏆 NMH a acté notre demande : le volet URGENCE est gagné ! Une coupe est posée et le GA sera prévenu. (Si c\'est une erreur, tu peux annuler la coupe depuis le dossier locataire.)');
     if (!empty($_GET['email_del_ok']))   lfi_nct_app_flash('🗑 Entrée de correspondance supprimée.');
     if (!empty($_GET['analyse_ok']))     lfi_nct_app_flash('📑 Analyse enregistrée dans le dossier.');
     if (!empty($_GET['deja_facture'])) lfi_nct_app_flash('⚠ Cette visite est déjà facturée — pas de doublon créé.', 'err');

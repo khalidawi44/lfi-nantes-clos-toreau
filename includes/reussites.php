@@ -105,6 +105,16 @@ function lfi_nct_app_view_victoires() {
     if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     lfi_nct_app_screen_open('🏆 Nos victoires', 'Ce qu\'on a obtenu concrètement — anonyme');
     echo '<div class="lfi-app-help">Chaque victoire = une famille qu\'on a aidée à sortir de la galère. Sans aucun nom : juste ce qu\'on a obtenu, concrètement.</div>';
+    /* Compteurs : coupes (batailles gagnées) + familles aidées (distinctes). */
+    if (function_exists('lfi_nct_victoires_stats')) {
+        $vs = lfi_nct_victoires_stats();
+        if (($vs['coupes'] ?? 0) > 0) {
+            echo '<div class="lfi-app-stats-grid" style="margin:8px 0 14px">';
+            echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $vs['coupes'] . '</div><div class="l">Coupes (batailles gagnées)</div></div>';
+            echo '<div class="stat"><div class="ico">👪</div><div class="n">' . (int) $vs['familles'] . '</div><div class="l">Familles aidées</div></div>';
+            echo '</div>';
+        }
+    }
     echo do_shortcode('[lfi_nct_tableau_reussites]');
     lfi_nct_app_screen_close();
 }

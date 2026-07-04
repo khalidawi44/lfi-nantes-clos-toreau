@@ -1008,10 +1008,18 @@ function lfi_nct_ingest_rest_handle($request) {
 
     $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => (int) $row->id]);
 
+    /* 🏆 Détection auto : une correspondance reçue qui acte notre demande
+       (relogement accordé, travaux programmés…) → coupe du volet urgence. */
+    $victoire_auto = false;
+    if ($type === 'correspondance_recue' && function_exists('lfi_nct_victoire_detect_from_email') && (int) $row->tenant_user_id) {
+        $victoire_auto = (bool) lfi_nct_victoire_detect_from_email((int) $row->tenant_user_id, $objet, $corps, (int) $row->id);
+    }
+
     return new WP_REST_Response([
-        'ok'       => true,
-        'dossier'  => ['id' => (int) $row->id, 'nom' => trim($row->tenant_prenom . ' ' . $row->tenant_nom)],
-        'classe'   => $added,
+        'ok'            => true,
+        'dossier'       => ['id' => (int) $row->id, 'nom' => trim($row->tenant_prenom . ' ' . $row->tenant_nom)],
+        'classe'        => $added,
+        'victoire_auto' => $victoire_auto,
     ], 200);
 }
 
