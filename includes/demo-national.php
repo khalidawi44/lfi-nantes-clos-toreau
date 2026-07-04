@@ -37,14 +37,29 @@ function lfi_nct_demo_seed_bompard() {
     update_option('lfi_nct_demo_bompard_done', 1, false);
 }
 
+/** Chiffres AGRÉGÉS de TOUT le réseau (France entière), anonymes. */
+function lfi_nct_demo_stats() {
+    global $wpdb;
+    /* Toutes les victoires (coupes) + familles distinctes, tous GA confondus. */
+    $victoires = 0; $familles = [];
+    if (function_exists('lfi_nct_victoires_all')) {
+        foreach (lfi_nct_victoires_all() as $v) { $victoires++; $familles[(int) ($v['tenant_uid'] ?? 0)] = 1; }
+    }
+    /* Réussites publiées (toutes). */
+    $publiees = 0;
+    if (function_exists('lfi_nct_reussites')) foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $publiees++;
+    /* Locataires ayant demandé à être suivis — RÉSEAU ENTIER (recontact = oui). */
+    $suivis = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses WHERE contact_recontact = 1 AND (deleted_at IS NULL)");
+    return ['victoires' => $victoires, 'familles' => count($familles), 'publiees' => $publiees, 'suivis' => $suivis];
+}
+
 /* ============================================================== *
  *  KIT DE PRÉSENTATION NATIONAL (Mélenchon) — page écran + PDF     *
  * ============================================================== */
 function lfi_nct_app_view_kit_national() {
     if (!current_user_can('manage_options') && !(function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())) { wp_safe_redirect(lfi_nct_app_url()); exit; }
 
-    $vs  = function_exists('lfi_nct_victoires_stats') ? lfi_nct_victoires_stats('clos-toreau') : ['coupes' => 0, 'familles' => 0];
-    $pub = function_exists('lfi_nct_reussites_count_published') ? lfi_nct_reussites_count_published('clos-toreau') : 0;
+    $st = lfi_nct_demo_stats();
     $logos = function_exists('lfi_nct_signature_logos_html') ? lfi_nct_signature_logos_html('avocat', 'center') : '';
 
     /* Exemples RÉELS mais ANONYMES (réussites publiées). */
@@ -102,11 +117,11 @@ function lfi_nct_app_view_kit_national() {
       <h1>Défendre les locataires, partout</h1>
       <p class="lead">Un outil de terrain né au Clos Toreau (Nantes Sud). De la porte du locataire jusqu'au tribunal — et <strong>reproductible dans chaque quartier de France</strong>.</p>
       <div class="grid">
-        <div class="stat"><div class="n">🏆 <?php echo (int) $vs['coupes']; ?></div><div class="l">Batailles gagnées</div></div>
-        <div class="stat"><div class="n">👪 <?php echo (int) $vs['familles']; ?></div><div class="l">Familles aidées</div></div>
-        <div class="stat"><div class="n">📣 <?php echo (int) $pub; ?></div><div class="l">Victoires publiées</div></div>
+        <div class="stat"><div class="n">🏠 <?php echo (int) $st['suivis']; ?></div><div class="l">Locataires qui demandent à être suivis</div></div>
+        <div class="stat"><div class="n">🏆 <?php echo (int) $st['victoires']; ?></div><div class="l">Batailles gagnées</div></div>
+        <div class="stat"><div class="n">📣 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires publiées</div></div>
       </div>
-      <p style="color:#888;font-size:.85em;margin-top:12px">Chiffres d'un seul GA · données strictement anonymes.</p>
+      <p style="color:#888;font-size:.85em;margin-top:12px">Totaux <strong>France entière</strong> (tout le réseau) · données strictement anonymes.</p>
     </section>
 
     <section class="slide">
@@ -171,9 +186,8 @@ function lfi_nct_app_view_demo_national() {
     $me = wp_get_current_user();
     $prenom = $me->first_name ?: $me->display_name;
 
-    /* Chiffres AGRÉGÉS et anonymes. */
-    $vs = function_exists('lfi_nct_victoires_stats') ? lfi_nct_victoires_stats('clos-toreau') : ['coupes' => 0, 'familles' => 0];
-    $pub = function_exists('lfi_nct_reussites_count_published') ? lfi_nct_reussites_count_published('clos-toreau') : 0;
+    /* Chiffres AGRÉGÉS et anonymes — RÉSEAU ENTIER (France). */
+    $st = lfi_nct_demo_stats();
 
     lfi_nct_app_screen_open('👋 Bienvenue, ' . $prenom, 'Découverte de l\'outil — défense des locataires');
 
@@ -185,11 +199,11 @@ function lfi_nct_app_view_demo_national() {
 
     /* En chiffres (anonymes). */
     echo '<div class="lfi-app-stats-grid" style="margin:14px 0">';
-    echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $vs['coupes'] . '</div><div class="l">Batailles gagnées</div></div>';
-    echo '<div class="stat"><div class="ico">👪</div><div class="n">' . (int) $vs['familles'] . '</div><div class="l">Familles aidées</div></div>';
-    echo '<div class="stat"><div class="ico">📣</div><div class="n">' . (int) $pub . '</div><div class="l">Victoires publiées</div></div>';
+    echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . (int) $st['suivis'] . '</div><div class="l">Locataires suivis (France)</div></div>';
+    echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $st['victoires'] . '</div><div class="l">Batailles gagnées</div></div>';
+    echo '<div class="stat"><div class="ico">📣</div><div class="n">' . (int) $st['publiees'] . '</div><div class="l">Victoires publiées</div></div>';
     echo '</div>';
-    echo '<div class="lfi-app-help" style="text-align:center"><small>Chiffres d\'un seul GA. Aucune donnée personnelle n\'est visible ici — tout est anonyme.</small></div>';
+    echo '<div class="lfi-app-help" style="text-align:center"><small>Totaux France entière (tout le réseau). Aucune donnée personnelle n\'est visible ici — tout est anonyme.</small></div>';
 
     /* La chaîne complète — visite guidée (capacités, pas de données). */
     $etapes = [
