@@ -458,10 +458,14 @@ function lfi_nct_render_elus_directory($with_contact = false) {
             echo '</div>';
             if ($with_contact) {
                 $tel = trim((string) get_user_meta($u->ID, 'lfi_nct_tel', true));
+                $tg  = trim((string) get_user_meta($u->ID, 'lfi_nct_telegram', true));
                 echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
-                if ($tel !== '') echo '<a class="btn-primary" style="background:' . esc_attr($meta[1]) . '" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
-                if (is_email($u->user_email)) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email</a>';
+                /* Email = canal PRINCIPAL des élu·es (avant le téléphone). */
+                if (is_email($u->user_email)) echo '<a class="btn-primary" style="background:' . esc_attr($meta[1]) . '" href="mailto:' . esc_attr($u->user_email) . '">✉️ Écrire</a>';
+                if ($tel !== '') echo '<a class="btn-ghost" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
+                if ($tg !== '') echo '<a class="btn-ghost" href="https://t.me/' . esc_attr(ltrim($tg, '@')) . '" target="_blank" rel="noopener">✈️ Telegram</a>';
                 echo '</div>';
+                if (is_email($u->user_email)) echo '<div style="font-size:.82em;color:#666;margin-top:3px">📧 ' . esc_html($u->user_email) . '</div>';
             }
             echo '</li>';
         }
@@ -593,6 +597,9 @@ function lfi_nct_app_view_partenaires() {
             update_user_meta($euid, 'lfi_nct_partner_scope', sanitize_text_field(wp_unslash($_POST['scope'] ?? '')));
             update_user_meta($euid, 'lfi_nct_tel', sanitize_text_field(wp_unslash($_POST['tel'] ?? '')));
             update_user_meta($euid, 'lfi_nct_telegram', sanitize_text_field(wp_unslash($_POST['telegram'] ?? '')));
+            /* Email = canal PRINCIPAL pour un·e élu·e (souvent, avant le téléphone). */
+            $pem = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+            if ($pem !== '' && is_email($pem)) { $own = email_exists($pem); if (!$own || (int) $own === $euid) wp_update_user(['ID' => $euid, 'user_email' => $pem]); }
         }
         wp_safe_redirect(lfi_nct_app_url('partenaires', ['edited' => 1])); exit;
     }
@@ -626,9 +633,10 @@ function lfi_nct_app_view_partenaires() {
             echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_edit', '_wpnonce', true, false);
             echo '<input type="hidden" name="lfi_partner_edit" value="1"><input type="hidden" name="user_id" value="' . (int) $p->ID . '">';
             echo lfi_nct_partner_casquettes_checkboxes($levels);
+            echo '<div style="margin:4px 0"><label style="font-size:.85em">📧 Email (canal principal)<br><input type="email" name="email" value="' . esc_attr($p->user_email) . '" placeholder="prenom.nom@assemblee-nationale.fr" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+            echo '<div style="margin:4px 0"><label style="font-size:.85em">📞 Téléphone (rare, optionnel)<br><input type="tel" name="tel" value="' . esc_attr($tel) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+            echo '<div style="margin:4px 0"><label style="font-size:.85em">✈️ Telegram (optionnel)<br><input type="text" name="telegram" value="' . esc_attr((string) $tg) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
             echo '<div style="margin:4px 0"><label style="font-size:.85em">Secteur / délégation (optionnel)<br><input type="text" name="scope" value="' . esc_attr($scope) . '" placeholder="ex. Logement, Clos Toreau…" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">Téléphone direct (optionnel)<br><input type="text" name="tel" value="' . esc_attr($tel) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">Telegram (optionnel)<br><input type="text" name="telegram" value="' . esc_attr((string) $tg) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
             echo '<button type="submit" class="btn-ghost" style="font-size:.85em;margin-top:4px">💾 Enregistrer les casquettes</button></form></details>';
             echo '</li>';
         }
