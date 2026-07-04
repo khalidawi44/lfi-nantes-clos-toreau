@@ -792,6 +792,7 @@ function lfi_nct_app_shortcode() {
                     case 'installer':       lfi_nct_app_view_installer();       break;
                     case 'partenaires':        lfi_nct_app_view_partenaires();        break;
                     case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
+                    case 'kit-national':       lfi_nct_app_view_kit_national();       break;
                     case 'avocats':            lfi_nct_app_view_avocats();            break;
                     case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
                     case 'avocat-invites':     lfi_nct_app_view_avocat_invites();     break;
