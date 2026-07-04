@@ -335,6 +335,18 @@ function lfi_nct_app_view_dossier() {
         exit;
     }
 
+    /* 🏆 Classer ce dossier en VICTOIRE → statut « abouti » + réussite anonyme
+       (brouillon, à publier). Aucun nom : la réussite est anonymisée. */
+    if (!empty($_POST['lfi_dossier_win']) && check_admin_referer('lfi_dossier_win')) {
+        $dt = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $did = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $dt WHERE tenant_user_id = %d ORDER BY id DESC LIMIT 1", $u->ID));
+        if ($did) {
+            $wpdb->update($dt, ['statut' => 'abouti'], ['id' => $did]);
+            if (function_exists('lfi_nct_reussite_auto_from_dossier')) lfi_nct_reussite_auto_from_dossier($did);
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'won' => 1])); exit;
+    }
+
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
        usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
        mot de passe (onboarding) puis complète sa fiche / dépose ses pièces. */
@@ -414,10 +426,12 @@ function lfi_nct_app_view_dossier() {
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
     echo '<a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Page précédente</a>';
     echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note pour l\'avocat (PDF)</a>';
+    echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Classer ce dossier en VICTOIRE ? Une réussite anonyme sera préparée (à publier).\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><button type="submit" class="btn-primary" style="background:#186a3b">🏆 Classer en victoire</button></form>';
     echo '</div>';
 
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');
     if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
+    if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Victoire classée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure).');
 
     /* Profil + actions */
     echo '<div class="lfi-app-card">';
