@@ -156,6 +156,36 @@ function lfi_nct_mandat_handler() {
     wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id]) . '#sec-reponses'); exit;
 }
 
+/* RETIRER le mandat : efface la coche manuelle ET la signature d'adhésion
+   éventuelle dans l'enquête (cas d'un clic par erreur). */
+add_action('admin_post_lfi_nct_mandat_remove', 'lfi_nct_mandat_remove_handler');
+function lfi_nct_mandat_remove_handler() {
+    if (!is_user_logged_in()) wp_die('non');
+    $id = (int) ($_GET['id'] ?? 0);
+    if ($id && check_admin_referer('lfi_nct_mandat_rm_' . $id)) {
+        global $wpdb; $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $id));
+        if ($row && (!function_exists('lfi_nct_dossier_can_manage') || lfi_nct_dossier_can_manage($row))) {
+            /* 1) coche manuelle. */
+            lfi_nct_dossier_mandat_set($id, false);
+            /* 2) signature d'adhésion dans l'enquête liée. */
+            $tuid = (int) ($row->tenant_user_id ?? 0);
+            $rid = $tuid ? (int) get_user_meta($tuid, 'lfi_nct_response_id', true) : 0;
+            if ($rid) {
+                $resp = $wpdb->get_row($wpdb->prepare("SELECT data FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+                $data = $resp ? json_decode((string) $resp->data, true) : null;
+                if (is_array($data) && isset($data['adhesion'])) {
+                    if (!empty($data['adhesion']['signature_id'])) { $sid = (int) $data['adhesion']['signature_id']; if ($sid) wp_delete_attachment($sid, true); }
+                    $data['adhesion']['signed'] = false;
+                    unset($data['adhesion']['signature_id'], $data['adhesion']['signature']);
+                    $wpdb->update("{$wpdb->prefix}lfi_nct_responses", ['data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)], ['id' => $rid]);
+                }
+            }
+        }
+    }
+    wp_safe_redirect(lfi_nct_app_url('dossier-juridique-edit', ['id' => $id, 'mandat_removed' => 1]) . '#sec-reponses'); exit;
+}
+
 /* ============================================================== *
  *  ÉCRAN : Générer la réponse (dans un dossier)                  *
  * ============================================================== */
