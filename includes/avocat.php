@@ -156,6 +156,16 @@ function lfi_nct_avocat_render_thread($tenant_uid, $title = '💬 Ligne directe 
     echo '</div>';
     echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_avocat_msg', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_avocat_msg" value="1"><input type="hidden" name="tenant_uid" value="' . (int) $tenant_uid . '">';
+    /* Questions rapides pré-typées — un clic remplit le message. */
+    $quick = lfi_nct_user_role_avocat()
+        ? ['Une pièce manque, laquelle ?', 'On tente l\'amiable ou on assigne ?', 'Quel est le délai à tenir ?', 'Peux-tu m\'envoyer le mandat signé ?']
+        : ['Où en êtes-vous ?', 'Peut-on assigner ?', 'Quelles pièces vous manque-t-il ?', 'Estimation du délai ?'];
+    $tid_js = 'q' . (int) $tenant_uid;
+    echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    foreach ($quick as $q) {
+        echo '<button type="button" onclick="var t=this.closest(\'form\').querySelector(\'textarea\');t.value=' . esc_attr(wp_json_encode($q)) . ';t.focus();" style="background:#f3e9fb;color:#6a1b9a;border:1px solid #e2d3f0;border-radius:14px;padding:4px 10px;font-size:.8em;cursor:pointer">' . esc_html($q) . '</button>';
+    }
+    echo '</div>';
     echo '<textarea name="msg" rows="2" placeholder="Écrire un message…"></textarea>';
     echo '<button type="submit" class="btn-primary" style="background:#6a1b9a">Envoyer</button></form>';
 }
@@ -218,10 +228,11 @@ function lfi_nct_avocat_dispatch() {
     /* Un·e avocat·e qui serait aussi admin garde sa console pour le reste. */
     $also_admin = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat') return false;
+    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat' && $vue !== 'justice-cdc') return false;
 
     switch ($vue) {
         case 'dossier-avocat': lfi_nct_app_view_dossier_avocat(); break; /* la note (accès contrôlé par assignation) */
+        case 'justice-cdc':    lfi_nct_app_view_justice_cdc();    break; /* saisine CDC (accès contrôlé) */
         case 'mon-profil':     lfi_nct_app_view_mon_profil();     break;
         case 'installer':      lfi_nct_app_view_installer();      break;
         case 'espace':         /* fallthrough */
@@ -259,9 +270,12 @@ function lfi_nct_app_view_avocat_dashboard() {
         $unread = 0; /* fil vu côté avocat — simple compteur informatif */
         echo '<li class="lfi-app-card" style="border-left:4px solid #6a1b9a">';
         echo '<div class="head"><div class="who">📂 ' . esc_html($t->display_name) . '</div></div>';
-        echo '<div class="row-actions" style="margin-top:6px">';
-        echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url($note_url) . '" target="_blank">📄 Note complète + pièces</a>';
+        echo '<div class="row-actions" style="margin-top:6px;flex-wrap:wrap">';
+        echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url($note_url) . '" target="_blank">📄 Note complète</a>';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => (int) $t->ID])) . '">⚖️ Dossier conciliation</a>';
         echo '</div>';
+        /* Pièces versées (lecture seule pour l'avocat·e). */
+        if (function_exists('lfi_nct_justice_pieces_box')) lfi_nct_justice_pieces_box($t, false);
         /* Ligne directe repliée par dossier. */
         echo '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:#6a1b9a">💬 Ligne directe avec le GA</summary><div style="margin-top:6px">';
         lfi_nct_avocat_render_thread((int) $t->ID, '');

@@ -1373,6 +1373,15 @@ function lfi_nct_app_dossier_juridique_form($row) {
             lfi_nct_ingest_render_pieces($row);
         }
 
+        /* Verser des pièces (à transmettre à NMH / CDC / TJ) + Commission de
+           conciliation : le versement et la saisine se font sur la page dédiée. */
+        if ((int) $row->tenant_user_id) {
+            echo '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">';
+            echo '<a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => (int) $row->tenant_user_id])) . '#pieces">📎 Verser des pièces à transmettre</a>';
+            echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => (int) $row->tenant_user_id])) . '">⚖️ Commission de conciliation</a>';
+            echo '</div>';
+        }
+
         /* === ANALYSE de la réponse NMH + document à imprimer/PDF === */
         $analyse_val = (is_array($logs) && !empty($logs['analyse_nmh'])) ? (string) $logs['analyse_nmh'] : '';
         echo '<h3 id="sec-analyse" style="margin:22px 0 6px;color:#c8102e">📑 Analyse de la réponse de NMH</h3>';

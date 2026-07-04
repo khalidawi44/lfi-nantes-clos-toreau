@@ -956,6 +956,12 @@ function lfi_nct_dossier_render_juridique_guidance($u, $row) {
     echo '</div>';
     echo '</details>';
 
+    /* Verser les pièces à transmettre (NMH / CDC / TJ). */
+    if (function_exists('lfi_nct_justice_pieces_box')) lfi_nct_justice_pieces_box($u, true);
+
+    /* Monter le dossier Commission de conciliation (bot justice). */
+    echo '<div style="margin-top:10px"><a class="btn-primary" style="background:#6a1b9a;width:100%;display:block;text-align:center;box-sizing:border-box" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => $u->ID])) . '">⚖️ Monter le dossier Commission de conciliation</a></div>';
+
     /* Confier ce dossier à un·e avocat·e (Me Valet / Me Goache). */
     if (function_exists('lfi_nct_avocat_assign_box')) lfi_nct_avocat_assign_box($u);
 }

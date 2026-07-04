@@ -793,6 +793,7 @@ function lfi_nct_app_shortcode() {
                     case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
                     case 'avocats':            lfi_nct_app_view_avocats();            break;
                     case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
+                    case 'justice-cdc':        lfi_nct_app_view_justice_cdc();        break;
                     case 'nmh':                lfi_nct_app_view_partenaire_nmh();     break;
                     case 'ase':                lfi_nct_app_view_ase();                break;
                     case 'elus':               lfi_nct_app_view_elus_membre();        break;
