@@ -2351,6 +2351,7 @@ function lfi_nct_app_view_comptes_ga() {
     if (isset($_GET['del_ga']))    lfi_nct_app_flash('🗑 ' . (int) $_GET['del_ga'] . ' membre(s) supprimé(s).');
     if (!empty($_GET['admin_set'])) lfi_nct_app_flash('⭐ Rôle d\'admin mis à jour.');
     if (!empty($_GET['moved']))     lfi_nct_app_flash('↪️ Membre déplacé vers son nouveau groupe d\'action.');
+    if (!empty($_GET['created_uid'])) { $nu = get_userdata((int) $_GET['created_uid']); if ($nu) lfi_nct_app_flash('✅ Membre du GA créé depuis un email : ' . esc_html($nu->display_name) . ' — complète sa fiche ci-dessous.'); }
 
     /* Batch après import en masse */
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
