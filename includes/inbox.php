@@ -446,9 +446,17 @@ function lfi_nct_app_view_inbox_import() {
             $n = lfi_nct_inbox_block_queue_ids((array) ($_POST['ids'] ?? []));
             wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blocked' => $n ?: 1])); exit;
         }
+        if (!empty($_POST['do_del']) || !empty($_POST['bulk_del'])) { /* supprimer SANS liste noire */
+            $del = !empty($_POST['do_del']) ? [(int) $_POST['do_del']] : array_map('intval', (array) ($_POST['ids'] ?? []));
+            $q = array_values(array_filter(lfi_nct_inbox_unmatched(), function ($e) use ($del) {
+                return !in_array((int) ($e['id'] ?? 0), $del, true);
+            }));
+            lfi_nct_inbox_unmatched_save($q);
+            wp_safe_redirect(lfi_nct_app_url('inbox-import', ['deleted' => count($del) ?: 1])); exit;
+        }
         if (!empty($_POST['do_member'])) {                       /* créer un membre du GA */
             $uid = lfi_nct_inbox_create_member_from_queue((int) $_POST['do_member']);
-            if ($uid) { wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['created_uid' => $uid])); exit; }
+            if ($uid) { wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['created_uid' => $uid]) . '#m-' . $uid); exit; }
             wp_safe_redirect(lfi_nct_app_url('inbox-import', ['memberr' => 1])); exit;
         }
         wp_safe_redirect(lfi_nct_app_url('inbox-import')); exit;
@@ -481,6 +489,7 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['blrm']))    lfi_nct_app_flash('Retiré de la liste noire.');
     if (!empty($_GET['memberr'])) lfi_nct_app_flash('⚠️ Impossible de créer le membre (email de l\'expéditeur manquant ou invalide).', 'error');
     if (!empty($_GET['pickone'])) lfi_nct_app_flash('⚠️ Choisis d\'abord une personne dans la liste avant « Ranger ».', 'error');
+    if (!empty($_GET['deleted'])) lfi_nct_app_flash('🗑 ' . (int) $_GET['deleted'] . ' email(s) retiré(s) de la file (sans liste noire).');
 
     echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
 
@@ -550,8 +559,10 @@ function lfi_nct_app_view_inbox_import() {
         echo '<input type="hidden" name="lfi_inbox_queue" value="1">';
         echo '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0 10px;flex-wrap:wrap">';
         echo '<label style="font-size:.85em;color:#555;display:flex;gap:6px;align-items:center"><input type="checkbox" onclick="var c=this.checked;document.querySelectorAll(\'.lfi-ib-ck\').forEach(function(x){x.checked=c})"> tout cocher</label>';
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+        echo '<button type="submit" name="bulk_del" value="1" class="btn-ghost" style="font-size:.82em" onclick="return confirm(\'Supprimer les emails COCHÉS de la file (sans liste noire) ?\')">🗑 Cochés → supprimer</button>';
         echo '<button type="submit" name="bulk_block" value="1" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1" onclick="return confirm(\'Mettre les expéditeurs COCHÉS en liste noire ?\')">🚫 Cochés → liste noire</button>';
-        echo '</div>';
+        echo '</div></div>';
         echo '<ul class="lfi-app-list">';
         foreach (array_reverse($q) as $e) {
             $qid = (int) ($e['id'] ?? 0);
@@ -566,7 +577,8 @@ function lfi_nct_app_view_inbox_import() {
             echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_html . '</select>';
             echo '<button type="submit" name="do_assign" value="' . $qid . '" class="btn-primary" style="background:#186a3b">✅ Ranger</button>';
             echo '<button type="submit" name="do_member" value="' . $qid . '" formtarget="_blank" class="btn-ghost" style="font-size:.83em;color:#4b2e83;border-color:#c9bdf0">➕ Créer un membre</button>';
-            echo '<button type="submit" name="do_block" value="' . $qid . '" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1" onclick="return confirm(\'Mettre cet expéditeur en liste noire ?\')">🚫</button>';
+            echo '<button type="submit" name="do_del" value="' . $qid . '" class="btn-ghost" style="font-size:.82em" title="Supprimer cet email (sans liste noire)" onclick="return confirm(\'Retirer cet email de la file (sans bannir l\\\'expéditeur) ?\')">🗑</button>';
+            echo '<button type="submit" name="do_block" value="' . $qid . '" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1" title="Liste noire" onclick="return confirm(\'Mettre cet expéditeur en liste noire ?\')">🚫</button>';
             echo '</div></li>';
         }
         echo '</ul></form>';
