@@ -37,6 +37,81 @@ function lfi_nct_demo_seed_bompard() {
     update_option('lfi_nct_demo_bompard_done', 1, false);
 }
 
+/**
+ * Visuel « boîte noire » (SVG autonome) — MONTRE ce que l'outil fait et ce
+ * qu'il gagne, JAMAIS comment il est construit.
+ *
+ * PROTECTION DU CONCEPT : le moteur (automatisation + IA) est volontairement
+ * représenté comme une boîte scellée. Aucune « recette » technique n'est
+ * divulguée (pas de service email, pas d'endpoint, pas de clé, pas de nom de
+ * table, pas de brique réutilisable) — pour qu'on ne puisse pas le reproduire
+ * de son côté sans l'auteur.
+ */
+function lfi_nct_demo_svg_schema() {
+    $b = function ($x, $y, $w, $h, $ico, $title, $sub, $fill = '#f6f2fc', $stroke = '#6f4bb0') {
+        $o  = '<rect x="' . $x . '" y="' . $y . '" width="' . $w . '" height="' . $h . '" rx="14" fill="' . $fill . '" stroke="' . $stroke . '" stroke-width="2"/>';
+        $o .= '<text x="' . ($x + 16) . '" y="' . ($y + 27) . '" font-size="15.5" font-weight="800" fill="#3a2668">' . $ico . '  ' . esc_html($title) . '</text>';
+        if ($sub !== '') $o .= '<text x="' . ($x + 16) . '" y="' . ($y + 47) . '" font-size="12.5" fill="#444">' . esc_html($sub) . '</text>';
+        return $o;
+    };
+    $arrow = function ($x1, $y1, $x2, $y2, $col = '#6f4bb0') {
+        return '<line x1="' . $x1 . '" y1="' . $y1 . '" x2="' . $x2 . '" y2="' . $y2 . '" stroke="' . $col . '" stroke-width="3" marker-end="url(#ar)"/>';
+    };
+    ob_start(); ?>
+    <svg viewBox="0 0 900 760" width="100%" style="max-width:900px;display:block;margin:0 auto;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schéma : de la porte du locataire à la victoire">
+      <defs>
+        <marker id="ar" markerWidth="11" markerHeight="11" refX="8" refY="3.2" orient="auto"><path d="M0,0 L9,3.2 L0,6.4 Z" fill="#6f4bb0"/></marker>
+        <linearGradient id="core" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b2e83"/><stop offset="1" stop-color="#8a5cd8"/></linearGradient>
+        <linearGradient id="win" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b7a43"/><stop offset="1" stop-color="#37a862"/></linearGradient>
+      </defs>
+
+      <!-- cadre cloisonnement (protection des locataires) -->
+      <rect x="8" y="8" width="884" height="672" rx="18" fill="none" stroke="#c8102e" stroke-width="2" stroke-dasharray="8 7"/>
+      <text x="24" y="705" font-size="12.5" font-weight="800" fill="#c8102e">🔒 Cloisonnement strict — chaque dossier est étanche, l'enquête de terrain n'est jamais partagée.</text>
+      <text x="24" y="726" font-size="12" font-weight="700" fill="#7a6a99">© Concept propriétaire · Union des Quartiers Libres — reproduction et déploiement réservés à l'auteur.</text>
+
+      <?php
+      /* ENTRÉE — le terrain */
+      echo $b(40, 34, 250, 64, '📋', 'Le terrain', 'On va vers les gens : porte-à-porte + signalement en ligne.', '#eef7ee', '#186a3b');
+      echo $arrow(290, 66, 352, 66, '#186a3b');
+
+      /* CŒUR SCELLÉ — la boîte noire (automatisation + IA) */
+      echo '<rect x="352" y="26" width="308" height="150" rx="18" fill="url(#core)"/>';
+      echo '<text x="506" y="58" text-anchor="middle" font-size="17" font-weight="900" fill="#fff">🔒 Le moteur</text>';
+      echo '<text x="506" y="82" text-anchor="middle" font-size="13" fill="#efe7ff">Automatisation + intelligence</text>';
+      echo '<text x="506" y="100" text-anchor="middle" font-size="13" fill="#efe7ff">artificielle</text>';
+      echo '<text x="506" y="128" text-anchor="middle" font-size="12" fill="#d9c9ff" font-style="italic">Le savoir-faire — scellé.</text>';
+      echo '<text x="506" y="150" text-anchor="middle" font-size="11.5" fill="#c7b3f5">Non divulgué · non reproductible sans l\'auteur</text>';
+      echo $arrow(506, 176, 506, 210, '#6f4bb0');
+
+      /* SORTIES — ce que ça produit, en éventail (le RÉSULTAT, pas la recette) */
+      echo $b(40, 210, 250, 66, '🗂️', 'Le dossier se monte seul', 'Constat, photos datées, préjudice chiffré, base légale.');
+      echo $b(325, 210, 250, 66, '⚔️', 'Deux batailles', '⚡ Faire cesser le danger, puis 💶 réparer le préjudice.', '#fff8e6', '#bd8600');
+      echo $b(610, 210, 250, 66, '✉️', 'La correspondance se range', 'Les échanges avec le bailleur reviennent au bon endroit.', '#eaf2fb', '#0066a3');
+
+      echo $b(40, 300, 250, 66, '⚖️', 'Amiable puis justice', 'Conciliation prête, puis avocats partenaires équipés.', '#f3e9fb', '#6a1b9a');
+      echo $b(325, 300, 250, 66, '🏠', 'Relogement d\'urgence', 'Demande unique + DALO : le préfet a 6 mois pour reloger.', '#eaf2fb', '#0066a3');
+      echo $b(610, 300, 250, 66, '💪', 'Le rapport de force', 'Élus, national, préfecture, presse, mobilisation.', '#fdeef0', '#c8102e');
+
+      /* La récompense */
+      echo $arrow(325, 388, 300, 402, '#1b7a43');
+      echo $arrow(575, 388, 600, 402, '#1b7a43');
+      echo '<rect x="230" y="402" width="440" height="86" rx="16" fill="url(#win)"/>';
+      echo '<text x="450" y="436" text-anchor="middle" font-size="18" font-weight="900" fill="#fff">🏆 On gagne — et on le célèbre</text>';
+      echo '<text x="450" y="462" text-anchor="middle" font-size="13" fill="#e6ffee">Une coupe par bataille gagnée · championnat de rapidité.</text>';
+      echo '<text x="450" y="480" text-anchor="middle" font-size="12.5" fill="#d5f5df">Chaque victoire encourage tout le groupe.</text>';
+      echo $arrow(450, 488, 450, 520, '#1b7a43');
+
+      /* Réseau national */
+      echo '<rect x="200" y="520" width="500" height="72" rx="16" fill="#3a2668"/>';
+      echo '<text x="450" y="552" text-anchor="middle" font-size="16" font-weight="900" fill="#fff">🇫🇷 Reproductible dans chaque quartier</text>';
+      echo '<text x="450" y="576" text-anchor="middle" font-size="12.5" fill="#d9c9ff">Un GA s\'en empare, configure son bailleur local — la machine se met en route.</text>';
+      ?>
+    </svg>
+    <?php
+    return ob_get_clean();
+}
+
 /** Chiffres AGRÉGÉS de TOUT le réseau (France entière), anonymes. */
 function lfi_nct_demo_stats() {
     global $wpdb;
@@ -130,6 +205,14 @@ function lfi_nct_app_view_kit_national() {
     </section>
 
     <section class="slide">
+      <h2>Comment ça marche — en une image</h2>
+      <p class="lead">Pas besoin d'être informaticien. C'est de l'<strong>automatisation avec de l'intelligence artificielle</strong> : on récolte ce qui vient du terrain, un « moteur » fait le travail répétitif tout seul (monter le dossier, ranger les courriers, repérer une victoire…), et il ne reste qu'à pousser jusqu'au bout.</p>
+      <?php echo lfi_nct_demo_svg_schema(); ?>
+      <p style="color:#6a1b9a;font-weight:700;margin-top:12px">👉 Comme un assistant infatigable : il prépare tout, l'humain décide et gagne.</p>
+      <p style="color:#7a6a99;font-size:.85em;margin-top:6px">Le cœur du moteur — le « comment » exact — reste notre savoir-faire. Il n'est pas divulgué et ne peut pas être reproduit sans son auteur.</p>
+    </section>
+
+    <section class="slide">
       <h2>La chaîne complète — de la porte au tribunal</h2>
       <?php foreach ($etapes as $e): ?>
         <div class="step"><div class="i"><?php echo $e[0]; ?></div><div><b><?php echo esc_html($e[1]); ?></b><br><span style="color:#333"><?php echo esc_html($e[2]); ?></span></div></div>
@@ -204,6 +287,11 @@ function lfi_nct_app_view_demo_national() {
     echo '<div class="stat"><div class="ico">📣</div><div class="n">' . (int) $st['publiees'] . '</div><div class="l">Victoires publiées</div></div>';
     echo '</div>';
     echo '<div class="lfi-app-help" style="text-align:center"><small>Totaux France entière (tout le réseau). Aucune donnée personnelle n\'est visible ici — tout est anonyme.</small></div>';
+
+    /* Le visuel « boîte noire » — impressionne sans livrer la recette. */
+    echo '<h3 style="margin:18px 0 6px;color:#4b2e83">🧠 Comment ça marche, en un coup d\'œil</h3>';
+    echo '<p style="color:#444;margin:0 0 10px;font-size:.95em">En clair : c\'est de l\'<strong>automatisation dopée à l\'intelligence artificielle</strong>. On récolte le terrain, un moteur fait le gros du travail, et il ne reste qu\'à pousser jusqu\'à la victoire. <em>Le cœur du moteur reste notre savoir-faire.</em></p>';
+    echo lfi_nct_demo_svg_schema();
 
     /* La chaîne complète — visite guidée (capacités, pas de données). */
     $etapes = [
