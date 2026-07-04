@@ -522,10 +522,10 @@ function lfi_nct_avocat_invite_text($link) {
     $t .= "== VOTRE RÔLE ==\n";
     $t .= "L'amiable d'abord : nous obtenons souvent les travaux / le relogement en urgence, puis nous négocions l'indemnisation. Si l'amiable échoue, VOUS prenez le relais devant la Commission de conciliation puis le Tribunal Judiciaire, avec un dossier prêt à plaider.\n\n";
     $t .= "== NOS FORCES (le rapport de force derrière chaque dossier) ==\n";
-    $t .= "- Élus municipaux partenaires (Conseil, audit de la gestion du bailleur).\n";
-    $t .= "- Relais national : députés LFI (questions, propositions de loi logement).\n";
-    $t .= "- Préfecture (signalements, dont via notre contact Christophe Jouin).\n";
-    $t .= "- SCHS / ARS (insalubrité), presse locale, mobilisation collective.\n";
+    $t .= "- Élus municipaux partenaires (Conseil municipal, audit de la gestion du bailleur).\n";
+    $t .= "- Relais au conseil d'administration de NMH (Christophe Jouin, membre du CA — majorité).\n";
+    $t .= "- Relais national : députés LFI (questions écrites, propositions de loi sur le logement).\n";
+    $t .= "- SCHS / ARS (insalubrité), signalements préfecture, presse locale, mobilisation collective.\n";
     $t .= "Le juridique s'inscrit dans une stratégie d'ensemble qui pèse sur le bailleur avant même l'audience.\n\n";
     $t .= "== VOTRE ESPACE DE TRAVAIL (confidentiel) ==\n";
     $t .= "1) Connexion en 1 clic, sans rien taper, puis vous choisissez votre mot de passe.\n";
@@ -557,10 +557,10 @@ function lfi_nct_avocat_invite_html($link, $nom = 'Maître') {
 
       <h3 style="color:#186a3b;margin:18px 0 6px">💪 Nos forces (le rapport de force derrière chaque dossier)</h3>
       <ul style="margin:6px 0;padding-left:20px">
-        <li>🏛️ <strong>Élus municipaux</strong> partenaires (Conseil, audit de la gestion du bailleur)</li>
-        <li>🇫🇷 <strong>Relais national</strong> : députés LFI (questions, propositions de loi logement)</li>
-        <li>🏛️ <strong>Préfecture</strong> (signalements, dont via notre contact Christophe Jouin)</li>
-        <li>🏥 <strong>SCHS / ARS</strong> (insalubrité), <strong>presse locale</strong>, <strong>mobilisation collective</strong></li>
+        <li>🏛️ <strong>Élus municipaux</strong> partenaires (Conseil municipal, audit de la gestion du bailleur)</li>
+        <li>🏢 <strong>Relais au conseil d'administration de NMH</strong> (Christophe Jouin, membre du CA — majorité)</li>
+        <li>🇫🇷 <strong>Relais national</strong> : députés LFI (questions écrites, propositions de loi sur le logement)</li>
+        <li>🏥 <strong>SCHS / ARS</strong> (insalubrité), <strong>signalements préfecture</strong>, <strong>presse locale</strong>, <strong>mobilisation collective</strong></li>
       </ul>
       <p style="color:#555">Le juridique s'inscrit dans une <strong>stratégie d'ensemble</strong> qui pèse sur le bailleur avant même l'audience.</p>
 
