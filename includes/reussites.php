@@ -43,6 +43,14 @@ function lfi_nct_reussite_auto_from_dossier($dossier_id) {
     $pref['publie']     = false;   /* brouillon */
     $pref['auto']       = true;
     $pref['date']       = current_time('mysql');
+    /* CLOISONNEMENT : on tague la réussite avec le GA du locataire, pour que le
+       compteur « Victoires » ne fuite jamais vers un autre GA. */
+    if (empty($pref['ga'])) {
+        global $wpdb;
+        $dt = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $tuid = (int) $wpdb->get_var($wpdb->prepare("SELECT tenant_user_id FROM $dt WHERE id = %d", $dossier_id));
+        $pref['ga'] = ($tuid && function_exists('lfi_nct_user_ga')) ? (string) lfi_nct_user_ga($tuid) : '';
+    }
     $list[] = $pref;
     lfi_nct_reussites_save($list);
     return $pref['id'];
@@ -83,6 +91,7 @@ function lfi_nct_reussites_seed_builtin() {
         $s['resultat_detail'] = $s['resultat_detail'] ?? '';
         $s['delai']           = '';
         $s['quartier']        = 'Clos Toreau (Nantes Sud)';
+        $s['ga']              = 'clos-toreau';  /* cloisonnement du compteur */
         $s['anonymize_names'] = '';
         $s['publie']          = true;  /* victoires PARTIELLES, anonymes → visibles au tableau */
         $s['auto']            = true;
@@ -93,10 +102,26 @@ function lfi_nct_reussites_seed_builtin() {
     if ($changed) lfi_nct_reussites_save($list);
 }
 
-/** Nombre de victoires publiées (pour le compteur d'accueil). */
-function lfi_nct_reussites_count_published() {
+/** GA d'une réussite, normalisé (les anciennes sans tag = Clos Toreau). */
+function lfi_nct_reussite_ga_norm($r) {
+    $g = (string) ($r['ga'] ?? '');
+    return $g === '' ? 'clos-toreau' : $g;
+}
+
+/**
+ * Nombre de victoires publiées, CLOISONNÉ au GA affiché. Sans le cloisonnement,
+ * les victoires du Clos Toreau apparaissaient dans TOUS les GA (bug signalé).
+ * $ga : null = GA courant ; '' interprété comme Clos Toreau (l'espace « maison »).
+ */
+function lfi_nct_reussites_count_published($ga = null) {
+    if ($ga === null) $ga = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $scope = ($ga === '') ? 'clos-toreau' : $ga;
     $n = 0;
-    foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $n++;
+    foreach (lfi_nct_reussites() as $r) {
+        if (empty($r['publie'])) continue;
+        if (lfi_nct_reussite_ga_norm($r) !== $scope) continue;
+        $n++;
+    }
     return $n;
 }
 

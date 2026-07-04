@@ -137,10 +137,13 @@ function lfi_nct_victoire_annuler($tenant_uid, $bataille) {
 
 /** Compteurs statistiques : coupes (batailles gagnées) + familles (distinctes). */
 function lfi_nct_victoires_stats($ga = null) {
-    $ga = ($ga === null && function_exists('lfi_nct_scope_ga_slug')) ? lfi_nct_scope_ga_slug() : (string) $ga;
+    if ($ga === null) $ga = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    /* '' (mon espace) = Clos Toreau ; les coupes sans tag GA y sont rattachées. */
+    $scope = ($ga === '') ? 'clos-toreau' : $ga;
     $coupes = 0; $familles = [];
     foreach (lfi_nct_victoires_all() as $v) {
-        if ($ga !== '' && ($v['ga'] ?? '') !== $ga) continue;
+        $vga = (string) ($v['ga'] ?? ''); if ($vga === '') $vga = 'clos-toreau';
+        if ($vga !== $scope) continue;
         $coupes++;
         $familles[(int) ($v['tenant_uid'] ?? 0)] = 1;
     }
