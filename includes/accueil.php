@@ -76,6 +76,79 @@ function lfi_nct_fixed_hero_bar() {
     <?php
 }
 
+/* ============================================================== *
+ *  AFFICHE A4 (hall d'immeuble) — QR vers l'enquête, imprimable.  *
+ *  Route ?vue=affiche. Réservée aux admins pour l'imprimer.       *
+ * ============================================================== */
+function lfi_nct_app_view_affiche() {
+    if (!current_user_can('manage_options') && !(function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $survey = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+    $survey = add_query_arg('src', 'affiche', $survey);           /* pour repérer les scans d'affiche */
+    $qr = 'https://api.qrserver.com/v1/create-qr-code/?size=900x900&margin=12&ecc=M&data=' . rawurlencode($survey);
+    $logos = function_exists('lfi_nct_signature_logos_html') ? lfi_nct_signature_logos_html('avocat', 'center') : '';
+    $probs = [
+        ['💧', 'Humidité, moisissures, fuites'],
+        ['🔥', 'Chauffage ou eau chaude en panne'],
+        ['🐜', 'Nuisibles (punaises, cafards, rats)'],
+        ['🏚️', 'Logement insalubre, dangereux'],
+        ['🔧', 'Travaux promis, jamais faits'],
+        ['🏠', 'Besoin d\'être relogé·e'],
+    ];
+    nocache_headers();
+    ?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Affiche — Un souci dans votre logement ?</title>
+    <style>
+      :root{--r:#c8102e;--v:#4b2e83}
+      *{box-sizing:border-box}
+      html,body{margin:0;background:#e9e6f2}
+      body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#16121f}
+      .noprint{position:sticky;top:0;background:var(--v);color:#fff;text-align:center;padding:10px;z-index:5}
+      .btn{background:#fff;color:var(--v);border:0;padding:10px 22px;border-radius:10px;font-weight:800;cursor:pointer}
+      .sheet{width:210mm;min-height:297mm;margin:16px auto;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.15);display:flex;flex-direction:column;overflow:hidden}
+      .top{background:linear-gradient(135deg,var(--r),#9d0f26);color:#fff;text-align:center;padding:26px 30px 22px}
+      .eyebrow{letter-spacing:2px;text-transform:uppercase;font-weight:800;font-size:15px;opacity:.95}
+      h1{font-size:52px;line-height:1.04;margin:12px 0 6px;font-weight:900}
+      .top p{font-size:22px;margin:0;opacity:.97}
+      .mid{flex:1;display:flex;flex-direction:column;align-items:center;padding:24px 30px 10px;text-align:center}
+      .qrwrap{background:#fff;border:6px solid var(--v);border-radius:22px;padding:14px;box-shadow:0 6px 18px rgba(75,46,131,.25)}
+      .qrwrap img{display:block;width:330px;height:330px}
+      .scan{font-size:30px;font-weight:900;color:var(--v);margin:16px 0 2px}
+      .scan small{display:block;font-size:18px;font-weight:700;color:#555;margin-top:4px}
+      .probs{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px;margin:16px auto 4px;max-width:620px;text-align:left}
+      .probs div{font-size:18px;font-weight:600;display:flex;gap:10px;align-items:center}
+      .probs .e{font-size:24px}
+      .free{margin-top:12px;background:#eef7ee;border:2px solid #186a3b;color:#186a3b;border-radius:12px;padding:10px 16px;font-weight:800;font-size:19px}
+      .bot{background:var(--v);color:#fff;text-align:center;padding:16px 20px}
+      .bot .n{font-weight:900;font-size:20px}
+      .bot .s{opacity:.92;font-size:15px;margin-top:2px}
+      .logos img{max-height:52px!important;margin:0 8px;vertical-align:middle}
+      @media print{ .noprint{display:none} html,body{background:#fff} .sheet{margin:0;box-shadow:none;width:auto;min-height:auto} @page{size:A4;margin:0} }
+    </style></head><body>
+    <div class="noprint">Affiche pour le hall — <button class="btn" onclick="window.print()">🖨️ Imprimer / PDF (A4)</button></div>
+    <div class="sheet">
+      <div class="top">
+        <div class="logos" style="margin-bottom:8px"><?php echo $logos; ?></div>
+        <div class="eyebrow">La France Insoumise · Nantes Sud — Clos Toreau</div>
+        <h1>Un souci dans<br>votre logement ?</h1>
+        <p>On peut vous aider — <strong>gratuitement, entre voisins.</strong></p>
+      </div>
+      <div class="mid">
+        <div class="qrwrap"><img src="<?php echo esc_url($qr); ?>" alt="QR code — signaler mon logement"></div>
+        <div class="scan">📱 Scannez ce code<small>Signalez votre problème en 2 minutes, depuis votre téléphone</small></div>
+        <div class="probs">
+          <?php foreach ($probs as $p): ?><div><span class="e"><?php echo $p[0]; ?></span> <?php echo esc_html($p[1]); ?></div><?php endforeach; ?>
+        </div>
+        <div class="free">🔒 Confidentiel · vous choisissez d'être recontacté·e ou non</div>
+      </div>
+      <div class="bot">
+        <div class="n">On va vers les gens. On écoute. On agit — ensemble.</div>
+        <div class="s">La France Insoumise · Nantes Sud — Clos Toreau &nbsp;·&nbsp; Association Union des Quartiers Libres</div>
+      </div>
+    </div>
+    </body></html><?php
+    exit;
+}
+
 add_shortcode('lfi_nct_accueil', 'lfi_nct_accueil_shortcode');
 function lfi_nct_accueil_shortcode($atts) {
     $survey  = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
