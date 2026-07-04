@@ -335,16 +335,22 @@ function lfi_nct_app_view_dossier() {
         exit;
     }
 
-    /* 🏆 Classer ce dossier en VICTOIRE → statut « abouti » + réussite anonyme
-       (brouillon, à publier). Aucun nom : la réussite est anonymisée. */
+    /* 🏆 Clore une BATAILLE → coupe + réussite anonyme + célébration du GA.
+       ⚡ urgence : le dossier reste OUVERT (la 2e bataille continue).
+       💶 indemnisation : le dossier est réellement clos.
+       Une coupe par bataille, une famille par locataire (cf. victoires.php). */
     if (!empty($_POST['lfi_dossier_win']) && check_admin_referer('lfi_dossier_win')) {
-        $dt = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
-        $did = (int) $wpdb->get_var($wpdb->prepare("SELECT id FROM $dt WHERE tenant_user_id = %d ORDER BY id DESC LIMIT 1", $u->ID));
-        if ($did) {
-            $wpdb->update($dt, ['statut' => 'abouti'], ['id' => $did]);
-            if (function_exists('lfi_nct_reussite_auto_from_dossier')) lfi_nct_reussite_auto_from_dossier($did);
+        $bataille = (($_POST['bataille'] ?? '') === 'indemnisation') ? 'indemnisation' : 'urgence';
+        if (function_exists('lfi_nct_victoire_record')) {
+            lfi_nct_victoire_record($u->ID, $bataille, 0, 'manuel');
         }
-        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'won' => 1])); exit;
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'won' => $bataille])); exit;
+    }
+    /* Annuler une coupe (fausse détection auto). */
+    if (!empty($_POST['lfi_dossier_win_annuler']) && check_admin_referer('lfi_dossier_win')) {
+        $bataille = (($_POST['bataille'] ?? '') === 'indemnisation') ? 'indemnisation' : 'urgence';
+        if (function_exists('lfi_nct_victoire_annuler')) lfi_nct_victoire_annuler($u->ID, $bataille);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'unwon' => 1])); exit;
     }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
@@ -426,12 +432,15 @@ function lfi_nct_app_view_dossier() {
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
     echo '<a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Page précédente</a>';
     echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note pour l\'avocat (PDF)</a>';
-    echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Classer ce dossier en VICTOIRE ? Une réussite anonyme sera préparée (à publier).\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><button type="submit" class="btn-primary" style="background:#186a3b">🏆 Classer en victoire</button></form>';
     echo '</div>';
 
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');
     if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
-    if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Victoire classée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure).');
+    if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Coupe posée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure). Les membres du GA verront la victoire à l\'ouverture de l\'app.');
+    if (!empty($_GET['unwon'])) lfi_nct_app_flash('Coupe annulée.');
+
+    /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
+    lfi_nct_dossier_render_batailles($u, $row);
 
     /* Profil + actions */
     echo '<div class="lfi-app-card">';
@@ -777,6 +786,76 @@ function lfi_nct_tenant_part_done($uid) {
     return !empty($st['profil']) && !empty($st['objectif']);
 }
 
+/* ============================================================== *
+ *  LES DEUX BATAILLES — bandeau haut du dossier :                 *
+ *  la demande du locataire + ⚡ urgence / 💶 indemnisation, avec   *
+ *  les boutons pour clore chaque bataille (→ coupe + célébration). *
+ * ============================================================== */
+function lfi_nct_dossier_render_batailles($u, $row) {
+    $obj_labels = [
+        'travaux'       => '🔧 Que les travaux soient faits',
+        'relogement'    => '🏠 Être relogé·e (déménager)',
+        'indemnisation' => '💶 Être indemnisé·e pour le préjudice',
+        'a_voir'        => '🤝 En discuter avec le GA',
+    ];
+    $rdata   = ($row && $row->data) ? json_decode($row->data, true) : [];
+    $obj_key = is_array($rdata) ? (string) ($rdata['objectif'] ?? '') : '';
+
+    $urg_won = function_exists('lfi_nct_victoire_won') ? lfi_nct_victoire_won($u->ID, 'urgence') : get_user_meta($u->ID, 'lfi_nct_urgence_won', true);
+    $ind_won = function_exists('lfi_nct_victoire_won') ? lfi_nct_victoire_won($u->ID, 'indemnisation') : get_user_meta($u->ID, 'lfi_nct_indemn_won', true);
+
+    echo '<div class="lfi-app-card" style="border:2px solid #c8102e;margin-bottom:14px">';
+    echo '<div class="head"><div class="who">⚖️ Un dossier, deux batailles</div>';
+    if ($urg_won && $ind_won) echo '<div class="badge" style="background:#186a3b;color:#fff">✅ Dossier gagné</div>';
+    echo '</div>';
+
+    /* La demande du locataire (son objectif) — tout en haut. */
+    echo '<div style="margin:8px 0 12px;padding:10px 12px;background:#fff8f9;border-radius:8px">';
+    echo '<div style="font-size:.76em;color:#999;font-weight:800;text-transform:uppercase;letter-spacing:.04em">🎯 La demande du locataire</div>';
+    if ($obj_key && isset($obj_labels[$obj_key])) {
+        echo '<div style="font-weight:700;margin-top:3px">' . esc_html($obj_labels[$obj_key]) . '</div>';
+    } else {
+        echo '<div style="margin-top:3px;color:#c8102e;font-weight:600">à définir avec le locataire — <a href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">renseigner l\'objectif</a></div>';
+    }
+    echo '</div>';
+
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+
+    /* ⚡ VOLET URGENCE */
+    if ($urg_won) {
+        echo '<div style="padding:12px;border-radius:10px;background:#e8f5ea;border-left:5px solid #186a3b">';
+        echo '<div style="font-weight:800;color:#186a3b">⚡ Urgence — 🏆 gagnée</div>';
+        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Le danger a cessé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($urg_won))) . '</span></div>';
+        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet urgence ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
+        echo '</div>';
+    } else {
+        echo '<div style="padding:12px;border-radius:10px;background:#fff3f5;border-left:5px solid #c8102e">';
+        echo '<div style="font-weight:800;color:#c8102e">⚡ Urgence — en cours</div>';
+        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Faire cesser le danger : travaux, relogement d\'urgence, insalubrité.</div>';
+        echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'NMH a accédé à la demande (travaux lancés, relogement accordé…) ? On clôt le volet urgence : une COUPE est posée et le GA est prévenu. Le dossier reste ouvert pour l\\\'indemnisation.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-primary" style="background:#186a3b;width:100%;font-size:.86em">🏆 Bataille gagnée — clore l\'urgence</button></form>';
+        echo '</div>';
+    }
+
+    /* 💶 VOLET INDEMNISATION */
+    if ($ind_won) {
+        echo '<div style="padding:12px;border-radius:10px;background:#e8f5ea;border-left:5px solid #186a3b">';
+        echo '<div style="font-weight:800;color:#186a3b">💶 Indemnisation — 🏆 gagnée</div>';
+        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Préjudice réparé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($ind_won))) . '</span></div>';
+        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet indemnisation ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
+        echo '</div>';
+    } else {
+        echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
+        echo '<div style="font-weight:800;color:#bd8600">💶 Indemnisation — ' . ($urg_won ? 'à mener' : 'à suivre') . '</div>';
+        echo '<div style="font-size:.82em;color:#555;margin-top:3px">' . ($urg_won ? 'Réparer le préjudice : amiable, puis juridique si besoin.' : 'Après l\'urgence : trouble de jouissance, préjudice.') . '</div>';
+        echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'Indemnisation obtenue (préjudice réparé) ? On pose la COUPE et on CLÔT le dossier. Le GA est prévenu.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="width:100%;font-size:.86em">🏆 Bataille gagnée — clore le dossier</button></form>';
+        echo '</div>';
+    }
+
+    echo '</div>';
+    echo '<div class="lfi-app-help" style="margin-top:8px"><small>Gagner l\'urgence ne ferme PAS le dossier : la coupe est posée, mais on continue sur l\'indemnisation. Chaque bataille = une coupe ; une famille reste comptée une seule fois.</small></div>';
+    echo '</div>';
+}
+
 function lfi_nct_dossier_render_parcours($u) {
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
@@ -956,7 +1035,19 @@ function lfi_nct_dossier_render_suivi($u, $row) {
     $a_recouvrer = $total_facture - $total_paye;
     $du_total = $total_realise + $total_facture; /* tout ce qui n'est pas payé reste dû */
 
-    echo '<h3 style="margin:20px 0 8px;color:#c8102e">📋 Suivi complet</h3>';
+    if (empty($dossiers) && empty($interv) && empty($recs) && empty($appels)) {
+        echo '<h3 style="margin:20px 0 8px;color:#c8102e">📋 Suivi complet</h3>';
+        echo '<div class="lfi-app-empty">Aucun dossier juridique, intervention ou appel pour ce locataire pour le moment. Utilise les boutons « Actions » ci-dessus pour en créer.</div>';
+        return;
+    }
+
+    /* Accordéon « Suivi complet » — replié par défaut (évite les listes
+       interminables ; on l'ouvre quand on veut le détail). */
+    $nb_suivi = count($dossiers) + count($interv) + count($recs) + count($appels);
+    echo '<details style="margin:20px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
+    echo '<span>📋 Suivi complet <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 7px;border-radius:10px;vertical-align:middle">' . (int) $nb_suivi . '</span></span><span style="font-size:1.2em">▾</span></summary>';
+    echo '<div style="padding:2px 16px 16px">';
 
     /* Bandeau totaux — toujours affiché s'il y a des interventions */
     if (!empty($interv)) {
@@ -967,11 +1058,6 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         echo '<div class="stat"><div class="ico">✅</div><div class="n">' . number_format($total_paye, 0, ',', ' ') . ' €</div><div class="l">Payé</div></div>';
         echo '</div>';
         echo '<div style="margin-bottom:14px"><a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => $uid])) . '" target="_blank">🧾 Récapitulatif complet à envoyer à NMH</a></div>';
-    }
-
-    if (empty($dossiers) && empty($interv) && empty($recs) && empty($appels)) {
-        echo '<div class="lfi-app-empty">Aucun dossier juridique, intervention ou appel pour ce locataire pour le moment. Utilise les boutons « Actions » ci-dessus pour en créer.</div>';
-        return;
     }
 
     /* Dossiers juridiques */
@@ -1092,6 +1178,9 @@ function lfi_nct_dossier_render_suivi($u, $row) {
         }
         echo '</ul>';
     }
+
+    echo '</div>';      /* .padding */
+    echo '</details>';  /* accordéon « Suivi complet » */
 }
 
 /* ============================================================== *

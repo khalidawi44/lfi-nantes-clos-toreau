@@ -1217,6 +1217,7 @@ function lfi_nct_app_render_dashboard() {
         <?php if (function_exists('lfi_nct_render_home_tenant_actions')) lfi_nct_render_home_tenant_actions(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
+        <?php if (function_exists('lfi_nct_render_victoire_celebration')) lfi_nct_render_victoire_celebration(); ?>
         <?php if (function_exists('lfi_nct_render_reussite_celebration')) lfi_nct_render_reussite_celebration(); ?>
         <?php if (function_exists('lfi_nct_geo_admin_notice')) lfi_nct_geo_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_dup_admin_notice')) lfi_nct_dup_admin_notice(); ?>
