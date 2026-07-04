@@ -217,18 +217,49 @@ function lfi_nct_inbox_block_queue_ids($ids) {
     return count($senders);
 }
 
-/** Crée un compte MEMBRE DU GA à partir de l'expéditeur d'un email de la file.
- *  Renvoie l'uid (existant ou nouveau), ou 0. */
+/**
+ * Extrait l'identité du NOUVEAU MEMBRE d'un email de la file.
+ *  - Action Populaire : le membre est NOMMÉ dans l'objet/corps (« … nouveau
+ *    membre par message, Roman.P ! ») → on prend ce nom, PAS l'expéditeur.
+ *  - Sinon : c'est l'expéditeur lui-même (nom + email de l'en-tête « De »).
+ * Renvoie ['name'=>…, 'email'=>…] (email éventuellement vide).
+ */
+function lfi_nct_inbox_extract_new_member($e) {
+    $from    = strtolower((string) ($e['from'] ?? ''));
+    $subject = (string) ($e['objet'] ?? '');
+    $body    = (string) ($e['body'] ?? ($e['extrait'] ?? ''));
+
+    /* Notification Action Populaire : le nom est dans le texte, pas l'expéditeur. */
+    if (strpos($from, 'actionpopulaire.fr') !== false || stripos($subject, 'nouveau membre') !== false) {
+        $name = '';
+        /* « …nouveau membre par message, Roman.P ! » / « …membre : Roman P » */
+        if (preg_match('/nouveau membre[^,:]*[,:]\s*(.+?)\s*[!.\s]*$/ui', $subject, $m)) $name = trim($m[1]);
+        elseif (preg_match('/membre[^,:]*[,:]\s*([\p{L}][\p{L}\-\.\s]{1,40}?)\s*[!.\s]*$/u', $subject, $m)) $name = trim($m[1]);
+        if ($name === '' && preg_match('/\b([\p{Lu}][\p{L}\-]+\.?\s*[\p{Lu}]\.?)\b/u', $subject, $m)) $name = trim($m[1]);
+        if ($name !== '') return ['name' => str_replace('.', ' ', $name), 'email' => ''];
+    }
+
+    /* Défaut : l'expéditeur. */
+    $email = '';
+    if (preg_match('/[\w.\-+]+@[\w.\-]+\.[a-z]{2,}/i', (string) ($e['from'] ?? ''), $m)) $email = strtolower($m[0]);
+    $name = '';
+    if (preg_match('/^\s*"?([^"<]+?)"?\s*</u', (string) ($e['from'] ?? ''), $mm)) $name = trim($mm[1]);
+    if ($name === '' && $email !== '') $name = ucfirst(strtok($email, '@'));
+    return ['name' => $name, 'email' => $email];
+}
+
+/** Crée un compte MEMBRE DU GA à partir d'un email de la file (nouveau membre
+ *  annoncé, ou expéditeur). Renvoie l'uid (existant ou nouveau), ou 0. */
 function lfi_nct_inbox_create_member_from_queue($qid) {
     $qid = (int) $qid; if (!$qid) return 0;
-    $q = lfi_nct_inbox_unmatched(); $from = '';
-    foreach ($q as $e) if ((int) ($e['id'] ?? 0) === $qid) { $from = (string) ($e['from'] ?? ''); break; }
-    if ($from === '') return 0;
-    $email = '';
-    if (preg_match('/[\w.\-+]+@[\w.\-]+\.[a-z]{2,}/i', $from, $m)) $email = strtolower($m[0]);
+    $q = lfi_nct_inbox_unmatched(); $entry = null;
+    foreach ($q as $e) if ((int) ($e['id'] ?? 0) === $qid) { $entry = $e; break; }
+    if (!$entry) return 0;
+    $info  = lfi_nct_inbox_extract_new_member($entry);
+    $email = (string) $info['email'];
+    $name  = trim((string) $info['name']);
+    if ($email === '' && $name === '') return 0;
     if ($email !== '' && ($ex = get_user_by('email', $email))) return (int) $ex->ID; /* déjà un compte */
-    $name = '';
-    if (preg_match('/^\s*"?([^"<]+?)"?\s*</u', $from, $mm)) $name = trim($mm[1]);
     if ($name === '' && $email !== '') $name = ucfirst(strtok($email, '@'));
     $parts  = preg_split('/\s+/', trim($name));
     $prenom = $parts[0] ?? '';
@@ -530,6 +561,7 @@ function lfi_nct_app_view_inbox_import() {
             if (!empty($e['to'])) echo '<span class="meta-chip">→ ' . esc_html($e['to']) . '</span>';
             echo '</div>';
             if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
+            if (!empty($e['body'])) echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3;font-weight:600">📄 Voir le mail complet</summary><div style="white-space:pre-wrap;font-size:.82em;color:#444;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px;max-height:320px;overflow:auto">' . esc_html($e['body']) . '</div></details>';
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
             echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_html . '</select>';
             echo '<button type="submit" name="do_assign" value="' . $qid . '" class="btn-primary" style="background:#186a3b">✅ Ranger</button>';

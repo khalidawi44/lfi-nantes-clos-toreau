@@ -2318,13 +2318,33 @@ function lfi_nct_app_view_comptes_ga() {
 
     /* Liste des comptes GA — cloisonnée par GA (un autre GA n'affiche QUE ses
        propres membres ; vide tant qu'il n'en a pas ajouté). */
+    /* Tri de la liste des membres — choisi par l'utilisateur (rôle, date, nom). */
+    $msort = isset($_GET['msort']) ? sanitize_key($_GET['msort']) : 'recent';
+    $order_map = [
+        'recent' => ['registered', 'DESC'],
+        'ancien' => ['registered', 'ASC'],
+        'nom'    => ['display_name', 'ASC'],
+        'role'   => ['registered', 'DESC'], /* réordonné en PHP (admins d'abord) */
+    ];
+    $ob = $order_map[$msort] ?? $order_map['recent'];
     $ga_args = [
         'role' => LFI_NCT_ROLE_GA,
-        'fields' => ['ID', 'user_login', 'display_name', 'user_email'],
-        'number' => 200, 'orderby' => 'registered', 'order' => 'DESC',
+        'fields' => ['ID', 'user_login', 'display_name', 'user_email', 'user_registered'],
+        'number' => 200, 'orderby' => $ob[0], 'order' => $ob[1],
     ];
     if (function_exists('lfi_nct_users_ga_query')) $ga_args = lfi_nct_users_ga_query($ga_args);
     $users_ga = get_users($ga_args);
+    /* Admins du GA courant (pour le badge ET le tri « par rôle »). */
+    $cur_slug_sort = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $admin_uids = ($cur_slug_sort !== '' && function_exists('lfi_nct_ga_admin_uids')) ? lfi_nct_ga_admin_uids($cur_slug_sort) : [];
+    if ($msort === 'role' && !empty($admin_uids)) {
+        usort($users_ga, function ($a, $b) use ($admin_uids) {
+            $aa = in_array((int) $a->ID, $admin_uids, true) ? 0 : 1;
+            $bb = in_array((int) $b->ID, $admin_uids, true) ? 0 : 1;
+            if ($aa !== $bb) return $aa - $bb;
+            return strcasecmp($a->display_name, $b->display_name);
+        });
+    }
     /* Le compteur reflète l'espace affiché (liste cloisonnée) — y compris le
        home, qui ne compte plus les membres rattachés à un autre GA. */
     $n_ga = count($users_ga);
@@ -2477,6 +2497,13 @@ function lfi_nct_app_view_comptes_ga() {
     if (empty($users_ga)) {
         echo '<div class="lfi-app-empty">Aucun membre GA pour l\'instant.</div>';
     } else {
+        /* Tri : rôle / date d'ajout / nom. */
+        $sort_opts = ['recent' => '🕑 Récents', 'ancien' => '📅 Anciens', 'nom' => '🔤 Nom A-Z', 'role' => '⭐ Rôle'];
+        echo '<div class="lfi-app-filter-chips" style="margin:2px 0 10px">';
+        foreach ($sort_opts as $k => $lab) {
+            echo '<a class="fc' . ($msort === $k ? ' on' : '') . '" href="' . esc_url(lfi_nct_app_url('comptes-ga', ['msort' => $k])) . '">' . esc_html($lab) . '</a>';
+        }
+        echo '</div>';
         $cur_uid    = (int) get_current_user_id();
         $cur_slug   = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
         $admin_uids = ($cur_slug !== '' && function_exists('lfi_nct_ga_admin_uids')) ? lfi_nct_ga_admin_uids($cur_slug) : [];
@@ -2504,6 +2531,7 @@ function lfi_nct_app_view_comptes_ga() {
             if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
             $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
             if ($tel) echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
+            if (!empty($u->user_registered)) echo '<span class="meta-chip">🗓️ ajouté le ' . esc_html(wp_date('j M Y', strtotime($u->user_registered))) . '</span>';
             echo '</div>';
 
             echo '<div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap">';
