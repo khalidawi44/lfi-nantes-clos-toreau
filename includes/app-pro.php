@@ -789,9 +789,11 @@ function lfi_nct_render_home_tenant_actions() {
     if (empty($mine) && empty($waiting)) return;
 
     if (!empty($mine)) {
-        echo '<div class="lfi-app-card" style="border:2px solid #0066a3;border-radius:14px;padding:12px;margin:0 0 14px">';
-        echo '<div style="font-weight:900;color:#0066a3;margin-bottom:6px">📋 Mes actions à faire (' . count($mine) . ')</div>';
-        echo '<div style="display:flex;flex-direction:column;gap:8px">';
+        /* Accordéon (ouvert) : la liste est BORNÉE dans un cadre déroulant — plus
+           de « liste interminable » qui prend 18 écrans. */
+        echo '<details open class="lfi-app-card" style="border:2px solid #0066a3;border-radius:14px;padding:0;margin:0 0 14px;overflow:hidden">';
+        echo '<summary style="cursor:pointer;list-style:none;padding:12px 14px;font-weight:900;color:#0066a3;display:flex;justify-content:space-between;align-items:center"><span>📋 Mes actions à faire (' . count($mine) . ')</span><span style="font-size:1.1em">▾</span></summary>';
+        echo '<div style="max-height:56vh;overflow:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:8px">';
         foreach ($mine as $it) {
             $done_url = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_tenant_step_done&uid=' . $it['uid'] . '&idx=' . $it['idx']), 'lfi_nct_tstep_' . $it['uid'] . '_' . $it['idx']);
             $open_url = lfi_nct_app_url('dossier', ['uid' => $it['uid']]);
@@ -803,11 +805,13 @@ function lfi_nct_render_home_tenant_actions() {
             echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em" href="' . esc_url($open_url) . '">📂 Ouvrir le dossier</a>';
             echo '</div></div>';
         }
-        echo '</div></div>';
+        echo '</div></details>';
     }
     if (!empty($waiting)) {
-        echo '<div class="lfi-app-card" style="border:1px solid #e6c65a;background:#fffbf0;border-radius:14px;padding:12px;margin:0 0 14px">';
-        echo '<div style="font-weight:800;color:#b8860b;margin-bottom:6px">⏳ En attente du locataire (' . count($waiting) . ')</div>';
+        /* Accordéon REPLIÉ par défaut : secondaire (ça avance tout seul). */
+        echo '<details class="lfi-app-card" style="border:1px solid #e6c65a;background:#fffbf0;border-radius:14px;padding:0;margin:0 0 14px;overflow:hidden">';
+        echo '<summary style="cursor:pointer;list-style:none;padding:12px 14px;font-weight:800;color:#b8860b;display:flex;justify-content:space-between;align-items:center"><span>⏳ En attente du locataire (' . count($waiting) . ')</span><span style="font-size:1.1em">▾</span></summary>';
+        echo '<div style="max-height:50vh;overflow:auto;padding:0 12px 12px">';
         echo '<div class="lfi-app-help" style="margin:0 0 6px"><small>Ces personnes ont leur espace : elles remplissent leur dossier. Rien à faire de ton côté — ça avancera tout seul. Tu peux relancer si ça traîne.</small></div>';
         echo '<div style="display:flex;flex-direction:column;gap:6px">';
         foreach ($waiting as $it) {
@@ -816,7 +820,7 @@ function lfi_nct_render_home_tenant_actions() {
             echo '<span><strong>' . esc_html($it['name']) . '</strong> <span style="font-size:.82em;color:#888">— ' . esc_html($it['text']) . '</span></span>';
             echo '<span style="color:#b8860b;font-weight:700;white-space:nowrap">Relancer →</span></a>';
         }
-        echo '</div></div>';
+        echo '</div></div></details>';
     }
 }
 
