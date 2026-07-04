@@ -2860,7 +2860,7 @@ function lfi_nct_app_view_evenements() {
     if (!empty($_GET['evt_add'])) lfi_nct_app_flash('✅ Événement créé.');
     if (!empty($_GET['evt_upd'])) lfi_nct_app_flash('✅ Événement mis à jour.');
     /* Créer un événement : réservé aux admins (GA admins + super-admin). */
-    $ev_can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    $ev_can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga()) || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('evenements'));
     if ($ev_can_edit) {
         echo '<div style="margin:0 0 12px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('evenement-add')) . '">➕ Créer un événement</a></div>';
     }
@@ -2870,7 +2870,7 @@ function lfi_nct_app_view_evenements() {
     } else {
         /* Tri : on sépare « à venir » et « passés », puis on trie chaque groupe.
            À venir = du plus proche au plus loin ; passés = du plus récent au plus ancien. */
-        $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+        $can_edit = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga()) || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('evenements'));
         $upcoming = []; $past = [];
         foreach ($events as $p) {
             $d  = function_exists('lfi_nct_event_data') ? lfi_nct_event_data($p) : null;
@@ -2943,7 +2943,8 @@ function lfi_nct_app_view_evenements() {
 
 /* ---------- ➕ Créer un événement (admins) — avec lien Action Populaire ---------- */
 function lfi_nct_app_view_evenement_add() {
-    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
+    $ev_ok = (function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options')) || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('evenements'));
+    if (!$ev_ok) return;
 
     if (!empty($_POST['lfi_evt_add']) && check_admin_referer('lfi_evt_add')) {
         $title = sanitize_text_field(wp_unslash($_POST['titre'] ?? ''));
@@ -3001,7 +3002,8 @@ function lfi_nct_event_in_scope($p) {
 
 /* ---------- ✏️ Éditer un événement (admins) — dans l'app, pas dans wp-admin ---------- */
 function lfi_nct_app_view_evenement_edit() {
-    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
+    $ev_ok = (function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options')) || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('evenements'));
+    if (!$ev_ok) {
         wp_safe_redirect(lfi_nct_app_url('evenements'));
         exit;
     }
