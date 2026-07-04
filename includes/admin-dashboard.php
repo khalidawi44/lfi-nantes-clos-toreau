@@ -70,6 +70,7 @@ function lfi_nct_register_admin_menu() {
         $items['🏢 CONFIGURATION DU GA'] = [
             ['🏢 Bailleurs sociaux',    lfi_nct_app_url('bailleurs')],
             ['📥 Import email (auto)',  lfi_nct_app_url('inbox-import')],
+            ['🎨 Logos & signatures',   lfi_nct_app_url('signatures-cfg')],
         ];
 
         $items['📣 ACTION POLITIQUE'] = [

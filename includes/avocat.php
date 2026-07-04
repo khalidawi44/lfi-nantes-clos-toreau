@@ -583,6 +583,7 @@ function lfi_nct_app_view_avocat_invite_pdf() {
       .noprint{margin-top:24px;text-align:center}
       .btn{background:#c8102e;color:#fff;border:0;padding:12px 24px;border-radius:10px;font-weight:800;cursor:pointer;font-size:1em}
     </style></head><body>
+    <?php if (function_exists('lfi_nct_signature_logos_html')) echo lfi_nct_signature_logos_html('avocat'); ?>
     <div class="hd"><div class="t">⚖️ Groupe d'Action La France Insoumise — Nantes Sud · Clos Toreau</div><div class="s">Union des Quartiers Libres — défense des locataires</div></div>
     <pre><?php echo esc_html($txt); ?></pre>
     <div class="noprint"><button class="btn" onclick="window.print()">🖨️ Imprimer / Enregistrer en PDF</button></div>

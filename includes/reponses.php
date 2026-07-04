@@ -100,10 +100,10 @@ function lfi_nct_generate_reply_body($row, $recu, $intention, $precisions, $sign
     /* Désamorçage pénal éventuel, à partir du mail reçu. */
     $penal = function_exists('lfi_nct_penal_paragraphe') ? lfi_nct_penal_paragraphe((string) ($recu['corps'] ?? '')) : '';
 
-    $signature = "\n\nCordialement,\n" . $signataire . "\n"
-        . "Interlocuteur unique de " . $nom . "\n"
-        . "Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau\n"
-        . "Association Union des Quartiers Libres";
+    /* Au BAILLEUR : signature de l'ASSOCIATION mandatée (jamais LFI — cadre légal). */
+    $signature = function_exists('lfi_nct_email_signature')
+        ? lfi_nct_email_signature('nmh', $signataire, $nom)
+        : "\n\nCordialement,\n" . $signataire . "\nUnion des Quartiers Libres — au nom et pour le compte de " . $nom . ".";
 
     $body = $intro . "\n" . $coeur . "\n";
     if ($penal !== '') $body .= "\n" . $penal . "\n";
