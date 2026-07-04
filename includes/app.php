@@ -791,6 +791,8 @@ function lfi_nct_app_shortcode() {
                     case 'installer':       lfi_nct_app_view_installer();       break;
                     case 'partenaires':        lfi_nct_app_view_partenaires();        break;
                     case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
+                    case 'avocats':            lfi_nct_app_view_avocats();            break;
+                    case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
                     case 'nmh':                lfi_nct_app_view_partenaire_nmh();     break;
                     case 'ase':                lfi_nct_app_view_ase();                break;
                     case 'elus':               lfi_nct_app_view_elus_membre();        break;
@@ -1212,6 +1214,7 @@ function lfi_nct_app_render_dashboard() {
         <?php endif; ?>
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_partner_admin_notice')) lfi_nct_partner_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_avocat_admin_notice')) lfi_nct_avocat_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_enq_todo_notice')) lfi_nct_enq_todo_notice(); ?>
         <?php if (!empty($_GET['stepok'])) lfi_nct_app_flash('✅ Étape validée — l\'action suivante est prête.'); ?>
         <?php if (function_exists('lfi_nct_render_home_tenant_actions')) lfi_nct_render_home_tenant_actions(); ?>
@@ -2390,6 +2393,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         '🏛 ESPACE ASSOCIATION' => [
             ['🏛', 'Association',            'Statuts · identité · documents',      lfi_nct_app_url('association')],
             ['📁', 'Dossiers juridiques',    'LRAR · relogement · SCHS/ARS',        lfi_nct_app_url('dossiers-juridiques')],
+            ['⚖️', 'Avocat·es partenaires',  'Confier un dossier · ligne directe',  lfi_nct_app_url('avocats')],
             ['⚖️', 'Cadre juridique',        'Ce qui est facturable, par qui',      lfi_nct_app_url('cadre-juridique')],
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],

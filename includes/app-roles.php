@@ -420,7 +420,8 @@ function lfi_nct_cage_non_admin_in_app() {
     $roles = (array) $u->roles;
     $is_caged = in_array(LFI_NCT_ROLE_GA, $roles, true) ||
                 in_array(LFI_NCT_ROLE_TENANT, $roles, true) ||
-                (defined('LFI_NCT_ROLE_PARTNER') && in_array(LFI_NCT_ROLE_PARTNER, $roles, true));
+                (defined('LFI_NCT_ROLE_PARTNER') && in_array(LFI_NCT_ROLE_PARTNER, $roles, true)) ||
+                (defined('LFI_NCT_ROLE_AVOCAT') && in_array(LFI_NCT_ROLE_AVOCAT, $roles, true));
     /* Par sécurité : tout utilisateur connecté sans capacité d'édition
        et sans rôle métier est aussi cagé (s'il a un compte WP par défaut
        il finit forcément dans l'app — jamais sur le front du thème). */
@@ -622,6 +623,11 @@ function lfi_nct_app_role_dispatch(&$handled) {
        directe avec Fabrice). Aucune donnée d'enquête ni de locataire. */
     if (function_exists('lfi_nct_user_role_partner') && lfi_nct_user_role_partner()) {
         if (function_exists('lfi_nct_partner_dispatch') && lfi_nct_partner_dispatch()) { $handled = true; return; }
+    }
+
+    /* Avocat·e partenaire : espace dédié (dossiers CONFIÉS uniquement). */
+    if (function_exists('lfi_nct_user_role_avocat') && lfi_nct_user_role_avocat()) {
+        if (function_exists('lfi_nct_avocat_dispatch') && lfi_nct_avocat_dispatch()) { $handled = true; return; }
     }
 
     if (lfi_nct_user_role_tenant()) {
