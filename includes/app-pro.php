@@ -1060,6 +1060,20 @@ function lfi_nct_dossier_render_parcours($u) {
         'Envoyer le récapitulatif de facturation à NMH',
     ];
 
+    /* 📎 Pièces à demander au locataire (choisies par l'architecte + robot avocat).
+       Bouton bien visible AVANT le parcours : on invite, on relance, on suit. */
+    if (function_exists('lfi_nct_pieces_progress')) {
+        $pp = lfi_nct_pieces_progress($u->ID);
+        $pc = $pp['complete'];
+        echo '<a href="' . esc_url(lfi_nct_app_url('pieces', ['uid' => $u->ID])) . '" style="text-decoration:none;color:inherit;display:block;margin:12px 0 0">';
+        echo '<div style="padding:12px 14px;border-radius:12px;background:' . ($pc ? '#e8f5ea' : '#fff8e6') . ';border:2px solid ' . ($pc ? '#186a3b' : '#bd8600') . ';display:flex;align-items:center;gap:12px">';
+        echo '<div style="font-size:1.6em">📎</div>';
+        echo '<div style="flex:1"><div style="font-weight:800;color:' . ($pc ? '#186a3b' : '#bd8600') . '">Pièces à demander au locataire</div>';
+        echo '<div style="font-size:.85em;color:#555">' . (int) $pp['received'] . '/' . (int) $pp['mandatory'] . ' obligatoires reçues' . ($pc ? ' · ✅ conciliation débloquée' : ' · inviter / relancer') . '</div></div>';
+        echo '<div style="font-weight:800;color:' . ($pc ? '#186a3b' : '#bd8600') . '">→</div>';
+        echo '</div></a>';
+    }
+
     echo '<details open style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
     echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
     echo '<span>🧭 Parcours de suivi';

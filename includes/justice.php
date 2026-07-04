@@ -129,6 +129,194 @@ function lfi_nct_justice_piece_del_handler() {
 }
 
 /* ============================================================== *
+ *  PIÈCES À DEMANDER AU LOCATAIRE — choisies par l'architecte +   *
+ *  le robot avocat, suivies une par une, relançables. Quand TOUTES *
+ *  les obligatoires sont reçues → on débloque la conciliation.     *
+ * ============================================================== */
+
+/** Liste recommandée (architecte + robot avocat) selon les désordres du dossier. */
+function lfi_nct_pieces_recommended($uid, $row = null) {
+    global $wpdb;
+    if ($row === null) {
+        $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+        $row = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    }
+    $problem = ($row && function_exists('lfi_nct_app_enq_problem')) ? lfi_nct_app_enq_problem($row) : null;
+    $txt = $problem && !empty($problem['chips']) ? mb_strtolower(implode(' ', array_map(function ($c) { return $c[1]; }, $problem['chips']))) : '';
+
+    $list = [
+        ['label' => 'Copie du bail (contrat de location)',            'mandatory' => true],
+        ['label' => 'Quittances / avis d\'échéance de loyer récents',  'mandatory' => true],
+        ['label' => 'Pièce d\'identité',                               'mandatory' => true],
+        ['label' => 'État des lieux d\'entrée',                        'mandatory' => true],
+        ['label' => 'Photos datées des désordres',                    'mandatory' => true],
+        ['label' => 'Courriers / emails échangés avec NMH',           'mandatory' => true],
+        ['label' => 'Attestation d\'assurance habitation',            'mandatory' => false],
+        ['label' => 'Attestations de voisins (témoignages)',          'mandatory' => false],
+    ];
+    if (preg_match('/moisiss|humidit|insecte|nuisible|sant|cafard|punaise|rat/u', $txt)) {
+        $list[] = ['label' => 'Certificat médical (lien logement ↔ santé)', 'mandatory' => true];
+    }
+    if (preg_match('/insalub|nuisible|moisiss|humidit/u', $txt)) {
+        $list[] = ['label' => 'Signalement SCHS / ARS / Histologe', 'mandatory' => false];
+    }
+    return $list;
+}
+
+function lfi_nct_pieces_get($uid) {
+    $l = get_user_meta($uid, 'lfi_nct_pieces_requises', true);
+    if (!is_array($l) || empty($l)) {
+        $l = [];
+        foreach (lfi_nct_pieces_recommended($uid) as $p) {
+            $l[] = ['label' => $p['label'], 'mandatory' => !empty($p['mandatory']), 'status' => 'todo', 'date' => ''];
+        }
+    }
+    return $l;
+}
+function lfi_nct_pieces_save($uid, $l) { update_user_meta((int) $uid, 'lfi_nct_pieces_requises', array_values($l)); }
+
+/** Progression des pièces obligatoires. */
+function lfi_nct_pieces_progress($uid) {
+    $l = lfi_nct_pieces_get($uid);
+    $mand = 0; $recv = 0; $miss = [];
+    foreach ($l as $p) {
+        if (empty($p['mandatory'])) continue;
+        $mand++;
+        if (($p['status'] ?? '') === 'received') $recv++;
+        else $miss[] = $p['label'];
+    }
+    return ['mandatory' => $mand, 'received' => $recv, 'complete' => ($mand > 0 && $recv >= $mand), 'missing' => $miss];
+}
+
+/** Vue : gérer les pièces à demander + inviter/relancer + débloquer conciliation. */
+function lfi_nct_app_view_pieces() {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $uid = (int) ($_GET['uid'] ?? 0);
+    $u = $uid ? get_userdata($uid) : null;
+    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) { wp_safe_redirect(lfi_nct_app_url('dossiers')); exit; }
+
+    $list = lfi_nct_pieces_get($uid);
+    /* Actions */
+    if (!empty($_POST['lfi_pieces_action']) && check_admin_referer('lfi_pieces')) {
+        $act = sanitize_key($_POST['lfi_pieces_action']);
+        if ($act === 'toggle') {
+            $i = (int) ($_POST['idx'] ?? -1);
+            if (isset($list[$i])) {
+                $list[$i]['status'] = (($list[$i]['status'] ?? '') === 'received') ? 'todo' : 'received';
+                $list[$i]['date']   = $list[$i]['status'] === 'received' ? current_time('Y-m-d') : '';
+            }
+        } elseif ($act === 'add') {
+            $lbl = sanitize_text_field(wp_unslash($_POST['label'] ?? ''));
+            if ($lbl !== '') $list[] = ['label' => $lbl, 'mandatory' => !empty($_POST['mandatory']), 'status' => 'todo', 'date' => ''];
+        } elseif ($act === 'del') {
+            $i = (int) ($_POST['idx'] ?? -1);
+            if (isset($list[$i])) array_splice($list, $i, 1);
+        } elseif ($act === 'reset') {
+            $list = [];
+            foreach (lfi_nct_pieces_recommended($uid) as $p) $list[] = ['label' => $p['label'], 'mandatory' => !empty($p['mandatory']), 'status' => 'todo', 'date' => ''];
+        } elseif ($act === 'mandatory') {
+            $i = (int) ($_POST['idx'] ?? -1);
+            if (isset($list[$i])) $list[$i]['mandatory'] = empty($list[$i]['mandatory']);
+        }
+        lfi_nct_pieces_save($uid, $list);
+        wp_safe_redirect(lfi_nct_app_url('pieces', ['uid' => $uid, 'saved' => 1])); exit;
+    }
+
+    /* Invitation / relance : génère le lien + le message des pièces manquantes. */
+    $invite = '';
+    if ((!empty($_POST['lfi_pieces_invite']) && check_admin_referer('lfi_pieces_invite'))) {
+        $prog = lfi_nct_pieces_progress($uid);
+        $miss = $prog['missing'];
+        $link = function_exists('lfi_nct_login_link') ? lfi_nct_login_link($uid, function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/')) : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
+        $prenom = $u->first_name ?: $u->display_name;
+        $moi = wp_get_current_user(); $moi_nom = $moi->display_name ?: $moi->user_login;
+        $liste = $miss ? ("\n- " . implode("\n- ", $miss)) : ' (toutes reçues, merci !)';
+        $invite = "Bonjour " . $prenom . ", c'est " . $moi_nom . " du Groupe d'Action LFI Nantes Sud. Pour faire avancer votre dossier logement, pouvez-vous nous envoyer (une photo lisible suffit) :" . $liste . "\n\nTout se dépose ici, en 1 clic : " . $link . "\nMerci beaucoup, on avance ensemble.";
+    }
+
+    lfi_nct_app_screen_open('📎 Pièces à demander', $u->display_name);
+    echo '<div style="margin-bottom:10px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $uid])) . '">← Retour au dossier</a></div>';
+    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Pièces mises à jour.');
+    echo '<div class="lfi-app-help">Liste proposée par l\'<strong>architecte</strong> et le <strong>robot avocat</strong> selon le dossier. Coche ce qui est reçu ; invite le locataire à envoyer le reste ; relance au besoin. <strong>Quand toutes les pièces obligatoires sont reçues, on peut monter le dossier de conciliation.</strong></div>';
+
+    $prog = lfi_nct_pieces_progress($uid);
+    $pct = $prog['mandatory'] ? round($prog['received'] / $prog['mandatory'] * 100) : 0;
+    echo '<div style="margin:10px 0;padding:10px 12px;background:#f7fafd;border-radius:10px">';
+    echo '<div style="font-weight:800;color:#0066a3">Pièces obligatoires : ' . (int) $prog['received'] . ' / ' . (int) $prog['mandatory'] . '</div>';
+    echo '<div style="height:10px;background:#e5e5e5;border-radius:6px;margin-top:6px;overflow:hidden"><div style="height:100%;width:' . (int) $pct . '%;background:' . ($prog['complete'] ? '#186a3b' : '#0066a3') . '"></div></div>';
+    echo '</div>';
+
+    /* Invitation / relance */
+    echo '<form method="post" style="margin:8px 0">' . wp_nonce_field('lfi_pieces_invite', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_pieces_invite" value="1">';
+    echo '<button type="submit" class="btn-primary" style="background:#0066a3;width:100%">📩 ' . ($prog['received'] ? 'Relancer le locataire (pièces manquantes)' : 'Inviter le locataire à envoyer ses pièces') . '</button></form>';
+    if ($invite !== '') {
+        $tel = (string) get_user_meta($uid, 'lfi_nct_tel', true);
+        $mail = sanitize_email((string) $u->user_email);
+        $has_mail = ($mail !== '' && is_email($mail) && stripos($mail, '@tenant.') === false);
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">';
+        if ($tel) echo '<a class="btn-primary" style="background:#186a3b" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($invite) . '">📲 Envoyer par SMS</a>';
+        if ($has_mail) echo '<a class="btn-primary" style="background:#0066a3" href="mailto:' . esc_attr($mail) . '?subject=' . rawurlencode('Vos pièces pour le dossier logement') . '&body=' . rawurlencode($invite) . '">✉️ Par email</a>';
+        echo '</div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:150px;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($invite) . '</textarea>';
+    }
+
+    /* Liste des pièces */
+    echo '<h3 style="margin:16px 0 6px">📋 Les pièces</h3>';
+    echo '<ul class="lfi-app-list">';
+    foreach ($list as $i => $p) {
+        $recv = (($p['status'] ?? '') === 'received');
+        $mand = !empty($p['mandatory']);
+        echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($recv ? '#186a3b' : ($mand ? '#c8102e' : '#bbb')) . '">';
+        echo '<div style="display:flex;align-items:flex-start;gap:10px">';
+        /* toggle reçu */
+        echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_pieces', '_wpnonce', true, false) . '<input type="hidden" name="lfi_pieces_action" value="toggle"><input type="hidden" name="idx" value="' . $i . '">';
+        echo '<button type="submit" title="Marquer reçu/à recevoir" style="width:26px;height:26px;border-radius:6px;border:2px solid ' . ($recv ? '#186a3b' : '#bbb') . ';background:' . ($recv ? '#186a3b' : '#fff') . ';color:#fff;cursor:pointer;font-weight:800">' . ($recv ? '✓' : '') . '</button></form>';
+        echo '<div style="flex:1"><div style="font-weight:600;' . ($recv ? 'color:#186a3b' : '') . '">' . esc_html($p['label']) . ' ';
+        echo $mand ? '<span style="background:#fdeaec;color:#c8102e;font-size:.66em;font-weight:800;padding:1px 6px;border-radius:8px">OBLIGATOIRE</span>' : '<span style="background:#eee;color:#888;font-size:.66em;padding:1px 6px;border-radius:8px">facultative</span>';
+        echo '</div>';
+        if ($recv && !empty($p['date'])) echo '<div style="font-size:.78em;color:#186a3b;margin-top:1px">✅ reçue le ' . esc_html(wp_date('j M Y', strtotime($p['date']))) . '</div>';
+        echo '</div>';
+        /* actions : (dé)obligatoire, retirer */
+        echo '<div style="display:flex;flex-direction:column;gap:3px">';
+        echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_pieces', '_wpnonce', true, false) . '<input type="hidden" name="lfi_pieces_action" value="mandatory"><input type="hidden" name="idx" value="' . $i . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">' . ($mand ? '↓ facultative' : '↑ obligatoire') . '</button></form>';
+        echo '<form method="post" style="margin:0" onsubmit="return confirm(\'Retirer cette pièce ?\')">' . wp_nonce_field('lfi_pieces', '_wpnonce', true, false) . '<input type="hidden" name="lfi_pieces_action" value="del"><input type="hidden" name="idx" value="' . $i . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
+        echo '</div>';
+        echo '</div></li>';
+    }
+    echo '</ul>';
+
+    /* Ajouter une pièce + réinitialiser */
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:10px;border-radius:8px;margin-top:8px">' . wp_nonce_field('lfi_pieces', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_pieces_action" value="add">';
+    echo '<label style="margin:0">➕ Ajouter une pièce<input type="text" name="label" placeholder="Ex : facture de dépannage" style="margin-top:4px"></label>';
+    echo '<label class="lfi-app-checkbox-row" style="margin-top:6px"><input type="checkbox" name="mandatory" value="1"> Obligatoire</label>';
+    echo '<button type="submit" class="btn-ghost" style="margin-top:6px">Ajouter</button></form>';
+    echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Réinitialiser la liste recommandée ? (les statuts reçus seront perdus)\')">' . wp_nonce_field('lfi_pieces', '_wpnonce', true, false) . '<input type="hidden" name="lfi_pieces_action" value="reset"><button type="submit" class="btn-ghost" style="font-size:.82em">↺ Réinitialiser la liste recommandée</button></form>';
+
+    /* Déblocage conciliation */
+    echo '<div style="margin-top:16px;padding:14px;border-radius:12px;background:' . ($prog['complete'] ? '#e8f5ea' : '#f4f4f4') . ';border:2px solid ' . ($prog['complete'] ? '#186a3b' : '#ccc') . '">';
+    if ($prog['complete']) {
+        echo '<div style="font-weight:900;color:#186a3b">✅ Toutes les pièces obligatoires sont reçues !</div>';
+        echo '<div style="font-size:.9em;color:#555;margin-top:3px">On peut monter le dossier de conciliation. Si l\'amiable échoue, on passe à l\'avocat.</div>';
+        echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
+        echo '<a class="btn-primary" style="background:#6a1b9a;flex:1;text-align:center;min-width:160px" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => $uid])) . '">⚖️ Créer le dossier conciliation</a>';
+        if (function_exists('lfi_nct_avocat_list') && !empty(lfi_nct_avocat_list())) {
+            echo '<a class="btn-ghost" style="flex:1;text-align:center;min-width:160px" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $uid])) . '">⚖️ Confier à un avocat (si échec)</a>';
+        }
+        echo '</div>';
+    } else {
+        $rem = max(0, (int) $prog['mandatory'] - (int) $prog['received']);
+        echo '<div style="font-weight:800;color:#888">🔒 Dossier conciliation verrouillé</div>';
+        echo '<div style="font-size:.9em;color:#777;margin-top:3px">Encore <strong>' . $rem . ' pièce(s) obligatoire(s)</strong> à recevoir avant de pouvoir monter la conciliation.</div>';
+    }
+    echo '</div>';
+
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
  *  VUE : Commission de conciliation — monter la saisine          *
  * ============================================================== */
 function lfi_nct_app_view_justice_cdc() {
