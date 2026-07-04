@@ -86,17 +86,29 @@ function lfi_nct_victoire_record($tenant_uid, $bataille, $dossier_id = 0, $sourc
         $wpdb->update($dt, ['statut' => 'abouti'], ['id' => $dossier_id]);
     }
 
-    /* Étape « gagnée » dans le parcours (retour visible, cochée). */
+    /* Parcours : on marque la bataille gagnée ET — si c'est l'urgence — on
+       LANCE le volet indemnisation / juridique (ses étapes apparaissent). */
     $steps = get_user_meta($tenant_uid, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
+    $existing_txt = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
+
     $b = $batailles[$bataille];
     $txt = $b['ico'] . ' ' . $b['label'] . ' : bataille GAGNÉE 🏆';
-    $already = false;
-    foreach ($steps as $s) { if (($s['text'] ?? '') === $txt) { $already = true; break; } }
-    if (!$already) {
+    if (!in_array($txt, $existing_txt, true)) {
         $steps[] = ['text' => $txt, 'who' => 'admin', 'done' => true, 'echeance' => '', 'created' => current_time('Y-m-d')];
-        update_user_meta($tenant_uid, 'lfi_nct_suivi_steps', array_values($steps));
+        $existing_txt[] = $txt;
     }
+    /* Gagner l'URGENCE ouvre la 2e bataille : on greffe les étapes indemnisation
+       (seulement celles qui manquent), pour que le juridique « se lance ». */
+    if ($bataille === 'urgence' && function_exists('lfi_nct_dossier_indemnisation_steps')) {
+        foreach (lfi_nct_dossier_indemnisation_steps() as $tpl) {
+            if (!in_array($tpl['text'], $existing_txt, true)) {
+                $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+                $existing_txt[] = $tpl['text'];
+            }
+        }
+    }
+    update_user_meta($tenant_uid, 'lfi_nct_suivi_steps', array_values($steps));
 
     $rec = [
         'id'         => (int) round(microtime(true) * 1000),
