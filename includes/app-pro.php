@@ -744,7 +744,9 @@ function lfi_nct_render_home_locataire_news() {
         foreach (['email_recu' => ['📥', 'Email reçu', '#0066a3'], 'email_log' => ['📤', 'Email envoyé', '#186a3b']] as $k => $m) {
             if (empty($logs[$k]) || !is_array($logs[$k])) continue;
             foreach ($logs[$k] as $e) {
-                if (($e['src'] ?? '') !== 'inbox') continue; /* uniquement les imports auto (ce qu'on risque de rater) */
+                /* Imports AUTOMATIQUES (ce qu'on risque de rater) : la voie « Apps
+                   Script » (src=inbox) ET la voie IMAP/pêche (src=mailcheck). */
+                if (!in_array($e['src'] ?? '', ['inbox', 'mailcheck'], true)) continue;
                 $ts = strtotime($e['date'] ?? '') ?: strtotime($r->updated_at);
                 $events[] = ['t' => $ts, 'ico' => $m[0], 'lbl' => $m[1], 'col' => $m[2], 'name' => $name, 'objet' => (string) ($e['objet'] ?? ''), 'uid' => $uid];
             }
