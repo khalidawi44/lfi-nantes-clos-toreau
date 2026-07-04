@@ -349,14 +349,18 @@ function lfi_nct_geo_route_submission($sub_id, $data = []) {
             $cur_ga = (string) get_user_meta($tenant_uid, 'lfi_nct_ga', true);
             if ($cur_ga === '') update_user_meta($tenant_uid, 'lfi_nct_ga', $match['slug']);
         }
-        /* RÈGLE : qui veut être contacté → compte + dossier juridique, liés,
-           avec les réponses de l'enquête. On rattache le dossier au bon GA. */
+        /* RÈGLE : qui veut être contacté → compte + dossier juridique, liés.
+           MAIS on ne crée le dossier QUE si le locataire n'en a AUCUN (sinon le
+           re-routage à chaque édition en fabriquait un nouveau → doublons). */
         if ($tenant_uid && function_exists('lfi_nct_ep_create_dossier')) {
-            $owner = function_exists('lfi_nct_ga_owner_for_slug') ? lfi_nct_ga_owner_for_slug($match ? $match['slug'] : '') : 0;
-            $souhaits = '';
-            $data_r = json_decode((string) $row->data, true);
-            if (is_array($data_r) && !empty($data_r['objectif'])) $souhaits = 'Objectif : ' . $data_r['objectif'];
-            lfi_nct_ep_create_dossier($row, $tenant_uid, '', $souhaits, $owner);
+            $has_d = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d LIMIT 1", $tenant_uid));
+            if (!$has_d) {
+                $owner = function_exists('lfi_nct_ga_owner_for_slug') ? lfi_nct_ga_owner_for_slug($match ? $match['slug'] : '') : 0;
+                $souhaits = '';
+                $data_r = json_decode((string) $row->data, true);
+                if (is_array($data_r) && !empty($data_r['objectif'])) $souhaits = 'Objectif : ' . $data_r['objectif'];
+                lfi_nct_ep_create_dossier($row, $tenant_uid, '', $souhaits, $owner);
+            }
         }
 
         lfi_nct_geo_queue_contact([

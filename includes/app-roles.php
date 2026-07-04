@@ -852,6 +852,38 @@ function lfi_nct_heal_orphan_tenant_ga() {
     update_option('lfi_nct_heal_orphan_ga_v1', 1, false);
 }
 
+/* NETTOYAGE (une fois) : un locataire qui a plusieurs dossiers juridiques (créés
+   en boucle par le re-routage) → on garde LE dossier avec du contenu (emails,
+   réponses) et on supprime les doublons VIDES. */
+add_action('init', 'lfi_nct_heal_dedup_dossiers', 19);
+function lfi_nct_heal_dedup_dossiers() {
+    if (get_option('lfi_nct_heal_dedup_dossiers_v1')) return;
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rows = $wpdb->get_results("SELECT id, tenant_user_id, notes, constatations, demandes FROM $t WHERE tenant_user_id IS NOT NULL AND tenant_user_id > 0 ORDER BY tenant_user_id ASC, id ASC") ?: [];
+    $by = [];
+    foreach ($rows as $r) $by[(int) $r->tenant_user_id][] = $r;
+    foreach ($by as $grp) {
+        if (count($grp) < 2) continue;
+        /* Meilleur dossier = le plus « riche » (emails reçus, réponses, contenu). */
+        $best = null; $bestscore = -1;
+        foreach ($grp as $r) {
+            $n = json_decode((string) $r->notes, true); if (!is_array($n)) $n = [];
+            $score = (empty($n['email_recu']) ? 0 : 1000 * count($n['email_recu']))
+                   + (empty($n['replies']) ? 0 : 100 * count($n['replies']))
+                   + strlen((string) $r->notes) + strlen((string) $r->constatations) + strlen((string) $r->demandes);
+            if ($score > $bestscore) { $bestscore = $score; $best = $r; }
+        }
+        foreach ($grp as $r) {
+            if ((int) $r->id === (int) $best->id) continue;
+            $n = json_decode((string) $r->notes, true); if (!is_array($n)) $n = [];
+            /* On ne supprime QUE les doublons vides (ni email reçu, ni réponse). */
+            if (empty($n['email_recu']) && empty($n['replies'])) $wpdb->delete($t, ['id' => (int) $r->id]);
+        }
+    }
+    update_option('lfi_nct_heal_dedup_dossiers_v1', 1, false);
+}
+
 /** Upload des photos → attachées au locataire (meta _lfi_tenant_user_id), horodatées. */
 function lfi_nct_ep_handle_photos($tenant_uid) {
     if (empty($_FILES['photos']['name'][0])) return 0;
@@ -962,8 +994,9 @@ function lfi_nct_backfill_recontact() {
         $cur_ga = (string) get_user_meta($tenant_uid, 'lfi_nct_ga', true);
         if ($cur_ga === '' && trim((string) $row->ga) !== '') update_user_meta($tenant_uid, 'lfi_nct_ga', (string) $row->ga);
         $owner = lfi_nct_ga_owner_for_slug((string) $row->ga);
+        /* Un seul dossier par locataire (peu importe l'owner) → jamais de doublon. */
         $exists_d = $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d AND owner_user_id = %d", $tenant_uid, $owner));
+            "SELECT id FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d LIMIT 1", $tenant_uid));
         if (!$exists_d) {
             $souhaits = ''; $d = json_decode((string) $row->data, true);
             if (is_array($d) && !empty($d['objectif'])) $souhaits = 'Objectif : ' . $d['objectif'];
