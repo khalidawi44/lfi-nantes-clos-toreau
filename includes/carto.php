@@ -33,6 +33,27 @@ function lfi_nct_carto_next_id($list) {
     return $m + 1;
 }
 
+/* ---- ORGANIGRAMME (pyramide) : personnes qui ne sont pas des admins de GA ---- */
+if (!defined('LFI_NCT_CARTO_PEOPLE_OPT')) define('LFI_NCT_CARTO_PEOPLE_OPT', 'lfi_nct_carto_people');
+function lfi_nct_carto_people_all() {
+    $v = get_option(LFI_NCT_CARTO_PEOPLE_OPT, []);
+    return is_array($v) ? $v : [];
+}
+function lfi_nct_carto_people_save($list) {
+    update_option(LFI_NCT_CARTO_PEOPLE_OPT, array_values($list), false);
+}
+/** Niveaux de la pyramide, du HAUT (Mélenchon) vers le BAS (terrain). */
+function lfi_nct_carto_niveaux() {
+    return [
+        'national'      => ['👑', 'National — coordination / porte-parole', '#4b2e83'],
+        'deputes'       => ['🇫🇷', 'Député·es (Assemblée nationale)',        '#0b3d91'],
+        'regional'      => ['🌍', 'Régional — Pays de la Loire',            '#6a1b9a'],
+        'departemental' => ['🏛️', 'Départemental — Loire-Atlantique',       '#0066a3'],
+        'circo'         => ['🗳️', 'Circonscription / secteur',              '#bd8600'],
+        'terrain'       => ['✊', 'Militant·e de terrain',                  '#186a3b'],
+    ];
+}
+
 /** Message d'invitation personnalisé pour un GA (avec chiffres réseau en direct). */
 function lfi_nct_carto_invite_message($e) {
     $nom = trim((string) ($e['contact'] ?? '')) ?: (trim((string) ($e['nom'] ?? '')) ?: 'camarade');
@@ -121,6 +142,56 @@ function lfi_nct_app_view_carto() {
         wp_safe_redirect(add_query_arg('deleted', 1, $back)); exit;
     }
 
+    /* ORGANIGRAMME : ajouter une personne. */
+    if (!empty($_POST['lfi_orga_add']) && check_admin_referer('lfi_orga_add')) {
+        $p = lfi_nct_carto_people_all();
+        $nom = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+        $niv = sanitize_key($_POST['niveau'] ?? '');
+        if (!isset(lfi_nct_carto_niveaux()[$niv])) $niv = 'terrain';
+        if ($nom !== '') {
+            $p[] = [
+                'id'       => lfi_nct_carto_next_id($p),
+                'nom'      => $nom,
+                'fonction' => sanitize_text_field(wp_unslash($_POST['fonction'] ?? '')),
+                'email'    => sanitize_email(wp_unslash($_POST['email'] ?? '')),
+                'ap_url'   => esc_url_raw(wp_unslash($_POST['ap_url'] ?? '')),
+                'niveau'   => $niv,
+            ];
+            lfi_nct_carto_people_save($p);
+        }
+        wp_safe_redirect(add_query_arg('padded', 1, $back)); exit;
+    }
+    /* ORGANIGRAMME : import en masse — Nom ; Fonction ; Email ; URL AP ; Niveau. */
+    if (!empty($_POST['lfi_orga_import']) && check_admin_referer('lfi_orga_import')) {
+        $raw = (string) wp_unslash($_POST['bulk'] ?? '');
+        $p = lfi_nct_carto_people_all();
+        $niveaux = lfi_nct_carto_niveaux();
+        $n = 0;
+        foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
+            $line = trim($line); if ($line === '') continue;
+            $c = preg_split('/\t|;|\|/', $line);
+            $nom = sanitize_text_field(trim($c[0] ?? '')); if ($nom === '') continue;
+            $niv = sanitize_key(trim($c[4] ?? '')); if (!isset($niveaux[$niv])) $niv = 'terrain';
+            $p[] = [
+                'id'       => lfi_nct_carto_next_id($p),
+                'nom'      => $nom,
+                'fonction' => sanitize_text_field(trim($c[1] ?? '')),
+                'email'    => sanitize_email(trim($c[2] ?? '')),
+                'ap_url'   => esc_url_raw(trim($c[3] ?? '')),
+                'niveau'   => $niv,
+            ];
+            $n++;
+        }
+        lfi_nct_carto_people_save($p);
+        wp_safe_redirect(add_query_arg('pimported', $n, $back)); exit;
+    }
+    if (!empty($_POST['lfi_orga_del']) && check_admin_referer('lfi_orga_del')) {
+        $id = (int) ($_POST['id'] ?? 0);
+        $p = array_values(array_filter(lfi_nct_carto_people_all(), function ($e) use ($id) { return (int) ($e['id'] ?? 0) !== $id; }));
+        lfi_nct_carto_people_save($p);
+        wp_safe_redirect(add_query_arg('pdeleted', 1, $back)); exit;
+    }
+
     $list = lfi_nct_carto_all();
     $statuts = lfi_nct_carto_statuts();
     $filter = isset($_GET['f']) ? sanitize_key($_GET['f']) : '';
@@ -129,6 +200,9 @@ function lfi_nct_app_view_carto() {
     if (!empty($_GET['added']))    lfi_nct_app_flash('✅ GA ajouté.');
     if (isset($_GET['imported']))  lfi_nct_app_flash('✅ ' . (int) $_GET['imported'] . ' GA importé(s).');
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 GA retiré.');
+    if (!empty($_GET['padded']))   lfi_nct_app_flash('✅ Personne ajoutée à l\'organigramme.');
+    if (isset($_GET['pimported']))  lfi_nct_app_flash('✅ ' . (int) $_GET['pimported'] . ' personne(s) importée(s).');
+    if (!empty($_GET['pdeleted']))  lfi_nct_app_flash('🗑 Personne retirée.');
     echo '<div class="lfi-app-help" style="background:#fdeef0;border-left:4px solid #c8102e"><small>🔒 <strong>Privé</strong> — visible par toi seul (superadmin). Ce sont des contacts de GA, aucune donnée d\'enquête ni de locataire.</small></div>';
 
     /* Compteurs + filtre. */
@@ -191,6 +265,53 @@ function lfi_nct_app_view_carto() {
     echo '<form method="post">' . wp_nonce_field('lfi_carto_import', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_carto_import" value="1">';
     echo '<textarea name="bulk" style="width:100%;height:160px;font-family:monospace;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px" placeholder="GA Rezé Centre ; Rezé ; ga.reze@exemple.fr ; Prénom Nom ; 06…&#10;GA Saint-Herblain ; Saint-Herblain ; ga.herblain@exemple.fr ; ; "></textarea>';
+    echo '<button type="submit" class="btn-primary" style="background:#4b2e83;margin-top:8px">Importer</button></form></details>';
+
+    /* ============ ORGANIGRAMME (pyramide) ============ */
+    $people  = lfi_nct_carto_people_all();
+    $niveaux = lfi_nct_carto_niveaux();
+    echo '<h2 style="margin:22px 0 4px;color:#4b2e83;border-bottom:3px solid #4b2e83;padding-bottom:6px">🔺 Organigramme (pyramide)</h2>';
+    echo '<div class="lfi-app-help"><small>De <strong>Mélenchon</strong> (en haut) jusqu\'au <strong>militant·e de terrain</strong> (en bas). On y range les personnes qui <strong>ne sont pas admin d\'un GA</strong> (ex. référent·es de la boucle départementale).</small></div>';
+    $by = []; foreach ($niveaux as $k => $v) $by[$k] = [];
+    foreach ($people as $e) { $nv = $e['niveau'] ?? 'terrain'; if (!isset($by[$nv])) $nv = 'terrain'; $by[$nv][] = $e; }
+    foreach ($niveaux as $k => $v) {
+        echo '<div style="margin:10px 0 4px;font-weight:800;color:' . esc_attr($v[2]) . '">' . $v[0] . ' ' . esc_html($v[1]) . ' <span style="color:#999;font-weight:600">(' . count($by[$k]) . ')</span></div>';
+        if (empty($by[$k])) { echo '<div style="font-size:.85em;color:#aaa;margin:0 0 4px 6px">—</div>'; continue; }
+        echo '<ul class="lfi-app-list">';
+        foreach ($by[$k] as $e) {
+            $id = (int) ($e['id'] ?? 0);
+            echo '<li class="lfi-app-card" style="border-left:4px solid ' . esc_attr($v[2]) . '">';
+            echo '<div class="head"><div class="who">' . esc_html($e['nom']) . '</div></div>';
+            if (!empty($e['fonction'])) echo '<div style="font-size:.9em;color:#333;margin:2px 0">🎽 ' . esc_html($e['fonction']) . '</div>';
+            echo '<div class="meta">';
+            if (!empty($e['email'])) echo '<a class="meta-chip" href="mailto:' . esc_attr($e['email']) . '">✉️ ' . esc_html($e['email']) . '</a>';
+            if (!empty($e['ap_url'])) echo '<a class="meta-chip" href="' . esc_url($e['ap_url']) . '" target="_blank" rel="noopener">🔗 Action Populaire</a>';
+            echo '</div>';
+            echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Retirer cette personne ?\')">' . wp_nonce_field('lfi_orga_del', '_wpnonce', true, false) . '<input type="hidden" name="lfi_orga_del" value="1"><input type="hidden" name="id" value="' . $id . '"><button type="submit" class="btn-ghost" style="font-size:.78em">🗑</button></form>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    /* Ajouter une personne. */
+    echo '<details class="lfi-app-card" style="border-left:4px solid #186a3b;margin-top:12px"><summary style="cursor:pointer;font-weight:800;color:#186a3b">➕ Ajouter une personne (organigramme)</summary>';
+    echo '<form method="post" class="lfi-app-form" style="margin-top:8px;box-shadow:none;padding:0">' . wp_nonce_field('lfi_orga_add', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_orga_add" value="1">';
+    echo '<label>Nom<input type="text" name="nom" required></label>';
+    echo '<label>Fonction / référence<input type="text" name="fonction" placeholder="ex. Gestion de la caisse départementale"></label>';
+    echo '<label>Email<input type="email" name="email"></label>';
+    echo '<label>URL Action Populaire<input type="url" name="ap_url" placeholder="https://actionpopulaire.fr/…"></label>';
+    echo '<label>Niveau<select name="niveau">';
+    foreach ($niveaux as $k => $v) echo '<option value="' . esc_attr($k) . '"' . selected($k, 'departemental', false) . '>' . $v[0] . ' ' . esc_html($v[1]) . '</option>';
+    echo '</select></label>';
+    echo '<button type="submit" class="btn-primary" style="background:#186a3b">Ajouter</button></form></details>';
+
+    /* Import en masse (personnes). */
+    echo '<details class="lfi-app-card" style="border-left:4px solid #4b2e83;margin-top:10px"><summary style="cursor:pointer;font-weight:800;color:#4b2e83">📥 Importer des personnes (en masse)</summary>';
+    echo '<div class="lfi-app-help" style="margin:6px 0"><small>Une ligne par personne :<br><code>Nom ; Fonction ; Email ; URL Action Populaire ; Niveau</code><br>Niveau = <code>national</code>, <code>regional</code>, <code>departemental</code>, <code>circo</code> ou <code>terrain</code>.</small></div>';
+    echo '<form method="post">' . wp_nonce_field('lfi_orga_import', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_orga_import" value="1">';
+    echo '<textarea name="bulk" style="width:100%;height:150px;font-family:monospace;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px" placeholder="Guillaume MARO ; Gestion de la caisse départementale ; maro.guillaume@gmail.com ; https://actionpopulaire.fr/groupes/… ; departemental"></textarea>';
     echo '<button type="submit" class="btn-primary" style="background:#4b2e83;margin-top:8px">Importer</button></form></details>';
 
     lfi_nct_app_screen_close();
