@@ -166,6 +166,25 @@ function lfi_nct_event_extra_save($post_id, $post) {
 function lfi_nct_upcoming_events($limit = 10) {
     $cpt = lfi_nct_event_cpt();
     $date_key = $cpt === LFI_NCT_EVT_CPT_THEME ? '_ag_event_date' : '_lfi_evt_date_debut';
+    $meta_query = [[
+        'key'     => $date_key,
+        'value'   => current_time('Y-m-d'),
+        'compare' => '>=',
+    ]];
+    /* CLOISONNEMENT par GA (même logique que le compteur d'accueil) : sinon les
+       événements du Clos Toreau (porte-à-porte…) apparaissaient dans les autres
+       GA. Home / mon espace = clos-toreau (ou non taggé) ; autre GA = son tag. */
+    $scope = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    if ($scope === '') {
+        $meta_query[] = [
+            'relation' => 'OR',
+            ['key' => '_lfi_evt_ga', 'compare' => 'NOT EXISTS'],
+            ['key' => '_lfi_evt_ga', 'value' => '', 'compare' => '='],
+            ['key' => '_lfi_evt_ga', 'value' => 'clos-toreau', 'compare' => '='],
+        ];
+    } else {
+        $meta_query[] = ['key' => '_lfi_evt_ga', 'value' => $scope, 'compare' => '='];
+    }
     return get_posts([
         'post_type'      => $cpt,
         'post_status'    => 'publish',
@@ -173,11 +192,7 @@ function lfi_nct_upcoming_events($limit = 10) {
         'meta_key'       => $date_key,
         'orderby'        => 'meta_value',
         'order'          => 'ASC',
-        'meta_query'     => [[
-            'key'     => $date_key,
-            'value'   => current_time('Y-m-d'),
-            'compare' => '>=',
-        ]],
+        'meta_query'     => $meta_query,
     ]);
 }
 

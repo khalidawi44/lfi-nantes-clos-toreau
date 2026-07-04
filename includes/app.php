@@ -777,7 +777,7 @@ function lfi_nct_app_shortcode() {
                     case 'comptes':            lfi_nct_app_view_comptes();              break;
                     case 'comptes-ga':         lfi_nct_app_view_comptes_ga();           break;
                     case 'comptes-locataires': lfi_nct_app_view_comptes_locataires();   break;
-                    case 'temoignage-add':     lfi_nct_app_view_temoignage_add();       break;
+                    case 'temoignage-add':     wp_safe_redirect(lfi_nct_app_url('enquete')); exit; /* retiré : un seul formulaire (Faire passer une enquête) */
                     case 'enquete-photos':     lfi_nct_app_view_enquete_photos();       break;
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
                     case 'dossier':         lfi_nct_app_view_dossier();         break;
@@ -1177,7 +1177,7 @@ function lfi_nct_app_render_dashboard() {
         <div style="display:flex;gap:8px;overflow-x:auto;margin:0 0 12px;padding-bottom:2px;-webkit-overflow-scrolling:touch">
             <?php
             $quick_actions = [
-                ['➕', 'Saisir une enquête', lfi_nct_app_url('temoignage-add')],
+                ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
                 ['🏠', 'Enquêtes',          lfi_nct_app_url('enquetes')],
                 ['🪪', 'Comptes',           lfi_nct_app_url('comptes', ['tab' => 'locataires'])],
                 ['🗂', 'Dossiers',          lfi_nct_app_url('dossiers')],
@@ -2327,7 +2327,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['🏠', 'Enquêtes logement',         $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
         ['📊', 'Stats enquête',             'Problèmes, adresses, gravité',        lfi_nct_app_url('stats-enquete')],
         ['🗺️', 'Carte interactive',         'Géolocalisation des réponses',        lfi_nct_app_url('carte')],
-        ['➕', '+ Saisir une réponse d\'enquête', 'Porte-à-porte / collecte papier', lfi_nct_app_url('temoignage-add')],
+        ['📋', 'Faire passer une enquête',  'Porte-à-porte · photos · crée le dossier', lfi_nct_app_url('enquete')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['🗂', 'Dossiers locataires',        'Photos, enquête, historique',         lfi_nct_app_url('dossiers')],
         ['👥', 'Membres actifs',            $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
@@ -2367,7 +2367,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏠', 'Réponses',              $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
             ['📊', 'Stats enquête',          'Problèmes · adresses · gravité',     lfi_nct_app_url('stats-enquete')],
             ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
-            ['➕', 'Saisir une réponse',     'Porte-à-porte / papier',             lfi_nct_app_url('temoignage-add')],
+            ['📋', 'Faire passer une enquête', 'Porte-à-porte · photos',            lfi_nct_app_url('enquete')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
@@ -4008,8 +4008,24 @@ function lfi_nct_app_view_enquetes_email() {
 function lfi_nct_app_view_stats() {
     global $wpdb;
     $s = lfi_nct_app_quick_stats();
-    $sms_sent   = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_sms_log");
-    $emails_sent = (int) $wpdb->get_var("SELECT COALESCE(SUM(recipients_count),0) FROM {$wpdb->prefix}lfi_nct_email_campaigns");
+    /* CLOISONNEMENT : les logs SMS / emails sont comptés par « qui les a
+       envoyés » (sent_by), restreint aux militant·es du GA affiché. Sans ça, un
+       GA vide affichait les 6 SMS d'un autre GA (bug signalé). */
+    $sms_where = ''; $mail_where = '';
+    if (function_exists('lfi_nct_scope_ga_slug')) {
+        $slug = lfi_nct_scope_ga_slug();
+        if ($slug !== '' && function_exists('lfi_nct_ga_member_ids')) {
+            $ids = lfi_nct_ga_member_ids($slug);
+            if (empty($ids)) { $sms_where = ' WHERE 1=0'; $mail_where = ' WHERE 1=0'; }
+            else {
+                $in = implode(',', array_map('intval', $ids));
+                $sms_where  = " WHERE sent_by IN ($in)";
+                $mail_where = " WHERE sent_by IN ($in)";
+            }
+        }
+    }
+    $sms_sent   = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_sms_log" . $sms_where);
+    $emails_sent = (int) $wpdb->get_var("SELECT COALESCE(SUM(recipients_count),0) FROM {$wpdb->prefix}lfi_nct_email_campaigns" . $mail_where);
     $cards = [
         ['📣', $s['reunion'], 'Inscrits 26 juin'],
         ['🏠', $s['surveys'], 'Enquêtes logement'],
