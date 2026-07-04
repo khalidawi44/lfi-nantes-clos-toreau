@@ -166,6 +166,87 @@ function lfi_nct_inbox_unmatched_save($list) {
 }
 
 /* -------------------------------------------------------------- *
+ *  ANTI-DOUBLON GLOBAL — un email n'est importé QU'UNE fois,      *
+ *  quel que soit le chemin (push Apps Script « inbox » ou pêche   *
+ *  IMAP « mailcheck »). Tant que tu ne l'ouvres pas dans Gmail,   *
+ *  il reste « non lu » et serait re-pêché → ce garde l'empêche.   *
+ *                                                                 *
+ *  Clé = Message-ID si présent ; sinon EMPREINTE de contenu       *
+ *  (expéditeur + objet + jour + début du corps) → couvre les      *
+ *  emails sans Message-ID (ex. « Email envoyé » d'un membre).     *
+ * -------------------------------------------------------------- */
+function lfi_nct_inbox_dedup_key($from, $subject, $date = '', $body = '', $message_id = '') {
+    $mid = trim((string) $message_id);
+    if ($mid !== '') return 'mid:' . $mid;
+    $norm = function ($s) { return preg_replace('/\s+/', ' ', mb_strtolower(trim((string) $s))); };
+    /* On borne le corps ET on ignore l'heure (garde le jour) : deux re-pêches du
+       même email doivent produire la MÊME empreinte. */
+    $day  = substr(preg_replace('/[^0-9]/', '', (string) $date), 0, 8); // AAAAMMJJ approx.
+    $sig  = $norm($from) . '|' . $norm($subject) . '|' . $day . '|' . mb_substr($norm($body), 0, 160);
+    return 'h:' . md5($sig);
+}
+/**
+ * A-t-on déjà vu cette clé ? Si non, on la marque et on renvoie false
+ * (= « nouveau, traite-le »). Si oui, renvoie true (= « doublon, ignore »).
+ * Atomique : teste-et-marque en une fois.
+ */
+function lfi_nct_inbox_seen_mark($key) {
+    $key = (string) $key;
+    if ($key === '' || $key === 'mid:' || $key === 'h:') return false; // clé vide → on ne bloque pas
+    $seen = get_option('lfi_nct_inbox_seen_global', []);
+    if (!is_array($seen)) $seen = [];
+    if (in_array($key, $seen, true)) return true;         // déjà vu → doublon
+    $seen[] = $key;
+    if (count($seen) > 1500) $seen = array_slice($seen, -1500);
+    update_option('lfi_nct_inbox_seen_global', $seen, false);
+    return false;                                          // nouveau
+}
+
+/**
+ * NETTOYAGE des doublons DÉJÀ importés (avant la pose du garde) :
+ *  - dans la file « à rattacher » ;
+ *  - dans chaque dossier (emails reçus / envoyés en double).
+ * On garde la 1re occurrence de chaque empreinte. Renvoie les compteurs retirés.
+ */
+function lfi_nct_inbox_dedup_existing() {
+    global $wpdb;
+    $removed = ['queue' => 0, 'dossiers' => 0];
+
+    /* File « à rattacher ». */
+    $q = lfi_nct_inbox_unmatched();
+    $seen = []; $clean = [];
+    foreach ($q as $e) {
+        $k = $e['dedup'] ?? lfi_nct_inbox_dedup_key($e['from'] ?? '', $e['objet'] ?? '', $e['date'] ?? '', $e['body'] ?? '', $e['message_id'] ?? '');
+        if (isset($seen[$k])) { $removed['queue']++; continue; }
+        $seen[$k] = 1; $clean[] = $e;
+    }
+    if ($removed['queue'] > 0) lfi_nct_inbox_unmatched_save($clean);
+
+    /* Dossiers : email_recu / email_log. */
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rows = $wpdb->get_results("SELECT id, notes FROM $t ORDER BY id DESC LIMIT 500") ?: [];
+    foreach ($rows as $r) {
+        $logs = json_decode($r->notes ?? '', true);
+        if (!is_array($logs)) continue;
+        $changed = false;
+        foreach (['email_recu', 'email_log'] as $k) {
+            if (empty($logs[$k]) || !is_array($logs[$k])) continue;
+            $s = []; $keep = [];
+            foreach ($logs[$k] as $e) {
+                $dk = lfi_nct_inbox_dedup_key($e['de'] ?? '', $e['objet'] ?? '', $e['date'] ?? '', $e['corps'] ?? '', '');
+                if (isset($s[$dk])) { $removed['dossiers']++; $changed = true; continue; }
+                $s[$dk] = 1; $keep[] = $e;
+            }
+            $logs[$k] = $keep;
+        }
+        if ($changed) {
+            $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE)], ['id' => (int) $r->id]);
+        }
+    }
+    return $removed;
+}
+
+/* -------------------------------------------------------------- *
  *  LISTE NOIRE (« boîte noire ») — expéditeurs à ne JAMAIS        *
  *  importer : newsletters, no-reply, alertes automatiques…       *
  *  On stocke des ADRESSES exactes ou des DOMAINES.               *
@@ -294,6 +375,12 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
        mis en file « à rattacher »). */
     if (lfi_nct_inbox_is_blocklisted($from_a)) return ['matched' => false, 'dossier_id' => 0, 'blocked' => true];
 
+    /* ANTI-DOUBLON : déjà importé (même Message-ID, ou même empreinte de contenu
+       si pas de Message-ID) → on n'ajoute rien. Résout les re-pêches en boucle
+       des emails non ouverts dans Gmail. */
+    $dk = lfi_nct_inbox_dedup_key($from, $subject, $date, $body, $message_id);
+    if (lfi_nct_inbox_seen_mark($dk)) return ['matched' => false, 'dossier_id' => 0, 'duplicate' => true];
+
     $tenant_uid = lfi_nct_inbox_find_tenant($all, $text);
     $collector  = strtolower(lfi_nct_inbox_collector());
 
@@ -308,11 +395,18 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
 
     if (!$tenant_uid) {
         $q = lfi_nct_inbox_unmatched();
+        /* Garde-fou supplémentaire : ne pas ré-empiler si une entrée identique
+           (même clé) est déjà dans la file (doublons hérités d'avant le fix). */
+        foreach ($q as $e) {
+            $ek = $e['dedup'] ?? lfi_nct_inbox_dedup_key($e['from'] ?? '', $e['objet'] ?? '', $e['date'] ?? '', $e['body'] ?? '', $e['message_id'] ?? '');
+            if ($ek === $dk) return ['matched' => false, 'dossier_id' => 0, 'duplicate' => true];
+        }
         $q[] = [
             'id' => (int) round(microtime(true) * 1000),
             'from' => $from, 'to' => $to, 'cc' => $cc, 'objet' => $subject,
             'body' => mb_substr((string) $body, 0, 12000),
             'message_id' => $message_id,
+            'dedup' => $dk,
             'date' => $date ?: current_time('mysql'),
             'extrait' => mb_substr((string) $body, 0, 200),
         ];
@@ -429,6 +523,10 @@ function lfi_nct_app_view_inbox_import() {
         lfi_nct_inbox_unmatched_save([]);
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['cleared' => 1])); exit;
     }
+    if (!empty($_POST['lfi_inbox_dedup']) && check_admin_referer('lfi_inbox_cfg')) {
+        $rm = lfi_nct_inbox_dedup_existing();
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['deduped' => (int) $rm['queue'] + (int) $rm['dossiers']])); exit;
+    }
     /* Actions sur la file « à rattacher » — UN seul formulaire, plusieurs boutons. */
     if (!empty($_POST['lfi_inbox_queue']) && check_admin_referer('lfi_inbox_assign')) {
         if (!empty($_POST['do_assign'])) {                       /* ranger chez une personne */
@@ -490,6 +588,7 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['memberr'])) lfi_nct_app_flash('⚠️ Impossible de créer le membre (email de l\'expéditeur manquant ou invalide).', 'error');
     if (!empty($_GET['pickone'])) lfi_nct_app_flash('⚠️ Choisis d\'abord une personne dans la liste avant « Ranger ».', 'error');
     if (!empty($_GET['deleted'])) lfi_nct_app_flash('🗑 ' . (int) $_GET['deleted'] . ' email(s) retiré(s) de la file (sans liste noire).');
+    if (isset($_GET['deduped']))  lfi_nct_app_flash('🧹 ' . (int) $_GET['deduped'] . ' doublon(s) retiré(s) (file + dossiers).');
 
     echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
 
@@ -499,6 +598,10 @@ function lfi_nct_app_view_inbox_import() {
     echo '<label>📮 Boîte collectrice<input type="email" name="collector" value="' . esc_attr($collector) . '"></label>';
     echo '<label>🏢 Domaines NMH (séparés par des virgules)<input type="text" name="nmh_domains" value="' . esc_attr($doms) . '"></label>';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer</button></form>';
+
+    /* Anti-doublon : nettoyer les emails déjà importés en double (avant le garde). */
+    echo '<div class="lfi-app-help" style="background:#eef7ee;border-left:4px solid #186a3b;margin-top:8px"><small>🛡️ <strong>Anti-doublon actif</strong> : un même email n\'est plus importé deux fois (même s\'il reste « non lu » dans Gmail et re-pêché). Pour effacer les doublons <strong>déjà présents</strong> (avant cette protection), clique ci-dessous.</small>';
+    echo '<form method="post" onsubmit="return confirm(\'Retirer les doublons déjà importés (file + dossiers) ?\')" style="margin-top:6px">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_dedup" value="1"><button type="submit" class="btn-primary" style="background:#186a3b">🧹 Retirer les doublons déjà importés</button></form></div>';
 
     /* Connexion (endpoint + clé) */
     echo '<h3 style="margin:16px 0 6px">🔗 Connexion du script</h3>';
