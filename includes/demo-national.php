@@ -247,6 +247,64 @@ function lfi_nct_app_view_kit_national() {
     exit;
 }
 
+/** Uid du compte démo Bompard (0 si absent). */
+function lfi_nct_demo_bompard_uid() {
+    $r = get_users(['meta_key' => 'lfi_nct_partner_seed', 'meta_value' => 'bompard', 'number' => 1, 'fields' => 'ID']);
+    return $r ? (int) $r[0] : 0;
+}
+
+/**
+ * HUB DÉPLOIEMENT NATIONAL (réservé à toi) — le point d'entrée des deux espaces :
+ *   🧑‍🏫 Manuel Bompard : espace CONNECTÉ « découverte » (il se connecte et explore).
+ *   🎤 Jean-Luc Mélenchon : PRÉSENTATION écran / PDF (tu la montres en personne).
+ * Ici : aperçu, lien de connexion Bompard, ouverture de la présentation.
+ */
+function lfi_nct_app_view_demo_hub() {
+    if (!current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+
+    /* Génération à la demande du lien de connexion de Bompard (usage unique). */
+    $link = '';
+    $buid = lfi_nct_demo_bompard_uid();
+    if (!empty($_POST['lfi_demo_genlink']) && check_admin_referer('lfi_demo_genlink') && $buid && function_exists('lfi_nct_login_link')) {
+        $link = lfi_nct_login_link($buid, lfi_nct_app_url());
+    }
+
+    lfi_nct_app_screen_open('🇫🇷 Déploiement national', 'Présenter l\'outil — Manuel Bompard & Jean-Luc Mélenchon');
+
+    echo '<div class="lfi-app-help" style="background:#f6f2fc;border-left:4px solid #6f4bb0;padding:10px 12px;border-radius:8px;margin-bottom:14px">';
+    echo '🔒 <strong>Concept protégé.</strong> Ces deux espaces <strong>montrent</strong> ce que l\'outil fait et gagne, mais jamais <em>comment il est fabriqué</em> — le moteur reste ton savoir-faire, non reproductible sans toi.';
+    echo '</div>';
+
+    /* ── Carte Bompard ──────────────────────────────────────────── */
+    echo '<div class="lfi-app-card" style="border:2px solid #6f4bb0;margin-bottom:14px">';
+    echo '<div class="head"><div class="who">🧑‍🏫 Manuel Bompard — espace connecté</div><div class="badge" style="background:#6f4bb0;color:#fff">découverte</div></div>';
+    echo '<div style="padding:4px 2px 0"><p style="margin:6px 0;color:#333">Il se connecte à <strong>son</strong> espace et explore lui-même : chiffres du réseau (anonymes), le visuel « boîte noire », la chaîne complète, les victoires. Aucune donnée réelle de locataire.</p>';
+    if ($buid) {
+        echo '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">';
+        echo '<a class="btn-primary" style="background:#6f4bb0" href="' . esc_url(lfi_nct_app_url('demo-preview')) . '">👁 Prévisualiser son espace</a>';
+        echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_demo_genlink', '_wpnonce', true, false) . '<input type="hidden" name="lfi_demo_genlink" value="1"><button type="submit" class="btn-ghost">🔗 Générer son lien de connexion</button></form>';
+        echo '</div>';
+        if ($link) {
+            echo '<div style="margin-top:10px;padding:10px;background:#eef7ee;border-radius:8px">';
+            echo '<div style="font-weight:800;color:#186a3b;font-size:.85em">Lien de connexion direct (usage unique) — à lui envoyer :</div>';
+            echo '<textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:.8em;padding:6px;border-radius:6px;border:1px solid #cbd5c0">' . esc_textarea($link) . '</textarea>';
+            echo '</div>';
+        }
+    } else {
+        echo '<p style="color:#c8102e;margin-top:8px">Le compte Bompard n\'est pas encore créé (il se crée automatiquement au prochain chargement).</p>';
+    }
+    echo '</div></div>';
+
+    /* ── Carte Mélenchon ────────────────────────────────────────── */
+    echo '<div class="lfi-app-card" style="border:2px solid #c8102e;margin-bottom:14px">';
+    echo '<div class="head"><div class="who">🎤 Jean-Luc Mélenchon — présentation</div><div class="badge" style="background:#c8102e;color:#fff">écran / PDF</div></div>';
+    echo '<div style="padding:4px 2px 0"><p style="margin:6px 0;color:#333">Une présentation <strong>simple et imagée</strong> — pas besoin d\'être informaticien : « automatisation avec de l\'intelligence artificielle », un assistant infatigable. À montrer en personne ou à <strong>enregistrer en PDF</strong>.</p>';
+    echo '<a class="btn-primary" style="background:#c8102e;margin-top:6px" href="' . esc_url(lfi_nct_app_url('kit-national')) . '" target="_blank" rel="noopener">▶ Ouvrir la présentation (nouvel onglet)</a>';
+    echo '</div></div>';
+
+    lfi_nct_app_screen_close();
+}
+
 /** Le compte courant est-il un espace démo ? */
 function lfi_nct_is_demo_user($uid = 0) {
     $uid = $uid ?: get_current_user_id();
@@ -272,7 +330,12 @@ function lfi_nct_app_view_demo_national() {
     /* Chiffres AGRÉGÉS et anonymes — RÉSEAU ENTIER (France). */
     $st = lfi_nct_demo_stats();
 
-    lfi_nct_app_screen_open('👋 Bienvenue, ' . $prenom, 'Découverte de l\'outil — défense des locataires');
+    $is_preview = current_user_can('manage_options');
+    lfi_nct_app_screen_open('👋 Bienvenue, ' . ($is_preview ? 'Manuel' : $prenom), 'Découverte de l\'outil — défense des locataires');
+
+    if ($is_preview) {
+        echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #bd8600;padding:8px 12px;border-radius:8px;margin-bottom:12px">👁 <strong>Aperçu</strong> — voici exactement ce que voit Manuel Bompard en se connectant. <a href="' . esc_url(lfi_nct_app_url('demo-national')) . '">← retour au hub</a></div>';
+    }
 
     /* Hero. */
     echo '<div style="background:linear-gradient(135deg,#4b2e83,#6f4bb0);color:#fff;border-radius:16px;padding:22px 20px;text-align:center">';
