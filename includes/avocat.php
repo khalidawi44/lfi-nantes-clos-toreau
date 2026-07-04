@@ -256,9 +256,27 @@ function lfi_nct_app_view_avocat_dashboard() {
         }
     }
 
-    lfi_nct_app_screen_open('⚖️ Espace avocat·e', 'Vos dossiers confiés par le GA — secret professionnel');
-    echo '<div class="lfi-app-help">Bonjour Maître. Voici les dossiers que le Groupe d\'Action vous a confiés. Pour chacun : la <strong>note structurée</strong> (faits, droit, demandes, délais), les <strong>pièces</strong>, la <strong>jurisprudence liée</strong>, et une <strong>ligne directe</strong> avec le GA.</div>';
-    echo '<div style="margin:6px 0 10px"><a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('jurisprudence')) . '">🔎 Rechercher dans la jurisprudence (Judilibre)</a></div>';
+    lfi_nct_app_screen_open('⚖️ Bonjour Maître', 'Votre espace de travail — simple et confidentiel');
+
+    /* Accès essentiels — épuré : 3 boutons clairs. */
+    echo '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:4px 0 10px">';
+    echo '<a class="btn-primary" style="background:#6a1b9a;text-align:center" href="#mes-dossiers">📂 Mes dossiers</a>';
+    echo '<a class="btn-primary" style="background:#0066a3;text-align:center" href="' . esc_url(lfi_nct_app_url('jurisprudence')) . '">🔎 Jurisprudence (Judilibre)</a>';
+    echo '<a class="btn-ghost" style="text-align:center" href="' . esc_url(lfi_nct_app_url('mon-profil')) . '">🔑 Mon mot de passe</a>';
+    echo '</div>';
+
+    /* Guide pédagogique — replié (épuré), à lire une fois. */
+    echo '<details style="background:#f7f0fb;border:1px solid #e2d3f0;border-radius:12px;overflow:hidden;margin-bottom:12px">';
+    echo '<summary style="cursor:pointer;list-style:none;padding:12px 14px;font-weight:800;color:#6a1b9a;display:flex;justify-content:space-between;align-items:center"><span>ℹ️ Comment ça marche (à lire une fois)</span><span>▾</span></summary>';
+    echo '<div style="padding:0 14px 14px;line-height:1.55;color:#333">';
+    echo '<p style="margin:6px 0"><strong>1) Votre mot de passe.</strong> Vous êtes connecté·e sans rien taper. Choisissez votre mot de passe dans <a href="' . esc_url(lfi_nct_app_url('mon-profil')) . '">🔑 Mon mot de passe</a> — il sera enregistré sur votre appareil, vous n\'aurez plus à le saisir.</p>';
+    echo '<p style="margin:6px 0"><strong>2) Vos dossiers.</strong> Ci-dessous, uniquement les dossiers <strong>que le GA vous confie</strong> (rien d\'autre). Chaque dossier contient : la <strong>note structurée</strong> (faits, désordres, chronologie, <strong>préjudice chiffré</strong>, délais, demandes), les <strong>pièces</strong> (classées par date de prise de vue), et le <strong>dossier de conciliation</strong> déjà monté.</p>';
+    echo '<p style="margin:6px 0"><strong>3) La jurisprudence (Judilibre).</strong> Pour chaque dossier, les décisions réelles <strong>liées au problème du locataire s\'affichent automatiquement</strong> (bouton « 🔎 Jurisprudence liée »). Vous pouvez aussi lancer vos propres recherches — tout est intégré, avec le lien officiel sous chaque décision.</p>';
+    echo '<p style="margin:6px 0"><strong>4) La ligne directe.</strong> Sur chaque dossier, une messagerie privée avec le GA (questions rapides).</p>';
+    echo '<p style="margin:6px 0;color:#6a1b9a"><small>🔒 Confidentiel : vous ne voyez que vos dossiers, jamais notre enquête globale ni les autres locataires.</small></p>';
+    echo '</div></details>';
+
+    echo '<h3 id="mes-dossiers" style="margin:10px 0 6px;color:#6a1b9a">📂 Vos dossiers confiés</h3>';
 
     $tenants = lfi_nct_avocat_tenants($aid);
     if (empty($tenants)) {
