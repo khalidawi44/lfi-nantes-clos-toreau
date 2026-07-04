@@ -797,6 +797,7 @@ function lfi_nct_app_shortcode() {
                     case 'demo-national':      lfi_nct_app_view_demo_hub();           break;
                     case 'demo-preview':       lfi_nct_app_view_demo_national();      break;
                     case 'kit-technique':      lfi_nct_app_view_kit_technique();      break;
+                    case 'affiche':            lfi_nct_app_view_affiche();            break;
                     case 'avocats':            lfi_nct_app_view_avocats();            break;
                     case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
                     case 'avocat-invites':     lfi_nct_app_view_avocat_invites();     break;
@@ -2427,6 +2428,7 @@ function lfi_nct_admin_get_tiles($stats = null) {
         ['📊', 'Stats enquête',             'Problèmes, adresses, gravité',        lfi_nct_app_url('stats-enquete')],
         ['🗺️', 'Carte interactive',         'Géolocalisation des réponses',        lfi_nct_app_url('carte')],
         ['📋', 'Faire passer une enquête',  'Porte-à-porte · photos · crée le dossier', lfi_nct_app_url('enquete')],
+        ['🖼️', 'Affiche hall (QR)',          'À imprimer · QR vers l\'enquête',      lfi_nct_app_url('affiche')],
         ['🪪', 'Comptes (GA & locataires)',  'Créer / gérer accès',                 lfi_nct_app_url('comptes')],
         ['🗂', 'Dossiers locataires',        'Photos, enquête, historique',         lfi_nct_app_url('dossiers')],
         ['👥', 'Membres actifs',            $stats['membres'] . ' membre(s) actif(s)', lfi_nct_app_url('membres')],
