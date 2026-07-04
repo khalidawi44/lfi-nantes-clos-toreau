@@ -98,6 +98,39 @@ function lfi_nct_victoire_record($tenant_uid, $bataille, $dossier_id = 0, $sourc
         $steps[] = ['text' => $txt, 'who' => 'admin', 'done' => true, 'echeance' => '', 'created' => current_time('Y-m-d')];
         $existing_txt[] = $txt;
     }
+    /* STATS « championnat de rapidité » : combien de jours et à quelle étape on
+       a gagné l'urgence. On calcule AVANT de greffer les étapes indemnisation. */
+    $days = null; $done_at_win = 0; $total_urg = 0; $started = '';
+    if ($bataille === 'urgence') {
+        $dates = [];
+        foreach ($steps as $s) {
+            $t = (string) ($s['text'] ?? '');
+            if ($t === $txt) continue;                    /* marqueur « GAGNÉE » */
+            if (mb_strpos($t, '💶') !== false) continue;   /* étape indemnisation */
+            if (!empty($s['created'])) $dates[] = $s['created'];
+            $total_urg++;
+            if (!empty($s['done'])) $done_at_win++;
+        }
+        $started  = $dates ? min($dates) : current_time('Y-m-d');
+        $won_date = current_time('Y-m-d');
+        $days = max(0, (int) round((strtotime($won_date) - strtotime($started)) / 86400));
+        /* Les étapes urgence NON cochées deviennent « inutiles » (urgence déjà
+           gagnée) : elles quittent la liste des choses à faire. */
+        foreach ($steps as $i => $s) {
+            $t = (string) ($s['text'] ?? '');
+            if ($t === $txt) continue;
+            if (mb_strpos($t, '💶') !== false) continue;
+            if (empty($s['done'])) $steps[$i]['skipped'] = true;
+        }
+        update_user_meta($tenant_uid, 'lfi_nct_urgence_stats', [
+            'started_at'  => $started,
+            'won_at'      => $won_date,
+            'days'        => $days,
+            'done_at_win' => $done_at_win,
+            'total_at_win'=> $total_urg,
+        ]);
+    }
+
     /* Gagner l'URGENCE ouvre la 2e bataille : on greffe les étapes indemnisation
        (seulement celles qui manquent), pour que le juridique « se lance ». */
     if ($bataille === 'urgence' && function_exists('lfi_nct_dossier_indemnisation_steps')) {
@@ -111,14 +144,15 @@ function lfi_nct_victoire_record($tenant_uid, $bataille, $dossier_id = 0, $sourc
     update_user_meta($tenant_uid, 'lfi_nct_suivi_steps', array_values($steps));
 
     $rec = [
-        'id'         => (int) round(microtime(true) * 1000),
-        'tenant_uid' => $tenant_uid,
-        'ga'         => function_exists('lfi_nct_user_ga') ? (string) lfi_nct_user_ga($tenant_uid) : '',
-        'bataille'   => $bataille,
-        'dossier_id' => (int) $dossier_id,
-        'source'     => (string) $source,
-        'date'       => current_time('mysql'),
+        'id'          => (int) round(microtime(true) * 1000),
+        'tenant_uid'  => $tenant_uid,
+        'ga'          => function_exists('lfi_nct_user_ga') ? (string) lfi_nct_user_ga($tenant_uid) : '',
+        'bataille'    => $bataille,
+        'dossier_id'  => (int) $dossier_id,
+        'source'      => (string) $source,
+        'date'        => current_time('mysql'),
     ];
+    if ($days !== null) { $rec['days'] = $days; $rec['won_at_step'] = $done_at_win; $rec['started_at'] = $started; }
     $list[] = $rec;
     lfi_nct_victoires_save($list);
     return $rec['id'];
@@ -195,6 +229,48 @@ function lfi_nct_victoire_detect_from_email($tenant_uid, $objet, $corps, $dossie
     if (!$hit) return 0;
 
     return lfi_nct_victoire_record($tenant_uid, 'urgence', (int) $dossier_id, 'auto-email');
+}
+
+/**
+ * 🏁 CHAMPIONNAT DE RAPIDITÉ — classement des victoires « urgence » par vitesse
+ * (nombre de jours du dépôt du dossier à la victoire). Réservé aux admins de GA
+ * (les noms de locataires y figurent : donnée interne, jamais publique).
+ */
+function lfi_nct_render_speed_championship() {
+    if (!(function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())) return;
+    $scope = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $scope = ($scope === '') ? 'clos-toreau' : $scope;
+    $rows = [];
+    foreach (lfi_nct_victoires_all() as $v) {
+        if (($v['bataille'] ?? '') !== 'urgence' || !isset($v['days'])) continue;
+        $vga = (string) ($v['ga'] ?? ''); if ($vga === '') $vga = 'clos-toreau';
+        if ($vga !== $scope) continue;
+        $rows[] = $v;
+    }
+    if (empty($rows)) return;
+    usort($rows, function ($a, $b) {
+        $d = (int) $a['days'] - (int) $b['days'];
+        return $d !== 0 ? $d : ((int) ($a['id'] ?? 0) - (int) ($b['id'] ?? 0));
+    });
+
+    echo '<h3 style="margin:18px 0 8px;color:#186a3b">🏁 Championnat de rapidité (volet urgence)</h3>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Du dépôt du dossier à la victoire de l\'urgence. Plus c\'est court, plus on a été réactifs. (Interne au GA.)</small></div>';
+    echo '<ol style="list-style:none;padding:0;margin:0">';
+    $medals = ['🥇', '🥈', '🥉'];
+    foreach ($rows as $i => $v) {
+        $u = get_userdata((int) ($v['tenant_uid'] ?? 0));
+        $name = $u ? $u->display_name : ('Dossier #' . (int) ($v['tenant_uid'] ?? 0));
+        $days = (int) $v['days'];
+        $medal = $medals[$i] ?? (($i + 1) . '.');
+        $bg = $i < 3 ? '#eef7ee' : '#fafafa';
+        echo '<li style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;margin-bottom:5px;background:' . $bg . ';border-left:3px solid #186a3b">';
+        echo '<span style="font-size:1.3em;width:30px;text-align:center">' . $medal . '</span>';
+        echo '<span style="flex:1;font-weight:700">' . esc_html($name) . '</span>';
+        echo '<span style="font-weight:800;color:#186a3b">' . $days . ' j</span>';
+        if (isset($v['won_at_step'])) echo '<span style="font-size:.78em;color:#999;margin-left:6px">étape ' . (int) $v['won_at_step'] . '</span>';
+        echo '</li>';
+    }
+    echo '</ol>';
 }
 
 /* ============================================================== *
