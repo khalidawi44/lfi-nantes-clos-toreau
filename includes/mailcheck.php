@@ -114,8 +114,16 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         $ov = @imap_fetch_overview($mbox, $uid, FT_UID);
         if (!$ov || empty($ov[0])) continue;
         $o = $ov[0];
-        $mid = (string) ($o->message_id ?? ('uid' . $uid));
+        $subject_raw = (string) imap_utf8((string) ($o->subject ?? ''));
+        /* Clé anti-doublon PARTAGÉE avec le chemin « inbox » (push Apps Script) :
+           Message-ID si présent, sinon empreinte de contenu (from+objet+jour).
+           Un même email pêché en boucle (non ouvert dans Gmail) ne compte qu'une
+           fois — et ne double pas non plus s'il est aussi poussé par Apps Script. */
+        $mid = (function_exists('lfi_nct_inbox_dedup_key'))
+            ? lfi_nct_inbox_dedup_key((string) ($o->from ?? ''), $subject_raw, (string) ($o->date ?? ''), '', (string) ($o->message_id ?? ''))
+            : (string) ($o->message_id ?? ('uid' . $uid));
         if (in_array($mid, $seen, true)) continue;
+        if (function_exists('lfi_nct_inbox_seen_mark') && lfi_nct_inbox_seen_mark($mid)) { $seen[] = $mid; continue; }
         $from = strtolower((string) ($o->from ?? ''));
         $to   = strtolower((string) ($o->to ?? ''));
         $cc   = strtolower((string) ($o->cc ?? ''));
@@ -157,7 +165,7 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
                apprend l'adresse pour la prochaine fois). */
             $q = lfi_nct_inbox_unmatched();
             $dup = false;
-            foreach ($q as $e) if ($mid !== '' && ($e['message_id'] ?? '') === $mid) { $dup = true; break; }
+            foreach ($q as $e) if ($mid !== '' && (($e['dedup'] ?? '') === $mid || ($e['message_id'] ?? '') === $mid)) { $dup = true; break; }
             if (!$dup) {
                 $q[] = [
                     'id'         => (int) round(microtime(true) * 1000) + ($uid % 1000),
@@ -166,7 +174,8 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
                     'cc'         => (string) ($o->cc ?? ''),
                     'objet'      => $subject,
                     'body'       => mb_substr($body, 0, 12000),
-                    'message_id' => $mid,
+                    'message_id' => (string) ($o->message_id ?? ''),
+                    'dedup'      => $mid,
                     'date'       => wp_date('Y-m-d H:i'),
                     'extrait'    => mb_substr($body, 0, 200),
                     'src'        => 'mailcheck',
