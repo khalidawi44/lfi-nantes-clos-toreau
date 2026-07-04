@@ -16,7 +16,9 @@ const LFI_NCT_JURIS_ENDPOINT = 'https://alliancegroupe-inc.com/wp-json/ag/v1/jud
 const LFI_NCT_JURIS_DECISION = 'https://alliancegroupe-inc.com/wp-json/ag/v1/judilibre-decision';
 
 function lfi_nct_juris_can() {
-    return current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    return current_user_can('manage_options')
+        || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())
+        || (function_exists('lfi_nct_user_role_avocat') && lfi_nct_user_role_avocat());
 }
 
 /** Lien public officiel d'une décision. */
@@ -75,7 +77,18 @@ function lfi_nct_app_view_jurisprudence() {
     if (!lfi_nct_juris_can()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
 
     $did = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-    $dossier = ($did && function_exists('lfi_nct_dossier_get')) ? lfi_nct_dossier_get($did) : null;
+    $is_avocat = !current_user_can('manage_options') && (!function_exists('lfi_nct_can_admin_ga') || !lfi_nct_can_admin_ga())
+        && function_exists('lfi_nct_user_role_avocat') && lfi_nct_user_role_avocat();
+    if ($is_avocat && $did) {
+        /* L'avocat·e ne voit la jurisprudence QUE des dossiers qui lui sont confiés. */
+        global $wpdb;
+        $drow = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE id = %d", $did));
+        $ok = $drow && function_exists('lfi_nct_avocat_of_tenant') && (int) lfi_nct_avocat_of_tenant((int) $drow->tenant_user_id) === get_current_user_id();
+        $dossier = $ok ? $drow : null;
+        if (!$ok) $did = 0;
+    } else {
+        $dossier = ($did && function_exists('lfi_nct_dossier_get')) ? lfi_nct_dossier_get($did) : null;
+    }
 
     $q = isset($_GET['q']) ? trim(sanitize_text_field(wp_unslash($_GET['q']))) : '';
     if ($q === '' && $dossier) $q = lfi_nct_juris_query_for_dossier($dossier);
