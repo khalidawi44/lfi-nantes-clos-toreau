@@ -69,18 +69,46 @@ function lfi_nct_register_admin_menu() {
         $items['📣 ACTION POLITIQUE'] = [
             ['📋 Faire passer une enquête', lfi_nct_survey_url()],
             ['📅 Événements',               lfi_nct_app_url('evenements')],
+            ['🤝 Se coordonner',            lfi_nct_app_url('mobilisation')],
             ['👥 Membres actifs',           lfi_nct_app_url('membres')],
             ['📱 SMS aux membres actifs',   lfi_nct_app_url('sms')],
             ['✉️ Email aux adhérents',       lfi_nct_app_url('email')],
         ];
+
+        /* Défense des locataires — juridique + pièces + avocats. */
+        $items['⚖️ JURIDIQUE & DÉFENSE'] = [
+            ['🏠 Comptes locataires',       lfi_nct_app_url('comptes-locataires')],
+            ['🗂 Dossiers & suivi',         lfi_nct_app_url('dossiers')],
+            ['📁 Dossiers juridiques',      lfi_nct_app_url('dossiers-juridiques')],
+            ['⚖️ Avocat·es partenaires',    lfi_nct_app_url('avocats')],
+            ['🔎 Jurisprudence (Judilibre)', lfi_nct_app_url('jurisprudence')],
+            ['🏆 Nos victoires',            lfi_nct_app_url('victoires')],
+            ['🚫 Liste noire SMS',          lfi_nct_app_url('sms-blocklist')],
+        ];
     }
 
     if ($is_admin) {
+        /* Élu·es & institutions — députés, municipaux, audit NMH. */
+        $items['🏛 ÉLU·ES & INSTITUTIONS'] = [
+            ['🤝 Élu·es partenaires',       lfi_nct_app_url('partenaires')],
+            ['🏛️ Stratégie municipale',     lfi_nct_app_url('strategie-municipale')],
+            ['🇫🇷 Stratégie nationale',      lfi_nct_app_url('strategie-nationale')],
+            ['💶 Où va mon loyer ? (audit NMH)', lfi_nct_app_url('audit-nmh')],
+            ['🏛️ Préfecture',               lfi_nct_app_url('prefecture')],
+        ];
+
+        /* Volets thématiques. */
+        $items['📚 VOLETS'] = [
+            ['🩺 Santé publique (puffs)',   lfi_nct_app_url('sante')],
+            ['👶 Protection de l\'enfance', lfi_nct_app_url('ase')],
+        ];
+
         $items['👁 ADMIN'] = [
             ['🗂 Réponses d\'enquête',  lfi_nct_app_url('dossiers')],
             ['📈 Stats enquêtes',      lfi_nct_app_url('stats-enquete')],
             ['📊 Stats globales',      lfi_nct_app_url('stats')],
             ['🗺 Carte',               lfi_nct_app_url('carte')],
+            ['🌐 Réseau des GA',       lfi_nct_app_url('reseau-ga')],
             ['👤 Aperçu locataire/GA', lfi_nct_app_url('preview')],
         ];
     }
@@ -103,6 +131,78 @@ function lfi_nct_register_admin_menu() {
         foreach ($links as $L) {
             $submenu['lfi-nct-hub'][] = [esc_html($L[0]), 'read', esc_url($L[1])];
         }
+    }
+}
+
+/* ============================================================== *
+ *  BLOCS sur l'accueil wp-admin (widgets « tableau de bord »)      *
+ *  → l'admin WordPress affiche les outils LFI en blocs, comme      *
+ *  l'app, rangés par catégorie.                                    *
+ * ============================================================== */
+add_action('wp_dashboard_setup', 'lfi_nct_register_dashboard_widgets');
+function lfi_nct_register_dashboard_widgets() {
+    if (!(current_user_can('manage_options') || (function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga()))) return;
+    wp_add_dashboard_widget('lfi_nct_tools_widget', '🏛 LFI Clos Toreau — Vos outils', 'lfi_nct_render_tools_widget');
+    /* On remonte le bloc tout en haut de la colonne principale. */
+    global $wp_meta_boxes;
+    if (isset($wp_meta_boxes['dashboard']['normal']['core']['lfi_nct_tools_widget'])) {
+        $w = $wp_meta_boxes['dashboard']['normal']['core']['lfi_nct_tools_widget'];
+        unset($wp_meta_boxes['dashboard']['normal']['core']['lfi_nct_tools_widget']);
+        $wp_meta_boxes['dashboard']['normal']['core'] = ['lfi_nct_tools_widget' => $w] + $wp_meta_boxes['dashboard']['normal']['core'];
+    }
+}
+
+function lfi_nct_render_tools_widget() {
+    if (!function_exists('lfi_nct_app_url')) return;
+    $is_admin = current_user_can('manage_options');
+    $survey   = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
+
+    $groups = [
+        '🔧 Brigade & dossiers' => [
+            ['📋', 'Faire une enquête', $survey],
+            ['🗂', 'Dossiers & suivi', lfi_nct_app_url('dossiers')],
+            ['📁', 'Dossiers juridiques', lfi_nct_app_url('dossiers-juridiques')],
+            ['🔧', 'Interventions', lfi_nct_app_url('interventions')],
+            ['⚖️', 'Recouvrement NMH', lfi_nct_app_url('recouvrements')],
+        ],
+        '⚖️ Juridique & défense' => [
+            ['🏠', 'Comptes locataires', lfi_nct_app_url('comptes-locataires')],
+            ['⚖️', 'Avocat·es partenaires', lfi_nct_app_url('avocats')],
+            ['🔎', 'Jurisprudence', lfi_nct_app_url('jurisprudence')],
+            ['🏆', 'Nos victoires', lfi_nct_app_url('victoires')],
+            ['🚫', 'Liste noire SMS', lfi_nct_app_url('sms-blocklist')],
+        ],
+        '📣 Action politique' => [
+            ['📅', 'Événements', lfi_nct_app_url('evenements')],
+            ['🤝', 'Se coordonner', lfi_nct_app_url('mobilisation')],
+            ['👥', 'Membres actifs', lfi_nct_app_url('membres')],
+            ['📱', 'SMS aux membres', lfi_nct_app_url('sms')],
+            ['✉️', 'Email aux adhérents', lfi_nct_app_url('email')],
+        ],
+    ];
+    if ($is_admin) {
+        $groups['🏛 Élu·es & institutions'] = [
+            ['🤝', 'Élu·es partenaires', lfi_nct_app_url('partenaires')],
+            ['🏛️', 'Stratégie municipale', lfi_nct_app_url('strategie-municipale')],
+            ['🇫🇷', 'Stratégie nationale', lfi_nct_app_url('strategie-nationale')],
+            ['💶', 'Audit NMH', lfi_nct_app_url('audit-nmh')],
+            ['🏛️', 'Préfecture', lfi_nct_app_url('prefecture')],
+        ];
+        $groups['📚 Volets'] = [
+            ['🩺', 'Santé publique (puffs)', lfi_nct_app_url('sante')],
+            ['👶', 'Protection de l\'enfance', lfi_nct_app_url('ase')],
+        ];
+    }
+
+    echo '<p style="margin:2px 0 12px"><a href="' . esc_url(lfi_nct_app_url('')) . '" class="button button-primary" style="background:#c8102e;border-color:#a30b25">🏠 Ouvrir l\'application complète</a></p>';
+    foreach ($groups as $title => $tiles) {
+        echo '<div style="font-weight:800;color:#c8102e;text-transform:uppercase;font-size:11px;letter-spacing:.5px;margin:12px 0 6px">' . esc_html($title) . '</div>';
+        echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">';
+        foreach ($tiles as $t) {
+            echo '<a href="' . esc_url($t[2]) . '" style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e0e0e0;border-radius:9px;padding:9px 11px;text-decoration:none;color:#1a1a1a" onmouseover="this.style.borderColor=\'#c8102e\'" onmouseout="this.style.borderColor=\'#e0e0e0\'">';
+            echo '<span style="font-size:1.25em;line-height:1">' . $t[0] . '</span><span style="font-weight:600;font-size:.9em">' . esc_html($t[1]) . '</span></a>';
+        }
+        echo '</div>';
     }
 }
 
