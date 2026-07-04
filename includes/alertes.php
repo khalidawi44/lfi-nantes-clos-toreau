@@ -207,8 +207,12 @@ function lfi_nct_render_home_alerts() {
     if (function_exists('lfi_nct_module_enabled') && !lfi_nct_module_enabled('alertes')) return;
     $alertes = lfi_nct_alertes_all();
     if (empty($alertes)) return;
-    echo '<div class="lfi-app-alertes" style="background:#fff;border:2px solid #c8102e;border-radius:12px;padding:10px 12px;margin:12px 0">';
-    echo '<div style="font-weight:800;color:#c8102e;margin-bottom:4px">🔔 À faire — à ne pas mettre de côté (' . count($alertes) . ')</div>';
+    /* Accordéon REPLIÉ : la liste peut être longue (nouveaux contacts à faire).
+       On l'ouvre quand on veut la traiter — plus de « liste interminable ». */
+    $n_alertes = count($alertes);
+    echo '<details class="lfi-app-alertes"' . ($n_alertes <= 5 ? ' open' : '') . ' style="background:#fff;border:2px solid #c8102e;border-radius:12px;padding:0;margin:12px 0;overflow:hidden">';
+    echo '<summary style="cursor:pointer;list-style:none;padding:11px 13px;font-weight:800;color:#c8102e;display:flex;justify-content:space-between;align-items:center"><span>🔔 À faire — à ne pas mettre de côté (' . $n_alertes . ')</span><span style="font-size:1.1em">▾</span></summary>';
+    echo '<div style="max-height:56vh;overflow:auto;padding:0 12px 10px">';
     foreach ($alertes as $al) {
         $dot = $al['prio'] === 'haute' ? '#c8102e' : ($al['prio'] === 'moyenne' ? '#d39e00' : '#888');
         echo '<a href="' . esc_url($al['url']) . '" style="display:flex;gap:10px;align-items:flex-start;text-decoration:none;color:#1a1a1a;padding:8px 4px;border-top:1px solid #eee">';
@@ -226,5 +230,5 @@ function lfi_nct_render_home_alerts() {
             echo '<div style="text-align:right;margin:-6px 4px 2px"><a href="' . esc_url($du) . '" onclick="return confirm(\'Écarter cette alerte (déjà fait / non pertinent) ?\');" style="font-size:.78em;color:#888;text-decoration:none">✕ écarter</a></div>';
         }
     }
-    echo '</div>';
+    echo '</div></details>';
 }
