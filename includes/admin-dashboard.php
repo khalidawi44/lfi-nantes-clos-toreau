@@ -66,6 +66,12 @@ function lfi_nct_register_admin_menu() {
     ];
 
     if ($is_admin || $is_ga) {
+        /* CONFIGURATION DU GA — tout en haut, facile à trouver. */
+        $items['🏢 CONFIGURATION DU GA'] = [
+            ['🏢 Bailleurs sociaux',    lfi_nct_app_url('bailleurs')],
+            ['📥 Import email (auto)',  lfi_nct_app_url('inbox-import')],
+        ];
+
         $items['📣 ACTION POLITIQUE'] = [
             ['📋 Faire passer une enquête', lfi_nct_survey_url()],
             ['📅 Événements',               lfi_nct_app_url('evenements')],
@@ -95,11 +101,6 @@ function lfi_nct_register_admin_menu() {
             ['🇫🇷 Stratégie nationale',      lfi_nct_app_url('strategie-nationale')],
             ['💶 Où va mon loyer ? (audit NMH)', lfi_nct_app_url('audit-nmh')],
             ['🏛️ Préfecture',               lfi_nct_app_url('prefecture')],
-        ];
-
-        $items['🏢 CONFIGURATION DU GA'] = [
-            ['🏢 Bailleurs sociaux',    lfi_nct_app_url('bailleurs')],
-            ['📥 Import email (auto)',  lfi_nct_app_url('inbox-import')],
         ];
 
         /* Volets thématiques. */
@@ -185,6 +186,10 @@ function lfi_nct_render_tools_widget() {
             ['📱', 'SMS aux membres', lfi_nct_app_url('sms')],
             ['✉️', 'Email aux adhérents', lfi_nct_app_url('email')],
         ],
+    ];
+    $groups['🏢 Configuration du GA'] = [
+        ['🏢', 'Bailleurs sociaux', lfi_nct_app_url('bailleurs')],
+        ['📥', 'Import email (auto)', lfi_nct_app_url('inbox-import')],
     ];
     if ($is_admin) {
         $groups['🏛 Élu·es & institutions'] = [
