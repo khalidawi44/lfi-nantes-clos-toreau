@@ -85,10 +85,23 @@ function lfi_nct_render_form() {
                     'depuis_emmenagement' => "Depuis mon emménagement",
                     'permanent'           => 'En permanence (toujours)',
                 ];
-                /* Sous-bloc « depuis quand + nombre de fois / an », ouvert quand on coche. */
-                $sub = function ($k) use ($durees) {
+                /* Fréquence / récurrence : « un peu … beaucoup … tout le temps ». */
+                $recurrences = [
+                    'permanent' => 'En permanence (tout le temps)',
+                    'souvent'   => 'Souvent (beaucoup)',
+                    'parfois'   => 'De temps en temps (un peu)',
+                    'rare'      => 'Rarement / ponctuel',
+                ];
+                /* Sous-bloc ouvert quand on coche : récurrence + depuis quand + nb/an. */
+                $sub = function ($k) use ($durees, $recurrences) {
                     ob_start(); ?>
                     <div class="lfi-prob-sub" id="sub-<?php echo esc_attr($k); ?>" hidden>
+                        <div class="lfi-label" style="font-weight:700;color:#c8102e;margin:0 0 4px">Est-ce récurrent&nbsp;?</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px">
+                            <?php foreach ($recurrences as $rk => $rl): ?>
+                                <label class="lfi-radio" style="margin:0"><input type="radio" name="probleme_recurrent[<?php echo esc_attr($k); ?>]" value="<?php echo esc_attr($rk); ?>"> <?php echo esc_html($rl); ?></label>
+                            <?php endforeach; ?>
+                        </div>
                         <label class="lfi-field" style="margin:0 0 6px"><span class="lfi-label">Depuis quand&nbsp;?</span>
                             <select name="probleme_depuis[<?php echo esc_attr($k); ?>]">
                                 <option value="">— choisir —</option>
@@ -303,6 +316,24 @@ function lfi_nct_render_form() {
             <button type="submit" name="lfi_nct_submit" class="lfi-btn lfi-btn-lg lfi-submit">✓ Enregistrer l'enquête</button>
         </p>
     </form>
+    <script>
+    /* FILET DE SÉCURITÉ : dans l'app (rendu autonome), form.js peut ne pas se
+       charger. On garantit ici l'ouverture du bloc « problèmes » (présence=oui)
+       et du bloc « contact / recontact » (suivi=oui), sinon la personne ne peut
+       pas accepter d'être recontactée → aucun dossier créé. */
+    (function(){
+        function byName(n){ return document.querySelector('input[name="'+n+'"]:checked'); }
+        function toggle(id, show){ var el=document.getElementById(id); if(el) el.hidden = !show; }
+        function refresh(){
+            var p = byName('problemes_presence'); toggle('lfi-bloc-problemes', !!(p && p.value==='oui'));
+            var r = byName('revenir_ok');         toggle('lfi-bloc-contact',   !!(r && r.value==='oui'));
+        }
+        document.addEventListener('change', function(e){
+            if(e.target && (e.target.name==='problemes_presence' || e.target.name==='revenir_ok')) refresh();
+        });
+        refresh();
+    })();
+    </script>
     <?php
     return ob_get_clean();
 }

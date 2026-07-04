@@ -964,6 +964,19 @@ function lfi_nct_dossier_render_parcours($u) {
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
 
+    /* AUTO : si aucune étape, on monte le parcours-type TOUT SEUL (plus besoin
+       de cliquer « générer »). Si l'urgence est déjà gagnée, on greffe aussi le
+       volet indemnisation. */
+    if (empty($steps) && function_exists('lfi_nct_dossier_parcours_template')) {
+        foreach (lfi_nct_dossier_parcours_template() as $tpl) {
+            $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+        }
+        update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+        if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
+        $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+        if (!is_array($steps)) $steps = [];
+    }
+
     /* Suggestions rapides (dropdown) — le parcours type d'un dossier */
     $suggestions = [
         'Passer chez le locataire pour constater',
