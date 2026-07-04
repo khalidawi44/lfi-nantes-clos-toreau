@@ -126,7 +126,7 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         $subject = (string) imap_utf8((string) ($o->subject ?? ''));
         $body = lfi_nct_mailcheck_body($mbox, $uid);
         /* Une boîte membre ne rattache QUE les dossiers dont il/elle est référent. */
-        $dossier = lfi_nct_mailcheck_match_dossier($subject . ' ' . $body, (int) $box['referent']);
+        $dossier = lfi_nct_mailcheck_match_dossier($subject, $body, (int) $box['referent'], $from);
         if ($dossier) {
             lfi_nct_mailcheck_prepare_reply($dossier, $o, $subject, $body);
             $out['prepares']++;
@@ -187,8 +187,11 @@ function lfi_nct_mailcheck_strip_quote($body) {
 /**
  * Trouve le dossier concerné (nom du locataire présent dans le texte).
  * $referent > 0 : on ne cherche que parmi les dossiers de ce membre.
+ * $from : en-tête « De » de l'email — sert à ÉCARTER le dossier de l'EXPÉDITEUR
+ *   (le membre qui envoie, ex. fabrice.doucet44, n'est pas le locataire concerné,
+ *   même si un dossier porte exactement son nom). On cherche d'abord dans l'OBJET.
  */
-function lfi_nct_mailcheck_match_dossier($text, $referent = 0) {
+function lfi_nct_mailcheck_match_dossier($subject, $body = '', $referent = 0, $from = '') {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
     if ($referent > 0) {
@@ -196,14 +199,37 @@ function lfi_nct_mailcheck_match_dossier($text, $referent = 0) {
     } else {
         $rows = $wpdb->get_results("SELECT * FROM $t ORDER BY updated_at DESC LIMIT 200") ?: [];
     }
-    $low = mb_strtolower($text);
+
+    /* Identité de l'EXPÉDITEUR → à écarter des candidats. */
+    $sender_uid = 0; $sender_nom = '';
+    if ($from !== '') {
+        if (preg_match('/[\w.\-+]+@[\w.\-]+/', $from, $m)) {
+            $su = get_user_by('email', $m[0]);
+            if ($su) { $sender_uid = (int) $su->ID; $sender_nom = mb_strtolower(trim((string) ($su->last_name ?: $su->display_name))); }
+        }
+        if ($sender_nom === '' && preg_match('/^\s*"?([^"<]+?)"?\s*</u', $from, $mm)) $sender_nom = mb_strtolower(trim($mm[1]));
+    }
+
+    /* Candidats = tous les dossiers SAUF celui de l'expéditeur (par compte OU par
+       nom identique) : on ne classe jamais l'email dans le dossier de celui qui
+       l'envoie — c'est le locataire nommé dans le message qui compte. */
+    $cands = [];
     foreach ($rows as $r) {
         $nom = trim((string) $r->tenant_nom);
         if ($nom === '' || mb_strlen($nom) < 2) continue;
-        /* Le nom doit apparaître comme MOT ENTIER (bornes des deux côtés) : évite
-           qu'un nom court (« Ba », « Roy ») matche « bail », « Royan »… et classe
-           le courrier dans le mauvais dossier. */
-        if (preg_match('/(?<![\p{L}])' . preg_quote(mb_strtolower($nom), '/') . '(?![\p{L}])/u', $low)) return $r;
+        if ($sender_uid && (int) $r->tenant_user_id === $sender_uid) continue;
+        if ($sender_nom !== '' && mb_strtolower($nom) === $sender_nom) continue;
+        $cands[] = $r;
+    }
+
+    /* On cherche le nom (mot entier) d'ABORD dans l'OBJET (le plus fiable), puis
+       dans objet + corps. Bornes des deux côtés → évite « Ba » dans « bail ». */
+    foreach ([$subject, $subject . ' ' . $body] as $txt) {
+        $low = mb_strtolower((string) $txt);
+        foreach ($cands as $r) {
+            $nl = mb_strtolower(trim((string) $r->tenant_nom));
+            if (preg_match('/(?<![\p{L}])' . preg_quote($nl, '/') . '(?![\p{L}])/u', $low)) return $r;
+        }
     }
     return null;
 }
