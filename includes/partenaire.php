@@ -399,6 +399,38 @@ function lfi_nct_partner_is_also_tenant($uid) {
 function lfi_nct_partner_scope($uid) {
     return trim((string) get_user_meta((int) $uid, 'lfi_nct_partner_scope', true));
 }
+/** GA(s) dont la personne est ADMIN — lu directement dans la base (lien auto). */
+function lfi_nct_person_ga_admin_of($uid) {
+    $uid = (int) $uid; $out = [];
+    if (function_exists('lfi_nct_ga_admins')) {
+        foreach ((array) lfi_nct_ga_admins() as $slug => $pair) {
+            foreach (['f', 'h'] as $k) if ((int) ($pair[$k] ?? 0) === $uid) {
+                $out[$slug] = function_exists('lfi_nct_ga_nom') ? lfi_nct_ga_nom($slug) : $slug;
+            }
+        }
+    }
+    return $out;
+}
+/**
+ * Casquettes « liées » détectées AUTOMATIQUEMENT pour une personne (même compte,
+ * lecture base) : admin de GA, membre de GA, locataire. Renvoie [[ico,label,couleur],…].
+ * Ne dépend jamais du nom — uniquement de l'identifiant de compte (cloisonnement).
+ */
+function lfi_nct_person_linked_chips($uid) {
+    $uid = (int) $uid; $chips = [];
+    $u = get_userdata($uid); if (!$u) return $chips;
+    $roles = (array) $u->roles;
+    foreach (lfi_nct_person_ga_admin_of($uid) as $nom) $chips[] = ['⭐', 'Admin du GA ' . $nom, '#bd8600'];
+    if (defined('LFI_NCT_ROLE_GA') && in_array(LFI_NCT_ROLE_GA, $roles, true)) {
+        $ga = (string) get_user_meta($uid, 'lfi_nct_ga', true);
+        $nom = $ga;
+        if ($ga && function_exists('lfi_nct_ga_nom')) { $n2 = lfi_nct_ga_nom($ga); if ($n2) $nom = $n2; }
+        $chips[] = ['👥', 'Membre du GA' . ($nom ? ' ' . $nom : ''), '#4b2e83'];
+    }
+    if (user_can($uid, 'manage_options')) $chips[] = ['🛠️', 'Super-admin', '#c8102e'];
+    if (function_exists('lfi_nct_partner_is_also_tenant') && lfi_nct_partner_is_also_tenant($uid)) $chips[] = ['🏠', 'Locataire (a un dossier)', '#186a3b'];
+    return $chips;
+}
 /** Cases à cocher des casquettes (formulaires création / promotion / édition). */
 function lfi_nct_partner_casquettes_checkboxes($selected = [], $name = 'casquettes') {
     $out = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:4px 0">';
@@ -610,37 +642,57 @@ function lfi_nct_app_view_partenaires() {
 
     $partners = get_users(['role' => LFI_NCT_ROLE_PARTNER, 'orderby' => 'display_name']);
     if (!empty($partners)) {
-        echo '<ul class="lfi-app-list">';
         $def = lfi_nct_partner_casquettes_def();
+        echo '<div class="lfi-app-help" style="background:#f6f2fc;border-left:4px solid #6f4bb0"><small>🔗 Chaque personne est affichée <strong>une seule fois</strong>, avec <strong>toutes ses casquettes</strong> détectées automatiquement (élu, admin de GA, membre, locataire) — même compte, lecture directe de la base. Groupé par échelon.</small></div>';
+        /* Groupe par échelon (national > local > autre) — chaque personne une fois. */
+        $groups = ['national' => [], 'local' => [], 'autre' => []];
         foreach ($partners as $p) {
-            $tg = get_user_meta($p->ID, 'lfi_nct_telegram', true);
-            $thread = lfi_nct_partner_thread($p->ID);
-            $levels = lfi_nct_partner_levels($p->ID);
-            $scope  = lfi_nct_partner_scope($p->ID);
-            $tel    = trim((string) get_user_meta($p->ID, 'lfi_nct_tel', true));
-            echo '<li class="lfi-app-card" style="border-left:4px solid #4b2e83">';
-            echo '<div class="head"><div class="who">' . esc_html($p->display_name) . '</div></div>';
-            /* Casquettes (plusieurs possibles) + « aussi locataire ». */
-            echo '<div class="meta">';
-            foreach ($levels as $lvl) if (isset($def[$lvl])) echo '<span class="meta-chip">' . $def[$lvl][0] . ' ' . esc_html($def[$lvl][1]) . '</span>';
-            if (lfi_nct_partner_is_also_tenant($p->ID)) echo '<span class="meta-chip" style="background:#eef7ee;color:#186a3b">🏠 aussi locataire</span>';
-            echo '</div>';
-            echo '<div class="meta"><span class="meta-chip">' . esc_html($p->user_email) . '</span>' . ($tg ? '<span class="meta-chip">✈️ ' . esc_html($tg) . '</span>' : '') . '</div>';
-            if (!empty($thread)) echo '<div class="com" style="font-size:.9em">💬 ' . count($thread) . ' message(s)</div>';
-            echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#4b2e83" href="' . esc_url(lfi_nct_app_url('partenaire-espace', ['uid' => $p->ID])) . '">Ouvrir l\'espace partagé →</a></div>';
-            /* Édition des casquettes / secteur / téléphone. */
-            echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.85em;color:#4b2e83;font-weight:700">🎩 Casquettes &amp; secteur</summary>';
-            echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_edit', '_wpnonce', true, false);
-            echo '<input type="hidden" name="lfi_partner_edit" value="1"><input type="hidden" name="user_id" value="' . (int) $p->ID . '">';
-            echo lfi_nct_partner_casquettes_checkboxes($levels);
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">📧 Email (canal principal)<br><input type="email" name="email" value="' . esc_attr($p->user_email) . '" placeholder="prenom.nom@assemblee-nationale.fr" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">📞 Téléphone (rare, optionnel)<br><input type="tel" name="tel" value="' . esc_attr($tel) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">✈️ Telegram (optionnel)<br><input type="text" name="telegram" value="' . esc_attr((string) $tg) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<div style="margin:4px 0"><label style="font-size:.85em">Secteur / délégation (optionnel)<br><input type="text" name="scope" value="' . esc_attr($scope) . '" placeholder="ex. Logement, Clos Toreau…" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
-            echo '<button type="submit" class="btn-ghost" style="font-size:.85em;margin-top:4px">💾 Enregistrer les casquettes</button></form></details>';
-            echo '</li>';
+            $ech = 'autre';
+            foreach (lfi_nct_partner_levels($p->ID) as $lvl) {
+                $e = $def[$lvl][2] ?? '';
+                if ($e === 'national') { $ech = 'national'; break; }
+                if ($e === 'local') $ech = 'local';
+            }
+            $groups[$ech][] = $p;
         }
-        echo '</ul>';
+        $headers = [
+            'national' => ['🇫🇷 Échelon national', '#0066a3'],
+            'local'    => ['🏙️ Échelon local — ville · métropole · département · région', '#4b2e83'],
+            'autre'    => ['Autres', '#777'],
+        ];
+        foreach ($headers as $ek => $h) {
+            if (empty($groups[$ek])) continue;
+            echo '<h3 style="margin:14px 0 6px;color:' . esc_attr($h[1]) . '">' . esc_html($h[0]) . '</h3>';
+            echo '<ul class="lfi-app-list">';
+            foreach ($groups[$ek] as $p) {
+                $tg     = get_user_meta($p->ID, 'lfi_nct_telegram', true);
+                $thread = lfi_nct_partner_thread($p->ID);
+                $levels = lfi_nct_partner_levels($p->ID);
+                $scope  = lfi_nct_partner_scope($p->ID);
+                $tel    = trim((string) get_user_meta($p->ID, 'lfi_nct_tel', true));
+                echo '<li class="lfi-app-card" style="border-left:4px solid #4b2e83">';
+                echo '<div class="head"><div class="who">' . esc_html($p->display_name) . '</div></div>';
+                /* TOUTES les casquettes : élu (chaque niveau) + liées (auto). */
+                echo '<div class="meta">';
+                foreach ($levels as $lvl) if (isset($def[$lvl])) echo '<span class="meta-chip" style="background:#efe9fb;color:#4b2e83">' . $def[$lvl][0] . ' ' . esc_html($def[$lvl][1]) . '</span>';
+                foreach (lfi_nct_person_linked_chips($p->ID) as $c) echo '<span class="meta-chip" style="background:#f4f1f9;color:' . esc_attr($c[2]) . '">' . $c[0] . ' ' . esc_html($c[1]) . '</span>';
+                echo '</div>';
+                echo '<div class="meta"><span class="meta-chip">' . esc_html($p->user_email) . '</span>' . ($tg ? '<span class="meta-chip">✈️ ' . esc_html($tg) . '</span>' : '') . '</div>';
+                if (!empty($thread)) echo '<div class="com" style="font-size:.9em">💬 ' . count($thread) . ' message(s)</div>';
+                echo '<div style="margin-top:8px"><a class="btn-primary" style="background:#4b2e83" href="' . esc_url(lfi_nct_app_url('partenaire-espace', ['uid' => $p->ID])) . '">Ouvrir l\'espace partagé →</a></div>';
+                echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.85em;color:#4b2e83;font-weight:700">🎩 Casquettes &amp; secteur</summary>';
+                echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_partner_edit', '_wpnonce', true, false);
+                echo '<input type="hidden" name="lfi_partner_edit" value="1"><input type="hidden" name="user_id" value="' . (int) $p->ID . '">';
+                echo lfi_nct_partner_casquettes_checkboxes($levels);
+                echo '<div style="margin:4px 0"><label style="font-size:.85em">📧 Email (canal principal)<br><input type="email" name="email" value="' . esc_attr($p->user_email) . '" placeholder="prenom.nom@assemblee-nationale.fr" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+                echo '<div style="margin:4px 0"><label style="font-size:.85em">📞 Téléphone (rare, optionnel)<br><input type="tel" name="tel" value="' . esc_attr($tel) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+                echo '<div style="margin:4px 0"><label style="font-size:.85em">✈️ Telegram (optionnel)<br><input type="text" name="telegram" value="' . esc_attr((string) $tg) . '" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+                echo '<div style="margin:4px 0"><label style="font-size:.85em">Secteur / délégation (optionnel)<br><input type="text" name="scope" value="' . esc_attr($scope) . '" placeholder="ex. Logement, Clos Toreau…" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px"></label></div>';
+                echo '<button type="submit" class="btn-ghost" style="font-size:.85em;margin-top:4px">💾 Enregistrer les casquettes</button></form></details>';
+                echo '</li>';
+            }
+            echo '</ul>';
+        }
     } else {
         echo '<div class="lfi-app-empty">Aucun·e partenaire pour l\'instant.</div>';
     }
