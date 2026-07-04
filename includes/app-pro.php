@@ -754,6 +754,19 @@ function lfi_nct_dossier_parcours_template() {
         ['who' => 'admin',  'text' => "Préparer l'assignation au Tribunal Judiciaire"],
     ];
 }
+
+/** Volet INDEMNISATION / juridique : la 2e bataille, lancée quand l'urgence est
+ *  gagnée. Réparer le préjudice — amiable d'abord, puis judiciaire. */
+function lfi_nct_dossier_indemnisation_steps() {
+    return [
+        ['who' => 'admin', 'text' => "💶 Chiffrer le préjudice subi (trouble de jouissance, frais engagés, santé)"],
+        ['who' => 'admin', 'text' => "💶 Écrire à NMH : demande d'indemnisation amiable (mandat requis)"],
+        ['who' => 'admin', 'text' => "💶 Relancer NMH sur l'indemnisation (1re, 2e relance)"],
+        ['who' => 'admin', 'text' => "💶 Si échec amiable : saisir la Commission Départementale de Conciliation"],
+        ['who' => 'admin', 'text' => "💶 Consulter l'avocat partenaire (Me Valet / Me Goache)"],
+        ['who' => 'admin', 'text' => "💶 Préparer l'assignation au Tribunal Judiciaire (indemnisation)"],
+    ];
+}
 /* NETTOYAGE (une fois) : les parcours créés avant le modèle « propriétaire par
    étape » (toi / locataire) sont ré-initialisés avec le nouveau modèle cohérent. */
 add_action('init', 'lfi_nct_heal_parcours_who', 17);
@@ -847,6 +860,14 @@ function lfi_nct_dossier_render_batailles($u, $row) {
         echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
         echo '<div style="font-weight:800;color:#bd8600">💶 Indemnisation — ' . ($urg_won ? 'à mener' : 'à suivre') . '</div>';
         echo '<div style="font-size:.82em;color:#555;margin-top:3px">' . ($urg_won ? 'Réparer le préjudice : amiable, puis juridique si besoin.' : 'Après l\'urgence : trouble de jouissance, préjudice.') . '</div>';
+        /* Quand l'urgence est gagnée, on ouvre concrètement le volet juridique. */
+        if ($urg_won) {
+            $dj = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+            $dj_url = $dj
+                ? lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $dj->id])
+                : lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID, 'tenant_nom' => $u->last_name ?: $u->display_name, 'tenant_prenom' => $u->first_name ?: '', 'tenant_adresse' => $row->adresse ?? '']);
+            echo '<a class="btn-primary" style="background:#bd8600;width:100%;display:block;text-align:center;margin-top:8px;font-size:.86em" href="' . esc_url($dj_url) . '">⚖️ ' . ($dj ? 'Ouvrir le volet juridique' : 'Lancer le volet juridique') . '</a>';
+        }
         echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'Indemnisation obtenue (préjudice réparé) ? On pose la COUPE et on CLÔT le dossier. Le GA est prévenu.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="width:100%;font-size:.86em">🏆 Bataille gagnée — clore le dossier</button></form>';
         echo '</div>';
     }
