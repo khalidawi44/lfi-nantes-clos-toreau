@@ -194,6 +194,60 @@ function lfi_nct_inbox_is_blocklisted($addresses) {
     return false;
 }
 
+/** Met en liste noire les expéditeurs des entrées de file données, et les retire. */
+function lfi_nct_inbox_block_queue_ids($ids) {
+    $ids = array_map('intval', (array) $ids);
+    if (!$ids) return 0;
+    $q = lfi_nct_inbox_unmatched();
+    $senders = [];
+    foreach ($q as $e) {
+        if (!in_array((int) ($e['id'] ?? 0), $ids, true)) continue;
+        $a = lfi_nct_inbox_emails($e['from'] ?? '');
+        if (!empty($a[0])) $senders[strtolower($a[0])] = 1;
+    }
+    if (!$senders) return 0;
+    $bl = lfi_nct_inbox_blocklist();
+    foreach (array_keys($senders) as $s) $bl[] = $s;
+    lfi_nct_inbox_blocklist_save($bl);
+    $q = array_values(array_filter($q, function ($e) use ($senders) {
+        foreach (array_map('strtolower', lfi_nct_inbox_emails($e['from'] ?? '')) as $x) if (isset($senders[$x])) return false;
+        return true;
+    }));
+    lfi_nct_inbox_unmatched_save($q);
+    return count($senders);
+}
+
+/** Crée un compte MEMBRE DU GA à partir de l'expéditeur d'un email de la file.
+ *  Renvoie l'uid (existant ou nouveau), ou 0. */
+function lfi_nct_inbox_create_member_from_queue($qid) {
+    $qid = (int) $qid; if (!$qid) return 0;
+    $q = lfi_nct_inbox_unmatched(); $from = '';
+    foreach ($q as $e) if ((int) ($e['id'] ?? 0) === $qid) { $from = (string) ($e['from'] ?? ''); break; }
+    if ($from === '') return 0;
+    $email = '';
+    if (preg_match('/[\w.\-+]+@[\w.\-]+\.[a-z]{2,}/i', $from, $m)) $email = strtolower($m[0]);
+    if ($email !== '' && ($ex = get_user_by('email', $email))) return (int) $ex->ID; /* déjà un compte */
+    $name = '';
+    if (preg_match('/^\s*"?([^"<]+?)"?\s*</u', $from, $mm)) $name = trim($mm[1]);
+    if ($name === '' && $email !== '') $name = ucfirst(strtok($email, '@'));
+    $parts  = preg_split('/\s+/', trim($name));
+    $prenom = $parts[0] ?? '';
+    $nom    = trim(implode(' ', array_slice($parts, 1)));
+    $login  = function_exists('lfi_nct_app_make_username') ? lfi_nct_app_make_username($prenom, $nom) : sanitize_user(($prenom ?: 'membre') . wp_generate_password(4, false, false));
+    $pwd    = function_exists('lfi_nct_app_make_password') ? lfi_nct_app_make_password() : wp_generate_password(14);
+    $uid = wp_insert_user([
+        'user_login'   => $login, 'user_pass' => $pwd,
+        'user_email'   => ($email !== '' && function_exists('lfi_nct_app_clean_email')) ? lfi_nct_app_clean_email($email) : $email,
+        'first_name'   => $prenom, 'last_name' => $nom,
+        'display_name' => trim($prenom . ' ' . $nom) ?: $login,
+        'role'         => defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member',
+    ]);
+    if (is_wp_error($uid)) return 0;
+    $cga = function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '';
+    if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
+    return (int) $uid;
+}
+
 /**
  * Range un email dans le bon dossier. Renvoie ['matched'=>bool,'dossier_id'=>int].
  */
@@ -344,28 +398,29 @@ function lfi_nct_app_view_inbox_import() {
         lfi_nct_inbox_unmatched_save([]);
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['cleared' => 1])); exit;
     }
-    if (!empty($_POST['lfi_inbox_assign']) && check_admin_referer('lfi_inbox_assign')) {
-        $qid = (int) ($_POST['queue_id'] ?? 0);
-        $tid = (int) ($_POST['tenant_uid'] ?? 0);
-        if ($qid && $tid && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($tid))) lfi_nct_inbox_assign($qid, $tid);
-        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['assigned' => 1])); exit;
-    }
-    /* 🚫 Liste noire : bannir l'expéditeur d'un email de la file (newsletter,
-       no-reply…) → on le retire ET on supprime tous les emails du même
-       expéditeur, présents comme à venir. */
-    if (!empty($_POST['lfi_inbox_block']) && check_admin_referer('lfi_inbox_assign')) {
-        $qid = (int) ($_POST['queue_id'] ?? 0);
-        $q = lfi_nct_inbox_unmatched(); $sender = '';
-        foreach ($q as $e) { if ((int) ($e['id'] ?? 0) === $qid) { $a = lfi_nct_inbox_emails($e['from'] ?? ''); $sender = strtolower($a[0] ?? ''); break; } }
-        if ($sender !== '') {
-            $bl = lfi_nct_inbox_blocklist(); $bl[] = $sender; lfi_nct_inbox_blocklist_save($bl);
-            $q = array_values(array_filter($q, function ($e) use ($sender) {
-                $a = array_map('strtolower', lfi_nct_inbox_emails($e['from'] ?? ''));
-                return !in_array($sender, $a, true);
-            }));
-            lfi_nct_inbox_unmatched_save($q);
+    /* Actions sur la file « à rattacher » — UN seul formulaire, plusieurs boutons. */
+    if (!empty($_POST['lfi_inbox_queue']) && check_admin_referer('lfi_inbox_assign')) {
+        if (!empty($_POST['do_assign'])) {                       /* ranger chez une personne */
+            $qid = (int) $_POST['do_assign'];
+            $tid = (int) ($_POST['tenant_' . $qid] ?? 0);
+            if (!$tid) { wp_safe_redirect(lfi_nct_app_url('inbox-import', ['pickone' => 1])); exit; }
+            if ($qid && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($tid))) lfi_nct_inbox_assign($qid, $tid);
+            wp_safe_redirect(lfi_nct_app_url('inbox-import', ['assigned' => 1])); exit;
         }
-        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blocked' => 1])); exit;
+        if (!empty($_POST['do_block'])) {                        /* liste noire (1 expéditeur) */
+            lfi_nct_inbox_block_queue_ids([(int) $_POST['do_block']]);
+            wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blocked' => 1])); exit;
+        }
+        if (!empty($_POST['bulk_block'])) {                      /* liste noire (cochés) */
+            $n = lfi_nct_inbox_block_queue_ids((array) ($_POST['ids'] ?? []));
+            wp_safe_redirect(lfi_nct_app_url('inbox-import', ['blocked' => $n ?: 1])); exit;
+        }
+        if (!empty($_POST['do_member'])) {                       /* créer un membre du GA */
+            $uid = lfi_nct_inbox_create_member_from_queue((int) $_POST['do_member']);
+            if ($uid) { wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['created_uid' => $uid])); exit; }
+            wp_safe_redirect(lfi_nct_app_url('inbox-import', ['memberr' => 1])); exit;
+        }
+        wp_safe_redirect(lfi_nct_app_url('inbox-import')); exit;
     }
     /* Ajout / retrait manuel dans la liste noire (adresse ou domaine). */
     if (!empty($_POST['lfi_inbox_block_add']) && check_admin_referer('lfi_inbox_bl')) {
@@ -393,6 +448,8 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['blocked'])) lfi_nct_app_flash('🚫 Expéditeur mis en liste noire — ses emails ne seront plus jamais importés.');
     if (!empty($_GET['bladd']))   lfi_nct_app_flash('🚫 Ajouté à la liste noire.');
     if (!empty($_GET['blrm']))    lfi_nct_app_flash('Retiré de la liste noire.');
+    if (!empty($_GET['memberr'])) lfi_nct_app_flash('⚠️ Impossible de créer le membre (email de l\'expéditeur manquant ou invalide).', 'error');
+    if (!empty($_GET['pickone'])) lfi_nct_app_flash('⚠️ Choisis d\'abord une personne dans la liste avant « Ranger ».', 'error');
 
     echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
 
@@ -456,26 +513,32 @@ function lfi_nct_app_view_inbox_import() {
         asort($people, SORT_NATURAL | SORT_FLAG_CASE);
         $opts_html = '<option value="">— rattacher à un locataire —</option>';
         foreach ($people as $puid => $pnm) $opts_html .= '<option value="' . (int) $puid . '">' . esc_html($pnm) . '</option>';
+        /* UN seul formulaire pour toute la file → cases à cocher (liste noire en
+           masse) + actions par email (ranger / créer un membre / liste noire). */
+        echo '<form method="post">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_inbox_queue" value="1">';
+        echo '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0 10px;flex-wrap:wrap">';
+        echo '<label style="font-size:.85em;color:#555;display:flex;gap:6px;align-items:center"><input type="checkbox" onclick="var c=this.checked;document.querySelectorAll(\'.lfi-ib-ck\').forEach(function(x){x.checked=c})"> tout cocher</label>';
+        echo '<button type="submit" name="bulk_block" value="1" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1" onclick="return confirm(\'Mettre les expéditeurs COCHÉS en liste noire ?\')">🚫 Cochés → liste noire</button>';
+        echo '</div>';
         echo '<ul class="lfi-app-list">';
         foreach (array_reverse($q) as $e) {
-            echo '<li class="lfi-app-card"><div class="head"><div class="who">' . esc_html($e['objet'] ?: '(sans objet)') . '</div><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
+            $qid = (int) ($e['id'] ?? 0);
+            echo '<li class="lfi-app-card">';
+            echo '<div class="head" style="align-items:center"><label style="display:flex;gap:8px;align-items:center;flex:1;min-width:0"><input type="checkbox" class="lfi-ib-ck" name="ids[]" value="' . $qid . '" style="width:18px;height:18px;flex:0 0 auto"><span class="who" style="overflow:hidden;text-overflow:ellipsis">' . esc_html($e['objet'] ?: '(sans objet)') . '</span></label><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
             echo '<div class="meta"><span class="meta-chip">de ' . esc_html($e['from'] ?? '') . '</span>';
             if (!empty($e['to'])) echo '<span class="meta-chip">→ ' . esc_html($e['to']) . '</span>';
             echo '</div>';
             if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
-            echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
-            echo '<input type="hidden" name="lfi_inbox_assign" value="1"><input type="hidden" name="queue_id" value="' . (int) ($e['id'] ?? 0) . '">';
-            echo '<select name="tenant_uid" required style="flex:1;min-width:170px">' . $opts_html . '</select>';
-            echo '<button type="submit" class="btn-primary" style="background:#186a3b">✅ Ranger + apprendre</button></form>';
-            /* 🚫 Bannir l'expéditeur (newsletter, no-reply…) : disparaît de la file
-               et ne reviendra plus. */
-            echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Mettre cet expéditeur en LISTE NOIRE ? Ses emails ne seront plus jamais importés.\')">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
-            echo '<input type="hidden" name="lfi_inbox_block" value="1"><input type="hidden" name="queue_id" value="' . (int) ($e['id'] ?? 0) . '">';
-            echo '<button type="submit" class="btn-ghost" style="font-size:.8em;color:#c8102e;border-color:#f0b6c1">🚫 Liste noire (ignorer cet expéditeur)</button></form>';
-            echo '</li>';
+            echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
+            echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_html . '</select>';
+            echo '<button type="submit" name="do_assign" value="' . $qid . '" class="btn-primary" style="background:#186a3b">✅ Ranger</button>';
+            echo '<button type="submit" name="do_member" value="' . $qid . '" formtarget="_blank" class="btn-ghost" style="font-size:.83em;color:#4b2e83;border-color:#c9bdf0">➕ Créer un membre</button>';
+            echo '<button type="submit" name="do_block" value="' . $qid . '" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1" onclick="return confirm(\'Mettre cet expéditeur en liste noire ?\')">🚫</button>';
+            echo '</div></li>';
         }
-        echo '</ul>';
-        echo '<form method="post" onsubmit="return confirm(\'Vider la file à rattacher ?\')">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_clear" value="1"><button type="submit" class="btn-ghost" style="font-size:.82em">🗑 Vider la file</button></form>';
+        echo '</ul></form>';
+        echo '<form method="post" onsubmit="return confirm(\'Vider la file à rattacher ?\')" style="margin-top:8px">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_clear" value="1"><button type="submit" class="btn-ghost" style="font-size:.82em">🗑 Vider la file</button></form>';
     }
 
     /* -------- Liste noire (boîte noire) -------- */
