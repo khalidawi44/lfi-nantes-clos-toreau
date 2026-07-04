@@ -135,53 +135,67 @@ function lfi_nct_demo_svg_schema() {
  * puissance de la chaîne. Le cœur (moteur) reste central mais scellé.
  */
 function lfi_nct_demo_svg_graph() {
-    /* [x, y, r, icône, titre, sous-titre, couleur] */
+    /* [x, y, r, icône, titre, sous-titre, type] — type: 'core' | 'tech' | 'humain'. */
     $N = [
-        'engine'  => [490, 330, 54, '🧠', 'Moteur', 'automatisation + IA', '#4b2e83'],
-        'terrain' => [120, 135, 42, '📋', 'Terrain', 'captation E/S', '#186a3b'],
-        'geo'     => [110, 330, 42, '🛰️', 'Géocodage', 'BAN · Nominatim', '#0066a3'],
-        'auto'    => [120, 525, 42, '🧩', 'Auto-création', 'compte ⋈ dossier', '#6a1b9a'],
-        'imap'    => [345, 110, 44, '📡', 'IMAP / POP3', 'ingestion mail', '#0066a3'],
-        'tri'     => [520, 95, 40, '🔀', 'Tri', 'routage par identité', '#0066a3'],
-        'dedup'   => [690, 120, 42, '🧬', 'Anti-doublon', 'Message-ID', '#0066a3'],
-        'nlp'     => [865, 210, 44, '🏆', 'Détection victoire', 'analyse NLP', '#186a3b'],
-        'reseau'  => [880, 355, 42, '🇫🇷', 'Agrégation', 'compteurs réseau', '#4b2e83'],
-        'dalo'    => [855, 500, 42, '🏠', 'DALO', 'saisine générée', '#0066a3'],
-        'judi'    => [675, 545, 42, '⚖️', 'Judilibre', 'jurisprudence API', '#6a1b9a'],
-        'cloison' => [500, 565, 46, '🔒', 'Cloisonnement', 'clé tenant_user_id', '#c8102e'],
-        'exif'    => [320, 545, 42, '🕑', 'EXIF', 'horodatage → chrono', '#bd8600'],
+        'engine'  => [500, 350, 58, '🧠', 'Moteur', 'automatisation + IA', 'core'],
+        /* — Les HUMAINS (militant·es, locataire, avocat, élu·es, collectif) — */
+        'militant'=> [150, 130, 46, '🧑‍🤝‍🧑', 'Militant·es', 'vont vers les gens', 'humain'],
+        'locataire'=>[150, 570, 46, '🧑', 'Locataire', 'signale · dépose · signe', 'humain'],
+        'collectif'=>[500, 610, 48, '✊', 'Le collectif (GA)', 'décide · se mobilise', 'humain'],
+        'avocat'  => [850, 560, 44, '👩‍⚖️', 'Avocat·e', 'espace cloisonné', 'humain'],
+        'elus'    => [860, 130, 44, '🏛️', 'Élu·es', 'rapport de force', 'humain'],
+        /* — Les MÉCANISMES techniques — */
+        'geo'     => [300, 210, 40, '🛰️', 'Géocodage', 'BAN · Nominatim', 'tech'],
+        'auto'    => [300, 490, 40, '🧩', 'Auto-création', 'compte ⋈ dossier', 'tech'],
+        'imap'    => [470, 150, 40, '📡', 'IMAP / POP3', 'ingestion mail', 'tech'],
+        'tri'     => [640, 180, 38, '🔀', 'Tri', 'routage par identité', 'tech'],
+        'dedup'   => [720, 300, 38, '🧬', 'Anti-doublon', 'Message-ID', 'tech'],
+        'nlp'     => [700, 440, 40, '🏆', 'Détection victoire', 'analyse NLP', 'tech'],
+        'exif'    => [360, 360, 36, '🕑', 'EXIF', 'horodatage', 'tech'],
+        'cloison' => [500, 490, 42, '🔒', 'Cloisonnement', 'tenant_user_id', 'tech'],
+        'mandat'  => [620, 560, 36, '✍️', 'Verrou mandat', 'signature requise', 'tech'],
+        'reseau'  => [700, 100, 38, '🇫🇷', 'Agrégation', 'compteurs réseau', 'tech'],
     ];
     $E = [
-        ['terrain', 'engine'], ['geo', 'engine'], ['auto', 'engine'], ['imap', 'engine'], ['tri', 'engine'],
-        ['dedup', 'engine'], ['nlp', 'engine'], ['reseau', 'engine'], ['dalo', 'engine'], ['judi', 'engine'],
-        ['cloison', 'engine'], ['exif', 'engine'],
-        ['terrain', 'imap'], ['terrain', 'geo'], ['geo', 'auto'], ['imap', 'tri'], ['tri', 'dedup'],
-        ['dedup', 'nlp'], ['nlp', 'reseau'], ['reseau', 'dalo'], ['dalo', 'judi'], ['judi', 'cloison'],
-        ['cloison', 'exif'], ['exif', 'auto'],
+        ['militant', 'geo'], ['militant', 'engine'], ['locataire', 'auto'], ['locataire', 'exif'], ['locataire', 'engine'],
+        ['geo', 'auto'], ['geo', 'engine'], ['auto', 'engine'], ['auto', 'cloison'],
+        ['imap', 'tri'], ['imap', 'engine'], ['tri', 'dedup'], ['dedup', 'nlp'], ['dedup', 'engine'],
+        ['nlp', 'engine'], ['nlp', 'reseau'], ['exif', 'engine'], ['exif', 'cloison'],
+        ['cloison', 'engine'], ['mandat', 'engine'], ['mandat', 'avocat'],
+        ['reseau', 'elus'], ['reseau', 'engine'], ['avocat', 'engine'], ['elus', 'engine'],
+        ['collectif', 'engine'], ['collectif', 'locataire'], ['collectif', 'militant'],
     ];
     ob_start(); ?>
-    <svg viewBox="0 0 980 660" width="100%" style="max-width:980px;display:block;margin:0 auto;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Graphe des mécanismes de l'outil">
+    <svg viewBox="0 0 1000 680" width="100%" style="max-width:1000px;display:block;margin:0 auto;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Galaxie des mécanismes et des humains">
       <defs>
-        <radialGradient id="glow" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#ffffff" stop-opacity=".55"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+        <radialGradient id="space" cx="50%" cy="42%" r="75%"><stop offset="0" stop-color="#2b2b36"/><stop offset="100%" stop-color="#0e0e15"/></radialGradient>
+        <radialGradient id="sph" cx="34%" cy="30%" r="78%"><stop offset="0" stop-color="#f3f3f6"/><stop offset="42%" stop-color="#b9b9c4"/><stop offset="100%" stop-color="#5c5c6b"/></radialGradient>
+        <radialGradient id="sphH" cx="34%" cy="30%" r="78%"><stop offset="0" stop-color="#fbf6ec"/><stop offset="45%" stop-color="#cfc3a8"/><stop offset="100%" stop-color="#6b5a3a"/></radialGradient>
+        <radialGradient id="sphC" cx="34%" cy="30%" r="80%"><stop offset="0" stop-color="#eef0fb"/><stop offset="45%" stop-color="#a9adcf"/><stop offset="100%" stop-color="#4a4a63"/></radialGradient>
+        <radialGradient id="halo" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffffff" stop-opacity=".22"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
       </defs>
-      <rect x="0" y="0" width="980" height="660" fill="#faf9fd"/>
+      <rect x="0" y="0" width="1000" height="680" rx="16" fill="url(#space)"/>
       <?php
-      /* Arêtes d'abord. */
+      /* Poussière d'étoiles (positions fixes, déterministes). */
+      $stars = [[60,80],[180,40],[320,70],[540,50],[760,60],[900,100],[950,300],[880,470],[930,600],[720,640],[500,660],[260,640],[80,520],[40,300],[120,220],[420,110],[610,90],[820,260],[560,300],[400,540],[240,360],[680,520],[860,360],[300,300]];
+      foreach ($stars as $i => $s) { $rr = 0.6 + ($i % 3) * 0.5; echo '<circle cx="' . $s[0] . '" cy="' . $s[1] . '" r="' . $rr . '" fill="#ffffff" fill-opacity="' . (0.35 + ($i % 4) * 0.12) . '"/>'; }
+      /* Arêtes = filaments de la galaxie. */
       foreach ($E as $e) {
           $a = $N[$e[0]]; $b = $N[$e[1]];
-          echo '<line x1="' . $a[0] . '" y1="' . $a[1] . '" x2="' . $b[0] . '" y2="' . $b[1] . '" stroke="#b9a9dc" stroke-width="1.6" stroke-opacity=".55"/>';
+          echo '<line x1="' . $a[0] . '" y1="' . $a[1] . '" x2="' . $b[0] . '" y2="' . $b[1] . '" stroke="#c9c9e0" stroke-width="1.2" stroke-opacity=".28"/>';
       }
-      /* Nœuds. */
+      /* Sphères. */
       foreach ($N as $n) {
-          list($x, $y, $r, $ico, $title, $sub, $col) = $n;
-          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . $r . '" fill="' . $col . '"/>';
-          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . $r . '" fill="url(#glow)"/>';
-          echo '<text x="' . $x . '" y="' . ($y + 8) . '" text-anchor="middle" font-size="' . ($r > 48 ? 26 : 22) . '">' . $ico . '</text>';
-          echo '<text x="' . $x . '" y="' . ($y + $r + 17) . '" text-anchor="middle" font-size="13.5" font-weight="800" fill="#2a2140">' . esc_html($title) . '</text>';
-          echo '<text x="' . $x . '" y="' . ($y + $r + 33) . '" text-anchor="middle" font-size="11.5" fill="#6b6577" font-style="italic">' . esc_html($sub) . '</text>';
+          list($x, $y, $r, $ico, $title, $sub, $type) = $n;
+          $grad = $type === 'humain' ? 'sphH' : ($type === 'core' ? 'sphC' : 'sph');
+          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . ($r + 8) . '" fill="url(#halo)"/>';
+          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . $r . '" fill="url(#' . $grad . ')" stroke="' . ($type === 'humain' ? '#d8c79a' : '#3a3a48') . '" stroke-width="1"/>';
+          echo '<text x="' . $x . '" y="' . ($y + 8) . '" text-anchor="middle" font-size="' . ($r > 50 ? 27 : 22) . '">' . $ico . '</text>';
+          echo '<text x="' . $x . '" y="' . ($y + $r + 17) . '" text-anchor="middle" font-size="13.5" font-weight="800" fill="#eef0f6">' . esc_html($title) . '</text>';
+          echo '<text x="' . $x . '" y="' . ($y + $r + 33) . '" text-anchor="middle" font-size="11.5" fill="#b9b9cc" font-style="italic">' . esc_html($sub) . '</text>';
       }
       ?>
-      <text x="490" y="640" text-anchor="middle" font-size="12.5" font-weight="800" fill="#c8102e">🔒 Invariant : rattachement par clé de compte exacte (tenant_user_id) — le cœur du moteur reste scellé.</text>
+      <text x="500" y="666" text-anchor="middle" font-size="12.5" font-weight="800" fill="#e6a3ae">🔒 Les militant·es et les locataires au cœur · l'humain décide, le moteur exécute — et son cœur reste scellé.</text>
     </svg>
     <?php
     return ob_get_clean();
@@ -425,6 +439,64 @@ function lfi_nct_app_view_kit_technique() {
           <div class="inv">◆ <?php echo esc_html($m[3]); ?></div>
         </div>
       <?php endforeach; ?>
+    </section>
+
+    <section class="slide">
+      <h2>Liste (quasi) exhaustive des mécanismes</h2>
+      <p class="lead">À peu près <strong>tout</strong> ce que fait l'outil — l'orchestration exacte du moteur restant volontairement secrète.</p>
+      <?php
+      $liste = [
+        'Terrain & entrée' => [
+          'Double captation : porte-à-porte (militant·e) et signalement web, même table de vérité',
+          'Géo-routage vers le bon GA : ancrage militant + ville, géocodage BAN · Nominatim',
+          'Auto-création liée : compte locataire ⋈ dossier en une transaction, anti-doublon par identité de compte',
+        ],
+        'Le dossier' => [
+          'Parcours à états typés (équipe / locataire), auto-avance, étapes rendues « inutiles »',
+          'Modèle à deux batailles : ⚡ urgence puis 💶 indemnisation, états disjoints',
+          'Greffe automatique des étapes d\'indemnisation dès l\'urgence gagnée',
+          'Préjudice chiffré + base légale attachés au dossier',
+          'Pièces & photos horodatées par métadonnées EXIF → chronologie fiable (sans IA)',
+        ],
+        'Correspondance email' => [
+          'Boîte collectrice + ingestion IMAP / POP3 (et passerelle POST alternative)',
+          'Tri des emails par identité (bailleur / membre / locataire), jamais par nom flou',
+          'Anti-doublon par Message-ID · apprentissage des adresses (rattachement mémorisé)',
+          'File « à rattacher » (aucun email perdu) + liste noire d\'expéditeurs',
+          'Verrou mandat : aucun courrier sortant au bailleur sans adhésion signée',
+          'Nettoyage de l\'historique cité (on ne garde que le message neuf)',
+          'Détection automatique de victoire : analyse du mail (NLP), garde-fous sur les refus',
+          'Brouillons de réponse générés + analyse de posture / ton conseillé',
+        ],
+        'Victoires' => [
+          'Coupe idempotente : une par bataille, une famille comptée une seule fois',
+          'Championnat de rapidité : durée + rang de la victoire, classement inter-dossiers',
+          'Célébration scopée au GA concerné (pop-up à l\'ouverture)',
+        ],
+        'Escalade' => [
+          'Commission de conciliation montée « prête » : saisine + pièces + contacts',
+          'Espace avocat cloisonné + Judilibre (jurisprudence) scopé au seul dossier',
+          'Relogement : demande unique + Action Logement + DALO (saisine générée, préfet 6 mois)',
+        ],
+        'Cloisonnement & rôles' => [
+          'Invariant : agrégation par clé de compte exacte (tenant_user_id), jamais par nom/adresse',
+          'Casquettes multiples d\'une même personne, liées automatiquement en base',
+          'Rôles & interfaces adaptées (superadmin, admin GA, trésorier, responsable réunions…)',
+          'Signatures adaptatives selon la casquette (au bailleur = association, à l\'avocat = LFI + UQL)',
+        ],
+        'Réseau & accès' => [
+          'Agrégation multi-GA strictement anonyme (compteurs, jamais d\'identités) + carte réseau',
+          'Connexion magique (lien usage-unique, 14 j) + onboarding (choix du mot de passe)',
+          'Application installable (PWA, écran d\'accueil) · SMS natif de l\'appareil + blocklist RGPD',
+          'Sauvegarde / export · cadre RGPD (registre, droit à l\'oubli)',
+        ],
+      ];
+      foreach ($liste as $cat => $items):
+      ?>
+        <h3 style="color:#4b2e83;margin:14px 0 4px"><?php echo esc_html($cat); ?></h3>
+        <ul style="margin:0;line-height:1.7"><?php foreach ($items as $it) echo '<li>' . esc_html($it) . '</li>'; ?></ul>
+      <?php endforeach; ?>
+      <p style="color:#7a6a99;font-size:.9em;margin-top:12px">🔒 Ce qui n'est <strong>pas</strong> dévoilé : l'orchestration précise du moteur (le « comment » exact) — c'est le savoir-faire scellé, non reproductible sans l'auteur.</p>
     </section>
 
     <section class="slide">
