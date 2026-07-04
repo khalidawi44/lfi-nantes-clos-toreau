@@ -682,6 +682,20 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'mon-profil':       lfi_nct_app_view_mon_profil();       break;
             case 'installer':        lfi_nct_app_view_installer();        break;
 
+            /* Outils ouverts selon le SOUS-RÔLE — jamais l'enquête ni les dossiers. */
+            case 'reunion':
+                if (lfi_nct_role_can('reunions')) lfi_nct_app_view_reunion(); else lfi_nct_app_view_ga_dashboard();
+                break;
+            case 'comptes-ga':
+                if (lfi_nct_role_can('membres')) lfi_nct_app_view_comptes_ga(); else lfi_nct_app_view_ga_dashboard();
+                break;
+            case 'evenement-add':
+                if (lfi_nct_role_can('evenements')) lfi_nct_app_view_evenement_add(); else lfi_nct_app_view_ga_dashboard();
+                break;
+            case 'evenement-edit':
+                if (lfi_nct_role_can('evenements')) lfi_nct_app_view_evenement_edit(); else lfi_nct_app_view_ga_dashboard();
+                break;
+
             default:                 lfi_nct_app_view_ga_dashboard();
         }
         $handled = true; return;
@@ -734,6 +748,20 @@ function lfi_nct_app_view_ga_dashboard() {
         ['✏️', 'Mon profil',                'Email · mot de passe',                lfi_nct_app_url('mon-profil')],
         ['🚪', 'Se déconnecter',            '',                                    wp_logout_url(home_url('/'))],
     ];
+
+    /* SOUS-RÔLE : outils supplémentaires (jamais l'enquête ni les dossiers). */
+    $my_role    = function_exists('lfi_nct_ga_role') ? lfi_nct_ga_role() : 'membre';
+    $rdef       = function_exists('lfi_nct_ga_roles_def') ? lfi_nct_ga_roles_def() : [];
+    $role_tiles = [];
+    if (function_exists('lfi_nct_role_can')) {
+        if (lfi_nct_role_can('reunions')) {
+            $role_tiles[] = ['📅', 'Réunions', 'Créer · valider · présences', lfi_nct_app_url('reunion')];
+            $role_tiles[] = ['🗓️', 'Événements', 'Organiser · convoquer', lfi_nct_app_url('evenements')];
+        }
+        if (lfi_nct_role_can('membres')) {
+            $role_tiles[] = ['🪪', 'Membres du GA', 'Gérer · accueillir', lfi_nct_app_url('comptes-ga')];
+        }
+    }
     ?>
     <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
     <?php if (function_exists('lfi_nct_render_victoire_celebration')) lfi_nct_render_victoire_celebration(); ?>
@@ -750,8 +778,27 @@ function lfi_nct_app_view_ga_dashboard() {
 
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
 
+        <?php if ($my_role !== 'membre' && isset($rdef[$my_role])): ?>
+        <div style="background:linear-gradient(135deg,#4b2e83,#6f4bb0);color:#fff;border-radius:12px;padding:12px 14px;margin:0 0 14px">
+            <div style="font-weight:800"><?php echo $rdef[$my_role][0] . ' Tu es ' . esc_html($rdef[$my_role][1]); ?></div>
+            <div style="opacity:.95;font-size:.9em;margin-top:2px"><?php echo esc_html($rdef[$my_role][2]); ?></div>
+        </div>
+        <?php if (!empty($role_tiles)): ?>
+        <h3 style="margin:8px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">🎫 Mes outils de <?php echo esc_html($rdef[$my_role][1]); ?></h3>
+        <div class="lfi-app-grid">
+            <?php foreach ($role_tiles as $t): ?>
+                <a class="lfi-app-tile" href="<?php echo esc_url($t[3]); ?>">
+                    <span class="ico"><?php echo $t[0]; ?></span>
+                    <span class="tit"><?php echo esc_html($t[1]); ?></span>
+                    <span class="sub"><?php echo esc_html($t[2]); ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+
         <div class="lfi-app-help" style="margin:0 0 14px">
-            👋 Tu es membre du GA. Tu fais passer l'<strong>enquête logement</strong> en porte-à-porte, et quand les gens t'invitent chez eux tu peux <strong>prendre des photos</strong>. Tout ça part directement à l'équipe. <strong>Les réponses, les dossiers et les contacts des locataires restent réservés aux administrateurs</strong> (RGPD) — tu n'y as pas accès.
+            👋 Tu fais passer l'<strong>enquête logement</strong> en porte-à-porte, et quand les gens t'invitent chez eux tu peux <strong>prendre des photos</strong>. Tout ça part directement à l'équipe. <strong>Les réponses, les dossiers et les contacts des locataires restent réservés aux administrateurs</strong> (RGPD) — tu n'y as pas accès.
         </div>
 
         <h3 style="margin:18px 0 8px;font-size:.9em;color:#666;text-transform:uppercase;letter-spacing:1px">📣 Mes actions</h3>
@@ -2128,7 +2175,8 @@ function lfi_nct_role_can($cap, $uid = 0) {
 }
 
 function lfi_nct_app_view_comptes_ga() {
-    $can = function_exists('lfi_nct_is_ga_admin') ? lfi_nct_is_ga_admin() : current_user_can('manage_options');
+    $can = (function_exists('lfi_nct_is_ga_admin') ? lfi_nct_is_ga_admin() : current_user_can('manage_options'))
+        || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('membres'));
     if (!$can) return;
     global $wpdb;
 
@@ -2185,6 +2233,18 @@ function lfi_nct_app_view_comptes_ga() {
             update_user_meta($euid, 'lfi_nct_tel', $te);
         }
         wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['edited' => 1, 'open' => $euid]) . '#m-' . $euid); exit;
+    }
+
+    /* Attribution d'un SOUS-RÔLE (superadmin uniquement). L'interface du membre
+       s'adapte ensuite. L'enquête/dossiers restent hors de portée des sous-rôles. */
+    if (!empty($_POST['lfi_app_set_ga_role']) && check_admin_referer('lfi_app_set_ga_role')) {
+        if (current_user_can('manage_options')) {
+            $ruid = (int) ($_POST['uid'] ?? 0);
+            if ($ruid && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($ruid))) {
+                lfi_nct_ga_role_save($ruid, sanitize_key($_POST['ga_role'] ?? 'membre'));
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['roleok' => 1, 'open' => (int) ($_POST['uid'] ?? 0)]) . '#m-' . (int) ($_POST['uid'] ?? 0)); exit;
     }
 
     /* Email d'ACCUEIL d'un membre (lien magique + parcours + appel direct). */
@@ -2478,6 +2538,7 @@ function lfi_nct_app_view_comptes_ga() {
     if (!empty($_GET['edited']))    lfi_nct_app_flash('✅ Fiche du membre mise à jour.');
     if (!empty($_GET['welcomed']))    lfi_nct_app_flash('✅ Email d\'accueil envoyé (lien de connexion + parcours inclus).');
     if (!empty($_GET['welcomefail'])) lfi_nct_app_flash('⚠️ Email non envoyé (adresse manquante ou invalide — complète la fiche).', 'error');
+    if (!empty($_GET['roleok']))    lfi_nct_app_flash('✅ Rôle mis à jour — son interface s\'adapte automatiquement.');
     $open_uid = (int) ($_GET['open'] ?? ($_GET['created_uid'] ?? ($_GET['welcome_sms'] ?? 0)));
     $welcome_sms = (int) ($_GET['welcome_sms'] ?? 0);
 
@@ -2634,7 +2695,12 @@ function lfi_nct_app_view_comptes_ga() {
             } else {
                 echo esc_html($u->display_name) . ' <span style="font-size:.8em;color:#777">(toi)</span>';
             }
-            echo '</div><div class="badge">' . ($is_admin ? '⭐ Admin' : 'GA') . '</div></div>';
+            $sub = function_exists('lfi_nct_ga_role') ? lfi_nct_ga_role($u->ID) : 'membre';
+            $rdef = function_exists('lfi_nct_ga_roles_def') ? lfi_nct_ga_roles_def() : [];
+            $sublbl = '';
+            if ($sub === 'superadmin') $sublbl = '<span class="badge" style="background:#fdeef0;color:#c8102e;margin-left:4px">🛠️ Superadmin</span>';
+            elseif ($sub !== 'membre' && isset($rdef[$sub])) $sublbl = '<span class="badge" style="background:#efe9fb;color:#4b2e83;margin-left:4px">' . $rdef[$sub][0] . ' ' . esc_html($rdef[$sub][1]) . '</span>';
+            echo '</div><div class="badge">' . ($is_admin ? '⭐ Admin' : 'GA') . '</div>' . $sublbl . '</div>';
             echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span>';
             if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
             $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
@@ -2658,6 +2724,19 @@ function lfi_nct_app_view_comptes_ga() {
             echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr($mtel) . '" placeholder="à compléter"></label>';
             echo '<button type="submit" class="btn-primary">💾 Enregistrer la fiche</button>';
             echo '</form></details>';
+
+            /* 🎫 Rôle (superadmin uniquement peut l'attribuer ; superadmins intouchables). */
+            if (current_user_can('manage_options') && function_exists('lfi_nct_ga_roles_def')) {
+                if ($sub === 'superadmin') {
+                    echo '<div style="margin:4px 0;font-size:.82em;color:#c8102e;font-weight:700">🛠️ Superadmin — rôle non modifiable.</div>';
+                } else {
+                    echo '<form method="post" style="margin:4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">' . wp_nonce_field('lfi_app_set_ga_role', '_wpnonce', true, false);
+                    echo '<input type="hidden" name="lfi_app_set_ga_role" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+                    echo '<span style="font-size:.82em;color:#555">🎫 Rôle :</span><select name="ga_role" style="font-size:.85em" onchange="this.form.submit()">';
+                    foreach (lfi_nct_ga_roles_def() as $rk => $rd) echo '<option value="' . esc_attr($rk) . '"' . selected($rk, $sub, false) . '>' . $rd[0] . ' ' . esc_html($rd[1]) . '</option>';
+                    echo '</select><noscript><button type="submit" class="btn-ghost" style="font-size:.78em">OK</button></noscript></form>';
+                }
+            }
 
             echo '<div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap">';
             /* Réinitialiser & renvoyer */
