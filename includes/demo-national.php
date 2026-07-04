@@ -135,14 +135,25 @@ function lfi_nct_demo_stats() {
        meta locataire, celle qui pilote les bandeaux « 🏆 gagné »). On lit donc
        les deux batailles gagnées, y compris les victoires posées AVANT le
        registre des coupes (ex. Gwen) — que l'ancien comptage oubliait. */
-    $victoires = 0; $familles = [];
+    /* On compte l'UNION de deux sources, dédupliquée par (locataire, bataille) :
+       (a) la meta locataire (bandeaux) ET (b) le registre des coupes — ainsi
+       aucune victoire n'est oubliée (ex. Gwen posée avant le registre), et le
+       total colle à celui de l'accueil. */
+    $pairs = []; $familles = [];
     foreach (['urgence', 'indemnisation'] as $bat) {
         $uids = get_users([
             'meta_query' => [['key' => 'lfi_nct_' . $bat . '_won', 'value' => '', 'compare' => '!=']],
             'fields'     => 'ID',
         ]);
-        foreach ($uids as $uid) { $victoires++; $familles[(int) $uid] = 1; }
+        foreach ($uids as $uid) { $pairs[(int) $uid . '|' . $bat] = 1; $familles[(int) $uid] = 1; }
     }
+    if (function_exists('lfi_nct_victoires_all')) {
+        foreach (lfi_nct_victoires_all() as $v) {
+            $vu = (int) ($v['tenant_uid'] ?? 0); $vb = (string) ($v['bataille'] ?? '');
+            if ($vu && $vb) { $pairs[$vu . '|' . $vb] = 1; $familles[$vu] = 1; }
+        }
+    }
+    $victoires = count($pairs);
     /* Réussites publiées (toutes). */
     $publiees = 0;
     if (function_exists('lfi_nct_reussites')) foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $publiees++;
@@ -270,6 +281,123 @@ function lfi_nct_app_view_kit_national() {
     exit;
 }
 
+/* ============================================================== *
+ *  PRÉSENTATION DÉTAILLÉE (Manuel Bompard) — mécanismes précis    *
+ *  Rigoureuse, minutieuse, pour un profil scientifique. Explique  *
+ *  le MODÈLE, les INVARIANTS et les GARANTIES — pas la recette :   *
+ *  le cœur (moteur) reste scellé (aucun code, clé, ni endpoint).  *
+ * ============================================================== */
+function lfi_nct_app_view_kit_technique() {
+    $ok = current_user_can('manage_options')
+        || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())
+        || (function_exists('lfi_nct_is_demo_user') && lfi_nct_is_demo_user()); /* Bompard peut la lire */
+    if (!$ok) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $st = lfi_nct_demo_stats();
+    $svg = function_exists('lfi_nct_demo_svg_schema') ? lfi_nct_demo_svg_schema() : '';
+
+    /* Chaque mécanisme : titre · ce qu'il fait · comment (logique) · l'invariant/garantie. */
+    $mecas = [
+        ['①', 'Captation terrain', 'Deux entrées équivalentes : porte-à-porte (par un·e militant·e) et signalement web. Chaque réponse produit un enregistrement structuré (problèmes cochés, récurrence, coordonnées si consenties, position).', 'Garantie : une seule table de vérité pour l\'entrée ; le mode de saisie (papier retranscrit / web) n\'affecte pas le traitement aval.'],
+        ['②', 'Géo-routage vers le bon GA', 'La réponse est rattachée à un Groupe d\'Action par un ancrage double : le GA du militant qui saisit, corrigé par la ville/adresse (géocodage). En cas de conflit, la ville prime.', 'Invariant : une réponse appartient à exactement un GA. Pas de réponse orpheline, pas de double rattachement.'],
+        ['③', 'Auto-création liée', 'Si la personne demande à être suivie, le système crée — en une transaction — un compte locataire et un dossier, reliés par un identifiant unique de compte. Anti-doublon sur l\'identité de compte, jamais sur le nom.', 'Invariant fondateur : l\'agrégation d\'un dossier se fait UNIQUEMENT par identifiant de compte exact (tenant_user_id), jamais par nom ni adresse.'],
+        ['④', 'Parcours à états', 'Le dossier suit une liste d\'étapes typées (à faire par l\'équipe / par le locataire). L\'avancement se déduit de l\'état ; certaines étapes deviennent « inutiles » quand un événement les rend caduques (ex. urgence gagnée).', 'Propriété : le parcours est monotone — une étape franchie ne redevient pas « à faire » ; une étape rendue inutile sort de la charge de travail.'],
+        ['⑤', 'Le modèle « deux batailles »', 'Un dossier = deux sous-problèmes indépendants : ⚡ URGENCE (faire cesser le danger) et 💶 INDEMNISATION (réparer le préjudice). Gagner l\'urgence n\' arrête pas le dossier : ça POSE une coupe et LANCE la seconde bataille (greffe de ses étapes).', 'Séparation des préoccupations : les deux batailles ont des états disjoints ; la victoire de l\'une déclenche, sans la confondre, l\'ouverture de l\'autre.'],
+        ['⑥', 'Boucle de correspondance', 'Les emails échangés avec le bailleur reviennent automatiquement se ranger dans le bon dossier : tri par identité (bailleur / membre / locataire), anti-doublon par identifiant de message, apprentissage des adresses non reconnues (une fois rattachées, mémorisées).', 'Verrou de sûreté : aucun courrier sortant vers le bailleur sans mandat signé. Le tri ne s\'appuie jamais sur une correspondance floue de noms.'],
+        ['⑦', 'Détection automatique de victoire', 'À l\'arrivée d\'un email du bailleur, une analyse décide s\'il ACTE une demande (relogement/travaux accordés) ; si oui, la coupe « urgence » se pose seule et le groupe est prévenu. Garde-fous : les tournures négatives (refus, « pas favorable ») sont écartées.', 'Prudence dissymétrique : on ne pose une victoire que sur signal positif net ; le doute ne déclenche rien (faux positif coûteux évité).'],
+        ['⑧', 'Métrique « championnat de rapidité »', 'Chaque victoire d\'urgence est datée : durée (jours entre 1re étape et victoire) et rang (à quelle étape sur le total on a gagné). Ces mesures alimentent un classement inter-dossiers, motivant.', 'Mesure comparable : durée et rang sont normalisés par dossier, donc agrégeables et classables entre situations.'],
+        ['⑨', 'Escalade amiable → juridique', 'Si l\'amiable échoue, la Commission de conciliation est montée « prête » (saisine + pièces + contacts) ; puis les avocats partenaires interviennent depuis un espace cloisonné, avec jurisprudence intégrée, limitée à leurs dossiers.', 'Cloisonnement transverse : l\'avocat ne voit que les dossiers qui lui sont attribués ; l\'accès jurisprudence est scopé au dossier.'],
+        ['⑩', 'Relogement / DALO', 'Quand l\'objectif est le relogement, le parcours ne dépend plus du seul bailleur : demande unique de logement social + Action Logement + saisine DALO. La saisine est générée ; le préfet a 6 mois pour reloger.', 'Voie indépendante : la victoire « relogement » ne suppose pas la bonne volonté du bailleur.'],
+        ['⑪', 'Agrégation réseau', 'Les compteurs nationaux additionnent, sur tous les GA : victoires (par bataille, dédupliquées) et locataires demandant un suivi. Strictement anonymes — aucun nom, aucune donnée personnelle n\'en sort.', 'Additivité sans fuite : on agrège des compteurs, jamais des identités ; le national ne « voit » aucun dossier.'],
+    ];
+
+    nocache_headers();
+    ?><!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Défendre les locataires — présentation détaillée</title>
+    <style>
+      :root{--r:#c8102e;--v:#4b2e83;--g:#186a3b}
+      *{box-sizing:border-box}
+      body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#16121f;margin:0;background:#f4f1fa}
+      .slide{max-width:940px;margin:0 auto 22px;background:#fff;padding:40px;box-shadow:0 6px 24px rgba(0,0,0,.08);border-radius:14px}
+      h1{font-size:2em;line-height:1.12;margin:6px 0 8px;color:var(--v)}
+      h2{font-size:1.4em;color:var(--r);margin:0 0 14px;border-bottom:3px solid var(--r);padding-bottom:8px}
+      .lead{font-size:1.12em;color:#333;line-height:1.6}
+      .meca{border-left:4px solid var(--v);background:#f7f4fc;border-radius:0 10px 10px 0;padding:12px 16px;margin:12px 0}
+      .meca .t{font-weight:800;color:var(--v);font-size:1.05em}
+      .meca .how{color:#333;margin:6px 0}
+      .meca .inv{font-size:.92em;color:var(--g);font-weight:700}
+      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px}
+      .stat{background:#f6f2fc;border-radius:12px;padding:16px;text-align:center;border-top:5px solid var(--v)}
+      .stat .n{font-size:2.2em;font-weight:900;color:var(--v)}
+      .stat .l{color:#555;font-weight:600;font-size:.85em}
+      .noprint{position:sticky;top:0;background:#4b2e83;color:#fff;text-align:center;padding:10px;z-index:5}
+      .btn{background:#fff;color:#4b2e83;border:0;padding:10px 22px;border-radius:10px;font-weight:800;cursor:pointer}
+      code{background:#efeafb;padding:1px 6px;border-radius:5px;font-size:.92em}
+      @media print{ .noprint{display:none} body{background:#fff} .slide{box-shadow:none;margin:0;border-radius:0;page-break-after:always} }
+    </style></head><body>
+    <div class="noprint">Présentation détaillée — ou <button class="btn" onclick="window.print()">🖨️ Enregistrer en PDF</button></div>
+
+    <section class="slide" style="text-align:center">
+      <div style="letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:700;font-size:.8em">La France Insoumise · Union des Quartiers Libres</div>
+      <h1>Défendre les locataires, partout</h1>
+      <p class="lead">Une présentation <strong>détaillée</strong> des mécanismes : le modèle, les invariants, les garanties. De la porte du locataire jusqu\'au tribunal — et reproductible dans chaque quartier.</p>
+      <div class="grid">
+        <div class="stat"><div class="n">🏠 <?php echo (int) $st['suivis']; ?></div><div class="l">Locataires suivis (réseau)</div></div>
+        <div class="stat"><div class="n">🏆 <?php echo (int) $st['victoires']; ?></div><div class="l">Batailles gagnées</div></div>
+        <div class="stat"><div class="n">📣 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires publiées</div></div>
+      </div>
+      <p style="color:#888;font-size:.82em;margin-top:12px">Totaux France entière · strictement anonymes.</p>
+    </section>
+
+    <section class="slide">
+      <h2>Vue d'ensemble</h2>
+      <p class="lead">Le système est une <strong>chaîne de traitement</strong> qui transforme un signalement de terrain en rapport de force organisé. Un « moteur » (automatisation + intelligence artificielle) prend en charge le travail répétitif ; l'humain décide et pousse. Le schéma :</p>
+      <?php echo $svg; ?>
+      <p style="color:#7a6a99;font-size:.9em;margin-top:8px">Le cœur du moteur — le <em>comment</em> exact — n'est pas divulgué : c'est le savoir-faire, scellé. Cette présentation détaille le <strong>modèle</strong> et les <strong>garanties</strong>, pas la recette de fabrication.</p>
+    </section>
+
+    <section class="slide">
+      <h2>Les mécanismes, un par un</h2>
+      <?php foreach ($mecas as $m): ?>
+        <div class="meca">
+          <div class="t"><?php echo $m[0]; ?> · <?php echo esc_html($m[1]); ?></div>
+          <div class="how"><?php echo esc_html($m[2]); ?></div>
+          <div class="inv">◆ <?php echo esc_html($m[3]); ?></div>
+        </div>
+      <?php endforeach; ?>
+    </section>
+
+    <section class="slide">
+      <h2>L'invariant central : le cloisonnement</h2>
+      <p class="lead">C'est la propriété la plus forte du système, et une règle absolue :</p>
+      <ul style="line-height:1.8">
+        <li>L'agrégation d'un dossier se fait <strong>uniquement par identifiant de compte exact</strong> (<code>tenant_user_id</code>) — <strong>jamais</strong> par nom ni adresse (qui produisent des collisions : homonymes, variantes d'orthographe).</li>
+        <li>Rien ne « transpire » d'un dossier à un autre, ni d'un GA à un autre : ni pièce, ni information, ni lien.</li>
+        <li>L'<strong>enquête de terrain n'est jamais partagée</strong> avec les élu·es partenaires — elle sert le rapport de force, pas la circulation d'informations personnelles.</li>
+        <li>Le national n'agrège que des <strong>compteurs anonymes</strong> ; il ne voit aucun dossier.</li>
+      </ul>
+      <p style="color:var(--g);font-weight:800;margin-top:10px">Conséquence : la puissance d'agrégation ne crée jamais de fuite. C'est ce qui rend l'outil déployable à l'échelle sans trahir la confiance des locataires.</p>
+    </section>
+
+    <section class="slide">
+      <h2>Le rapport de force (au-delà du juridique)</h2>
+      <p class="lead">Le droit ne suffit pas : il agit dans une stratégie qui pèse sur le bailleur <em>avant</em> l'audience.</p>
+      <ul style="line-height:1.8">
+        <li><strong>Local</strong> : élus municipaux (audit de la gestion du bailleur), relais au conseil d'administration.</li>
+        <li><strong>Institutions</strong> : interlocuteurs préfecture, SCHS / ARS (insalubrité), DALO (relogement d'urgence).</li>
+        <li><strong>National</strong> : député·es (questions écrites, propositions de loi logement).</li>
+        <li><strong>Populaire</strong> : presse locale, mobilisation collective, entraide de quartier.</li>
+      </ul>
+    </section>
+
+    <section class="slide">
+      <h2>Reproductibilité</h2>
+      <p class="lead">Un GA s'en empare, configure son bailleur local, et toute la mécanique se met en place : enquête, dossiers, juridique, relogement, coordination. <strong>Chaque quartier peut avoir sa machine à gagner</strong> — sans jamais recopier le cœur, qui reste le savoir-faire de l'auteur.</p>
+      <p style="text-align:center;color:#888;font-size:.85em;margin-top:14px">🔒 Protection absolue des locataires : aucune donnée personnelle n'est jamais exposée. © Concept propriétaire · Union des Quartiers Libres.</p>
+    </section>
+    </body></html><?php
+    exit;
+}
+
 /** Uid du compte démo Bompard (0 si absent). */
 function lfi_nct_demo_bompard_uid() {
     $r = get_users(['meta_key' => 'lfi_nct_partner_seed', 'meta_value' => 'bompard', 'number' => 1, 'fields' => 'ID']);
@@ -339,8 +467,9 @@ function lfi_nct_demo_dispatch() {
     if (current_user_can('manage_options')) return false; /* toi : console normale */
     if (!lfi_nct_is_demo_user()) return false;
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-    if ($vue === 'mon-profil')  { lfi_nct_app_view_mon_profil(); return true; }
-    if ($vue === 'installer')   { lfi_nct_app_view_installer();  return true; }
+    if ($vue === 'mon-profil')    { lfi_nct_app_view_mon_profil();   return true; }
+    if ($vue === 'installer')     { lfi_nct_app_view_installer();    return true; }
+    if ($vue === 'kit-technique') { lfi_nct_app_view_kit_technique(); return true; } /* présentation détaillée */
     lfi_nct_app_view_demo_national();
     return true;
 }
@@ -390,6 +519,12 @@ function lfi_nct_app_view_demo_national() {
         ['💪', '7 · Le rapport de force', 'Élus municipaux, relais national (députés), interlocuteurs préfecture, SCHS/ARS, presse, mobilisation collective — le juridique dans une stratégie d\'ensemble.'],
         ['🤝', '8 · Le collectif s\'organise', 'Coordination des créneaux, votes, événements, victoires célébrées — le GA vit et se motive.'],
     ];
+    echo '<div style="margin:14px 0;padding:14px;background:#f6f2fc;border:1px solid #ddd0f0;border-radius:12px;text-align:center">';
+    echo '<div style="font-weight:800;color:#4b2e83">🔬 Envie du détail complet ?</div>';
+    echo '<div style="font-size:.9em;color:#444;margin:4px 0 8px">La présentation <strong>détaillée</strong> : chaque mécanisme, les invariants, les garanties (le cœur du moteur reste scellé).</div>';
+    echo '<a class="btn-primary" style="background:#4b2e83" href="' . esc_url(lfi_nct_app_url('kit-technique')) . '" target="_blank" rel="noopener">Ouvrir la présentation détaillée →</a>';
+    echo '</div>';
+
     echo '<h3 style="margin:16px 0 8px;color:#4b2e83">🧭 La chaîne complète, de la porte au tribunal</h3>';
     echo '<div style="display:flex;flex-direction:column;gap:8px">';
     foreach ($etapes as $e) {

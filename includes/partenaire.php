@@ -834,8 +834,12 @@ function lfi_nct_app_view_partenaire_espace() {
     echo '<div style="display:flex;flex-direction:column;gap:6px">';
     echo '<div>🔗 <strong>Son espace</strong> : le lien de connexion ci-dessous l\'amène direct sur la <strong>visite guidée</strong> (ce qu\'on fait + ce qu\'on a gagné).</div>';
     echo '<div>✉️ <strong>Par email</strong> : bouton « Envoyer l\'invitation par email » (le message inclut le bilan chiffré).</div>';
-    echo '<a class="btn-ghost" style="color:#c8102e;border-color:#f0b6c1;align-self:flex-start" href="' . esc_url(lfi_nct_app_url('kit-national')) . '" target="_blank" rel="noopener">📄 Ouvrir la présentation (à enregistrer en PDF)</a>';
-    echo '</div></div>';
+    echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
+    echo '<a class="btn-ghost" style="color:#c8102e;border-color:#f0b6c1" href="' . esc_url(lfi_nct_app_url('kit-national')) . '" target="_blank" rel="noopener">📄 Présentation simple (PDF)</a>';
+    echo '<a class="btn-primary" style="background:#4b2e83" href="' . esc_url(lfi_nct_app_url('kit-technique')) . '" target="_blank" rel="noopener">🔬 Présentation DÉTAILLÉE (mécanismes) — pour un profil technique</a>';
+    echo '</div>';
+    echo '<div class="lfi-app-help" style="margin-top:6px"><small>Pour <strong>Manuel Bompard</strong> (mathématicien) : la présentation <strong>détaillée</strong> explique les mécanismes, les invariants et les garanties (le cœur reste scellé). Ouvre-la → 🖨️ Enregistrer en PDF pour la joindre.</small></div>';
+    echo '</div>';
 
     /* ===== Bloc « Message Telegram prêt à envoyer » ===== */
     $tg = get_user_meta($uid, 'lfi_nct_telegram', true);
