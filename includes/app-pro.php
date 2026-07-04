@@ -361,6 +361,10 @@ function lfi_nct_app_view_dossier() {
         } elseif ($action === 'toggle') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) $steps[$idx]['done'] = !$steps[$idx]['done'];
+        } elseif ($action === 'batch') {
+            /* Coche/décoche PLUSIEURS étapes d'un coup (cases cochées = faites). */
+            $checked = array_map('intval', (array) ($_POST['step_done'] ?? []));
+            foreach ($steps as $i => $s) { $steps[$i]['done'] = in_array($i, $checked, true); }
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
@@ -796,44 +800,32 @@ function lfi_nct_dossier_render_parcours($u) {
     echo '</form>';
     echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Le parcours-type démarre par « le locataire s\'empare de sa fiche » (partage de l\'espace, pièces, adhésion, objectif) puis va à l\'amiable avant le juridique. Tu peux tout modifier.</small></div>';
 
-    /* Liste des étapes */
+    /* Liste des étapes — UNE SEULE FORM : on coche PLUSIEURS cases puis on
+       enregistre en une fois (plus de rechargement à chaque clic). */
     if (empty($steps)) {
         echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Clique « ✨ Générer le parcours automatique » ci-dessus, ou ajoute une action à la main.</div>';
     } else {
-        echo '<ol style="list-style:none;padding:0;margin:8px 0;counter-reset:lfi-step">';
+        echo '<form method="post">';
+        wp_nonce_field('lfi_app_dossier_step');
+        echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="batch">';
+        echo '<div class="lfi-app-help" style="margin:4px 0"><small>Coche tout ce qui est fait, <strong>puis</strong> « 💾 Enregistrer » — tu peux en cocher plusieurs d\'un coup.</small></div>';
+        echo '<ol style="list-style:none;padding:0;margin:8px 0">';
         foreach ($steps as $idx => $s) {
             $done = !empty($s['done']);
-            echo '<li style="counter-increment:lfi-step;display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:8px;margin-bottom:6px;background:' . ($done ? '#e8f5ea' : '#fafafa') . ';border-left:3px solid ' . ($done ? '#186a3b' : '#c8102e') . '">';
-
-            /* Numéro / coche */
-            echo '<form method="post" style="margin:0">';
-            wp_nonce_field('lfi_app_dossier_step');
-            echo '<input type="hidden" name="lfi_app_dossier_step" value="1">';
-            echo '<input type="hidden" name="step_action" value="toggle">';
-            echo '<input type="hidden" name="step_idx" value="' . $idx . '">';
-            echo '<button type="submit" title="Cocher" style="width:28px;height:28px;border-radius:50%;border:2px solid ' . ($done ? '#186a3b' : '#c8102e') . ';background:' . ($done ? '#186a3b' : '#fff') . ';color:#fff;cursor:pointer;font-weight:800;flex-shrink:0">' . ($done ? '✓' : (string) ($idx + 1)) . '</button>';
-            echo '</form>';
-
-            echo '<div style="flex:1">';
-            echo '<div style="font-weight:600;' . ($done ? 'text-decoration:line-through;color:#888' : 'color:#1a1a1a') . '">' . esc_html($s['text']) . '</div>';
+            $who = $s['who'] ?? 'admin';
+            $badge = $who === 'tenant' ? '<span style="background:#fff3cd;color:#8a6d1f;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">🏠 locataire</span>' : '<span style="background:#e7f0fb;color:#0066a3;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">👤 toi</span>';
+            echo '<li style="display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:8px;margin-bottom:5px;background:' . ($done ? '#e8f5ea' : '#fafafa') . ';border-left:3px solid ' . ($done ? '#186a3b' : ($who === 'tenant' ? '#d39e00' : '#c8102e')) . '">';
+            echo '<input type="checkbox" name="step_done[]" value="' . $idx . '" ' . checked($done, true, false) . ' style="width:22px;height:22px;margin-top:2px;flex-shrink:0">';
+            echo '<div style="flex:1"><div style="font-weight:600;' . ($done ? 'text-decoration:line-through;color:#888' : 'color:#1a1a1a') . '">' . esc_html($s['text']) . ' ' . $badge . '</div>';
             if (!empty($s['echeance'])) {
                 $late = (!$done && strtotime($s['echeance']) < strtotime(current_time('Y-m-d')));
                 echo '<div style="font-size:.82em;color:' . ($late ? '#c8102e' : '#888') . ';margin-top:2px">' . ($late ? '⚠ en retard — ' : '🗓 ') . 'échéance ' . esc_html(wp_date('j M Y', strtotime($s['echeance']))) . '</div>';
             }
-            echo '</div>';
-
-            /* Supprimer */
-            echo '<form method="post" style="margin:0" onsubmit="return confirm(\'Supprimer cette étape ?\')">';
-            wp_nonce_field('lfi_app_dossier_step');
-            echo '<input type="hidden" name="lfi_app_dossier_step" value="1">';
-            echo '<input type="hidden" name="step_action" value="del">';
-            echo '<input type="hidden" name="step_idx" value="' . $idx . '">';
-            echo '<button type="submit" title="Supprimer" style="background:none;border:0;color:#bbb;cursor:pointer;font-size:1.1em">✕</button>';
-            echo '</form>';
-
-            echo '</li>';
+            echo '</div></li>';
         }
         echo '</ol>';
+        echo '<button type="submit" class="btn-primary" style="background:#186a3b;width:100%">💾 Enregistrer les étapes cochées</button>';
+        echo '</form>';
     }
 
     /* Ajout d'une étape — avec dropdown de suggestions */
