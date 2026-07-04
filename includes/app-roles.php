@@ -619,6 +619,10 @@ function lfi_nct_app_role_dispatch(&$handled) {
         }
     }
 
+    /* Espace DÉMO national (ex. Manuel Bompard) : tableau de bord découverte,
+       données anonymes uniquement. Prioritaire sur l'espace partenaire. */
+    if (function_exists('lfi_nct_demo_dispatch') && lfi_nct_demo_dispatch()) { $handled = true; return; }
+
     /* Élu·e partenaire : espace privilégié cloisonné (dossier partagé + ligne
        directe avec Fabrice). Aucune donnée d'enquête ni de locataire. */
     if (function_exists('lfi_nct_user_role_partner') && lfi_nct_user_role_partner()) {
