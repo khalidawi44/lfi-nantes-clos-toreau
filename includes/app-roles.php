@@ -2099,6 +2099,24 @@ function lfi_nct_app_view_comptes_ga() {
         }
     }
 
+    /* Édition de la fiche d'un membre GA (identité + contact). */
+    if (!empty($_POST['lfi_app_edit_ga']) && check_admin_referer('lfi_app_edit_ga')) {
+        $euid = (int) ($_POST['uid'] ?? 0);
+        $eu   = $euid ? get_userdata($euid) : null;
+        if ($eu && in_array(LFI_NCT_ROLE_GA, (array) $eu->roles, true) && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($euid))) {
+            $p  = sanitize_text_field(wp_unslash($_POST['prenom'] ?? ''));
+            $n  = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+            $em = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+            $te = sanitize_text_field(wp_unslash($_POST['tel'] ?? ''));
+            $upd = ['ID' => $euid, 'first_name' => $p, 'last_name' => $n];
+            $disp = trim($p . ' ' . $n); if ($disp !== '') $upd['display_name'] = $disp;
+            if ($em !== '' && is_email($em)) { $owner = email_exists($em); if (!$owner || (int) $owner === $euid) $upd['user_email'] = $em; }
+            wp_update_user($upd);
+            update_user_meta($euid, 'lfi_nct_tel', $te);
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes-ga', ['edited' => 1, 'open' => $euid]) . '#m-' . $euid); exit;
+    }
+
     /* Import depuis le RÉPERTOIRE TÉLÉPHONE : fiches contact (.vcf) +
        sélecteur de contacts natif (Android). Crée des comptes GA rattachés
        au GA en cours. */
@@ -2371,7 +2389,9 @@ function lfi_nct_app_view_comptes_ga() {
     if (isset($_GET['del_ga']))    lfi_nct_app_flash('🗑 ' . (int) $_GET['del_ga'] . ' membre(s) supprimé(s).');
     if (!empty($_GET['admin_set'])) lfi_nct_app_flash('⭐ Rôle d\'admin mis à jour.');
     if (!empty($_GET['moved']))     lfi_nct_app_flash('↪️ Membre déplacé vers son nouveau groupe d\'action.');
-    if (!empty($_GET['created_uid'])) { $nu = get_userdata((int) $_GET['created_uid']); if ($nu) lfi_nct_app_flash('✅ Membre du GA créé depuis un email : ' . esc_html($nu->display_name) . ' — complète sa fiche ci-dessous.'); }
+    if (!empty($_GET['created_uid'])) { $nu = get_userdata((int) $_GET['created_uid']); if ($nu) lfi_nct_app_flash('✅ Membre du GA créé depuis un email : ' . esc_html($nu->display_name) . ' — sa fiche est ouverte plus bas, complète l\'email et le téléphone.'); }
+    if (!empty($_GET['edited']))    lfi_nct_app_flash('✅ Fiche du membre mise à jour.');
+    $open_uid = (int) ($_GET['open'] ?? ($_GET['created_uid'] ?? 0));
 
     /* Batch après import en masse */
     $batch = get_transient('lfi_nct_pwd_batch_' . get_current_user_id());
@@ -2533,6 +2553,23 @@ function lfi_nct_app_view_comptes_ga() {
             if ($tel) echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
             if (!empty($u->user_registered)) echo '<span class="meta-chip">🗓️ ajouté le ' . esc_html(wp_date('j M Y', strtotime($u->user_registered))) . '</span>';
             echo '</div>';
+
+            /* ✏️ Fiche éditable (identité + contact) — ouverte d'office pour un
+               membre qu'on vient de créer depuis un email. */
+            $fn  = (string) get_user_meta($u->ID, 'first_name', true);
+            $ln  = (string) get_user_meta($u->ID, 'last_name', true);
+            $mtel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
+            echo '<details id="m-' . (int) $u->ID . '"' . ($open_uid === (int) $u->ID ? ' open' : '') . ' style="margin:6px 0">';
+            echo '<summary style="cursor:pointer;font-size:.85em;color:#4b2e83;font-weight:700">✏️ Modifier la fiche</summary>';
+            echo '<form method="post" class="lfi-app-form" style="margin:6px 0 0;box-shadow:none;padding:10px;background:#faf9fd;border:1px solid #ece7f6">';
+            wp_nonce_field('lfi_app_edit_ga');
+            echo '<input type="hidden" name="lfi_app_edit_ga" value="1"><input type="hidden" name="uid" value="' . (int) $u->ID . '">';
+            echo '<label>Prénom<input type="text" name="prenom" value="' . esc_attr($fn) . '"></label>';
+            echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($ln) . '"></label>';
+            echo '<label>Email<input type="email" name="email" value="' . esc_attr($u->user_email) . '" placeholder="à compléter"></label>';
+            echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr($mtel) . '" placeholder="à compléter"></label>';
+            echo '<button type="submit" class="btn-primary">💾 Enregistrer la fiche</button>';
+            echo '</form></details>';
 
             echo '<div class="row-actions" style="display:flex;gap:6px;flex-wrap:wrap">';
             /* Réinitialiser & renvoyer */
