@@ -434,12 +434,28 @@ function lfi_nct_app_view_inbox_import() {
         echo '<div class="lfi-app-empty">Aucun email non reconnu. 👍</div>';
     } else {
         echo '<div class="lfi-app-help"><small>Le robot n\'a pas reconnu le locataire. Dis-lui une fois de qui il s\'agit : il range l\'email <strong>et il apprend</strong> (l\'adresse est mémorisée → la prochaine fois, c\'est automatique).</small></div>';
-        /* Liste des locataires du GA pour le menu déroulant. */
-        $tsel = [];
+        /* Personnes rattachables = locataires (par rôle) UNION toute personne
+           ayant un DOSSIER dans le périmètre. Multi-casquette : un admin / membre
+           du GA qui a AUSSI son propre dossier locataire doit apparaître. */
+        $people = [];
         if (function_exists('lfi_nct_users_ga_query')) {
             $ta = lfi_nct_users_ga_query(['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'fields' => ['ID', 'display_name'], 'number' => 800, 'orderby' => 'display_name']);
-            $tsel = get_users($ta);
+            foreach (get_users($ta) as $tu) $people[(int) $tu->ID] = $tu->display_name;
         }
+        global $wpdb;
+        $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $drows = $wpdb->get_results("SELECT DISTINCT tenant_user_id, tenant_prenom, tenant_nom FROM $td WHERE tenant_user_id > 0") ?: [];
+        foreach ($drows as $r) {
+            $duid = (int) $r->tenant_user_id;
+            if (!$duid || isset($people[$duid])) continue;
+            if (function_exists('lfi_nct_uid_in_scope') && !lfi_nct_uid_in_scope($duid)) continue; /* cloisonnement */
+            $nm = trim($r->tenant_prenom . ' ' . $r->tenant_nom);
+            if ($nm === '') { $u = get_userdata($duid); $nm = $u ? $u->display_name : ('Dossier #' . $duid); }
+            $people[$duid] = $nm . ' 🗂️';
+        }
+        asort($people, SORT_NATURAL | SORT_FLAG_CASE);
+        $opts_html = '<option value="">— rattacher à un locataire —</option>';
+        foreach ($people as $puid => $pnm) $opts_html .= '<option value="' . (int) $puid . '">' . esc_html($pnm) . '</option>';
         echo '<ul class="lfi-app-list">';
         foreach (array_reverse($q) as $e) {
             echo '<li class="lfi-app-card"><div class="head"><div class="who">' . esc_html($e['objet'] ?: '(sans objet)') . '</div><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
@@ -449,9 +465,7 @@ function lfi_nct_app_view_inbox_import() {
             if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
             echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
             echo '<input type="hidden" name="lfi_inbox_assign" value="1"><input type="hidden" name="queue_id" value="' . (int) ($e['id'] ?? 0) . '">';
-            echo '<select name="tenant_uid" required style="flex:1;min-width:170px"><option value="">— rattacher à un locataire —</option>';
-            foreach ($tsel as $tu) echo '<option value="' . (int) $tu->ID . '">' . esc_html($tu->display_name) . '</option>';
-            echo '</select>';
+            echo '<select name="tenant_uid" required style="flex:1;min-width:170px">' . $opts_html . '</select>';
             echo '<button type="submit" class="btn-primary" style="background:#186a3b">✅ Ranger + apprendre</button></form>';
             /* 🚫 Bannir l'expéditeur (newsletter, no-reply…) : disparaît de la file
                et ne reviendra plus. */
