@@ -496,14 +496,20 @@ function lfi_nct_nmh_deadline($courrier_date, $urgence) {
  *  dossier (aucune donnée inventée). Imprimable / PDF.            *
  * ============================================================== */
 function lfi_nct_app_view_dossier_avocat() {
-    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
-        wp_safe_redirect(lfi_nct_app_url('dossiers'));
-        exit;
-    }
     global $wpdb;
     $uid = (int) ($_GET['uid'] ?? 0);
+    /* Accès : soit admin de GA (cloisonné à son GA), soit l'avocat·e À QUI ce
+       dossier a été confié (secret professionnel, du côté du locataire). */
+    $is_admin = function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options');
+    $is_avocat_assigned = function_exists('lfi_nct_user_role_avocat') && lfi_nct_user_role_avocat()
+        && function_exists('lfi_nct_avocat_of_tenant') && lfi_nct_avocat_of_tenant($uid) === get_current_user_id();
+    if (!$is_admin && !$is_avocat_assigned) {
+        wp_safe_redirect(lfi_nct_app_url());
+        exit;
+    }
     $u   = $uid ? get_userdata($uid) : null;
-    $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
+    /* L'admin est cloisonné à son GA ; l'avocat·e assigné·e passe (déjà filtré). */
+    $in_scope = $is_avocat_assigned || !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
     if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
         echo '<div class="lfi-app"><div class="lfi-app-error">Locataire introuvable.</div></div>';
         return;

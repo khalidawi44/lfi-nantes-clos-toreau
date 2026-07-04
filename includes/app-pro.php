@@ -438,6 +438,7 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
     if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Coupe posée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure). Les membres du GA verront la victoire à l\'ouverture de l\'app.');
     if (!empty($_GET['unwon'])) lfi_nct_app_flash('Coupe annulée.');
+    if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
 
     /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
     lfi_nct_dossier_render_batailles($u, $row);
@@ -954,6 +955,9 @@ function lfi_nct_dossier_render_juridique_guidance($u, $row) {
     echo '<p style="margin:6px 0;color:#666"><small>Le <strong>robot architecte</strong> t\'oriente pièce par pièce et sur la formulation à envoyer.</small></p>';
     echo '</div>';
     echo '</details>';
+
+    /* Confier ce dossier à un·e avocat·e (Me Valet / Me Goache). */
+    if (function_exists('lfi_nct_avocat_assign_box')) lfi_nct_avocat_assign_box($u);
 }
 
 function lfi_nct_dossier_render_parcours($u) {
