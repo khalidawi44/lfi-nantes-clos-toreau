@@ -56,6 +56,23 @@ function lfi_nct_carto_niveaux() {
     ];
 }
 
+/**
+ * Affichage respectueux de la vie privée : « Prénom N. ».
+ * On ne montre JAMAIS le nom de famille complet ni l'email en clair.
+ * (Prénom = 1er mot ; N. = initiale du dernier mot.)
+ */
+function lfi_nct_carto_short_name($name) {
+    $name = trim(preg_replace('/\s+/', ' ', (string) $name));
+    if ($name === '') return '';
+    $parts = explode(' ', $name);
+    if (count($parts) === 1) return $parts[0];
+    $prenom  = $parts[0];
+    $initial = function_exists('mb_strtoupper')
+        ? mb_strtoupper(mb_substr(end($parts), 0, 1))
+        : strtoupper(substr(end($parts), 0, 1));
+    return $prenom . ' ' . $initial . '.';
+}
+
 /** Message d'invitation personnalisé pour un GA (avec chiffres réseau en direct). */
 function lfi_nct_carto_invite_message($e) {
     $nom = trim((string) ($e['contact'] ?? '')) ?: (trim((string) ($e['nom'] ?? '')) ?: 'camarade');
@@ -213,7 +230,7 @@ function lfi_nct_app_view_carto() {
     if (!empty($_GET['padded']))   lfi_nct_app_flash('✅ Personne ajoutée à l\'organigramme.');
     if (isset($_GET['pimported']))  lfi_nct_app_flash('✅ ' . (int) $_GET['pimported'] . ' personne(s) importée(s).');
     if (!empty($_GET['pdeleted']))  lfi_nct_app_flash('🗑 Personne retirée.');
-    echo '<div class="lfi-app-help" style="background:#fdeef0;border-left:4px solid #c8102e"><small>🔒 <strong>Privé</strong> — visible par toi seul (superadmin). Ce sont des contacts de GA, aucune donnée d\'enquête ni de locataire.</small></div>';
+    echo '<div class="lfi-app-help" style="background:#fdeef0;border-left:4px solid #c8102e"><small>🔒 <strong>Privé</strong> — visible par toi seul (superadmin). Ce sont des contacts de GA, aucune donnée d\'enquête ni de locataire.<br>👁️ <strong>Affichage protégé</strong> : seuls le GA et « <em>Prénom N.</em> » sont montrés. Les <strong>emails ne sont jamais affichés en clair</strong> (masqués <code>••</code>) — ils restent stockés pour l\'envoi automatique et s\'utilisent via les boutons ✉️/📱.</small></div>';
 
     /* Compteurs + filtre. */
     $counts = ['' => count($list)];
@@ -237,14 +254,13 @@ function lfi_nct_app_view_carto() {
             echo '<li class="lfi-app-card" style="border-left:4px solid ' . esc_attr($sm[2]) . '">';
             echo '<div class="head"><div class="who">' . esc_html($e['nom']) . ($e['commune'] ? ' <span style="font-weight:400;color:#888">· ' . esc_html($e['commune']) . '</span>' : '') . '</div><div class="badge" style="background:' . esc_attr($sm[2]) . ';color:#fff">' . $sm[0] . ' ' . esc_html($sm[1]) . '</div></div>';
             echo '<div class="meta">';
-            if (!empty($e['contact'])) echo '<span class="meta-chip">👤 ' . esc_html($e['contact']) . '</span>';
-            if (!empty($e['email'])) echo '<a class="meta-chip" href="mailto:' . esc_attr($e['email']) . '">✉️ ' . esc_html($e['email']) . '</a>';
-            if (!empty($e['tel'])) echo '<a class="meta-chip" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $e['tel'])) . '">📞 ' . esc_html($e['tel']) . '</a>';
+            if (!empty($e['contact'])) echo '<span class="meta-chip">👤 ' . esc_html(lfi_nct_carto_short_name($e['contact'])) . '</span>';
+            if (!empty($e['email'])) echo '<span class="meta-chip" style="color:#999" title="Email masqué — non public">✉️ •••</span>';
             echo '</div>';
             if (!empty($e['contact2']) || !empty($e['email2'])) {
                 echo '<div class="meta"><span class="meta-chip" style="background:#eef;color:#33a">👥 binôme</span>';
-                if (!empty($e['contact2'])) echo '<span class="meta-chip">👤 ' . esc_html($e['contact2']) . '</span>';
-                if (!empty($e['email2'])) echo '<a class="meta-chip" href="mailto:' . esc_attr($e['email2']) . '">✉️ ' . esc_html($e['email2']) . '</a>';
+                if (!empty($e['contact2'])) echo '<span class="meta-chip">👤 ' . esc_html(lfi_nct_carto_short_name($e['contact2'])) . '</span>';
+                if (!empty($e['email2'])) echo '<span class="meta-chip" style="color:#999" title="Email masqué — non public">✉️ •••</span>';
                 echo '</div>';
             }
             /* Invitation prête + statut + suppression. */
@@ -299,11 +315,11 @@ function lfi_nct_app_view_carto() {
         foreach ($by[$k] as $e) {
             $id = (int) ($e['id'] ?? 0);
             echo '<li class="lfi-app-card" style="border-left:4px solid ' . esc_attr($v[2]) . '">';
-            echo '<div class="head"><div class="who">' . esc_html($e['nom']) . '</div></div>';
+            echo '<div class="head"><div class="who">' . esc_html(lfi_nct_carto_short_name($e['nom'])) . '</div></div>';
             if (!empty($e['fonction'])) echo '<div style="font-size:.9em;color:#333;margin:2px 0">🎽 ' . esc_html($e['fonction']) . '</div>';
             if (!empty($e['ga_nom'])) echo '<div style="font-size:.9em;color:#c8102e;font-weight:700;margin:2px 0">🏳️ ' . esc_html($e['ga_nom']) . (!empty($e['ga_membres']) ? ' · <span style="color:#555">' . (int) $e['ga_membres'] . ' membres</span>' : '') . '</div>';
             echo '<div class="meta">';
-            if (!empty($e['email'])) echo '<a class="meta-chip" href="mailto:' . esc_attr($e['email']) . '">✉️ ' . esc_html($e['email']) . '</a>';
+            if (!empty($e['email'])) echo '<span class="meta-chip" style="color:#999" title="Email masqué — non public">✉️ •••</span>';
             if (!empty($e['ap_url'])) echo '<a class="meta-chip" href="' . esc_url($e['ap_url']) . '" target="_blank" rel="noopener">🔗 Action Populaire</a>';
             echo '</div>';
             echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Retirer cette personne ?\')">' . wp_nonce_field('lfi_orga_del', '_wpnonce', true, false) . '<input type="hidden" name="lfi_orga_del" value="1"><input type="hidden" name="id" value="' . $id . '"><button type="submit" class="btn-ghost" style="font-size:.78em">🗑</button></form>';
