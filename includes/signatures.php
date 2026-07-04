@@ -38,7 +38,7 @@ function lfi_nct_email_signature($ctx, $signataire = '', $person = '') {
             return "\n\nOn est là pour vous, courage — à très vite.\n" . $signataire . "\n"
                  . "Union des Quartiers Libres · votre Groupe d'Action de quartier";
         case 'avocat': /* confraternel : LFI + association */
-            return "\n\nBien confraternellement,\n" . $signataire . "\n"
+            return "\n\nBien cordialement,\n" . $signataire . "\n"
                  . "Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau\n"
                  . "Union des Quartiers Libres";
         default:
