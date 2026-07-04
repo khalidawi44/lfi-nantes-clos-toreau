@@ -1217,12 +1217,17 @@ function lfi_nct_app_render_dashboard() {
               </div>
             </a>
         <?php endif; ?>
+
+        <?php /* ===== PRIORITÉ N°1 : LES LOCATAIRES (nouveautés + actions à faire) ===== */ ?>
+        <?php if (!empty($_GET['stepok'])) lfi_nct_app_flash('✅ Étape validée — l\'action suivante est prête.'); ?>
+        <?php if (function_exists('lfi_nct_render_home_locataire_news')) lfi_nct_render_home_locataire_news(); ?>
+        <?php if (function_exists('lfi_nct_render_home_tenant_actions')) lfi_nct_render_home_tenant_actions(); ?>
+
+        <?php /* ===== Ensuite : interpellations / coordination / alertes ===== */ ?>
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_partner_admin_notice')) lfi_nct_partner_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_avocat_admin_notice')) lfi_nct_avocat_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_enq_todo_notice')) lfi_nct_enq_todo_notice(); ?>
-        <?php if (!empty($_GET['stepok'])) lfi_nct_app_flash('✅ Étape validée — l\'action suivante est prête.'); ?>
-        <?php if (function_exists('lfi_nct_render_home_tenant_actions')) lfi_nct_render_home_tenant_actions(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
         <?php if (function_exists('lfi_nct_render_vote_popup')) lfi_nct_render_vote_popup(); ?>
         <?php if (function_exists('lfi_nct_render_victoire_celebration')) lfi_nct_render_victoire_celebration(); ?>
