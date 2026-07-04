@@ -754,6 +754,9 @@ function lfi_nct_render_dossier_replies($row) {
     if (!empty($_GET['nomandat']) && function_exists('lfi_nct_app_flash')) {
         lfi_nct_app_flash('🔒 Impossible d\'écrire à NMH : il faut d\'abord le mandat (adhésion signée au dossier).', 'error');
     }
+    if (!empty($_GET['mandat_removed']) && function_exists('lfi_nct_app_flash')) {
+        lfi_nct_app_flash('✅ Mandat / signature d\'adhésion retiré pour ce dossier.');
+    }
 
     /* VERROU MANDAT : pas d'email à NMH tant que l'adhésion n'est pas signée.
        Aucun membre ne peut écrire à NMH sans mandat → le bouton n'apparaît pas. */
@@ -773,7 +776,11 @@ function lfi_nct_render_dossier_replies($row) {
         if (empty($replies)) return;
     } else {
         /* Bouton self-service : le membre a vu le locataire → il génère l'email. */
-        echo '<div style="margin:4px 0 10px"><a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('generer-reponse', ['id' => (int) $row->id])) . '">✍️ Générer une réponse (le locataire a décidé)</a></div>';
+        echo '<div style="margin:4px 0 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+        echo '<a class="btn-primary" style="background:#186a3b" href="' . esc_url(lfi_nct_app_url('generer-reponse', ['id' => (int) $row->id])) . '">✍️ Générer une réponse (le locataire a décidé)</a>';
+        $rm = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_mandat_remove&id=' . (int) $row->id), 'lfi_nct_mandat_rm_' . (int) $row->id);
+        echo '<a class="btn-ghost" style="font-size:.82em;color:#c8102e" href="' . esc_url($rm) . '" onclick="return confirm(\'Retirer le mandat / la signature d\\\'adhésion pour ce dossier ? (à faire si coché par erreur)\')">🗑 Retirer le mandat (erreur)</a>';
+        echo '</div>';
     }
     if (empty($replies)) {
         echo '<div class="lfi-app-help">Quand un email arrive, va voir le locataire, puis clique « Générer une réponse » : choisis ce qu\'il a décidé, l\'email complet à NMH se prépare ici. Tu le relis et tu l\'envoies depuis ta boîte.</div>';

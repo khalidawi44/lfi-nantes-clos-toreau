@@ -1961,6 +1961,20 @@ function lfi_nct_app_render_assistant_button() {
         <span class="lbl"><?php echo esc_html($label); ?></span>
     </a>
 
+    <?php /* Bascule permanente vers l'interface PC (wp-admin) — admins seulement. */
+    if (current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())): ?>
+    <a class="lfi-app-pcswitch" href="<?php echo esc_url(admin_url('admin.php?page=lfi-nct-hub')); ?>" title="Ouvrir l'interface PC (wp-admin)" aria-label="Basculer sur l'interface PC">
+        <span class="ico">🖥️</span><span class="lbl">Version PC</span>
+    </a>
+    <style>
+      .lfi-app-pcswitch{position:fixed;bottom:20px;right:16px;z-index:99990;background:#1a1a1a;color:#fff;padding:12px 16px;border-radius:999px;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.35);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-weight:700;font-size:.9em;display:inline-flex;align-items:center;gap:8px;transition:transform .12s}
+      .lfi-app-pcswitch:hover,.lfi-app-pcswitch:focus{color:#fff;transform:scale(1.05)}
+      .lfi-app-pcswitch .ico{font-size:1.15em}
+      @media(max-width:480px){.lfi-app-pcswitch .lbl{display:none}.lfi-app-pcswitch{padding:12px}}
+      @media print{.lfi-app-pcswitch{display:none!important}}
+    </style>
+    <?php endif; ?>
+
     <div class="lfi-robot-overlay" id="lfiRobotOverlay" hidden>
         <div class="lfi-robot-panel" role="dialog" aria-modal="true" aria-label="<?php echo esc_attr($titre); ?>">
             <div class="lfi-robot-head">

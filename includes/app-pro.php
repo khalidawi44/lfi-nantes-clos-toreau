@@ -1288,23 +1288,14 @@ function lfi_nct_dossier_render_suivi($u, $row) {
     $adr  = $row->adresse ?? '';
     $adr_key = ($adr && function_exists('lfi_nct_address_canonical_key')) ? lfi_nct_address_canonical_key($adr) : '';
 
-    /* Helper de matching robuste : un enregistrement concerne ce locataire si
-       son tenant_user_id == uid, OU si son adresse a la même clé canonique,
-       OU si le nom correspond (insensible casse/espaces). Gère les fautes de
-       frappe sur la rue (Saint-Jean-de-Luz orthographié différemment). */
-    $matches = function ($r_uid, $r_nom, $r_adr) use ($uid, $nom, $adr_key) {
-        if ((int) $r_uid === $uid && $uid) return true;
-        if ($adr_key && function_exists('lfi_nct_address_canonical_key')) {
-            if (lfi_nct_address_canonical_key($r_adr) === $adr_key && $adr_key !== '') return true;
-        }
-        if ($nom && $r_nom) {
-            $a = strtolower(trim(preg_replace('/\s+/', ' ', $nom)));
-            $b = strtolower(trim(preg_replace('/\s+/', ' ', $r_nom)));
-            if ($a === $b) return true;
-            /* Match partiel : le nom du locataire est contenu dans l'autre */
-            if (strlen($a) >= 4 && (strpos($b, $a) !== false || strpos($a, $b) !== false)) return true;
-        }
-        return false;
+    /* CLOISONNEMENT STRICT (règle absolue) : un enregistrement n'appartient à ce
+       locataire QUE si son tenant_user_id correspond EXACTEMENT. Aucune
+       correspondance par nom ni par adresse — c'était la source de fuites entre
+       dossiers (deux personnes au même immeuble, noms proches…). Un dossier ou
+       une intervention sans tenant_user_id doit être RELIÉ au bon compte (via
+       « lier / fusionner »), pas deviné à l'affichage. */
+    $matches = function ($r_uid, $r_nom = '', $r_adr = '') use ($uid) {
+        return ($uid && (int) $r_uid === $uid);
     };
 
     $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
@@ -1541,11 +1532,9 @@ function lfi_nct_app_view_dossier_recap_nmh() {
 
     $ti = $wpdb->prefix . 'lfi_nct_interventions';
     $all = $wpdb->get_results($wpdb->prepare("SELECT * FROM $ti WHERE owner_user_id = %d AND statut != 'annule' ORDER BY date_intervention ASC", $owner)) ?: [];
-    $interv = array_values(array_filter($all, function ($i) use ($uid, $nom, $adr_key) {
-        if ((int) $i->tenant_user_id === $uid && $uid) return true;
-        if ($adr_key && function_exists('lfi_nct_address_canonical_key') && lfi_nct_address_canonical_key($i->tenant_adresse) === $adr_key) return true;
-        if ($nom && $i->tenant_nom && strtolower(trim($i->tenant_nom)) === strtolower(trim($nom))) return true;
-        return false;
+    /* CLOISONNEMENT STRICT : uniquement les interventions liées à CE compte. */
+    $interv = array_values(array_filter($all, function ($i) use ($uid) {
+        return ($uid && (int) $i->tenant_user_id === $uid);
     }));
 
     $presta = function_exists('lfi_nct_fact_prestataire') ? lfi_nct_fact_prestataire() : [];
