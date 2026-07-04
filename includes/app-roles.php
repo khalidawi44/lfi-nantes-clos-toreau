@@ -2574,6 +2574,34 @@ function lfi_nct_app_view_comptes_locataires() {
         }
     }
 
+    /* === ACTION : FUSIONNER deux comptes locataires (même personne) ===
+       On rapatrie le dossier juridique, le suivi, les photos et (si absent) le
+       lien enquête/tél de l'AUTRE compte dans CELUI-CI, puis on supprime l'autre. */
+    if (!empty($_POST['lfi_app_merge_tenant']) && check_admin_referer('lfi_app_merge_tenant')) {
+        $keep   = (int) ($_POST['keep_uid'] ?? 0);
+        $absorb = (int) ($_POST['absorb_uid'] ?? 0);
+        $ku = $keep ? get_userdata($keep) : null;
+        $au = $absorb ? get_userdata($absorb) : null;
+        $scope_ok = !function_exists('lfi_nct_uid_in_scope') || (lfi_nct_uid_in_scope($keep) && lfi_nct_uid_in_scope($absorb));
+        if ($ku && $au && $keep !== $absorb && $scope_ok
+            && in_array(LFI_NCT_ROLE_TENANT, (array) $ku->roles, true)
+            && in_array(LFI_NCT_ROLE_TENANT, (array) $au->roles, true)) {
+            /* Dossiers juridiques + photos → rattachés au compte gardé. */
+            $wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}lfi_nct_dossiers_locataires SET tenant_user_id = %d WHERE tenant_user_id = %d", $keep, $absorb));
+            $wpdb->query($wpdb->prepare("UPDATE {$wpdb->postmeta} SET meta_value = %d WHERE meta_key = '_lfi_tenant_user_id' AND meta_value = %d", $keep, $absorb));
+            /* Métas utiles récupérées seulement si le compte gardé ne les a pas. */
+            foreach (['lfi_nct_suivi_steps', 'lfi_nct_response_id', 'lfi_nct_tel'] as $mk) {
+                if (!get_user_meta($keep, $mk, true)) { $v = get_user_meta($absorb, $mk, true); if ($v !== '' && $v !== false) update_user_meta($keep, $mk, $v); }
+            }
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+            wp_delete_user($absorb);
+            wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'merged' => 1, 'open' => $keep]) . '#compte-' . $keep);
+            exit;
+        }
+        wp_safe_redirect(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'mergeerr' => 1]));
+        exit;
+    }
+
     /* === ACTION : SUPPRESSION d'un compte locataire (bornée au GA) === */
     if (!empty($_POST['lfi_app_delete_tenant']) && check_admin_referer('lfi_app_delete_tenant')) {
         $uid = (int) ($_POST['uid'] ?? 0);
@@ -2773,6 +2801,8 @@ function lfi_nct_app_view_comptes_locataires() {
     if ($created_err)              lfi_nct_app_flash('❌ ' . $created_err, 'err');
     if (!empty($_GET['edited']))   lfi_nct_app_flash('✅ Compte locataire mis à jour.');
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 Compte locataire supprimé.');
+    if (!empty($_GET['merged']))   lfi_nct_app_flash('🔀 Comptes fusionnés : dossier, suivi et photos rapatriés ici, le doublon a été supprimé.');
+    if (!empty($_GET['mergeerr']))  lfi_nct_app_flash('⚠️ Fusion impossible (compte introuvable ou hors de ton GA).', 'error');
     if (isset($_GET['backfilled'])) lfi_nct_app_flash('✅ Rattrapage : ' . (int) $_GET['backfilled'] . ' compte(s) et ' . (int) ($_GET['bdos'] ?? 0) . ' dossier(s) juridique(s) créés pour les personnes à recontacter.');
 
     /* RATTRAPAGE en un clic : tous ceux qui veulent être recontactés → compte +
@@ -3030,6 +3060,32 @@ function lfi_nct_app_view_comptes_locataires() {
             echo '<button type="submit" style="background:#a30b25;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-weight:700;cursor:pointer">🗑 Supprimer ce compte</button>';
             echo '</form>';
             echo '</div>';
+
+            /* 🔀 FUSION : rapatrier un DOUBLON (même personne) dans ce compte. */
+            $wantn2 = strtolower(trim(function_exists('remove_accents') ? remove_accents((string) $u->display_name) : (string) $u->display_name));
+            $others = get_users(['role' => LFI_NCT_ROLE_TENANT, 'exclude' => [(int) $u->ID], 'number' => 400, 'fields' => ['ID', 'display_name', 'user_email']]);
+            if (function_exists('lfi_nct_uid_in_scope')) $others = array_values(array_filter($others, function ($o) { return lfi_nct_uid_in_scope($o->ID); }));
+            /* Priorité aux mêmes noms. */
+            usort($others, function ($a, $b) use ($wantn2) {
+                $sa = (strtolower(trim(remove_accents((string) $a->display_name))) === $wantn2) ? 0 : 1;
+                $sb = (strtolower(trim(remove_accents((string) $b->display_name))) === $wantn2) ? 0 : 1;
+                return $sa <=> $sb;
+            });
+            if (!empty($others)) {
+                echo '<div style="margin-top:10px;background:#faf7ff;border:1px solid #dcd0f0;border-radius:8px;padding:10px 12px">';
+                echo '<div style="font-weight:700;color:#4b2e83">🔀 Fusionner un doublon dans ce compte</div>';
+                echo '<div class="lfi-app-help" style="margin:4px 0"><small>Choisis l\'AUTRE compte de la même personne : son <strong>dossier</strong>, son <strong>suivi</strong> et ses <strong>photos</strong> viennent <strong>ICI</strong>, puis il est supprimé. Garde de préférence le compte qui a l\'enquête.</small></div>';
+                echo '<form method="post" onsubmit="return confirm(\'Rapatrier ce compte ici et le supprimer ? Irréversible.\')">';
+                wp_nonce_field('lfi_app_merge_tenant');
+                echo '<input type="hidden" name="lfi_app_merge_tenant" value="1"><input type="hidden" name="keep_uid" value="' . (int) $u->ID . '">';
+                echo '<select name="absorb_uid" required style="width:100%;margin:4px 0"><option value="">— compte à rapatrier ici —</option>';
+                foreach ($others as $o) {
+                    $same = (strtolower(trim(remove_accents((string) $o->display_name))) === $wantn2) ? ' ⭐ même nom' : '';
+                    echo '<option value="' . (int) $o->ID . '">' . esc_html($o->display_name . ' · ' . $o->user_email) . $same . '</option>';
+                }
+                echo '</select>';
+                echo '<button type="submit" class="btn-primary" style="background:#4b2e83;margin-top:4px">🔀 Rapatrier ici + supprimer l\'autre</button></form></div>';
+            }
 
             echo '</details>';
             echo '</li>';
