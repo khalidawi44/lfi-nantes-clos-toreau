@@ -17,10 +17,12 @@ function lfi_nct_signataire_defaut() {
     return (string) get_option('lfi_nct_signataire', 'Fabrice Doucet');
 }
 function lfi_nct_logo_uql_url() {
-    return (string) get_option('lfi_nct_logo_uql', '');
+    $def = defined('LFI_NCT_URL') ? LFI_NCT_URL . 'assets/img/logo-quartier-libre.jpg' : '';
+    return (string) get_option('lfi_nct_logo_uql', $def);
 }
 function lfi_nct_logo_lfi_url() {
-    return (string) get_option('lfi_nct_logo_lfi', 'https://lfi-nantes-clostoreau.fr/wp-content/uploads/2026/05/cropped-logo_sanss_AP.png');
+    $def = defined('LFI_NCT_URL') ? LFI_NCT_URL . 'assets/img/logo-lfi.png' : 'https://lfi-nantes-clostoreau.fr/wp-content/uploads/2026/05/cropped-logo_sanss_AP.png';
+    return (string) get_option('lfi_nct_logo_lfi', $def);
 }
 
 /** Signature TEXTE adaptée à l'interlocuteur ($ctx = nmh|locataire|avocat|general). */
