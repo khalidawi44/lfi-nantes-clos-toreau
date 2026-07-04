@@ -524,8 +524,9 @@ function lfi_nct_avocat_invite_text($link) {
     $t .= "== NOS FORCES (le rapport de force derrière chaque dossier) ==\n";
     $t .= "- Élus municipaux partenaires (Conseil municipal, audit de la gestion du bailleur).\n";
     $t .= "- Relais au conseil d'administration de NMH (Christophe Jouin, membre du CA — majorité).\n";
+    $t .= "- Interlocuteurs directs à la préfecture (signalements, contingent préfectoral, relogement DALO).\n";
     $t .= "- Relais national : députés LFI (questions écrites, propositions de loi sur le logement).\n";
-    $t .= "- SCHS / ARS (insalubrité), signalements préfecture, presse locale, mobilisation collective.\n";
+    $t .= "- SCHS / ARS (insalubrité), presse locale, mobilisation collective.\n";
     $t .= "Le juridique s'inscrit dans une stratégie d'ensemble qui pèse sur le bailleur avant même l'audience.\n\n";
     $t .= "== VOTRE ESPACE DE TRAVAIL (confidentiel) ==\n";
     $t .= "1) Connexion en 1 clic, sans rien taper, puis vous choisissez votre mot de passe.\n";
@@ -559,8 +560,9 @@ function lfi_nct_avocat_invite_html($link, $nom = 'Maître') {
       <ul style="margin:6px 0;padding-left:20px">
         <li>🏛️ <strong>Élus municipaux</strong> partenaires (Conseil municipal, audit de la gestion du bailleur)</li>
         <li>🏢 <strong>Relais au conseil d'administration de NMH</strong> (Christophe Jouin, membre du CA — majorité)</li>
+        <li>🏛️ <strong>Interlocuteurs directs à la préfecture</strong> (signalements, contingent préfectoral, relogement DALO)</li>
         <li>🇫🇷 <strong>Relais national</strong> : députés LFI (questions écrites, propositions de loi sur le logement)</li>
-        <li>🏥 <strong>SCHS / ARS</strong> (insalubrité), <strong>signalements préfecture</strong>, <strong>presse locale</strong>, <strong>mobilisation collective</strong></li>
+        <li>🏥 <strong>SCHS / ARS</strong> (insalubrité), <strong>presse locale</strong>, <strong>mobilisation collective</strong></li>
       </ul>
       <p style="color:#555">Le juridique s'inscrit dans une <strong>stratégie d'ensemble</strong> qui pèse sur le bailleur avant même l'audience.</p>
 
