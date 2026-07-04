@@ -12,6 +12,18 @@
  */
 if (!defined('ABSPATH')) exit;
 
+/* La bannière hero du thème (.ag-asso-hero) doit être TOUT EN HAUT, collée sous
+   le menu. Le thème n'étant pas dans ce dépôt, on force sa position par une
+   injection CSS depuis le plugin (page d'accueil, front uniquement). */
+add_action('wp_head', 'lfi_nct_hero_top_css', 99);
+function lfi_nct_hero_top_css() {
+    if (is_admin()) return;
+    echo '<style id="lfi-hero-top">'
+       . '.ag-asso-hero{margin-top:0 !important;order:-1}'
+       . 'body.home main, body.home #main, body.home .site-main, body.home .entry-content{padding-top:0 !important;margin-top:0 !important}'
+       . '</style>';
+}
+
 add_shortcode('lfi_nct_accueil', 'lfi_nct_accueil_shortcode');
 function lfi_nct_accueil_shortcode($atts) {
     $survey  = function_exists('lfi_nct_survey_url') ? lfi_nct_survey_url() : home_url('/');
