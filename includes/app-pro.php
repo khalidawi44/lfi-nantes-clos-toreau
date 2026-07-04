@@ -765,8 +765,25 @@ function lfi_nct_render_home_locataire_news() {
     usort($events, function ($a, $b) { return $b['t'] - $a['t']; });
     $unmatched = function_exists('lfi_nct_inbox_unmatched') ? count(lfi_nct_inbox_unmatched()) : 0;
     $new_count = 0; foreach ($events as $e) { if ($e['t'] > $seen) $new_count++; }
+    $new_total = $new_count + $unmatched;
 
-    if (empty($events) && $unmatched === 0) return; /* rien à montrer */
+    /* Compte-rendu d'une pêche manuelle (bandeau éphémère). */
+    if (function_exists('lfi_nct_mailcheck_peche_flash')) echo lfi_nct_mailcheck_peche_flash();
+
+    /* 🔔 ALERTE ÉPHÉMÈRE : dès qu'une nouveauté arrive, un bandeau saillant.
+       Et le bouton « pêcher maintenant » reste TOUJOURS là pour synchroniser à
+       la demande — le check automatique tourne en plus, tout seul. */
+    $btn = function_exists('lfi_nct_mailcheck_run_button') ? lfi_nct_mailcheck_run_button('🎣 Pêcher les emails maintenant') : '';
+    if ($new_total > 0) {
+        echo '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:#fdeef0;border:2px solid #c8102e;border-radius:12px;padding:11px 14px;margin-bottom:12px">';
+        echo '<div style="font-weight:800;color:#c8102e">🔔 ' . (int) $new_total . ' nouveauté' . ($new_total > 1 ? 's' : '') . ' <span style="font-weight:600;color:#a33">— ' . (int) $new_count . ' email/photo · ' . (int) $unmatched . ' à rattacher</span></div>';
+        echo '<div>' . $btn . '</div></div>';
+    } else {
+        echo '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:#f4f7fb;border:1px solid #d6e2f0;border-radius:12px;padding:9px 14px;margin-bottom:12px">';
+        echo '<div style="color:#456;font-weight:600">📬 Emails à jour</div><div>' . $btn . '</div></div>';
+    }
+
+    if (empty($events) && $unmatched === 0) return; /* le bandeau + le bouton ci-dessus restent affichés */
 
     echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-bottom:14px">';
     echo '<div class="head"><div class="who">🆕 Quoi de neuf côté locataires</div>';
