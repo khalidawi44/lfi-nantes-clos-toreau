@@ -1809,6 +1809,65 @@ function lfi_nct_app_render_styles() {
     /* Grille de checkboxes (témoignage) */
     .lfi-checkbox-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
     @media (min-width: 600px) { .lfi-checkbox-grid { grid-template-columns: 1fr 1fr; } }
+
+    /* ============================================================== *
+     *  RAFRAÎCHISSEMENT VISUEL « moderne & épuré » (surcouche)        *
+     *  Garde l'ADN LFI (rouge #c8102e / violet #4b2e83) : plus d'air, *
+     *  cartes douces, boutons avec relief, focus accessible.         *
+     * ============================================================== */
+    .lfi-app{
+      --r:#c8102e; --r2:#a30b25; --v:#4b2e83; --ink:#20182c; --muted:#6b6577;
+      --line:rgba(32,20,52,.07);
+      --sh1:0 1px 2px rgba(28,18,48,.05);
+      --sh2:0 8px 24px rgba(28,18,48,.10);
+      background:linear-gradient(180deg,#f7f5fb,#f1eef7);
+      color:var(--ink);
+    }
+    /* Cartes / formulaires / accordéons : bord fin + ombre douce, coins ronds. */
+    .lfi-app-card, .lfi-app-form, .lfi-app-collapse, .lfi-app-empty{
+      border-radius:16px; border:1px solid var(--line); box-shadow:var(--sh1);
+    }
+    .lfi-app-card{ padding:16px; transition:box-shadow .16s ease, transform .16s ease; }
+    .lfi-app-card:hover{ box-shadow:var(--sh2); }
+    .lfi-app-card .who{ color:var(--ink); letter-spacing:-.01em; }
+    .lfi-app-card .badge{ background:#efe9fb; color:#5a3eb0; }
+
+    /* Boutons : relief, dégradé subtil, halo au focus (accessibilité). */
+    .lfi-app .btn-primary{
+      background:linear-gradient(180deg,#d31735,#b60f27); border-radius:12px;
+      box-shadow:0 2px 6px rgba(200,16,46,.26);
+      transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+    }
+    .lfi-app .btn-primary:hover{ filter:brightness(1.04); box-shadow:0 7px 18px rgba(200,16,46,.32); transform:translateY(-1px); }
+    .lfi-app .btn-primary:active{ transform:translateY(0); box-shadow:0 2px 6px rgba(200,16,46,.26); }
+    .lfi-app .btn-ghost{ border-radius:12px; border-width:1.5px; transition:background .12s ease, transform .12s ease; }
+    .lfi-app .btn-ghost:hover{ background:#fff3f5; }
+    .lfi-app .btn-primary:focus-visible, .lfi-app .btn-ghost:focus-visible, .lfi-app .meta-chip:focus-visible{
+      outline:3px solid rgba(75,46,131,.38); outline-offset:2px;
+    }
+
+    /* Barre de navigation : dégradé plus riche + base arrondie. */
+    .lfi-app-navbar{ background:linear-gradient(135deg,#c8102e,#8f0c20); border-radius:0 0 18px 18px; box-shadow:0 6px 18px rgba(160,11,37,.26); }
+
+    /* Tuiles de stats : liseré d'accent en haut + chiffre net. */
+    .lfi-app-stats-grid .stat{ border-radius:16px; border:1px solid var(--line); box-shadow:var(--sh1); position:relative; overflow:hidden; padding:18px 10px 15px; }
+    .lfi-app-stats-grid .stat::before{ content:""; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg,var(--r),var(--v)); }
+    .lfi-app-stats-grid .n{ color:var(--v); letter-spacing:-.02em; }
+
+    /* Puces plus douces et rondes. */
+    .lfi-app .meta-chip{ border-radius:999px; background:#f0edf6; color:#4a4458; }
+    .lfi-app .meta-chip:hover{ background:#e7e2f2; color:#20182c; }
+
+    /* Champs de formulaire nets, focus violet. */
+    .lfi-app-form input[type=text], .lfi-app-form input[type=email], .lfi-app-form input[type=tel],
+    .lfi-app-form input[type=search], .lfi-app-form select, .lfi-app-form textarea{ border-radius:12px; border-color:#e4e0ee; background:#faf9fd; }
+    .lfi-app-form input:focus, .lfi-app-form select:focus, .lfi-app-form textarea:focus{ border-color:var(--v); box-shadow:0 0 0 3px rgba(75,46,131,.12); background:#fff; }
+
+    /* Tuiles d'accueil : relief léger. */
+    .lfi-app-tile{ border-radius:16px; border:1px solid var(--line); box-shadow:var(--sh1); transition:transform .12s ease, box-shadow .12s ease; }
+    .lfi-app-tile:hover{ box-shadow:var(--sh2); transform:translateY(-1px); }
+    .lfi-app-tile:active{ transform:scale(.97); }
+
     <?php
     /* Couleur d'accent personnalisée par GA (repli = rouge LFI, aucun effet). */
     if (function_exists('lfi_nct_ga_couleur')) {
