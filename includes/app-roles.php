@@ -2732,6 +2732,12 @@ function lfi_nct_app_view_comptes_locataires() {
     /* Onglets en haut */
     lfi_nct_app_comptes_tabs('locataires');
 
+    /* Scroll + ouverture fiable de la fiche visée par « Ouvrir / supprimer ». */
+    $open_uid_js = isset($_GET['open']) ? (int) $_GET['open'] : 0;
+    if ($open_uid_js) {
+        echo '<script>setTimeout(function(){var e=document.getElementById("compte-' . $open_uid_js . '");if(e){var d=e.nextElementSibling;if(d&&d.tagName==="DETAILS")d.open=true;e.scrollIntoView({behavior:"smooth",block:"start"});}},300);</script>';
+    }
+
     /* DÉTECTION DE DOUBLONS : comptes locataires au même nom → à vérifier/fusionner. */
     $byname = [];
     foreach ($users_tenant as $tu) {
@@ -2748,7 +2754,7 @@ function lfi_nct_app_view_comptes_locataires() {
             foreach ($grp as $tu) {
                 $has_enq = (bool) get_user_meta($tu->ID, 'lfi_nct_response_id', true);
                 echo '<li class="lfi-app-card" style="padding:8px 10px"><div class="head"><div class="who">@' . esc_html($tu->user_login) . '</div>'
-                   . '<a class="btn-ghost" style="padding:5px 10px;font-size:.82em" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $tu->ID])) . '">Ouvrir / supprimer</a></div>'
+                   . '<a class="btn-ghost" style="padding:5px 10px;font-size:.82em" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $tu->ID]) . '#compte-' . (int) $tu->ID) . '">Ouvrir / supprimer</a></div>'
                    . '<div class="meta"><span class="meta-chip">' . esc_html($tu->user_email) . '</span>' . ($has_enq ? '<span class="meta-chip">📋 a une enquête liée</span>' : '<span class="meta-chip" style="color:#c8102e">sans enquête</span>') . '</div></li>';
             }
             echo '</ul>';
@@ -2899,8 +2905,9 @@ function lfi_nct_app_view_comptes_locataires() {
             echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('intervention-add', ['tenant_uid' => $u->ID])) . '">🔧 + Intervention</a>';
             echo '</div>';
 
-            /* Accordéon édition — ouvert si ?open=UID */
+            /* Accordéon édition — ouvert si ?open=UID (avec ancre pour scroller). */
             $open_attr = ($open_uid === (int) $u->ID) ? ' open' : '';
+            echo '<div id="compte-' . (int) $u->ID . '"></div>';
             echo '<details' . $open_attr . ' style="margin-top:10px;background:#fafafa;border-radius:8px;padding:10px 14px;border:1px solid #eee">';
             echo '<summary style="cursor:pointer;font-weight:700;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
             echo '<span>✏️ Éditer ce locataire</span><span style="font-size:1.2em">▾</span>';
