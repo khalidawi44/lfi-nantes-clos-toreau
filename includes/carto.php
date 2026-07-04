@@ -49,6 +49,7 @@ function lfi_nct_carto_niveaux() {
         'deputes'       => ['🇫🇷', 'Député·es (Assemblée nationale)',        '#0b3d91'],
         'regional'      => ['🌍', 'Régional — Pays de la Loire',            '#6a1b9a'],
         'departemental' => ['🏛️', 'Départemental — Loire-Atlantique',       '#0066a3'],
+        'municipaux'    => ['🏙️', 'Conseiller·es municipaux / métropolitains', '#7a1fa2'],
         'circo'         => ['🗳️', 'Circonscription / secteur',              '#bd8600'],
         'admin_ga'      => ['🏳️', 'Admins de GA (binôme)',                  '#c8102e'],
         'terrain'       => ['✊', 'Militant·e de terrain',                  '#186a3b'],
