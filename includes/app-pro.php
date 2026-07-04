@@ -788,6 +788,41 @@ function lfi_nct_heal_parcours_who() {
     update_option('lfi_nct_heal_parcours_who_v1', 1, false);
 }
 
+/** Déploie (idempotent) les étapes du volet indemnisation dès que l'urgence est
+ *  gagnée. Rattrape les dossiers dont l'urgence a été close avant le grafting
+ *  automatique. */
+function lfi_nct_ensure_indemnisation_steps($uid) {
+    if (function_exists('lfi_nct_victoire_won') && !lfi_nct_victoire_won($uid, 'urgence')) return;
+    if (!function_exists('lfi_nct_dossier_indemnisation_steps')) return;
+    $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
+    if (!is_array($steps)) $steps = [];
+    $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
+    $changed = false;
+    foreach (lfi_nct_dossier_indemnisation_steps() as $tpl) {
+        if (!in_array($tpl['text'], $existing, true)) {
+            $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+            $existing[] = $tpl['text'];
+            $changed = true;
+        }
+    }
+    if ($changed) update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+}
+
+/* HEAL (une fois) : tous les dossiers dont l'urgence est déjà gagnée reçoivent
+   les étapes du volet indemnisation. */
+add_action('init', 'lfi_nct_heal_deploy_indemnisation', 18);
+function lfi_nct_heal_deploy_indemnisation() {
+    if (get_option('lfi_nct_heal_deploy_indemn_v1')) return;
+    if (!defined('LFI_NCT_ROLE_TENANT')) return;
+    $users = get_users(['role' => LFI_NCT_ROLE_TENANT, 'number' => 2000, 'fields' => ['ID']]);
+    foreach ($users as $uid) {
+        if (get_user_meta($uid, 'lfi_nct_urgence_won', true)) {
+            lfi_nct_ensure_indemnisation_steps((int) $uid);
+        }
+    }
+    update_option('lfi_nct_heal_deploy_indemn_v1', 1, false);
+}
+
 /** Le locataire a-t-il fait sa part (fiche + objectif) ? */
 function lfi_nct_tenant_part_done($uid) {
     global $wpdb;
@@ -832,49 +867,93 @@ function lfi_nct_dossier_render_batailles($u, $row) {
     }
     echo '</div>';
 
-    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    /* Quand l'urgence est GAGNÉE, on déploie le volet indemnisation : on greffe
+       ses étapes au parcours (idempotent — rattrape les dossiers gagnés avant
+       le grafting automatique, comme Gwenaëlle). */
+    if ($urg_won && function_exists('lfi_nct_ensure_indemnisation_steps')) {
+        lfi_nct_ensure_indemnisation_steps($u->ID);
+    }
 
-    /* ⚡ VOLET URGENCE */
-    if ($urg_won) {
-        echo '<div style="padding:12px;border-radius:10px;background:#e8f5ea;border-left:5px solid #186a3b">';
-        echo '<div style="font-weight:800;color:#186a3b">⚡ Urgence — 🏆 gagnée</div>';
-        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Le danger a cessé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($urg_won))) . '</span></div>';
-        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet urgence ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
-        echo '</div>';
-    } else {
+    if (!$urg_won) {
+        /* Les deux batailles côte à côte : urgence active, indemnisation à suivre. */
+        echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
         echo '<div style="padding:12px;border-radius:10px;background:#fff3f5;border-left:5px solid #c8102e">';
         echo '<div style="font-weight:800;color:#c8102e">⚡ Urgence — en cours</div>';
         echo '<div style="font-size:.82em;color:#555;margin-top:3px">Faire cesser le danger : travaux, relogement d\'urgence, insalubrité.</div>';
         echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'NMH a accédé à la demande (travaux lancés, relogement accordé…) ? On clôt le volet urgence : une COUPE est posée et le GA est prévenu. Le dossier reste ouvert pour l\\\'indemnisation.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-primary" style="background:#186a3b;width:100%;font-size:.86em">🏆 Bataille gagnée — clore l\'urgence</button></form>';
         echo '</div>';
-    }
-
-    /* 💶 VOLET INDEMNISATION */
-    if ($ind_won) {
-        echo '<div style="padding:12px;border-radius:10px;background:#e8f5ea;border-left:5px solid #186a3b">';
-        echo '<div style="font-weight:800;color:#186a3b">💶 Indemnisation — 🏆 gagnée</div>';
-        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Préjudice réparé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($ind_won))) . '</span></div>';
-        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet indemnisation ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
+        echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
+        echo '<div style="font-weight:800;color:#bd8600">💶 Indemnisation — à suivre</div>';
+        echo '<div style="font-size:.82em;color:#555;margin-top:3px">Après l\'urgence : trouble de jouissance, préjudice. Se déploie automatiquement dès l\'urgence gagnée.</div>';
+        echo '</div>';
         echo '</div>';
     } else {
-        echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
-        echo '<div style="font-weight:800;color:#bd8600">💶 Indemnisation — ' . ($urg_won ? 'à mener' : 'à suivre') . '</div>';
-        echo '<div style="font-size:.82em;color:#555;margin-top:3px">' . ($urg_won ? 'Réparer le préjudice : amiable, puis juridique si besoin.' : 'Après l\'urgence : trouble de jouissance, préjudice.') . '</div>';
-        /* Quand l'urgence est gagnée, on ouvre concrètement le volet juridique. */
-        if ($urg_won) {
+        /* URGENCE GAGNÉE → repliée en « hamburger » ; INDEMNISATION déployée dessous. */
+        echo '<details style="margin:4px 0 10px;background:#e8f5ea;border-radius:10px;border-left:5px solid #186a3b;overflow:hidden">';
+        echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#186a3b;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>⚡ Volet urgence — 🏆 gagné</span><span style="font-size:1.1em">▾</span></summary>';
+        echo '<div style="padding:0 12px 12px"><div style="font-size:.85em;color:#555">Le danger a cessé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($urg_won))) . '</span></div>';
+        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet urgence ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
+        echo '</div></details>';
+
+        if ($ind_won) {
+            echo '<div style="padding:14px;border-radius:12px;background:#e8f5ea;border:2px solid #186a3b">';
+            echo '<div style="font-weight:900;color:#186a3b;font-size:1.05em">💶 Volet indemnisation — 🏆 gagné</div>';
+            echo '<div style="font-size:.85em;color:#555;margin-top:3px">Préjudice réparé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($ind_won))) . '</span> — dossier clos.</div>';
+            echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet indemnisation ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
+            echo '</div>';
+        } else {
+            echo '<div style="padding:14px;border-radius:12px;background:#fffdf5;border:2px solid #bd8600">';
+            echo '<div style="font-weight:900;color:#bd8600;font-size:1.08em">💶 Volet indemnisation — déployé</div>';
+            echo '<div style="font-size:.9em;color:#555;margin-top:4px">Le <strong>préjudice est déjà chiffré</strong> dans le dossier. Reste à <strong>réunir les preuves</strong>, puis à négocier l\'indemnisation à l\'amiable avec Nantes Métropole Habitat.</div>';
+            lfi_nct_dossier_render_juridique_guidance($u, $row);
             $dj = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
             $dj_url = $dj
                 ? lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $dj->id])
                 : lfi_nct_app_url('dossier-juridique-add', ['tenant_uid' => $u->ID, 'tenant_nom' => $u->last_name ?: $u->display_name, 'tenant_prenom' => $u->first_name ?: '', 'tenant_adresse' => $row->adresse ?? '']);
-            echo '<a class="btn-primary" style="background:#bd8600;width:100%;display:block;text-align:center;margin-top:8px;font-size:.86em" href="' . esc_url($dj_url) . '">⚖️ ' . ($dj ? 'Ouvrir le volet juridique' : 'Lancer le volet juridique') . '</a>';
+            echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+            echo '<a class="btn-primary" style="background:#bd8600;flex:1;text-align:center;min-width:150px" href="' . esc_url($dj_url) . '">⚖️ ' . ($dj ? 'Ouvrir le volet juridique' : 'Lancer le volet juridique') . '</a>';
+            if (function_exists('lfi_nct_architecte_can') && lfi_nct_architecte_can()) {
+                echo '<a class="btn-ghost" style="flex:1;text-align:center;min-width:150px" href="' . esc_url(lfi_nct_app_url('architecte')) . '">🧠 Robot architecte</a>';
+            }
+            echo '</div>';
+            echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'Indemnisation obtenue (préjudice réparé) ? On pose la COUPE et on CLÔT le dossier. Le GA est prévenu.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="width:100%;font-size:.86em">🏆 Indemnisation obtenue — clore le dossier</button></form>';
+            echo '</div>';
         }
-        echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'Indemnisation obtenue (préjudice réparé) ? On pose la COUPE et on CLÔT le dossier. Le GA est prévenu.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="indemnisation"><button type="submit" class="btn-ghost" style="width:100%;font-size:.86em">🏆 Bataille gagnée — clore le dossier</button></form>';
-        echo '</div>';
     }
 
-    echo '</div>';
     echo '<div class="lfi-app-help" style="margin-top:8px"><small>Gagner l\'urgence ne ferme PAS le dossier : la coupe est posée, mais on continue sur l\'indemnisation. Chaque bataille = une coupe ; une famille reste comptée une seule fois.</small></div>';
     echo '</div>';
+}
+
+/** Volet juridique déployé : les pièces à réunir + la stratégie amiable à
+ *  destination de NMH (sans dévoiler tout le jeu). Guide d'orientation — le
+ *  chiffrage du préjudice, lui, vit dans le dossier juridique. */
+function lfi_nct_dossier_render_juridique_guidance($u, $row) {
+    $pieces = [
+        'Photos datées / horodatées de tous les désordres (avant / après)',
+        'Constats et rapports officiels (SCHS, ARS, huissier si disponible)',
+        'Certificats médicaux liés au logement (asthme, allergies, stress…)',
+        'Tous les courriers et emails échangés avec NMH (avec accusés)',
+        'Factures et justificatifs des frais engagés à cause du désordre',
+        'Attestations de proches / voisins (témoignages sur le trouble)',
+        'Quittances de loyer (loyer payé plein malgré le trouble de jouissance)',
+    ];
+    echo '<details style="margin-top:10px;background:#fff;border-radius:10px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#bd8600;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>📎 Les pièces / preuves à réunir</span><span>▾</span></summary>';
+    echo '<ul style="margin:4px 0 10px;padding:0 16px 0 30px;font-size:.9em;color:#333;line-height:1.6">';
+    foreach ($pieces as $p) echo '<li>' . esc_html($p) . '</li>';
+    echo '</ul>';
+    echo '</details>';
+
+    echo '<details style="margin-top:8px;background:#fff;border-radius:10px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#0066a3;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>🎯 Stratégie amiable (ne pas dévoiler tout le jeu)</span><span>▾</span></summary>';
+    echo '<div style="padding:0 12px 12px;font-size:.9em;color:#333;line-height:1.55">';
+    echo '<p style="margin:6px 0">On adresse à Nantes Métropole Habitat une <strong>demande d\'indemnisation amiable chiffrée</strong>, en annonçant le <strong>montant global</strong> du préjudice et sa <strong>base légale</strong> (art. 1719 et 1721 du Code civil — obligation de délivrance et de jouissance paisible ; trouble de jouissance), <em>sans</em> communiquer le détail complet du calcul ni l\'intégralité des pièces.</p>';
+    echo '<p style="margin:6px 0">On garde les preuves détaillées <strong>en réserve</strong> pour l\'éventuel contentieux : on montre qu\'on est solide et prêt, mais on ne livre pas tout le dossier d\'un coup.</p>';
+    echo '<p style="margin:6px 0">On fixe un <strong>délai de réponse raisonnable</strong> (≈ 30 jours) et on rappelle qu\'à défaut d\'accord, on saisit la <strong>Commission Départementale de Conciliation</strong> puis le <strong>Tribunal Judiciaire de Nantes</strong>.</p>';
+    echo '<p style="margin:6px 0;color:#666"><small>Le <strong>robot architecte</strong> t\'oriente pièce par pièce et sur la formulation à envoyer.</small></p>';
+    echo '</div>';
+    echo '</details>';
 }
 
 function lfi_nct_dossier_render_parcours($u) {
