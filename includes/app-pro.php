@@ -109,6 +109,58 @@ function lfi_nct_email_wrap_html($prenom, $body_html, $event_html = '', $signatu
  *  - Stockées en attachment privé, lien via post_meta              *
  * ============================================================== */
 
+/** Détermine et mémorise la DATE DE PRISE DE VUE d'une photo (EXIF), pour le
+ *  classement chronologique. Ordre de fiabilité : EXIF « created_timestamp » →
+ *  date de fichier → date d'upload. Renvoie le timestamp unix. */
+function lfi_nct_store_capture_ts($att_id, $file = '') {
+    $att_id = (int) $att_id; $ts = 0;
+    $meta = wp_get_attachment_metadata($att_id);
+    if (is_array($meta) && !empty($meta['image_meta']['created_timestamp'])) {
+        $ts = (int) $meta['image_meta']['created_timestamp'];
+    }
+    if (!$ts && $file && @file_exists($file)) $ts = (int) @filemtime($file);
+    if (!$ts) { $p = get_post($att_id); if ($p) $ts = (int) get_post_time('U', true, $p); }
+    if (!$ts) $ts = (int) current_time('timestamp');
+    update_post_meta($att_id, '_lfi_capture_ts', $ts);
+    return $ts;
+}
+
+/* HEAL (une fois) : renseigne _lfi_capture_ts (date de prise de vue) sur toutes
+   les photos de locataires déjà envoyées, pour le tri chronologique. */
+add_action('init', 'lfi_nct_heal_capture_ts', 19);
+function lfi_nct_heal_capture_ts() {
+    if (get_option('lfi_nct_heal_capture_ts_v1')) return;
+    $ids = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 3000, 'fields' => 'ids',
+        'meta_query' => [
+            ['key' => '_lfi_tenant_user_id', 'compare' => 'EXISTS'],
+            ['key' => '_lfi_capture_ts', 'compare' => 'NOT EXISTS'],
+        ],
+    ]);
+    foreach ((array) $ids as $aid) lfi_nct_store_capture_ts((int) $aid, get_attached_file((int) $aid));
+    update_option('lfi_nct_heal_capture_ts_v1', 1, false);
+}
+
+/** Récupère les photos d'un locataire, CLASSÉES par date de prise de vue (chrono). */
+function lfi_nct_tenant_photos_chrono($uid, $limit = 200) {
+    return get_posts([
+        'post_type'      => 'attachment',
+        'post_status'    => 'any',
+        'posts_per_page' => (int) $limit,
+        'meta_key'       => '_lfi_capture_ts',
+        'orderby'        => 'meta_value_num',
+        'order'          => 'ASC',
+        'meta_query'     => [['key' => '_lfi_tenant_user_id', 'value' => (int) $uid]],
+    ]);
+}
+
+/** Date de prise de vue lisible d'une photo (ou date d'upload en repli). */
+function lfi_nct_photo_capture_label($att_id) {
+    $ts = (int) get_post_meta($att_id, '_lfi_capture_ts', true);
+    if (!$ts) $ts = (int) get_post_time('U', true, get_post($att_id));
+    return $ts ? wp_date('j M Y · H:i', $ts) : '';
+}
+
 function lfi_nct_app_view_envoyer_photo() {
     if (!lfi_nct_user_role_tenant()) {
         echo '<div class="lfi-app"><div class="lfi-app-error">Page réservée aux locataires suivis.</div></div>';
@@ -156,6 +208,7 @@ function lfi_nct_app_view_envoyer_photo() {
                             update_post_meta($att_id, '_lfi_tenant_note', $note);
                             $meta = wp_generate_attachment_metadata($att_id, $upload['file']);
                             wp_update_attachment_metadata($att_id, $meta);
+                            lfi_nct_store_capture_ts($att_id, $upload['file']); /* date de prise de vue (EXIF) */
                             wp_safe_redirect(lfi_nct_app_url('envoyer-photo', ['uploaded' => 1]));
                             exit;
                         }
@@ -176,14 +229,9 @@ function lfi_nct_app_view_envoyer_photo() {
         }
     }
 
-    $photos = get_posts([
-        'post_type'      => 'attachment',
-        'post_status'    => 'any',
-        'posts_per_page' => 50,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-        'meta_query'     => [['key' => '_lfi_tenant_user_id', 'value' => $user->ID]],
-    ]);
+    $photos = function_exists('lfi_nct_tenant_photos_chrono')
+        ? lfi_nct_tenant_photos_chrono($user->ID, 100)
+        : get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 50, 'orderby' => 'date', 'order' => 'DESC', 'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => $user->ID]]]);
 
     lfi_nct_app_screen_open('📷 Envoyer une photo', 'Documenter votre logement en images');
 
@@ -226,7 +274,7 @@ function lfi_nct_app_view_envoyer_photo() {
             echo '<div class="info">';
             if ($piece) echo '<div class="piece">📍 ' . esc_html($piece) . '</div>';
             if ($note)  echo '<div class="note">' . esc_html($note) . '</div>';
-            echo '<div class="when">' . esc_html(wp_date('j M Y', strtotime($p->post_date))) . '</div>';
+            echo '<div class="when">📅 ' . esc_html(lfi_nct_photo_capture_label($p->ID)) . '</div>';
             echo '</div>';
             echo '<form method="post" class="row-actions" onsubmit="return confirm(\'Supprimer cette photo ?\');">';
             wp_nonce_field('lfi_app_photo_del');
@@ -406,14 +454,10 @@ function lfi_nct_app_view_dossier() {
     $row = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
     $problem = $row ? lfi_nct_app_enq_problem($row) : null;
 
-    /* Photos */
-    $photos = get_posts([
-        'post_type'      => 'attachment',
-        'post_status'    => 'any',
-        'posts_per_page' => 100,
-        'orderby'        => 'date', 'order' => 'DESC',
-        'meta_query'     => [['key' => '_lfi_tenant_user_id', 'value' => $u->ID]],
-    ]);
+    /* Photos — CLASSÉES par date de prise de vue (chronologie), pas par upload. */
+    $photos = function_exists('lfi_nct_tenant_photos_chrono')
+        ? lfi_nct_tenant_photos_chrono($u->ID, 200)
+        : get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 100, 'orderby' => 'date', 'order' => 'DESC', 'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => $u->ID]]]);
 
     /* Communications */
     $sms_log   = $tel ? $wpdb->get_results($wpdb->prepare(
@@ -591,13 +635,16 @@ function lfi_nct_app_view_dossier() {
     /* === SUIVI : dossiers juridiques + interventions + recouvrements === */
     lfi_nct_dossier_render_suivi($u, $row);
 
-    /* Photos */
-    echo '<h3 style="margin:18px 0 8px">📷 Photos envoyées (' . count($photos) . ')</h3>';
+    /* Photos — dans l'ordre CHRONOLOGIQUE (date de prise de vue). */
+    echo '<h3 style="margin:18px 0 8px">📷 Photos envoyées (' . count($photos) . ') <small style="font-weight:400;color:#888">· classées par date de prise de vue</small></h3>';
     if (empty($photos)) {
         echo '<div class="lfi-app-empty">Aucune photo encore envoyée.</div>';
     } else {
         echo '<div class="lfi-tenant-gallery">';
+        $prev_day = '';
         foreach ($photos as $p) {
+            $cap_ts = (int) get_post_meta($p->ID, '_lfi_capture_ts', true);
+            $day = $cap_ts ? wp_date('Y-m-d', $cap_ts) : wp_date('Y-m-d', strtotime($p->post_date));
             $url    = wp_get_attachment_image_url($p->ID, 'medium') ?: wp_get_attachment_url($p->ID);
             $piece  = (string) get_post_meta($p->ID, '_lfi_tenant_piece', true);
             $note   = (string) get_post_meta($p->ID, '_lfi_tenant_note', true);
@@ -608,7 +655,7 @@ function lfi_nct_app_view_dossier() {
             echo '<div class="info">';
             if ($piece) echo '<div class="piece">📍 ' . esc_html($piece) . '</div>';
             if ($note)  echo '<div class="note">' . esc_html($note) . '</div>';
-            echo '<div class="when">' . esc_html(wp_date('j M Y', strtotime($p->post_date))) . '</div>';
+            echo '<div class="when">📅 ' . esc_html(lfi_nct_photo_capture_label($p->ID)) . '</div>';
             echo '</div></div>';
         }
         echo '</div>';
