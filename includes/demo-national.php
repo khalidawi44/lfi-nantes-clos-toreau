@@ -37,6 +37,22 @@ function lfi_nct_demo_seed_bompard() {
     update_option('lfi_nct_demo_bompard_done', 1, false);
 }
 
+/* Migration : remplace l'email placeholder de Bompard par son VRAI email de
+   député (vérifié sur assemblee-nationale.fr) + casquette « national ». */
+add_action('init', 'lfi_nct_demo_fix_bompard_email', 13);
+function lfi_nct_demo_fix_bompard_email() {
+    if (get_option('lfi_nct_demo_bompard_email_fixed')) return;
+    $buid = function_exists('lfi_nct_demo_bompard_uid') ? lfi_nct_demo_bompard_uid() : 0;
+    if (!$buid) return;
+    $real = 'manuel.bompard@assemblee-nationale.fr';
+    $cur  = get_userdata($buid);
+    if ($cur && strpos((string) $cur->user_email, '@partenaire.example') !== false && !email_exists($real)) {
+        wp_update_user(['ID' => $buid, 'user_email' => $real]);
+    }
+    if (function_exists('lfi_nct_partner_levels_save')) lfi_nct_partner_levels_save($buid, ['national']);
+    update_option('lfi_nct_demo_bompard_email_fixed', 1, false);
+}
+
 /**
  * Visuel « boîte noire » (SVG autonome) — MONTRE ce que l'outil fait et ce
  * qu'il gagne, JAMAIS comment il est construit.
