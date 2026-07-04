@@ -228,12 +228,13 @@ function lfi_nct_avocat_dispatch() {
     /* Un·e avocat·e qui serait aussi admin garde sa console pour le reste. */
     $also_admin = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat' && $vue !== 'justice-cdc' && $vue !== 'jurisprudence') return false;
+    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat' && $vue !== 'justice-cdc' && $vue !== 'jurisprudence' && $vue !== 'relogement') return false;
 
     switch ($vue) {
         case 'dossier-avocat': lfi_nct_app_view_dossier_avocat(); break; /* la note (accès contrôlé par assignation) */
         case 'justice-cdc':    lfi_nct_app_view_justice_cdc();    break; /* saisine CDC (accès contrôlé) */
         case 'jurisprudence':  lfi_nct_app_view_jurisprudence();  break; /* Judilibre (scopé à ses dossiers) */
+        case 'relogement':     lfi_nct_app_view_relogement();     break; /* DALO / relogement (accès contrôlé) */
         case 'mon-profil':     lfi_nct_app_view_mon_profil();     break;
         case 'installer':      lfi_nct_app_view_installer();      break;
         case 'espace':         /* fallthrough */

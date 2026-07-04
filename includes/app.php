@@ -798,6 +798,7 @@ function lfi_nct_app_shortcode() {
                     case 'avocat-invite-pdf':  lfi_nct_app_view_avocat_invite_pdf();  break;
                     case 'justice-cdc':        lfi_nct_app_view_justice_cdc();        break;
                     case 'pieces':             lfi_nct_app_view_pieces();             break;
+                    case 'relogement':         lfi_nct_app_view_relogement();         break;
                     case 'inbox-import':       lfi_nct_app_view_inbox_import();       break;
                     case 'bailleurs':          lfi_nct_app_view_bailleurs();          break;
                     case 'signatures-cfg':     lfi_nct_app_view_signatures_cfg();     break;
