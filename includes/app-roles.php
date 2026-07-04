@@ -910,6 +910,7 @@ function lfi_nct_ep_handle_photos($tenant_uid) {
         if (!is_wp_error($aid)) {
             update_post_meta($aid, '_lfi_tenant_user_id', (int) $tenant_uid);
             update_post_meta($aid, '_lfi_photo_date', $stamp);
+            if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts((int) $aid, get_attached_file((int) $aid)); /* date de prise de vue */
             $done++;
         }
     }
