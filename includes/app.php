@@ -749,6 +749,7 @@ function lfi_nct_app_shortcode() {
                 $super_only = [
                     'groupes', 'reseau-ga', 'reseau-carte', 'reseau-stats-enquete', 'reseau-ga-pdf', 'voir-ga',
                     'national', 'national-args', 'national-etudes', 'national-pdf', 'sauvegarde', 'suggestions', 'activite',
+                    'demo-national', 'demo-preview', 'kit-national',
                     'modules-params', 'cache', 'preview', 'preview-set', 'preview-exit',
                     'strategie-municipale', 'strategie-nationale', 'geo-perimetres',
                     'partenaires', 'partenaire-espace',
@@ -793,6 +794,8 @@ function lfi_nct_app_shortcode() {
                     case 'partenaires':        lfi_nct_app_view_partenaires();        break;
                     case 'partenaire-espace':  lfi_nct_app_view_partenaire_espace();  break;
                     case 'kit-national':       lfi_nct_app_view_kit_national();       break;
+                    case 'demo-national':      lfi_nct_app_view_demo_hub();           break;
+                    case 'demo-preview':       lfi_nct_app_view_demo_national();      break;
                     case 'avocats':            lfi_nct_app_view_avocats();            break;
                     case 'avocat-espace':      lfi_nct_app_view_avocat_espace();      break;
                     case 'avocat-invites':     lfi_nct_app_view_avocat_invites();     break;
@@ -2445,6 +2448,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📡', 'Activité & connexions',     'Qui utilise l\'app · GA actifs/dormants', lfi_nct_app_url('activite')],
         ],
         '🇫🇷 VOLET NATIONAL — député·es' => [
+            ['🚀', 'Déploiement national',       'Espaces Bompard & Mélenchon',        lfi_nct_app_url('demo-national')],
             ['🤝', 'Élu·es partenaires',        'Espace privé des député·es',         lfi_nct_app_url('partenaires')],
             ['🩺', 'Santé publique (puffs)',    'Dossier national + européen',        lfi_nct_app_url('sante')],
             ['🇫🇷', 'Stratégie nationale',      'Remonter · multi-GA · députation',   lfi_nct_app_url('strategie-nationale')],
