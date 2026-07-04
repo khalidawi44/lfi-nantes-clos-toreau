@@ -451,11 +451,17 @@ function lfi_nct_app_view_dossier() {
     if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
     if ($row && $row->adresse) echo '<span class="meta-chip">📍 ' . esc_html(trim($row->adresse . ($row->etage ? ' · ét. ' . $row->etage : ''))) . '</span>';
     echo '</div>';
+    $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
     echo '<div class="row-actions">';
-    if ($tel) echo '<a class="btn-primary" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📱 SMS direct</a>';
+    if ($tel && !$sms_blocked) echo '<a class="btn-primary" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📱 SMS direct</a>';
+    if ($tel &&  $sms_blocked) echo '<span class="btn-ghost" style="opacity:.6;cursor:not-allowed" title="A demandé à ne plus recevoir de SMS">🚫 SMS refusés</span>';
     if ($tel) echo '<a class="btn-ghost" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
     if ($u->user_email) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email perso</a>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Éditer la fiche</a>';
+    if ($tel && function_exists('lfi_nct_sms_block_toggle_link')) {
+        $lbl = $sms_blocked ? '↩ Réautoriser les SMS' : '🚫 Ne plus lui envoyer de SMS';
+        echo '<a class="btn-ghost" style="font-size:.85em" href="' . esc_url(lfi_nct_sms_block_toggle_link($tel, $u->display_name)) . '">' . $lbl . '</a>';
+    }
     echo '</div>';
     echo '</div>';
 
@@ -2111,6 +2117,8 @@ function lfi_nct_app_view_sms_locataires() {
     $tenants_with_tel = [];
     foreach ($tenants as $u) {
         $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
+        /* Liste noire SMS : on n'affiche pas les locataires qui refusent les SMS. */
+        if ($tel && function_exists('lfi_nct_sms_is_blocked') && lfi_nct_sms_is_blocked($tel)) continue;
         if ($tel) $tenants_with_tel[] = ['uid' => $u->ID, 'name' => $u->display_name, 'tel' => $tel];
     }
 
