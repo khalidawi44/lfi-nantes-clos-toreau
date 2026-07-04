@@ -675,6 +675,81 @@ function lfi_nct_tenant_step_done_handler() {
     wp_safe_redirect(lfi_nct_app_url('', ['stepok' => 1])); exit;
 }
 
+/** 🆕 QUOI DE NEUF CÔTÉ LOCATAIRES — en tête de l'accueil : les emails importés
+ *  récents, les photos/pièces reçues, et les emails « à rattacher ». Un « NEW »
+ *  tant qu'on ne l'a pas vu (mémorisé par admin). */
+function lfi_nct_render_home_locataire_news() {
+    $can = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
+    if (!$can) return;
+    global $wpdb;
+
+    /* « Vu » : on retient l'instant de dernière consultation. */
+    $seen = (int) get_user_meta(get_current_user_id(), 'lfi_nct_locnews_seen', true);
+
+    $owner = function_exists('lfi_nct_fact_owner_id') ? (int) lfi_nct_fact_owner_id() : (int) get_current_user_id();
+    $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT id, tenant_user_id, tenant_prenom, tenant_nom, notes, updated_at FROM $td WHERE owner_user_id = %d ORDER BY updated_at DESC LIMIT 200", $owner)) ?: [];
+    $events = [];
+    foreach ($rows as $r) {
+        $logs = json_decode($r->notes ?? '', true); if (!is_array($logs)) continue;
+        $name = trim($r->tenant_prenom . ' ' . $r->tenant_nom) ?: 'Locataire';
+        $uid  = (int) $r->tenant_user_id;
+        foreach (['email_recu' => ['📥', 'Email reçu', '#0066a3'], 'email_log' => ['📤', 'Email envoyé', '#186a3b']] as $k => $m) {
+            if (empty($logs[$k]) || !is_array($logs[$k])) continue;
+            foreach ($logs[$k] as $e) {
+                if (($e['src'] ?? '') !== 'inbox') continue; /* uniquement les imports auto (ce qu'on risque de rater) */
+                $ts = strtotime($e['date'] ?? '') ?: strtotime($r->updated_at);
+                $events[] = ['t' => $ts, 'ico' => $m[0], 'lbl' => $m[1], 'col' => $m[2], 'name' => $name, 'objet' => (string) ($e['objet'] ?? ''), 'uid' => $uid];
+            }
+        }
+    }
+    /* Photos récentes de locataires (14 j). */
+    $since = date('Y-m-d H:i:s', current_time('timestamp') - 14 * DAY_IN_SECONDS);
+    $photos = $wpdb->get_results($wpdb->prepare(
+        "SELECT p.ID, p.post_date, pm.meta_value AS uid FROM {$wpdb->posts} p
+         JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_lfi_tenant_user_id'
+         WHERE p.post_type='attachment' AND p.post_date >= %s ORDER BY p.post_date DESC LIMIT 30", $since)) ?: [];
+    foreach ($photos as $ph) {
+        $u = get_userdata((int) $ph->uid);
+        if (!$u || (function_exists('lfi_nct_uid_in_scope') && !lfi_nct_uid_in_scope((int) $ph->uid))) continue;
+        $events[] = ['t' => strtotime($ph->post_date), 'ico' => '📸', 'lbl' => 'Photo envoyée', 'col' => '#8a6d1f', 'name' => $u->display_name, 'objet' => '', 'uid' => (int) $ph->uid];
+    }
+
+    usort($events, function ($a, $b) { return $b['t'] - $a['t']; });
+    $unmatched = function_exists('lfi_nct_inbox_unmatched') ? count(lfi_nct_inbox_unmatched()) : 0;
+    $new_count = 0; foreach ($events as $e) { if ($e['t'] > $seen) $new_count++; }
+
+    if (empty($events) && $unmatched === 0) return; /* rien à montrer */
+
+    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-bottom:14px">';
+    echo '<div class="head"><div class="who">🆕 Quoi de neuf côté locataires</div>';
+    if ($new_count) echo '<div class="badge" style="background:#c8102e;color:#fff">' . (int) $new_count . ' nouveau' . ($new_count > 1 ? 'x' : '') . '</div>';
+    echo '</div>';
+
+    if ($unmatched > 0) {
+        echo '<a href="' . esc_url(lfi_nct_app_url('inbox-import')) . '" style="text-decoration:none;color:inherit;display:block;margin:6px 0"><div style="background:#fff3cd;border-radius:8px;padding:9px 11px;font-weight:700;color:#8a6d1f">🧩 ' . (int) $unmatched . ' email(s) à rattacher — dis au robot de qui il s\'agit →</div></a>';
+    }
+
+    if (!empty($events)) {
+        echo '<div style="display:flex;flex-direction:column;gap:5px;margin-top:4px">';
+        foreach (array_slice($events, 0, 8) as $e) {
+            $is_new = $e['t'] > $seen;
+            $url = lfi_nct_app_url('dossier', ['uid' => $e['uid']]);
+            echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid ' . ($is_new ? '#c8102e' : '#e0e0e0') . ';border-radius:8px;padding:8px 10px">';
+            echo '<span style="font-size:1.15em">' . $e['ico'] . '</span>';
+            echo '<span style="flex:1"><strong>' . esc_html($e['name']) . '</strong> <span style="color:#888;font-size:.9em">— ' . esc_html($e['lbl']) . ($e['objet'] ? ' · ' . esc_html(mb_substr($e['objet'], 0, 40)) : '') . '</span></span>';
+            if ($is_new) echo '<span style="background:#c8102e;color:#fff;font-size:.64em;font-weight:800;padding:1px 6px;border-radius:8px">NEW</span>';
+            echo '<span style="color:#0066a3;font-weight:800">→</span></a>';
+        }
+        echo '</div>';
+        echo '<div style="margin-top:6px;text-align:right"><a href="' . esc_url(lfi_nct_app_url('', ['locnews_seen' => 1])) . '" style="font-size:.82em;color:#666">✓ Tout marquer vu</a></div>';
+    }
+    echo '</div>';
+
+    /* Marquer vu si demandé. */
+    if (!empty($_GET['locnews_seen'])) update_user_meta(get_current_user_id(), 'lfi_nct_locnews_seen', current_time('timestamp'));
+}
+
 /** Fil « Mes actions locataires » sur le tableau de bord : la 1re étape non faite
  *  de chaque dossier suivi, avec « ✓ Fait » (avance) et « Ouvrir le dossier ». */
 function lfi_nct_render_home_tenant_actions() {
