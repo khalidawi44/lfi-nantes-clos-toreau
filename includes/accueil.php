@@ -30,55 +30,67 @@ function lfi_nct_accueil_shortcode($atts) {
     ];
 
     ob_start(); ?>
-    <div class="lfi-accueil" style="max-width:820px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+    <style>
+      .lfi-accueil{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;overflow-x:hidden}
+      /* Bandes PLEIN ÉCRAN : chaque section prend toute la largeur, même dans un
+         conteneur de thème étroit (technique « full-bleed » 100vw). */
+      .lfi-acc-band{position:relative;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;width:100vw;max-width:100vw;padding:40px 18px;box-sizing:border-box}
+      .lfi-acc-inner{max-width:1040px;margin:0 auto}
+      .lfi-acc-h{font-size:1.55em;font-weight:900;text-align:center;margin:0 0 6px}
+      .lfi-acc-sub{text-align:center;color:#555;max-width:720px;margin:0 auto 22px;font-size:1.02em;line-height:1.5}
+      @media(max-width:600px){.lfi-acc-band{padding:26px 14px}}
+    </style>
+    <div class="lfi-accueil">
 
-      <!-- HERO -->
-      <section style="background:linear-gradient(135deg,#c8102e,#9d0f26);color:#fff;border-radius:18px;padding:30px 24px;text-align:center">
-        <div style="font-size:.9em;letter-spacing:1px;text-transform:uppercase;opacity:.9;margin-bottom:8px">Groupe d'Action La France Insoumise · Nantes Sud — Clos Toreau</div>
-        <h2 style="font-size:1.8em;font-weight:900;line-height:1.15;margin:0 0 12px;color:#fff">Un souci dans votre logement ? On peut vous aider.</h2>
-        <p style="font-size:1.08em;opacity:.96;max-width:600px;margin:0 auto 20px">Humidité, chauffage, nuisibles, eau chaude, réparations… On vous <strong>accompagne pour faire valoir vos droits</strong> auprès de votre bailleur — simplement, et <strong>gratuitement</strong>, avec l'association <strong>Union des Quartiers Libres</strong>.</p>
-        <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#fff;color:#c8102e;font-weight:900;font-size:1.1em;padding:14px 26px;border-radius:12px;text-decoration:none">📋 Signaler mon problème de logement</a>
-      </section>
-
-      <!-- CE QU'ON FAIT -->
-      <section style="margin-top:28px">
-        <h3 style="font-size:1.4em;font-weight:800;color:#c8102e;text-align:center;margin:0 0 16px">Comment on vous aide</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px">
-          <?php foreach ($combats as $c): ?>
-            <div style="background:#f7f7f7;border-radius:12px;padding:16px">
-              <div style="font-size:1.6em"><?php echo $c[0]; ?></div>
-              <div style="font-weight:800;margin:4px 0 4px"><?php echo esc_html($c[1]); ?></div>
-              <div style="font-size:.94em;color:#333;line-height:1.45"><?php echo wp_kses_post($c[2]); ?></div>
-            </div>
-          <?php endforeach; ?>
+      <!-- 1) SIGNALEMENT — une seule porte d'entrée -->
+      <div class="lfi-acc-band" style="background:linear-gradient(135deg,#c8102e,#9d0f26)">
+        <div class="lfi-acc-inner" style="text-align:center;color:#fff">
+          <div style="font-size:.85em;letter-spacing:1.2px;text-transform:uppercase;opacity:.9;margin-bottom:10px">Groupe d'Action La France Insoumise · Nantes Sud — Clos Toreau</div>
+          <h2 style="font-size:2em;font-weight:900;line-height:1.12;margin:0 0 14px;color:#fff">Un souci dans votre logement&nbsp;?<br>On peut vous aider.</h2>
+          <p style="font-size:1.12em;opacity:.96;max-width:680px;margin:0 auto 22px;line-height:1.5">Humidité, moisissures, nuisibles, chauffage, eau chaude, réparations… On vous <strong>accompagne pour faire valoir vos droits</strong> auprès de votre bailleur — simplement, et <strong>gratuitement</strong>, avec l'association <strong>Union des Quartiers Libres</strong>.</p>
+          <a href="<?php echo esc_url($survey); ?>" style="display:inline-block;background:#fff;color:#c8102e;font-weight:900;font-size:1.15em;padding:15px 30px;border-radius:12px;text-decoration:none;box-shadow:0 8px 22px rgba(0,0,0,.25)">📋 Signaler mon logement (5&nbsp;min)</a>
+          <div style="margin-top:12px;font-size:.92em;opacity:.9">C'est <strong>confidentiel</strong>, et vous pouvez demander qu'<strong>on vous recontacte</strong>.</div>
         </div>
-      </section>
+      </div>
 
-      <!-- TEMOIGNER (bloc réutilisé) -->
-      <section style="margin-top:30px">
-        <?php echo function_exists('lfi_nct_temoigner_shortcode') ? lfi_nct_temoigner_shortcode([]) : ''; ?>
-      </section>
-
-      <!-- NOS RESULTATS -->
-      <section style="margin-top:30px">
-        <h3 style="font-size:1.4em;font-weight:800;color:#186a3b;text-align:center;margin:0 0 16px">Nos résultats</h3>
-        <?php if ($nb_pub > 0 && function_exists('lfi_nct_reussites_shortcode')): ?>
-          <?php echo lfi_nct_reussites_shortcode(['limite' => 4]); ?>
-        <?php else: ?>
-          <p style="text-align:center;color:#555">Nos réussites (relogements obtenus, travaux imposés, indemnisations) sont documentées et publiées ici au fur et à mesure. <strong>La preuve, pas la promesse.</strong></p>
-        <?php endif; ?>
-      </section>
-
-      <!-- NOUS REJOINDRE -->
-      <section style="margin-top:30px;background:#111;color:#fff;border-radius:18px;padding:26px 22px;text-align:center">
-        <h3 style="font-size:1.4em;font-weight:900;margin:0 0 8px;color:#fff">Nous rejoindre</h3>
-        <p style="opacity:.92;max-width:560px;margin:0 auto 18px">Adhésion à l'association <strong>gratuite</strong>. Que vous souhaitiez être accompagné·e ou donner un coup de main près de chez vous, il y a une place pour vous.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
-          <a href="<?php echo esc_url($adh); ?>" style="background:#c8102e;color:#fff;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none">✊ Adhérer / s'inscrire</a>
-          <a href="<?php echo esc_url($events); ?>" style="background:#fff;color:#111;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none">📅 Nos événements</a>
-          <a href="<?php echo esc_url($contact); ?>" style="background:transparent;border:2px solid #fff;color:#fff;font-weight:800;padding:11px 20px;border-radius:12px;text-decoration:none">✍️ Nous contacter</a>
+      <!-- 2) COMMENT ON VOUS AIDE -->
+      <div class="lfi-acc-band" style="background:#fff">
+        <div class="lfi-acc-inner">
+          <h3 class="lfi-acc-h" style="color:#c8102e">Comment on vous aide</h3>
+          <p class="lfi-acc-sub">Nos combats concrets, quartier par quartier — la loi est de votre côté, on la fait respecter.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+            <?php foreach ($combats as $c): ?>
+              <div style="background:#f7f7f7;border-radius:14px;padding:18px;border-top:4px solid #c8102e">
+                <div style="font-size:1.7em"><?php echo $c[0]; ?></div>
+                <div style="font-weight:800;margin:6px 0 5px;font-size:1.05em"><?php echo esc_html($c[1]); ?></div>
+                <div style="font-size:.94em;color:#333;line-height:1.5"><?php echo wp_kses_post($c[2]); ?></div>
+              </div>
+            <?php endforeach; ?>
+          </div>
         </div>
-      </section>
+      </div>
+
+      <!-- 3) NOS RÉSULTATS — coupe + victoires encadrées en colonnes -->
+      <div class="lfi-acc-band" style="background:#f1f7f2">
+        <div class="lfi-acc-inner">
+          <h3 class="lfi-acc-h" style="color:#186a3b">Nos résultats</h3>
+          <p class="lfi-acc-sub">La preuve, pas la promesse. Chaque victoire est documentée et <strong>anonyme</strong>.</p>
+          <?php echo function_exists('lfi_nct_tableau_reussites_shortcode') ? lfi_nct_tableau_reussites_shortcode([]) : ''; ?>
+        </div>
+      </div>
+
+      <!-- 4) NOUS REJOINDRE -->
+      <div class="lfi-acc-band" style="background:#111">
+        <div class="lfi-acc-inner" style="text-align:center;color:#fff">
+          <h3 class="lfi-acc-h" style="color:#fff">Nous rejoindre</h3>
+          <p style="opacity:.92;max-width:620px;margin:0 auto 20px;line-height:1.5">Adhésion à l'association <strong>gratuite</strong>. Que vous souhaitiez être accompagné·e ou donner un coup de main près de chez vous, il y a une place pour vous.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+            <a href="<?php echo esc_url($adh); ?>" style="background:#c8102e;color:#fff;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none">✊ Adhérer / s'inscrire</a>
+            <a href="<?php echo esc_url($events); ?>" style="background:#fff;color:#111;font-weight:800;padding:13px 22px;border-radius:12px;text-decoration:none">📅 Nos événements</a>
+            <a href="<?php echo esc_url($contact); ?>" style="background:transparent;border:2px solid #fff;color:#fff;font-weight:800;padding:11px 20px;border-radius:12px;text-decoration:none">✍️ Nous contacter</a>
+          </div>
+        </div>
+      </div>
 
     </div>
     <?php
