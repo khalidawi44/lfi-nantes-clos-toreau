@@ -412,9 +412,15 @@ function lfi_nct_app_view_kit_technique() {
     <div class="noprint">Présentation détaillée — ou <button class="btn" onclick="window.print()">🖨️ Enregistrer en PDF</button></div>
 
     <section class="slide" style="text-align:center">
+      <?php echo function_exists('lfi_nct_signature_logos_html') ? lfi_nct_signature_logos_html('avocat', 'center') : ''; ?>
       <div style="letter-spacing:2px;text-transform:uppercase;color:#888;font-weight:700;font-size:.8em">La France Insoumise · Union des Quartiers Libres</div>
       <h1>Défendre les locataires, partout</h1>
       <p class="lead">Une présentation <strong>détaillée</strong> des mécanismes : le modèle, les invariants, les garanties. De la porte du locataire jusqu\'au tribunal — et reproductible dans chaque quartier.</p>
+      <?php $ac = lfi_nct_author_contact(); ?>
+      <div style="margin:8px 0 4px;font-size:.95em;color:#444">Présenté par <strong><?php echo esc_html($ac['name']); ?></strong><?php
+        if ($ac['email']) echo ' · <a href="mailto:' . esc_attr($ac['email']) . '" style="color:#4b2e83">' . esc_html($ac['email']) . '</a>';
+        if ($ac['tel'])   echo ' · <a href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $ac['tel'])) . '" style="color:#4b2e83">' . esc_html($ac['tel']) . '</a>';
+      ?></div>
       <div class="grid">
         <div class="stat"><div class="n">🏠 <?php echo (int) $st['suivis']; ?></div><div class="l">Locataires suivis (réseau)</div></div>
         <div class="stat"><div class="n">🏆 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires</div></div>
@@ -428,6 +434,42 @@ function lfi_nct_app_view_kit_technique() {
       <p class="lead">Le système est une <strong>chaîne de traitement</strong> qui transforme un signalement de terrain en rapport de force organisé. Un « moteur » (automatisation + intelligence artificielle) prend en charge le travail répétitif ; l'humain décide et pousse. Le schéma :</p>
       <?php echo $svg; ?>
       <p style="color:#7a6a99;font-size:.9em;margin-top:8px">Le cœur du moteur — le <em>comment</em> exact — n'est pas divulgué : c'est le savoir-faire, scellé. Cette présentation détaille le <strong>modèle</strong> et les <strong>garanties</strong>, pas la recette de fabrication.</p>
+    </section>
+
+    <section class="slide">
+      <h2>L'automatisation, concrètement</h2>
+      <div class="meca">
+        <div class="t">📡 L'app va chercher les emails toute seule</div>
+        <div class="how">Une boîte collectrice reçoit toute la correspondance avec le bailleur. L'app la relève <strong>automatiquement</strong> (IMAP/POP, en tâche de fond) <em>et</em> <strong>à la demande</strong> (un bouton « 🎣 Pêcher les emails »). Chaque email est rangé dans le <strong>bon dossier</strong>, un début de réponse est préparé, une éventuelle victoire est repérée, et tu es alerté·e sur l'accueil. Tu ne tapes rien, tu ne cherches rien.</div>
+        <div class="inv">◆ Zéro saisie manuelle : le militant envoie/reçoit ses mails normalement ; le rangement et le suivi se font seuls.</div>
+      </div>
+      <div class="meca">
+        <div class="t">📱 Les SMS en 1 bouton</div>
+        <div class="how">Sur chaque fiche (locataire, membre), un bouton prépare le SMS tout fait — invitation, accueil, convocation — <strong>avec le lien de connexion déjà dedans</strong>. Un appui : le SMS s'ouvre prêt à partir. Pas de copier-coller, pas d'oubli.</div>
+        <div class="inv">◆ Le geste le plus fréquent (« envoyer le lien ») passe de 5 minutes à 1 clic.</div>
+      </div>
+      <div class="meca">
+        <div class="t">✉️ Les emails en masse, en 1 fois</div>
+        <div class="how">Un envoi groupé (email en nombre) touche d'un coup tous les membres ou locataires concernés — une convocation, une info, un appel à mobilisation — <strong>cloisonné par GA</strong> (chaque groupe n'écrit qu'aux siens).</div>
+        <div class="inv">◆ Informer 100 personnes prend le même temps qu'en informer une.</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <h2>Le vrai problème résolu : s'organiser et s'informer</h2>
+      <p class="lead">Aujourd'hui, les militant·es s'organisent surtout sur <strong>Telegram</strong>. Ça communique, mais pour <em>agir ensemble</em>, c'est inefficace :</p>
+      <ul style="line-height:1.8">
+        <li>L'information <strong>défile et se perd</strong> : impossible de retrouver où en est un dossier, qui fait quoi.</li>
+        <li>Les <strong>décisions, présences et votes</strong> ne sont pas tracés ; on refait les mêmes discussions.</li>
+        <li>Tout est <strong>mélangé</strong> : logistique, dossiers sensibles, contacts — aucun cloisonnement.</li>
+      </ul>
+      <p class="lead" style="margin-top:10px">L'outil <strong>centralise et range</strong>, chacun selon son rôle :</p>
+      <ul style="line-height:1.8">
+        <li><strong>S'organiser</strong> : réunions (validation, présences, votes), événements (convocations, inscriptions), coordination des créneaux.</li>
+        <li><strong>S'informer</strong> : état de chaque dossier, correspondance rangée, pièces horodatées, victoires célébrées — au bon endroit, pas dans un fil qui défile.</li>
+        <li><strong>Cloisonner</strong> : l'enquête et les dossiers restent protégés ; on ne mélange plus l'action et les données sensibles.</li>
+      </ul>
+      <p style="color:var(--g);font-weight:800;margin-top:10px">Résultat : moins de bruit, plus d'action. L'organisation et l'information ne dépendent plus d'un fil de discussion.</p>
     </section>
 
     <section class="slide">
@@ -529,6 +571,18 @@ function lfi_nct_app_view_kit_technique() {
     </section>
     </body></html><?php
     exit;
+}
+
+/** Contact de l'auteur (le super-admin principal = Fabrice) — nom, email, tél. */
+function lfi_nct_author_contact() {
+    $admins = get_users(['role' => 'administrator', 'orderby' => 'ID', 'order' => 'ASC', 'number' => 1]);
+    $u = $admins ? $admins[0] : null;
+    if (!$u) return ['name' => 'Fabrice Doucet', 'email' => '', 'tel' => ''];
+    return [
+        'name'  => $u->display_name ?: 'Fabrice Doucet',
+        'email' => (string) $u->user_email,
+        'tel'   => trim((string) get_user_meta($u->ID, 'lfi_nct_tel', true)),
+    ];
 }
 
 /** Uid du compte démo Bompard (0 si absent). */

@@ -869,7 +869,8 @@ function lfi_nct_app_view_partenaire_espace() {
     if (is_email($p->user_email) && !$is_placeholder_mail) {
         echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_partner_send_invite', '_wpnonce', true, false);
         echo '<input type="hidden" name="lfi_partner_send_invite" value="1">';
-        echo '<button type="submit" class="btn-primary" style="background:#0066a3" onclick="return confirm(\'Envoyer l\\\'invitation (bilan + lien de découverte) par email à ' . esc_js($p->user_email) . ' ?\')">✉️ Envoyer l\'invitation par email</button></form>';
+        echo '<button type="submit" class="btn-primary" style="background:#0066a3" onclick="return confirm(\'Envoyer l\\\'invitation par email à ' . esc_js($p->user_email) . ' ? Un lien de connexion NEUF est généré (il remplace tout lien précédent).\')">✉️ Envoyer / renvoyer l\'invitation (lien neuf)</button></form>';
+        echo '<div class="lfi-app-help" style="margin-top:4px"><small>Chaque envoi crée un <strong>nouveau lien qui remplace le précédent</strong> — clique ici si tu doutes que l\'ancien fonctionne encore.</small></div>';
     }
     echo '</div>';
 
