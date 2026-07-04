@@ -751,9 +751,9 @@ function lfi_nct_partner_invite_message($p, $link) {
     if (function_exists('lfi_nct_demo_stats')) {
         $st = lfi_nct_demo_stats();
         $bilan = "📊 Ce qu'on a DÉJÀ obtenu (données anonymes) : "
-               . (int) ($st['victoires'] ?? 0) . " bataille(s) gagnée(s), "
-               . (int) ($st['suivis'] ?? 0) . " locataire(s) suivi(s), "
-               . (int) ($st['publiees'] ?? 0) . " victoire(s) racontée(s).\n\n";
+               . (int) ($st['publiees'] ?? 0) . " victoire(s), "
+               . (int) ($st['foyers'] ?? 0) . " foyer(s) accompagné(s), "
+               . (int) ($st['suivis'] ?? 0) . " locataire(s) qui demandent un suivi.\n\n";
     }
     return "Salut " . $prenom . ",\n\n"
         . "On a construit au Clos Toreau (Nantes Sud) un outil de terrain pour défendre les locataires : de la porte du locataire jusqu'au tribunal — enquête, dossier monté tout seul, argumentaire chiffré sur le bailleur, relogement, victoires. Ça tourne, c'est concret.\n\n"

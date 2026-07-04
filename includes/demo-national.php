@@ -128,6 +128,65 @@ function lfi_nct_demo_svg_schema() {
     return ob_get_clean();
 }
 
+/**
+ * Graphe de NŒUDS technique (SVG) — pour la présentation DÉTAILLÉE (Bompard).
+ * Des sphères reliées, étiquetées de termes précis (IMAP/POP3, géocodage,
+ * anti-doublon, NLP, EXIF, cloisonnement…) : montre la complexité et la
+ * puissance de la chaîne. Le cœur (moteur) reste central mais scellé.
+ */
+function lfi_nct_demo_svg_graph() {
+    /* [x, y, r, icône, titre, sous-titre, couleur] */
+    $N = [
+        'engine'  => [490, 330, 54, '🧠', 'Moteur', 'automatisation + IA', '#4b2e83'],
+        'terrain' => [120, 135, 42, '📋', 'Terrain', 'captation E/S', '#186a3b'],
+        'geo'     => [110, 330, 42, '🛰️', 'Géocodage', 'BAN · Nominatim', '#0066a3'],
+        'auto'    => [120, 525, 42, '🧩', 'Auto-création', 'compte ⋈ dossier', '#6a1b9a'],
+        'imap'    => [345, 110, 44, '📡', 'IMAP / POP3', 'ingestion mail', '#0066a3'],
+        'tri'     => [520, 95, 40, '🔀', 'Tri', 'routage par identité', '#0066a3'],
+        'dedup'   => [690, 120, 42, '🧬', 'Anti-doublon', 'Message-ID', '#0066a3'],
+        'nlp'     => [865, 210, 44, '🏆', 'Détection victoire', 'analyse NLP', '#186a3b'],
+        'reseau'  => [880, 355, 42, '🇫🇷', 'Agrégation', 'compteurs réseau', '#4b2e83'],
+        'dalo'    => [855, 500, 42, '🏠', 'DALO', 'saisine générée', '#0066a3'],
+        'judi'    => [675, 545, 42, '⚖️', 'Judilibre', 'jurisprudence API', '#6a1b9a'],
+        'cloison' => [500, 565, 46, '🔒', 'Cloisonnement', 'clé tenant_user_id', '#c8102e'],
+        'exif'    => [320, 545, 42, '🕑', 'EXIF', 'horodatage → chrono', '#bd8600'],
+    ];
+    $E = [
+        ['terrain', 'engine'], ['geo', 'engine'], ['auto', 'engine'], ['imap', 'engine'], ['tri', 'engine'],
+        ['dedup', 'engine'], ['nlp', 'engine'], ['reseau', 'engine'], ['dalo', 'engine'], ['judi', 'engine'],
+        ['cloison', 'engine'], ['exif', 'engine'],
+        ['terrain', 'imap'], ['terrain', 'geo'], ['geo', 'auto'], ['imap', 'tri'], ['tri', 'dedup'],
+        ['dedup', 'nlp'], ['nlp', 'reseau'], ['reseau', 'dalo'], ['dalo', 'judi'], ['judi', 'cloison'],
+        ['cloison', 'exif'], ['exif', 'auto'],
+    ];
+    ob_start(); ?>
+    <svg viewBox="0 0 980 660" width="100%" style="max-width:980px;display:block;margin:0 auto;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Graphe des mécanismes de l'outil">
+      <defs>
+        <radialGradient id="glow" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#ffffff" stop-opacity=".55"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="0" y="0" width="980" height="660" fill="#faf9fd"/>
+      <?php
+      /* Arêtes d'abord. */
+      foreach ($E as $e) {
+          $a = $N[$e[0]]; $b = $N[$e[1]];
+          echo '<line x1="' . $a[0] . '" y1="' . $a[1] . '" x2="' . $b[0] . '" y2="' . $b[1] . '" stroke="#b9a9dc" stroke-width="1.6" stroke-opacity=".55"/>';
+      }
+      /* Nœuds. */
+      foreach ($N as $n) {
+          list($x, $y, $r, $ico, $title, $sub, $col) = $n;
+          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . $r . '" fill="' . $col . '"/>';
+          echo '<circle cx="' . $x . '" cy="' . $y . '" r="' . $r . '" fill="url(#glow)"/>';
+          echo '<text x="' . $x . '" y="' . ($y + 8) . '" text-anchor="middle" font-size="' . ($r > 48 ? 26 : 22) . '">' . $ico . '</text>';
+          echo '<text x="' . $x . '" y="' . ($y + $r + 17) . '" text-anchor="middle" font-size="13.5" font-weight="800" fill="#2a2140">' . esc_html($title) . '</text>';
+          echo '<text x="' . $x . '" y="' . ($y + $r + 33) . '" text-anchor="middle" font-size="11.5" fill="#6b6577" font-style="italic">' . esc_html($sub) . '</text>';
+      }
+      ?>
+      <text x="490" y="640" text-anchor="middle" font-size="12.5" font-weight="800" fill="#c8102e">🔒 Invariant : rattachement par clé de compte exacte (tenant_user_id) — le cœur du moteur reste scellé.</text>
+    </svg>
+    <?php
+    return ob_get_clean();
+}
+
 /** Chiffres AGRÉGÉS de TOUT le réseau (France entière), anonymes. */
 function lfi_nct_demo_stats() {
     global $wpdb;
@@ -159,7 +218,9 @@ function lfi_nct_demo_stats() {
     if (function_exists('lfi_nct_reussites')) foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $publiees++;
     /* Locataires ayant demandé à être suivis — RÉSEAU ENTIER (recontact = oui). */
     $suivis = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses WHERE contact_recontact = 1 AND (deleted_at IS NULL)");
-    return ['victoires' => $victoires, 'familles' => count($familles), 'publiees' => $publiees, 'suivis' => $suivis];
+    /* Foyers accompagnés = dossiers ouverts (distinct locataires) — solide, non disputé. */
+    $foyers = (int) $wpdb->get_var("SELECT COUNT(DISTINCT tenant_user_id) FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id > 0");
+    return ['victoires' => $victoires, 'familles' => count($familles), 'publiees' => $publiees, 'suivis' => $suivis, 'foyers' => $foyers];
 }
 
 /* ============================================================== *
@@ -227,8 +288,8 @@ function lfi_nct_app_view_kit_national() {
       <p class="lead">Un outil de terrain né au Clos Toreau (Nantes Sud). De la porte du locataire jusqu'au tribunal — et <strong>reproductible dans chaque quartier de France</strong>.</p>
       <div class="grid">
         <div class="stat"><div class="n">🏠 <?php echo (int) $st['suivis']; ?></div><div class="l">Locataires qui demandent à être suivis</div></div>
-        <div class="stat"><div class="n">🏆 <?php echo (int) $st['victoires']; ?></div><div class="l">Batailles gagnées</div></div>
-        <div class="stat"><div class="n">📣 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires publiées</div></div>
+        <div class="stat"><div class="n">🏆 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires</div></div>
+        <div class="stat"><div class="n">🏡 <?php echo (int) $st['foyers']; ?></div><div class="l">Foyers accompagnés</div></div>
       </div>
       <p style="color:#888;font-size:.85em;margin-top:12px">Totaux <strong>France entière</strong> (tout le réseau) · données strictement anonymes.</p>
     </section>
@@ -293,7 +354,7 @@ function lfi_nct_app_view_kit_technique() {
         || (function_exists('lfi_nct_is_demo_user') && lfi_nct_is_demo_user()); /* Bompard peut la lire */
     if (!$ok) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     $st = lfi_nct_demo_stats();
-    $svg = function_exists('lfi_nct_demo_svg_schema') ? lfi_nct_demo_svg_schema() : '';
+    $svg = function_exists('lfi_nct_demo_svg_graph') ? lfi_nct_demo_svg_graph() : '';
 
     /* Chaque mécanisme : titre · ce qu'il fait · comment (logique) · l'invariant/garantie. */
     $mecas = [
@@ -342,8 +403,8 @@ function lfi_nct_app_view_kit_technique() {
       <p class="lead">Une présentation <strong>détaillée</strong> des mécanismes : le modèle, les invariants, les garanties. De la porte du locataire jusqu\'au tribunal — et reproductible dans chaque quartier.</p>
       <div class="grid">
         <div class="stat"><div class="n">🏠 <?php echo (int) $st['suivis']; ?></div><div class="l">Locataires suivis (réseau)</div></div>
-        <div class="stat"><div class="n">🏆 <?php echo (int) $st['victoires']; ?></div><div class="l">Batailles gagnées</div></div>
-        <div class="stat"><div class="n">📣 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires publiées</div></div>
+        <div class="stat"><div class="n">🏆 <?php echo (int) $st['publiees']; ?></div><div class="l">Victoires</div></div>
+        <div class="stat"><div class="n">🏡 <?php echo (int) $st['foyers']; ?></div><div class="l">Foyers accompagnés</div></div>
       </div>
       <p style="color:#888;font-size:.82em;margin-top:12px">Totaux France entière · strictement anonymes.</p>
     </section>
@@ -498,8 +559,8 @@ function lfi_nct_app_view_demo_national() {
     /* En chiffres (anonymes). */
     echo '<div class="lfi-app-stats-grid" style="margin:14px 0">';
     echo '<div class="stat"><div class="ico">🏠</div><div class="n">' . (int) $st['suivis'] . '</div><div class="l">Locataires suivis (France)</div></div>';
-    echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $st['victoires'] . '</div><div class="l">Batailles gagnées</div></div>';
-    echo '<div class="stat"><div class="ico">📣</div><div class="n">' . (int) $st['publiees'] . '</div><div class="l">Victoires publiées</div></div>';
+    echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $st['publiees'] . '</div><div class="l">Victoires</div></div>';
+    echo '<div class="stat"><div class="ico">🏡</div><div class="n">' . (int) $st['foyers'] . '</div><div class="l">Foyers accompagnés</div></div>';
     echo '</div>';
     echo '<div class="lfi-app-help" style="text-align:center"><small>Totaux France entière (tout le réseau). Aucune donnée personnelle n\'est visible ici — tout est anonyme.</small></div>';
 
