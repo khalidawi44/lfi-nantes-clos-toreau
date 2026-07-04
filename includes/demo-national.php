@@ -115,10 +115,17 @@ function lfi_nct_demo_svg_schema() {
 /** Chiffres AGRÉGÉS de TOUT le réseau (France entière), anonymes. */
 function lfi_nct_demo_stats() {
     global $wpdb;
-    /* Toutes les victoires (coupes) + familles distinctes, tous GA confondus. */
+    /* Batailles gagnées = SOURCE DE VÉRITÉ = l'état réel de chaque dossier (la
+       meta locataire, celle qui pilote les bandeaux « 🏆 gagné »). On lit donc
+       les deux batailles gagnées, y compris les victoires posées AVANT le
+       registre des coupes (ex. Gwen) — que l'ancien comptage oubliait. */
     $victoires = 0; $familles = [];
-    if (function_exists('lfi_nct_victoires_all')) {
-        foreach (lfi_nct_victoires_all() as $v) { $victoires++; $familles[(int) ($v['tenant_uid'] ?? 0)] = 1; }
+    foreach (['urgence', 'indemnisation'] as $bat) {
+        $uids = get_users([
+            'meta_query' => [['key' => 'lfi_nct_' . $bat . '_won', 'value' => '', 'compare' => '!=']],
+            'fields'     => 'ID',
+        ]);
+        foreach ($uids as $uid) { $victoires++; $familles[(int) $uid] = 1; }
     }
     /* Réussites publiées (toutes). */
     $publiees = 0;
