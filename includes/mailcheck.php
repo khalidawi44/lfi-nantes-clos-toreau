@@ -117,9 +117,24 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         $mid = (string) ($o->message_id ?? ('uid' . $uid));
         if (in_array($mid, $seen, true)) continue;
         $from = strtolower((string) ($o->from ?? ''));
+        $to   = strtolower((string) ($o->to ?? ''));
+        $cc   = strtolower((string) ($o->cc ?? ''));
+        $hay  = $from . ' ' . $to . ' ' . $cc;
+        $is_central = ((int) $box['referent'] === 0); /* la boîte collectrice dédiée */
+
+        /* On capte : une réponse d'un expéditeur suivi (NMH/institution/avocat,
+           en From OU To/Cc → les deux sens), OU un email impliquant un MEMBRE du
+           GA (ex. Fabrice Doucet qui envoie) — pas seulement les réponses reçues. */
         $match = false;
-        foreach ($senders as $s) if (strpos($from, $s) !== false) { $match = true; break; }
-        if (!$match) continue;
+        foreach ($senders as $s) if (strpos($hay, $s) !== false) { $match = true; break; }
+        if (!$match && function_exists('lfi_nct_inbox_is_member_email') && function_exists('lfi_nct_inbox_emails')) {
+            foreach (array_merge(lfi_nct_inbox_emails($from), lfi_nct_inbox_emails($to), lfi_nct_inbox_emails($cc)) as $a) {
+                if (lfi_nct_inbox_is_member_email($a)) { $match = true; break; }
+            }
+        }
+        /* Boîte collectrice : on ne JETTE rien — un email inconnu part en « à
+           rattacher » (jamais perdu). Une boîte membre reste filtrée. */
+        if (!$match && !$is_central) continue;
 
         $out['traites']++;
         $seen[] = $mid;
