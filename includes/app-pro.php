@@ -693,6 +693,7 @@ function lfi_nct_render_home_tenant_actions() {
            fait sa part (fiche + objectif). On persiste pour ne pas recalculer. */
         $changed = false;
         foreach ($steps as $i => $s) {
+            if (!empty($s['skipped'])) continue; /* étape rendue inutile : on l'ignore */
             if (empty($s['done']) && ($s['who'] ?? 'admin') === 'tenant' && !empty($s['auto'])) {
                 if (lfi_nct_tenant_part_done((int) $u->ID)) { $steps[$i]['done'] = true; $changed = true; }
                 break; /* on ne teste que la 1re non faite */
@@ -701,8 +702,9 @@ function lfi_nct_render_home_tenant_actions() {
         }
         if ($changed) update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
 
+        /* Prochaine étape À FAIRE = 1re non cochée ET non « inutile ». */
         $idx = -1;
-        foreach ($steps as $i => $s) { if (empty($s['done'])) { $idx = $i; break; } }
+        foreach ($steps as $i => $s) { if (empty($s['done']) && empty($s['skipped'])) { $idx = $i; break; } }
         if ($idx < 0) continue; /* tout est fait */
         $done_n = 0; foreach ($steps as $s) if (!empty($s['done'])) $done_n++;
         $who = $steps[$idx]['who'] ?? 'admin';
@@ -812,7 +814,50 @@ function lfi_nct_ensure_indemnisation_steps($uid) {
             $changed = true;
         }
     }
+    /* RATTRAPAGE : marquer « inutiles » les étapes urgence restées non cochées
+       (dossiers gagnés avant cette logique, ex. Gwenaëlle). Le marqueur
+       « GAGNÉE » et les étapes 💶 indemnisation sont préservés. */
+    $marker = '⚡ Volet urgence : bataille GAGNÉE 🏆';
+    foreach ($steps as $i => $s) {
+        $t = (string) ($s['text'] ?? '');
+        if ($t === $marker) continue;
+        if (mb_strpos($t, '💶') !== false) continue;
+        if (empty($s['done']) && empty($s['skipped'])) { $steps[$i]['skipped'] = true; $changed = true; }
+    }
     if ($changed) update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+
+    /* Backfill des stats « rapidité » si absentes (victoire posée avant). */
+    $ust = get_user_meta($uid, 'lfi_nct_urgence_stats', true);
+    if (!is_array($ust) || !isset($ust['days'])) {
+        $won = (string) get_user_meta($uid, 'lfi_nct_urgence_won', true);
+        if ($won !== '') {
+            $dates = [];
+            $done_at_win = 0; $total_urg = 0;
+            foreach ($steps as $s) {
+                $t = (string) ($s['text'] ?? '');
+                if ($t === $marker || mb_strpos($t, '💶') !== false) continue;
+                if (!empty($s['created'])) $dates[] = $s['created'];
+                $total_urg++;
+                if (!empty($s['done'])) $done_at_win++;
+            }
+            $started = $dates ? min($dates) : substr($won, 0, 10);
+            $days = max(0, (int) round((strtotime(substr($won, 0, 10)) - strtotime($started)) / 86400));
+            update_user_meta($uid, 'lfi_nct_urgence_stats', [
+                'started_at' => $started, 'won_at' => substr($won, 0, 10), 'days' => $days,
+                'done_at_win' => $done_at_win, 'total_at_win' => $total_urg,
+            ]);
+            /* On enrichit aussi la coupe existante pour le classement. */
+            if (function_exists('lfi_nct_victoires_all') && function_exists('lfi_nct_victoires_save')) {
+                $vl = lfi_nct_victoires_all(); $vchg = false;
+                foreach ($vl as $k => $v) {
+                    if ((int) ($v['tenant_uid'] ?? 0) === (int) $uid && ($v['bataille'] ?? '') === 'urgence' && !isset($v['days'])) {
+                        $vl[$k]['days'] = $days; $vl[$k]['won_at_step'] = $done_at_win; $vchg = true;
+                    }
+                }
+                if ($vchg) lfi_nct_victoires_save($vl);
+            }
+        }
+    }
 }
 
 /* HEAL (une fois) : tous les dossiers dont l'urgence est déjà gagnée reçoivent
@@ -899,6 +944,16 @@ function lfi_nct_dossier_render_batailles($u, $row) {
         echo '<details style="margin:4px 0 10px;background:#e8f5ea;border-radius:10px;border-left:5px solid #186a3b;overflow:hidden">';
         echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#186a3b;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>⚡ Volet urgence — 🏆 gagné</span><span style="font-size:1.1em">▾</span></summary>';
         echo '<div style="padding:0 12px 12px"><div style="font-size:.85em;color:#555">Le danger a cessé. <span style="color:#888">' . esc_html(wp_date('j M Y', strtotime($urg_won))) . '</span></div>';
+        /* 🏁 Championnat de rapidité : durée + étape de la victoire. */
+        $ust = get_user_meta($u->ID, 'lfi_nct_urgence_stats', true);
+        if (is_array($ust) && isset($ust['days'])) {
+            $d = (int) $ust['days'];
+            echo '<div style="margin-top:6px;padding:8px 10px;background:#eef7ee;border-radius:8px;font-size:.85em;color:#186a3b">🏁 <strong>Gagné en ' . $d . ' jour' . ($d > 1 ? 's' : '') . '</strong>';
+            if (isset($ust['done_at_win'], $ust['total_at_win']) && (int) $ust['total_at_win'] > 0) {
+                echo ' · à l\'étape ' . (int) $ust['done_at_win'] . '/' . (int) $ust['total_at_win'];
+            }
+            echo ' — <a href="' . esc_url(lfi_nct_app_url('victoires')) . '" style="color:#186a3b;text-decoration:underline">voir le classement</a></div>';
+        }
         echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Annuler la coupe du volet urgence ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win_annuler" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-ghost" style="font-size:.78em;padding:3px 8px">↩ annuler la coupe</button></form>';
         echo '</div></details>';
 
@@ -1008,7 +1063,7 @@ function lfi_nct_dossier_render_parcours($u) {
     echo '<details open style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
     echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
     echo '<span>🧭 Parcours de suivi';
-    $todo = count(array_filter($steps, function ($s) { return empty($s['done']); }));
+    $todo = count(array_filter($steps, function ($s) { return empty($s['done']) && empty($s['skipped']); }));
     if ($todo) echo ' <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 7px;border-radius:10px;vertical-align:middle">' . $todo . ' à faire</span>';
     echo '</span><span style="font-size:1.2em">▾</span>';
     echo '</summary>';
@@ -1033,6 +1088,16 @@ function lfi_nct_dossier_render_parcours($u) {
         echo '<div class="lfi-app-help" style="margin:4px 0"><small>Coche tout ce qui est fait, <strong>puis</strong> « 💾 Enregistrer » — tu peux en cocher plusieurs d\'un coup.</small></div>';
         echo '<ol style="list-style:none;padding:0;margin:8px 0">';
         foreach ($steps as $idx => $s) {
+            /* Étape rendue « inutile » (urgence gagnée avant qu'on la fasse) :
+               affichée barrée, en gris, SANS case — elle ne compte plus. */
+            if (!empty($s['skipped'])) {
+                echo '<li style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:5px;background:#f4f4f4;border-left:3px solid #bbb">';
+                echo '<span style="width:22px;text-align:center;flex-shrink:0">⏭️</span>';
+                echo '<div style="flex:1"><div style="text-decoration:line-through;color:#999;font-weight:500">' . esc_html($s['text'] ?? '') . '</div>';
+                echo '<div style="font-size:.78em;color:#aaa;margin-top:1px">inutile — urgence gagnée avant</div></div>';
+                echo '</li>';
+                continue;
+            }
             $done = !empty($s['done']);
             $who = $s['who'] ?? 'admin';
             $badge = $who === 'tenant' ? '<span style="background:#fff3cd;color:#8a6d1f;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">🏠 locataire</span>' : '<span style="background:#e7f0fb;color:#0066a3;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">👤 toi</span>';

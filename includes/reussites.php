@@ -140,6 +140,8 @@ function lfi_nct_app_view_victoires() {
             echo '</div>';
         }
     }
+    /* 🏁 Classement rapidité (admins de GA uniquement). */
+    if (function_exists('lfi_nct_render_speed_championship')) lfi_nct_render_speed_championship();
     echo do_shortcode('[lfi_nct_tableau_reussites]');
     lfi_nct_app_screen_close();
 }
