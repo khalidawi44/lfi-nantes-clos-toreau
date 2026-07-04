@@ -302,6 +302,49 @@ function lfi_nct_app_view_avocats() {
         }
         wp_safe_redirect(lfi_nct_app_url('avocats', ['email_ok' => 1])); exit;
     }
+    /* CRÉER un·e avocat·e. */
+    if (!empty($_POST['lfi_avocat_create']) && check_admin_referer('lfi_avocat_crud')) {
+        $nom = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+        if ($nom !== '') {
+            $base = 'me.' . sanitize_title($nom);
+            $login = $base; $n = 1;
+            while (username_exists($login)) { $login = $base . '.' . (++$n); }
+            $email = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+            if ($email === '' || !is_email($email) || email_exists($email)) $email = $login . '@avocat.example';
+            $uid = wp_insert_user(['user_login' => $login, 'user_email' => $email, 'user_pass' => wp_generate_password(16), 'display_name' => $nom, 'role' => LFI_NCT_ROLE_AVOCAT]);
+            if (!is_wp_error($uid)) {
+                update_user_meta($uid, 'lfi_nct_tel', sanitize_text_field(wp_unslash($_POST['tel'] ?? '')));
+                update_user_meta($uid, 'lfi_nct_localisation', sanitize_text_field(wp_unslash($_POST['localisation'] ?? '')));
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('avocats', ['created' => 1])); exit;
+    }
+    /* ÉDITER la fiche (nom, tél, localisation, email). */
+    if (!empty($_POST['lfi_avocat_edit']) && check_admin_referer('lfi_avocat_crud')) {
+        $aid = (int) ($_POST['avocat_uid'] ?? 0);
+        if ($aid && lfi_nct_user_role_avocat($aid)) {
+            $upd = ['ID' => $aid];
+            $nom = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
+            if ($nom !== '') $upd['display_name'] = $nom;
+            $em = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+            if ($em !== '' && is_email($em)) $upd['user_email'] = $em;
+            wp_update_user($upd);
+            update_user_meta($aid, 'lfi_nct_tel', sanitize_text_field(wp_unslash($_POST['tel'] ?? '')));
+            update_user_meta($aid, 'lfi_nct_localisation', sanitize_text_field(wp_unslash($_POST['localisation'] ?? '')));
+        }
+        wp_safe_redirect(lfi_nct_app_url('avocats', ['email_ok' => 1])); exit;
+    }
+    /* SUPPRIMER un·e avocat·e. */
+    if (!empty($_POST['lfi_avocat_delete']) && check_admin_referer('lfi_avocat_crud')) {
+        $aid = (int) ($_POST['avocat_uid'] ?? 0);
+        if ($aid && lfi_nct_user_role_avocat($aid) && !user_can($aid, 'manage_options')) {
+            /* on désassigne d'abord les dossiers confiés. */
+            foreach (lfi_nct_avocat_tenants($aid) as $t) delete_user_meta($t->ID, 'lfi_nct_avocat_uid');
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+            wp_delete_user($aid);
+        }
+        wp_safe_redirect(lfi_nct_app_url('avocats', ['deleted' => 1])); exit;
+    }
     /* Générer un lien magique (à envoyer par SMS / email / Telegram). */
     $magic = ['uid' => 0, 'link' => ''];
     if (!empty($_POST['lfi_avocat_link']) && check_admin_referer('lfi_avocat_link')) {
@@ -312,14 +355,14 @@ function lfi_nct_app_view_avocats() {
     }
 
     lfi_nct_app_screen_open('⚖️ Avocat·es partenaires', 'Confie tes dossiers, garde une ligne directe');
-    if (!empty($_GET['email_ok'])) lfi_nct_app_flash('Email enregistré.');
+    if (!empty($_GET['email_ok'])) lfi_nct_app_flash('✅ Fiche enregistrée.');
+    if (!empty($_GET['created']))  lfi_nct_app_flash('✅ Avocat·e ajouté·e. Renseigne son email puis génère son lien.');
+    if (!empty($_GET['deleted']))  lfi_nct_app_flash('Avocat·e supprimé·e.');
     echo '<div class="lfi-app-help">Chaque avocat·e a un espace dédié : la liste des dossiers que tu lui confies, la note structurée + les pièces, et une ligne directe avec toi. <strong>Il/elle ne voit rien d\'autre</strong> (ni l\'enquête terrain, ni les autres locataires).</div>';
 
     $avocats = lfi_nct_avocat_list();
     if (empty($avocats)) {
-        echo '<div class="lfi-app-empty">Aucun compte avocat·e. (Me Valet et Me Goache sont créés automatiquement au déploiement.)</div>';
-        lfi_nct_app_screen_close();
-        return;
+        echo '<div class="lfi-app-empty">Aucun compte avocat·e pour l\'instant. Ajoute-en un ci-dessous.</div>';
     }
     $activity = get_option('lfi_nct_avocat_activity', []);
     foreach ($avocats as $av) {
@@ -337,11 +380,21 @@ function lfi_nct_app_view_avocats() {
         echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('avocat-espace', ['uid' => (int) $av->ID])) . '">Ouvrir son espace →</a>';
         echo '</div>';
 
-        /* Email */
-        echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_avocat_email', '_wpnonce', true, false);
-        echo '<input type="hidden" name="lfi_avocat_email" value="1"><input type="hidden" name="avocat_uid" value="' . (int) $av->ID . '">';
-        echo '<input type="email" name="email" placeholder="email de l\'avocat·e" value="' . ($has_mail ? esc_attr($av->user_email) : '') . '" style="flex:1;min-width:180px">';
-        echo '<button type="submit" class="btn-ghost">💾 Email</button></form>';
+        /* Éditer la fiche (nom, email, tél, localisation) — replié. */
+        $tel = (string) get_user_meta($av->ID, 'lfi_nct_tel', true);
+        $loc = (string) get_user_meta($av->ID, 'lfi_nct_localisation', true);
+        echo '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700;color:#6a1b9a">✏️ Éditer la fiche</summary>';
+        echo '<form method="post" class="lfi-app-form" style="margin-top:6px">' . wp_nonce_field('lfi_avocat_crud', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_avocat_edit" value="1"><input type="hidden" name="avocat_uid" value="' . (int) $av->ID . '">';
+        echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($av->display_name) . '"></label>';
+        echo '<label>Email<input type="email" name="email" value="' . ($has_mail ? esc_attr($av->user_email) : '') . '" placeholder="email de l\'avocat·e"></label>';
+        echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+        echo '<label style="margin:0">Téléphone<input type="tel" name="tel" value="' . esc_attr($tel) . '"></label>';
+        echo '<label style="margin:0">Localisation / cabinet<input type="text" name="localisation" value="' . esc_attr($loc) . '"></label>';
+        echo '</div>';
+        echo '<button type="submit" class="btn-primary" style="margin-top:6px">💾 Enregistrer la fiche</button></form>';
+        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Supprimer cet·te avocat·e ? Ses dossiers seront désassignés.\')">' . wp_nonce_field('lfi_avocat_crud', '_wpnonce', true, false) . '<input type="hidden" name="lfi_avocat_delete" value="1"><input type="hidden" name="avocat_uid" value="' . (int) $av->ID . '"><button type="submit" class="btn-ghost" style="color:#c8102e;font-size:.85em">🗑 Supprimer</button></form>';
+        echo '</details>';
 
         /* Lien magique */
         echo '<form method="post" style="margin-top:6px">' . wp_nonce_field('lfi_avocat_link', '_wpnonce', true, false);
@@ -357,6 +410,19 @@ function lfi_nct_app_view_avocats() {
         }
         echo '</div>';
     }
+
+    /* ➕ Ajouter un·e avocat·e. */
+    echo '<h3 style="margin:18px 0 6px">➕ Ajouter un·e avocat·e</h3>';
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:8px">' . wp_nonce_field('lfi_avocat_crud', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_avocat_create" value="1">';
+    echo '<label>Nom (ex : Me Dupont)<input type="text" name="nom" required></label>';
+    echo '<label>Email<input type="email" name="email" placeholder="facultatif — tu pourras le mettre après"></label>';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label style="margin:0">Téléphone<input type="tel" name="tel"></label>';
+    echo '<label style="margin:0">Localisation / cabinet<input type="text" name="localisation"></label>';
+    echo '</div>';
+    echo '<button type="submit" class="btn-primary" style="background:#6a1b9a;margin-top:6px">Ajouter l\'avocat·e</button></form>';
+
     lfi_nct_app_screen_close();
 }
 

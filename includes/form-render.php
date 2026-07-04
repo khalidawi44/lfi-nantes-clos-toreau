@@ -160,6 +160,27 @@ function lfi_nct_render_form() {
         </div>
 
         <?php
+        /* Bailleur social : proposé au choix (le parc n'est pas le même selon le
+           quartier). L'enquêteur/le locataire choisit ; « Autre » = à préciser. */
+        $lfi_bailleurs = function_exists('lfi_nct_bailleurs_for_ga') ? lfi_nct_bailleurs_for_ga() : [];
+        if (!empty($lfi_bailleurs)): ?>
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">🏢 Bailleur social (propriétaire du logement)</legend>
+            <label class="lfi-field">
+                <select name="bailleur">
+                    <option value="">— choisir —</option>
+                    <?php foreach ($lfi_bailleurs as $bl): ?>
+                        <option value="<?php echo esc_attr($bl['nom']); ?>"><?php echo esc_html($bl['nom'] . ($bl['sigle'] ? ' (' . $bl['sigle'] . ')' : '')); ?></option>
+                    <?php endforeach; ?>
+                    <option value="__autre">Autre bailleur…</option>
+                    <option value="__inconnu">Je ne sais pas</option>
+                </select>
+            </label>
+            <input type="text" name="bailleur_autre" class="lfi-other-input" placeholder="Nom du bailleur si « Autre »" style="margin-top:6px">
+        </fieldset>
+        <?php endif; ?>
+
+        <?php
         /* Section « coupures d'eau chaude » : spécifique au Clos Toreau (fait de
            quartier). On ne l'affiche QUE pour ce GA (home / clos-toreau). */
         $lfi_eau_chaude = !function_exists('lfi_nct_scope_ga_slug')

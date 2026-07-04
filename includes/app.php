@@ -797,6 +797,7 @@ function lfi_nct_app_shortcode() {
                     case 'justice-cdc':        lfi_nct_app_view_justice_cdc();        break;
                     case 'pieces':             lfi_nct_app_view_pieces();             break;
                     case 'inbox-import':       lfi_nct_app_view_inbox_import();       break;
+                    case 'bailleurs':          lfi_nct_app_view_bailleurs();          break;
                     case 'nmh':                lfi_nct_app_view_partenaire_nmh();     break;
                     case 'ase':                lfi_nct_app_view_ase();                break;
                     case 'elus':               lfi_nct_app_view_elus_membre();        break;

@@ -97,6 +97,11 @@ function lfi_nct_register_admin_menu() {
             ['🏛️ Préfecture',               lfi_nct_app_url('prefecture')],
         ];
 
+        $items['🏢 CONFIGURATION DU GA'] = [
+            ['🏢 Bailleurs sociaux',    lfi_nct_app_url('bailleurs')],
+            ['📥 Import email (auto)',  lfi_nct_app_url('inbox-import')],
+        ];
+
         /* Volets thématiques. */
         $items['📚 VOLETS'] = [
             ['🩺 Santé publique (puffs)',   lfi_nct_app_url('sante')],

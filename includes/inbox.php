@@ -19,12 +19,16 @@ if (!defined('ABSPATH')) exit;
 function lfi_nct_inbox_collector() {
     return (string) get_option('lfi_nct_inbox_collector', 'nantessudclostoreau@gmail.com');
 }
-/** Domaines reconnus comme « NMH / bailleur ». */
+/** Domaines reconnus comme « bailleur social » (NMH + tous les bailleurs du GA). */
 function lfi_nct_inbox_nmh_domains() {
     $d = get_option('lfi_nct_inbox_nmh_domains', '');
     $list = $d !== '' ? array_map('trim', explode(',', strtolower($d)))
                       : ['nantesmetropolehabitat.fr', 'nanteshabitat.fr', 'nmhabitat.fr', 'nmh.fr'];
-    return array_values(array_filter($list));
+    /* + les domaines des bailleurs configurés (Nantaise, Atlantique, CDC…). */
+    if (function_exists('lfi_nct_bailleurs_domains')) {
+        $list = array_merge($list, lfi_nct_bailleurs_domains());
+    }
+    return array_values(array_unique(array_filter($list)));
 }
 
 /** Extrait les adresses email d'une chaîne « Nom <a@b>, c@d ». */
