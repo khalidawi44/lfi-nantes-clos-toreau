@@ -109,6 +109,7 @@ function lfi_nct_register_admin_menu() {
             ['📊 Stats globales',      lfi_nct_app_url('stats')],
             ['🗺 Carte',               lfi_nct_app_url('carte')],
             ['🌐 Réseau des GA',       lfi_nct_app_url('reseau-ga')],
+            ['📥 Import email (auto)', lfi_nct_app_url('inbox-import')],
             ['👤 Aperçu locataire/GA', lfi_nct_app_url('preview')],
         ];
     }

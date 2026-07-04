@@ -1,0 +1,341 @@
+<?php
+/**
+ * IMPORT AUTOMATIQUE DES EMAILS — boîte collectrice.
+ *
+ * Toute la correspondance des dossiers locataires transite par UNE boîte Gmail
+ * partagée (par défaut nantessudclostoreau@gmail.com). Un petit script Google
+ * Apps Script lit cette boîte toutes les X minutes et POST chaque email ici.
+ * Le site TRIE par adresses : NMH (bailleur), le membre du GA (expéditeur), et
+ * le LOCATAIRE — et range l'email dans le BON dossier locataire. Ainsi le membre
+ * du GA a tout le suivi, sans que personne n'accède à sa boîte perso.
+ *
+ * Sécurité : la clé d'intégration (lfi_nct_ingest_key) protège le point d'entrée.
+ * Confidentialité : rien n'est public ; l'email est rangé dans le dossier
+ * cloisonné du GA.
+ */
+if (!defined('ABSPATH')) exit;
+
+/** Adresse de la boîte collectrice (configurable). */
+function lfi_nct_inbox_collector() {
+    return (string) get_option('lfi_nct_inbox_collector', 'nantessudclostoreau@gmail.com');
+}
+/** Domaines reconnus comme « NMH / bailleur ». */
+function lfi_nct_inbox_nmh_domains() {
+    $d = get_option('lfi_nct_inbox_nmh_domains', '');
+    $list = $d !== '' ? array_map('trim', explode(',', strtolower($d)))
+                      : ['nantesmetropolehabitat.fr', 'nanteshabitat.fr', 'nmhabitat.fr', 'nmh.fr'];
+    return array_values(array_filter($list));
+}
+
+/** Extrait les adresses email d'une chaîne « Nom <a@b>, c@d ». */
+function lfi_nct_inbox_emails($str) {
+    $out = [];
+    if (preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', (string) $str, $m)) {
+        foreach ($m[0] as $e) $out[] = strtolower($e);
+    }
+    return array_values(array_unique($out));
+}
+function lfi_nct_inbox_is_nmh($addresses) {
+    $doms = lfi_nct_inbox_nmh_domains();
+    foreach ((array) $addresses as $a) {
+        $dom = substr(strrchr($a, '@'), 1);
+        if ($dom && in_array($dom, $doms, true)) return true;
+    }
+    return false;
+}
+
+/** Index (caché) des locataires : emails connus + nom + adresse, pour le tri. */
+function lfi_nct_inbox_tenant_index() {
+    $cache = get_transient('lfi_nct_inbox_tenant_index');
+    if (is_array($cache)) return $cache;
+    global $wpdb;
+    $idx = [];
+    $role = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+    $users = get_users(['role' => $role, 'fields' => ['ID', 'user_email', 'display_name'], 'number' => 2000]);
+    foreach ($users as $u) {
+        $emails = [];
+        $ue = strtolower(trim((string) $u->user_email));
+        if ($ue && is_email($ue) && !preg_match('/@(tenant|partenaire|avocat)\./', $ue)) $emails[] = $ue;
+        $nom = strtolower(trim((string) $u->display_name));
+        $adrraw = ''; $adrkey = '';
+        $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+        if ($rid) {
+            $r = $wpdb->get_row($wpdb->prepare("SELECT contact_email, contact_prenom, contact_nom, adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+            if ($r) {
+                $ce = strtolower(trim((string) $r->contact_email));
+                if ($ce && is_email($ce)) $emails[] = $ce;
+                $n2 = strtolower(trim($r->contact_prenom . ' ' . $r->contact_nom));
+                if ($n2 !== '') $nom = $n2;
+                if (!empty($r->adresse)) {
+                    $adrraw = strtolower(trim($r->adresse));
+                    $adrkey = function_exists('lfi_nct_address_canonical_key') ? lfi_nct_address_canonical_key($r->adresse) : $adrraw;
+                }
+            }
+        }
+        $idx[] = [
+            'uid'    => (int) $u->ID,
+            'emails' => array_values(array_unique($emails)),
+            'namekey'=> $nom,
+            'adrraw' => $adrraw,
+            'adrkey' => $adrkey,
+        ];
+    }
+    set_transient('lfi_nct_inbox_tenant_index', $idx, 300);
+    return $idx;
+}
+
+/** Trouve le locataire concerné : d'abord par email, sinon par nom/adresse dans le texte. */
+function lfi_nct_inbox_find_tenant($addresses, $text) {
+    $addresses = array_map('strtolower', (array) $addresses);
+    $idx = lfi_nct_inbox_tenant_index();
+    /* 1) Match par ADRESSE EMAIL (le plus fiable). */
+    foreach ($idx as $t) {
+        foreach ($t['emails'] as $e) if (in_array($e, $addresses, true)) return $t['uid'];
+    }
+    /* 2) Match par nom complet ou adresse postale cités dans l'objet/corps. */
+    $tl = ' ' . strtolower($text) . ' ';
+    foreach ($idx as $t) {
+        if ($t['adrkey'] !== '' && function_exists('lfi_nct_address_canonical_key')) {
+            /* on cherche le numéro + rue : si l'adresse brute apparaît dans le texte */
+            if ($t['adrraw'] !== '' && mb_strlen($t['adrraw']) >= 8 && strpos($tl, $t['adrraw']) !== false) return $t['uid'];
+        }
+        if ($t['namekey'] !== '' && mb_strlen($t['namekey']) >= 6 && strpos($tl, ' ' . $t['namekey'] . ' ') !== false) return $t['uid'];
+    }
+    return 0;
+}
+
+/** File d'attente « à rattacher » (emails non reconnus). */
+function lfi_nct_inbox_unmatched() {
+    $u = get_option('lfi_nct_inbox_unmatched', []);
+    return is_array($u) ? $u : [];
+}
+function lfi_nct_inbox_unmatched_save($list) {
+    /* on borne à 200 pour ne pas gonfler l'option. */
+    update_option('lfi_nct_inbox_unmatched', array_slice(array_values($list), -200), false);
+}
+
+/**
+ * Range un email dans le bon dossier. Renvoie ['matched'=>bool,'dossier_id'=>int].
+ */
+function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $message_id = '') {
+    global $wpdb;
+    $from_a = lfi_nct_inbox_emails($from);
+    $to_a   = lfi_nct_inbox_emails($to);
+    $cc_a   = lfi_nct_inbox_emails($cc);
+    $all    = array_values(array_unique(array_merge($from_a, $to_a, $cc_a)));
+    $text   = $subject . "\n" . $body;
+
+    $tenant_uid = lfi_nct_inbox_find_tenant($all, $text);
+    $collector  = strtolower(lfi_nct_inbox_collector());
+
+    /* Le membre du GA = une adresse qui n'est ni NMH, ni le locataire, ni la
+       boîte collectrice. On l'affiche pour info. */
+    $member = '';
+    foreach ($all as $a) {
+        if ($a === $collector) continue;
+        if (lfi_nct_inbox_is_nmh([$a])) continue;
+        $member = $member ?: $a;
+    }
+
+    if (!$tenant_uid) {
+        $q = lfi_nct_inbox_unmatched();
+        $q[] = ['from' => $from, 'to' => $to, 'objet' => $subject, 'date' => $date ?: current_time('mysql'), 'extrait' => mb_substr((string) $body, 0, 200)];
+        lfi_nct_inbox_unmatched_save($q);
+        return ['matched' => false, 'dossier_id' => 0];
+    }
+
+    $d = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($tenant_uid) : null;
+    if (!$d) return ['matched' => false, 'dossier_id' => 0, 'tenant_uid' => $tenant_uid];
+
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $logs = json_decode($d->notes ?? '', true);
+    if (!is_array($logs)) $logs = ['__notes' => $d->notes ?? ''];
+
+    /* Anti-doublon par Message-ID. */
+    $logs['inbox_seen'] = isset($logs['inbox_seen']) && is_array($logs['inbox_seen']) ? $logs['inbox_seen'] : [];
+    if ($message_id !== '' && in_array($message_id, $logs['inbox_seen'], true)) {
+        return ['matched' => true, 'dossier_id' => (int) $d->id, 'duplicate' => true];
+    }
+    if ($message_id !== '') { $logs['inbox_seen'][] = $message_id; $logs['inbox_seen'] = array_slice($logs['inbox_seen'], -300); }
+
+    /* Sens : reçu de NMH (from = NMH) OU envoyé à NMH (to/cc = NMH). */
+    $recu = lfi_nct_inbox_is_nmh($from_a);
+    $entry = [
+        'de'     => $from,
+        'to'     => $to,
+        'objet'  => $subject,
+        'corps'  => $body,
+        'date'   => $date ?: current_time('Y-m-d H:i'),
+        'membre' => $member,
+        'src'    => 'inbox',
+    ];
+    if ($recu) {
+        $logs['email_recu'] = isset($logs['email_recu']) && is_array($logs['email_recu']) ? $logs['email_recu'] : [];
+        $logs['email_recu'][] = $entry;
+    } else {
+        $logs['email_log'] = isset($logs['email_log']) && is_array($logs['email_log']) ? $logs['email_log'] : [];
+        $logs['email_log'][] = $entry;
+    }
+    $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE), 'updated_at' => current_time('mysql')], ['id' => (int) $d->id]);
+
+    /* Détection auto de victoire (NMH acte notre demande). */
+    if ($recu && function_exists('lfi_nct_victoire_detect_from_email')) {
+        lfi_nct_victoire_detect_from_email($tenant_uid, $subject, $body, (int) $d->id);
+    }
+    return ['matched' => true, 'dossier_id' => (int) $d->id, 'sens' => $recu ? 'recu' : 'envoye', 'tenant_uid' => $tenant_uid];
+}
+
+/* ============================================================== *
+ *  ROUTE REST : POST /wp-json/lfi-nct/v1/inbox                    *
+ *  (protégée par la clé d'intégration lfi_nct_ingest_key)         *
+ * ============================================================== */
+add_action('rest_api_init', function () {
+    register_rest_route('lfi-nct/v1', '/inbox', [
+        'methods'             => 'POST',
+        'callback'            => 'lfi_nct_inbox_rest',
+        'permission_callback' => function ($r) {
+            return function_exists('lfi_nct_ingest_rest_auth') ? lfi_nct_ingest_rest_auth($r) : false;
+        },
+    ]);
+});
+function lfi_nct_inbox_rest($request) {
+    $from = (string) $request->get_param('from');
+    $to   = (string) $request->get_param('to');
+    $cc   = (string) $request->get_param('cc');
+    $subj = sanitize_text_field((string) $request->get_param('subject'));
+    $body = (string) $request->get_param('body');
+    $body = wp_check_invalid_utf8($body);
+    $body = sanitize_textarea_field($body);
+    $date = sanitize_text_field((string) $request->get_param('date'));
+    $mid  = sanitize_text_field((string) $request->get_param('message_id'));
+    if ($from === '' && $to === '') return new WP_REST_Response(['ok' => false, 'error' => 'vide'], 400);
+    $res = lfi_nct_inbox_route($from, $to, $cc, $subj, $body, $date, $mid);
+    return new WP_REST_Response(['ok' => true] + $res, 200);
+}
+
+/* ============================================================== *
+ *  VUE ADMIN : configurer l'import + file « à rattacher » + script *
+ * ============================================================== */
+function lfi_nct_app_view_inbox_import() {
+    if (!current_user_can('manage_options')) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+
+    if (!empty($_POST['lfi_inbox_cfg']) && check_admin_referer('lfi_inbox_cfg')) {
+        update_option('lfi_nct_inbox_collector', sanitize_email(wp_unslash($_POST['collector'] ?? '')) ?: 'nantessudclostoreau@gmail.com', false);
+        update_option('lfi_nct_inbox_nmh_domains', sanitize_text_field(wp_unslash($_POST['nmh_domains'] ?? '')), false);
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['saved' => 1])); exit;
+    }
+    if (!empty($_POST['lfi_inbox_regen']) && check_admin_referer('lfi_inbox_cfg') && function_exists('lfi_nct_ingest_key_regenerate')) {
+        lfi_nct_ingest_key_regenerate();
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['regen' => 1])); exit;
+    }
+    if (!empty($_POST['lfi_inbox_clear']) && check_admin_referer('lfi_inbox_cfg')) {
+        lfi_nct_inbox_unmatched_save([]);
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['cleared' => 1])); exit;
+    }
+
+    $collector = lfi_nct_inbox_collector();
+    $key       = function_exists('lfi_nct_ingest_key') ? lfi_nct_ingest_key() : '';
+    $endpoint  = rest_url('lfi-nct/v1/inbox');
+    $doms      = implode(', ', lfi_nct_inbox_nmh_domains());
+
+    lfi_nct_app_screen_open('📥 Import automatique des emails', 'Toute la correspondance NMH, rangée toute seule');
+    if (!empty($_GET['saved']))   lfi_nct_app_flash('✅ Réglages enregistrés.');
+    if (!empty($_GET['regen']))   lfi_nct_app_flash('🔑 Nouvelle clé générée — remets-la dans le script.');
+    if (!empty($_GET['cleared'])) lfi_nct_app_flash('File « à rattacher » vidée.');
+
+    echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
+
+    /* Réglages */
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_inbox_cfg" value="1">';
+    echo '<label>📮 Boîte collectrice<input type="email" name="collector" value="' . esc_attr($collector) . '"></label>';
+    echo '<label>🏢 Domaines NMH (séparés par des virgules)<input type="text" name="nmh_domains" value="' . esc_attr($doms) . '"></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button></form>';
+
+    /* Connexion (endpoint + clé) */
+    echo '<h3 style="margin:16px 0 6px">🔗 Connexion du script</h3>';
+    echo '<div class="lfi-app-card"><div class="com" style="font-size:.9em">';
+    echo 'Endpoint : <code style="word-break:break-all">' . esc_html($endpoint) . '</code><br>';
+    echo 'Clé : <code style="word-break:break-all">' . esc_html($key) . '</code>';
+    echo '</div>';
+    echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Régénérer la clé ? L\\\'ancienne cessera de fonctionner.\')">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_regen" value="1"><button type="submit" class="btn-ghost" style="font-size:.82em">🔑 Régénérer la clé</button></form>';
+    echo '</div>';
+
+    /* Le script Apps Script prêt à coller */
+    $script = lfi_nct_inbox_apps_script($endpoint, $key);
+    echo '<h3 style="margin:16px 0 6px">🤖 Script Google Apps Script (à coller une fois)</h3>';
+    echo '<div class="lfi-app-help"><small>Dans le Gmail collecteur : <strong>≡ → Extensions → Apps Script</strong>, colle ce code, puis crée un <strong>déclencheur horaire</strong> (toutes les 5–10 min) sur la fonction <code>lfiImportEmails</code>. Il POSTe chaque email récent vers le site et pose un libellé « lfi-importe » pour ne pas le refaire.</small></div>';
+    echo '<textarea readonly onclick="this.select()" style="width:100%;height:260px;font-family:monospace;font-size:.72em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($script) . '</textarea>';
+
+    /* Mémo membre */
+    echo '<h3 style="margin:16px 0 6px">✉️ Mémo à envoyer aux membres (filtre Gmail)</h3>';
+    $memo = "Pour que ton suivi des locataires soit complet automatiquement :\n"
+          . "1. Dans Gmail : Paramètres (roue) → Voir tous les paramètres → Filtres et adresses bloquées → Créer un filtre.\n"
+          . "2. Dans « Inclut les mots », mets : nantesmetropolehabitat.fr\n"
+          . "3. Créer le filtre → coche « Transférer à » → ajoute : " . $collector . " (à valider une fois).\n"
+          . "4. Valide. C'est tout : tes emails avec NMH arrivent tout seuls dans le dossier du locataire concerné. Personne n'accède à ta boîte.";
+    echo '<textarea readonly onclick="this.select()" style="width:100%;height:150px;font-size:.85em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($memo) . '</textarea>';
+
+    /* File à rattacher */
+    $q = lfi_nct_inbox_unmatched();
+    echo '<h3 style="margin:16px 0 6px">🧩 À rattacher (' . count($q) . ')</h3>';
+    if (empty($q)) {
+        echo '<div class="lfi-app-empty">Aucun email non reconnu. 👍</div>';
+    } else {
+        echo '<div class="lfi-app-help"><small>Emails dont le site n\'a pas reconnu le locataire (adresse inconnue). Ajoute l\'email du locataire à sa fiche pour qu\'ils se rangent tout seuls la prochaine fois.</small></div>';
+        echo '<ul class="lfi-app-list">';
+        foreach (array_reverse($q) as $e) {
+            echo '<li class="lfi-app-card"><div class="head"><div class="who">' . esc_html($e['objet'] ?: '(sans objet)') . '</div><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
+            echo '<div class="meta"><span class="meta-chip">de ' . esc_html($e['from'] ?? '') . '</span></div>';
+            if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
+            echo '</li>';
+        }
+        echo '</ul>';
+        echo '<form method="post" onsubmit="return confirm(\'Vider la file à rattacher ?\')">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false) . '<input type="hidden" name="lfi_inbox_clear" value="1"><button type="submit" class="btn-ghost" style="font-size:.82em">🗑 Vider la file</button></form>';
+    }
+
+    lfi_nct_app_screen_close();
+}
+
+/** Le code Apps Script (paramétré avec l'endpoint + la clé). */
+function lfi_nct_inbox_apps_script($endpoint, $key) {
+    $ep = addslashes($endpoint);
+    $ky = addslashes($key);
+    return <<<JS
+// LFI Nantes Sud — import des emails vers le site. Déclencheur horaire → lfiImportEmails
+var LFI_ENDPOINT = "$ep";
+var LFI_KEY = "$ky";
+var LFI_LABEL = "lfi-importe";
+
+function lfiImportEmails() {
+  var label = GmailApp.getUserLabelByName(LFI_LABEL) || GmailApp.createLabel(LFI_LABEL);
+  // emails récents non encore importés
+  var threads = GmailApp.search('newer_than:2d -label:' + LFI_LABEL, 0, 50);
+  for (var i = 0; i < threads.length; i++) {
+    var msgs = threads[i].getMessages();
+    for (var j = 0; j < msgs.length; j++) {
+      var m = msgs[j];
+      try {
+        var payload = {
+          key: LFI_KEY,
+          from: m.getFrom(),
+          to: m.getTo(),
+          cc: m.getCc(),
+          subject: m.getSubject(),
+          body: m.getPlainBody().substring(0, 12000),
+          date: Utilities.formatDate(m.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
+          message_id: m.getId()
+        };
+        UrlFetchApp.fetch(LFI_ENDPOINT, {
+          method: "post",
+          contentType: "application/json",
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        });
+      } catch (e) {}
+    }
+    threads[i].addLabel(label);
+  }
+}
+JS;
+}
