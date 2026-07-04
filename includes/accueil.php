@@ -18,10 +18,25 @@ if (!defined('ABSPATH')) exit;
 add_action('wp_head', 'lfi_nct_hero_top_css', 99);
 function lfi_nct_hero_top_css() {
     if (is_admin()) return;
-    echo '<style id="lfi-hero-top">'
-       . '.ag-asso-hero{margin-top:0 !important;order:-1}'
-       . 'body.home main, body.home #main, body.home .site-main, body.home .entry-content{padding-top:0 !important;margin-top:0 !important}'
-       . '</style>';
+    ?>
+    <style id="lfi-hero-top">
+      /* Bannière tout en haut, collée sous le menu. */
+      .ag-asso-hero{margin-top:0 !important;order:-1;position:sticky;top:0;z-index:50;transition:min-height .25s ease,padding .25s ease}
+      body.home main, body.home #main, body.home .site-main, body.home .entry-content{padding-top:0 !important;margin-top:0 !important}
+      /* Quand on descend : la bannière RESTE FIGÉE mais devient compacte
+         (on garde le titre, on masque le sous-texte et le bouton). */
+      body.lfi-hero-shrunk .ag-asso-hero{min-height:0 !important;height:auto !important;padding-top:10px !important;padding-bottom:10px !important}
+      body.lfi-hero-shrunk .ag-asso-hero__sub, body.lfi-hero-shrunk .ag-asso-hero__ctas{display:none !important}
+      body.lfi-hero-shrunk .ag-asso-hero__title{font-size:1.25em !important;margin:0 !important;line-height:1.1 !important}
+    </style>
+    <script>
+    (function(){
+      function upd(){ document.body.classList.toggle('lfi-hero-shrunk', (window.scrollY||document.documentElement.scrollTop) > 140); }
+      window.addEventListener('scroll', upd, {passive:true});
+      if(document.readyState!=='loading') upd(); else document.addEventListener('DOMContentLoaded', upd);
+    })();
+    </script>
+    <?php
 }
 
 add_shortcode('lfi_nct_accueil', 'lfi_nct_accueil_shortcode');
