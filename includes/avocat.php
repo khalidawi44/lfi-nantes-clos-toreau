@@ -228,11 +228,12 @@ function lfi_nct_avocat_dispatch() {
     /* Un·e avocat·e qui serait aussi admin garde sa console pour le reste. */
     $also_admin = current_user_can('manage_options') || (function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga());
     $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
-    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat' && $vue !== 'justice-cdc') return false;
+    if ($also_admin && $vue !== 'espace' && $vue !== 'dossier-avocat' && $vue !== 'justice-cdc' && $vue !== 'jurisprudence') return false;
 
     switch ($vue) {
         case 'dossier-avocat': lfi_nct_app_view_dossier_avocat(); break; /* la note (accès contrôlé par assignation) */
         case 'justice-cdc':    lfi_nct_app_view_justice_cdc();    break; /* saisine CDC (accès contrôlé) */
+        case 'jurisprudence':  lfi_nct_app_view_jurisprudence();  break; /* Judilibre (scopé à ses dossiers) */
         case 'mon-profil':     lfi_nct_app_view_mon_profil();     break;
         case 'installer':      lfi_nct_app_view_installer();      break;
         case 'espace':         /* fallthrough */
@@ -256,7 +257,8 @@ function lfi_nct_app_view_avocat_dashboard() {
     }
 
     lfi_nct_app_screen_open('⚖️ Espace avocat·e', 'Vos dossiers confiés par le GA — secret professionnel');
-    echo '<div class="lfi-app-help">Bonjour Maître. Voici les dossiers que le Groupe d\'Action vous a confiés. Pour chacun : la <strong>note structurée</strong> (faits, droit, demandes, délais), les <strong>pièces</strong>, et une <strong>ligne directe</strong> avec le GA.</div>';
+    echo '<div class="lfi-app-help">Bonjour Maître. Voici les dossiers que le Groupe d\'Action vous a confiés. Pour chacun : la <strong>note structurée</strong> (faits, droit, demandes, délais), les <strong>pièces</strong>, la <strong>jurisprudence liée</strong>, et une <strong>ligne directe</strong> avec le GA.</div>';
+    echo '<div style="margin:6px 0 10px"><a class="btn-primary" style="background:#0066a3" href="' . esc_url(lfi_nct_app_url('jurisprudence')) . '">🔎 Rechercher dans la jurisprudence (Judilibre)</a></div>';
 
     $tenants = lfi_nct_avocat_tenants($aid);
     if (empty($tenants)) {
@@ -270,9 +272,11 @@ function lfi_nct_app_view_avocat_dashboard() {
         $unread = 0; /* fil vu côté avocat — simple compteur informatif */
         echo '<li class="lfi-app-card" style="border-left:4px solid #6a1b9a">';
         echo '<div class="head"><div class="who">📂 ' . esc_html($t->display_name) . '</div></div>';
+        $dj = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant((int) $t->ID) : null;
         echo '<div class="row-actions" style="margin-top:6px;flex-wrap:wrap">';
         echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url($note_url) . '" target="_blank">📄 Note complète</a>';
         echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => (int) $t->ID])) . '">⚖️ Dossier conciliation</a>';
+        if ($dj) echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('jurisprudence', ['id' => (int) $dj->id])) . '">🔎 Jurisprudence liée</a>';
         echo '</div>';
         /* Pièces versées (lecture seule pour l'avocat·e). */
         if (function_exists('lfi_nct_justice_pieces_box')) lfi_nct_justice_pieces_box($t, false);
@@ -315,6 +319,7 @@ function lfi_nct_app_view_avocats() {
             if (!is_wp_error($uid)) {
                 update_user_meta($uid, 'lfi_nct_tel', sanitize_text_field(wp_unslash($_POST['tel'] ?? '')));
                 update_user_meta($uid, 'lfi_nct_localisation', sanitize_text_field(wp_unslash($_POST['localisation'] ?? '')));
+                update_user_meta($uid, 'lfi_nct_avocat_specialites', sanitize_text_field(wp_unslash($_POST['specialites'] ?? '')));
             }
         }
         wp_safe_redirect(lfi_nct_app_url('avocats', ['created' => 1])); exit;
@@ -331,6 +336,7 @@ function lfi_nct_app_view_avocats() {
             wp_update_user($upd);
             update_user_meta($aid, 'lfi_nct_tel', sanitize_text_field(wp_unslash($_POST['tel'] ?? '')));
             update_user_meta($aid, 'lfi_nct_localisation', sanitize_text_field(wp_unslash($_POST['localisation'] ?? '')));
+            update_user_meta($aid, 'lfi_nct_avocat_specialites', sanitize_text_field(wp_unslash($_POST['specialites'] ?? '')));
         }
         wp_safe_redirect(lfi_nct_app_url('avocats', ['email_ok' => 1])); exit;
     }
@@ -373,8 +379,15 @@ function lfi_nct_app_view_avocats() {
         echo '<div class="head"><div class="who">⚖️ ' . esc_html($av->display_name) . '</div>';
         if ($unread) echo '<div class="badge" style="background:#6a1b9a;color:#fff">💬 ' . $unread . '</div>';
         echo '</div>';
+        $c_tel  = (string) get_user_meta($av->ID, 'lfi_nct_tel', true);
+        $c_loc  = (string) get_user_meta($av->ID, 'lfi_nct_localisation', true);
+        $c_spec = (string) get_user_meta($av->ID, 'lfi_nct_avocat_specialites', true);
         echo '<div class="meta"><span class="meta-chip">📂 ' . count($tenants) . ' dossier' . (count($tenants) > 1 ? 's' : '') . ' confié' . (count($tenants) > 1 ? 's' : '') . '</span>';
-        echo '<span class="meta-chip">' . ($has_mail ? '✉️ ' . esc_html($av->user_email) : '⚠️ email à renseigner') . '</span></div>';
+        echo '<span class="meta-chip">' . ($has_mail ? '✉️ ' . esc_html($av->user_email) : '⚠️ email à renseigner') . '</span>';
+        if ($c_tel) echo '<a class="meta-chip" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $c_tel)) . '">📞 ' . esc_html($c_tel) . '</a>';
+        echo '</div>';
+        if ($c_loc)  echo '<div class="com" style="font-size:.85em;color:#555">📍 ' . esc_html($c_loc) . '</div>';
+        if ($c_spec) echo '<div class="com" style="font-size:.85em;color:#6a1b9a">⚖️ ' . esc_html($c_spec) . '</div>';
 
         echo '<div class="row-actions" style="margin-top:6px">';
         echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('avocat-espace', ['uid' => (int) $av->ID])) . '">Ouvrir son espace →</a>';
@@ -392,6 +405,7 @@ function lfi_nct_app_view_avocats() {
         echo '<label style="margin:0">Téléphone<input type="tel" name="tel" value="' . esc_attr($tel) . '"></label>';
         echo '<label style="margin:0">Localisation / cabinet<input type="text" name="localisation" value="' . esc_attr($loc) . '"></label>';
         echo '</div>';
+        echo '<label>Spécialités<input type="text" name="specialites" value="' . esc_attr((string) get_user_meta($av->ID, 'lfi_nct_avocat_specialites', true)) . '" placeholder="Ex : droit du logement, pénal"></label>';
         echo '<button type="submit" class="btn-primary" style="margin-top:6px">💾 Enregistrer la fiche</button></form>';
         echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'Supprimer cet·te avocat·e ? Ses dossiers seront désassignés.\')">' . wp_nonce_field('lfi_avocat_crud', '_wpnonce', true, false) . '<input type="hidden" name="lfi_avocat_delete" value="1"><input type="hidden" name="avocat_uid" value="' . (int) $av->ID . '"><button type="submit" class="btn-ghost" style="color:#c8102e;font-size:.85em">🗑 Supprimer</button></form>';
         echo '</details>';
@@ -508,4 +522,44 @@ function lfi_nct_avocat_seed() {
         if (!is_wp_error($uid)) update_user_meta($uid, 'lfi_nct_avocat_seed', $key);
     }
     update_option('lfi_nct_avocat_seed_done', 1, false);
+}
+
+/* HEAL (une fois) : les vraies fiches des deux avocats du barreau de Nantes.
+   « Valet » = Me Stéphane VALLÉE (Cabinet 333) ; « Goache » = Me Maxime GOUACHE
+   (Cabinet Poquet Gouache). Infos publiques (barreau / cabinets). */
+add_action('init', 'lfi_nct_avocat_heal_real_info', 13);
+function lfi_nct_avocat_heal_real_info() {
+    if (get_option('lfi_nct_avocat_real_info_v1')) return;
+    if (!get_role(LFI_NCT_ROLE_AVOCAT)) return;
+    $real = [
+        'goache' => [
+            'display' => 'Me Maxime Gouache', 'first' => 'Maxime', 'last' => 'Gouache',
+            'email' => 'mg@poquetgouache-avocats.fr', 'tel' => '02 40 69 16 18',
+            'localisation' => 'Cabinet Poquet Gouache Avocats — 4 rue Racine, 44000 Nantes',
+            'specialites' => 'Droit du logement, contentieux',
+        ],
+        'valet' => [
+            'display' => 'Me Stéphane Vallée', 'first' => 'Stéphane', 'last' => 'Vallée',
+            'email' => 'stephane.vallee@avocat.fr', 'tel' => '02 40 20 00 22',
+            'localisation' => 'Cabinet d\'Avocats 333 — 14 bd Gabriel Guist\'hau, 44000 Nantes',
+            'specialites' => 'Droit du logement, droit pénal, droit des personnes, consommation',
+        ],
+    ];
+    foreach ($real as $key => $r) {
+        $found = get_users(['meta_key' => 'lfi_nct_avocat_seed', 'meta_value' => $key, 'number' => 1, 'fields' => 'ID']);
+        if (empty($found)) continue;
+        $uid = (int) $found[0];
+        $upd = ['ID' => $uid, 'display_name' => $r['display'], 'first_name' => $r['first'], 'last_name' => $r['last']];
+        /* On ne met le vrai email que si l'actuel est encore le provisoire. */
+        $cur = get_userdata($uid);
+        if ($cur && (stripos($cur->user_email, '@avocat.example') !== false) && !email_exists($r['email'])) {
+            $upd['user_email'] = $r['email'];
+        }
+        wp_update_user($upd);
+        update_user_meta($uid, 'lfi_nct_tel', $r['tel']);
+        update_user_meta($uid, 'lfi_nct_localisation', $r['localisation']);
+        update_user_meta($uid, 'lfi_nct_avocat_specialites', $r['specialites']);
+    }
+    update_option('lfi_nct_avocat_real_info_v1', 1, false);
+    delete_transient('lfi_nct_inbox_tenant_index');
 }

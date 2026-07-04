@@ -1968,6 +1968,7 @@ function lfi_nct_app_render_assistant_button() {
             </form>
         </div>
     </div>
+    <?php if (function_exists('lfi_nct_assist_inject')) lfi_nct_assist_inject(); ?>
 
     <style>
     .lfi-app-assistant {
