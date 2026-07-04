@@ -56,8 +56,11 @@ function lfi_nct_inbox_tenant_index() {
         $emails = [];
         $ue = strtolower(trim((string) $u->user_email));
         if ($ue && is_email($ue) && !preg_match('/@(tenant|partenaire|avocat)\./', $ue)) $emails[] = $ue;
+        /* Emails APPRIS (rattachés à la main → le robot s'en souvient). */
+        $learned = get_user_meta($u->ID, 'lfi_nct_known_emails', true);
+        if (is_array($learned)) foreach ($learned as $le) { $le = strtolower(trim((string) $le)); if ($le && is_email($le)) $emails[] = $le; }
         $nom = strtolower(trim((string) $u->display_name));
-        $adrraw = ''; $adrkey = '';
+        $last = ''; $adrraw = ''; $adrkey = '';
         $rid = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
         if ($rid) {
             $r = $wpdb->get_row($wpdb->prepare("SELECT contact_email, contact_prenom, contact_nom, adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
@@ -66,16 +69,20 @@ function lfi_nct_inbox_tenant_index() {
                 if ($ce && is_email($ce)) $emails[] = $ce;
                 $n2 = strtolower(trim($r->contact_prenom . ' ' . $r->contact_nom));
                 if ($n2 !== '') $nom = $n2;
+                $last = strtolower(trim((string) $r->contact_nom));
                 if (!empty($r->adresse)) {
                     $adrraw = strtolower(trim($r->adresse));
                     $adrkey = function_exists('lfi_nct_address_canonical_key') ? lfi_nct_address_canonical_key($r->adresse) : $adrraw;
                 }
             }
         }
+        /* Nom de famille = dernier mot du nom affiché si pas d'enquête. */
+        if ($last === '' && $nom !== '') { $parts = preg_split('/\s+/', $nom); $last = end($parts); }
         $idx[] = [
             'uid'    => (int) $u->ID,
             'emails' => array_values(array_unique($emails)),
             'namekey'=> $nom,
+            'last'   => $last,
             'adrraw' => $adrraw,
             'adrkey' => $adrkey,
         ];
@@ -84,7 +91,14 @@ function lfi_nct_inbox_tenant_index() {
     return $idx;
 }
 
-/** Trouve le locataire concerné : d'abord par email, sinon par nom/adresse dans le texte. */
+/**
+ * Le « robot de tri » : trouve le locataire concerné par la correspondance.
+ * 1) adresse email connue (compte, enquête, ou APPRISE) ;
+ * 2) adresse postale citée ;
+ * 3) NOM DE FAMILLE cité (le nom du locataire est presque toujours dans l'email)
+ *    — uniquement s'il ne correspond qu'à UN seul locataire (sinon ambigu) ;
+ * 4) nom complet cité.
+ */
 function lfi_nct_inbox_find_tenant($addresses, $text) {
     $addresses = array_map('strtolower', (array) $addresses);
     $idx = lfi_nct_inbox_tenant_index();
@@ -92,16 +106,49 @@ function lfi_nct_inbox_find_tenant($addresses, $text) {
     foreach ($idx as $t) {
         foreach ($t['emails'] as $e) if (in_array($e, $addresses, true)) return $t['uid'];
     }
-    /* 2) Match par nom complet ou adresse postale cités dans l'objet/corps. */
-    $tl = ' ' . strtolower($text) . ' ';
+    $tl = ' ' . mb_strtolower($text) . ' ';
+    /* 2) Adresse postale citée. */
     foreach ($idx as $t) {
-        if ($t['adrkey'] !== '' && function_exists('lfi_nct_address_canonical_key')) {
-            /* on cherche le numéro + rue : si l'adresse brute apparaît dans le texte */
-            if ($t['adrraw'] !== '' && mb_strlen($t['adrraw']) >= 8 && strpos($tl, $t['adrraw']) !== false) return $t['uid'];
-        }
+        if ($t['adrraw'] !== '' && mb_strlen($t['adrraw']) >= 8 && strpos($tl, $t['adrraw']) !== false) return $t['uid'];
+    }
+    /* 3) NOM DE FAMILLE cité — seulement si unique (pas d'homonyme). */
+    $by_last = [];
+    foreach ($idx as $t) { if ($t['last'] !== '' && mb_strlen($t['last']) >= 4) $by_last[$t['last']][] = $t['uid']; }
+    foreach ($by_last as $last => $uids) {
+        if (count(array_unique($uids)) !== 1) continue; /* homonymes → on ne devine pas */
+        if (preg_match('/\b' . preg_quote($last, '/') . '\b/u', $tl)) return (int) $uids[0];
+    }
+    /* 4) Nom complet cité. */
+    foreach ($idx as $t) {
         if ($t['namekey'] !== '' && mb_strlen($t['namekey']) >= 6 && strpos($tl, ' ' . $t['namekey'] . ' ') !== false) return $t['uid'];
     }
     return 0;
+}
+
+/** Est-ce l'adresse email d'un membre du GA (pour ne pas l'apprendre comme locataire) ? */
+function lfi_nct_inbox_is_member_email($addr) {
+    $addr = strtolower(trim($addr));
+    if ($addr === '') return false;
+    $u = get_user_by('email', $addr);
+    if (!$u) return false;
+    $roles = (array) $u->roles;
+    return in_array(defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member', $roles, true) || user_can($u, 'manage_options');
+}
+
+/** Apprentissage : mémorise sur la fiche du locataire les adresses « tierces »
+ *  d'un email qu'on lui a rattaché (ni NMH, ni collectrice, ni membre du GA). */
+function lfi_nct_inbox_learn($tenant_uid, $addresses) {
+    $known = get_user_meta($tenant_uid, 'lfi_nct_known_emails', true);
+    if (!is_array($known)) $known = [];
+    $collector = strtolower(lfi_nct_inbox_collector());
+    $changed = false;
+    foreach ((array) $addresses as $a) {
+        $a = strtolower(trim($a));
+        if ($a === '' || !is_email($a)) continue;
+        if ($a === $collector || lfi_nct_inbox_is_nmh([$a]) || lfi_nct_inbox_is_member_email($a)) continue;
+        if (!in_array($a, $known, true)) { $known[] = $a; $changed = true; }
+    }
+    if ($changed) { update_user_meta($tenant_uid, 'lfi_nct_known_emails', array_values($known)); delete_transient('lfi_nct_inbox_tenant_index'); }
 }
 
 /** File d'attente « à rattacher » (emails non reconnus). */
@@ -139,11 +186,25 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
 
     if (!$tenant_uid) {
         $q = lfi_nct_inbox_unmatched();
-        $q[] = ['from' => $from, 'to' => $to, 'objet' => $subject, 'date' => $date ?: current_time('mysql'), 'extrait' => mb_substr((string) $body, 0, 200)];
+        $q[] = [
+            'id' => (int) round(microtime(true) * 1000),
+            'from' => $from, 'to' => $to, 'cc' => $cc, 'objet' => $subject,
+            'body' => mb_substr((string) $body, 0, 12000),
+            'message_id' => $message_id,
+            'date' => $date ?: current_time('mysql'),
+            'extrait' => mb_substr((string) $body, 0, 200),
+        ];
         lfi_nct_inbox_unmatched_save($q);
         return ['matched' => false, 'dossier_id' => 0];
     }
 
+    return lfi_nct_inbox_file($tenant_uid, $from, $to, $cc, $subject, $body, $date, $message_id, $member);
+}
+
+/** Range effectivement l'email dans le dossier du locataire donné. */
+function lfi_nct_inbox_file($tenant_uid, $from, $to, $cc, $subject, $body, $date = '', $message_id = '', $member = '') {
+    global $wpdb;
+    $tenant_uid = (int) $tenant_uid;
     $d = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($tenant_uid) : null;
     if (!$d) return ['matched' => false, 'dossier_id' => 0, 'tenant_uid' => $tenant_uid];
 
@@ -159,7 +220,7 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
     if ($message_id !== '') { $logs['inbox_seen'][] = $message_id; $logs['inbox_seen'] = array_slice($logs['inbox_seen'], -300); }
 
     /* Sens : reçu de NMH (from = NMH) OU envoyé à NMH (to/cc = NMH). */
-    $recu = lfi_nct_inbox_is_nmh($from_a);
+    $recu = lfi_nct_inbox_is_nmh(lfi_nct_inbox_emails($from));
     $entry = [
         'de'     => $from,
         'to'     => $to,
@@ -178,11 +239,25 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
     }
     $wpdb->update($t, ['notes' => wp_json_encode($logs, JSON_UNESCAPED_UNICODE), 'updated_at' => current_time('mysql')], ['id' => (int) $d->id]);
 
-    /* Détection auto de victoire (NMH acte notre demande). */
     if ($recu && function_exists('lfi_nct_victoire_detect_from_email')) {
         lfi_nct_victoire_detect_from_email($tenant_uid, $subject, $body, (int) $d->id);
     }
     return ['matched' => true, 'dossier_id' => (int) $d->id, 'sens' => $recu ? 'recu' : 'envoye', 'tenant_uid' => $tenant_uid];
+}
+
+/** Attribution manuelle d'un email « à rattacher » → le range ET apprend. */
+function lfi_nct_inbox_assign($queue_id, $tenant_uid) {
+    $queue_id = (int) $queue_id; $tenant_uid = (int) $tenant_uid;
+    $q = lfi_nct_inbox_unmatched();
+    $email = null; $rest = [];
+    foreach ($q as $e) { if ((int) ($e['id'] ?? 0) === $queue_id) $email = $e; else $rest[] = $e; }
+    if (!$email || !$tenant_uid) return false;
+    $res = lfi_nct_inbox_file($tenant_uid, $email['from'] ?? '', $email['to'] ?? '', $email['cc'] ?? '', $email['objet'] ?? '', $email['body'] ?? '', $email['date'] ?? '', $email['message_id'] ?? '');
+    /* Le robot apprend : on mémorise les adresses tierces pour la prochaine fois. */
+    $all = array_merge(lfi_nct_inbox_emails($email['from'] ?? ''), lfi_nct_inbox_emails($email['to'] ?? ''), lfi_nct_inbox_emails($email['cc'] ?? ''));
+    lfi_nct_inbox_learn($tenant_uid, $all);
+    lfi_nct_inbox_unmatched_save($rest);
+    return $res;
 }
 
 /* ============================================================== *
@@ -232,6 +307,12 @@ function lfi_nct_app_view_inbox_import() {
         lfi_nct_inbox_unmatched_save([]);
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['cleared' => 1])); exit;
     }
+    if (!empty($_POST['lfi_inbox_assign']) && check_admin_referer('lfi_inbox_assign')) {
+        $qid = (int) ($_POST['queue_id'] ?? 0);
+        $tid = (int) ($_POST['tenant_uid'] ?? 0);
+        if ($qid && $tid && (!function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($tid))) lfi_nct_inbox_assign($qid, $tid);
+        wp_safe_redirect(lfi_nct_app_url('inbox-import', ['assigned' => 1])); exit;
+    }
 
     $collector = lfi_nct_inbox_collector();
     $key       = function_exists('lfi_nct_ingest_key') ? lfi_nct_ingest_key() : '';
@@ -242,6 +323,7 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['saved']))   lfi_nct_app_flash('✅ Réglages enregistrés.');
     if (!empty($_GET['regen']))   lfi_nct_app_flash('🔑 Nouvelle clé générée — remets-la dans le script.');
     if (!empty($_GET['cleared'])) lfi_nct_app_flash('File « à rattacher » vidée.');
+    if (!empty($_GET['assigned'])) lfi_nct_app_flash('✅ Email rangé — le robot a mémorisé cette adresse pour la prochaine fois.');
 
     echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
 
@@ -282,12 +364,26 @@ function lfi_nct_app_view_inbox_import() {
     if (empty($q)) {
         echo '<div class="lfi-app-empty">Aucun email non reconnu. 👍</div>';
     } else {
-        echo '<div class="lfi-app-help"><small>Emails dont le site n\'a pas reconnu le locataire (adresse inconnue). Ajoute l\'email du locataire à sa fiche pour qu\'ils se rangent tout seuls la prochaine fois.</small></div>';
+        echo '<div class="lfi-app-help"><small>Le robot n\'a pas reconnu le locataire. Dis-lui une fois de qui il s\'agit : il range l\'email <strong>et il apprend</strong> (l\'adresse est mémorisée → la prochaine fois, c\'est automatique).</small></div>';
+        /* Liste des locataires du GA pour le menu déroulant. */
+        $tsel = [];
+        if (function_exists('lfi_nct_users_ga_query')) {
+            $ta = lfi_nct_users_ga_query(['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'fields' => ['ID', 'display_name'], 'number' => 800, 'orderby' => 'display_name']);
+            $tsel = get_users($ta);
+        }
         echo '<ul class="lfi-app-list">';
         foreach (array_reverse($q) as $e) {
             echo '<li class="lfi-app-card"><div class="head"><div class="who">' . esc_html($e['objet'] ?: '(sans objet)') . '</div><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
-            echo '<div class="meta"><span class="meta-chip">de ' . esc_html($e['from'] ?? '') . '</span></div>';
+            echo '<div class="meta"><span class="meta-chip">de ' . esc_html($e['from'] ?? '') . '</span>';
+            if (!empty($e['to'])) echo '<span class="meta-chip">→ ' . esc_html($e['to']) . '</span>';
+            echo '</div>';
             if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
+            echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_inbox_assign', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_inbox_assign" value="1"><input type="hidden" name="queue_id" value="' . (int) ($e['id'] ?? 0) . '">';
+            echo '<select name="tenant_uid" required style="flex:1;min-width:170px"><option value="">— rattacher à un locataire —</option>';
+            foreach ($tsel as $tu) echo '<option value="' . (int) $tu->ID . '">' . esc_html($tu->display_name) . '</option>';
+            echo '</select>';
+            echo '<button type="submit" class="btn-primary" style="background:#186a3b">✅ Ranger + apprendre</button></form>';
             echo '</li>';
         }
         echo '</ul>';
