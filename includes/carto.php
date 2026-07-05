@@ -366,12 +366,71 @@ function lfi_nct_carto_first_name($name) {
     $p = explode(' ', $name);
     return $p[0];
 }
+
+/**
+ * Annuaire public INTÉGRÉ (Loire-Atlantique) — GA + commune + PRÉNOMS des
+ * animateur·ices. AUCUN email, AUCUN nom de famille : c'est volontairement
+ * public et léger (les animateur·ices se déclarent déjà publiquement comme
+ * gestionnaires de leur GA sur Action Populaire). Enrichi en direct si des
+ * données sont importées dans la carto privée.
+ */
+function lfi_nct_gas_public_seed() {
+    return [
+        ['Groupe d\'action « Demain est à nous » à Machecoul', 'Machecoul', ['Séverine', 'Bleiz']],
+        ['Couëron avec Jean-Luc Mélenchon', 'Couëron', ['Jean-Claude', 'Martine', 'Olivier']],
+        ['GA Bouguenais', 'Bouguenais', ['Matthieu']],
+        ['GA Cœur de la Brière', 'Saint-Lyphard', ['Lucyole', 'Bertrand']],
+        ['GA Guérande', 'Guérande', ['Claire', 'Hélène']],
+        ['GA Nantes Dervallières', 'Nantes', ['Ibrahim', 'Camille']],
+        ['GA Nantes Erdre (Port-Boyer · Beaujoire · Halvêque)', 'Nantes', ['Julien', 'Alice']],
+        ['GA Nantes Nord', 'Nantes', ['Erwan', 'Erika']],
+        ['GA Saint-Nazaire EST-CARÈNE-AGGLO', 'Saint-Nazaire', ['Juliette', 'Christophe']],
+        ['GA Savenay et environs', 'Savenay', ['Christelle', 'Pascal']],
+        ['GA de Saint-Nazaire', 'Saint-Nazaire', ['Thomas', 'Laurence']],
+        ['GA de Vallet', 'Vallet', ['Pauline', 'Guilhem']],
+        ['Groupe d\'action Carquefou', 'Carquefou', ['Hakim', 'Sarah']],
+        ['Groupe d\'action Donges et alentours', 'Donges', ['Jennifer', 'Thomas']],
+        ['Groupe d\'action de Derval', 'Derval', ['Didier']],
+        ['Groupe d\'action de Nantes Sud – Clos Toreau', 'Nantes', ['Fabrice', 'Gwenaëlle']],
+        ['Groupe d\'action de Paimbœuf', 'Paimbœuf', ['Patricia', 'Thierry']],
+        ['Groupe d\'action de Pornic', 'Pornic', ['Timothée', 'Armelle']],
+        ['Groupe d\'action de Rezé', 'Rezé', ['Lu']],
+        ['Groupe d\'action de Saint-Sébastien-sur-Loire', 'Saint-Sébastien-sur-Loire', ['Jenny', 'Laurent']],
+        ['Groupe d\'action de l\'Université Nantaise', 'Nantes', ['Anne', 'Frédéric']],
+        ['Groupe d\'action du Pays d\'Ancenis', 'Ancenis', ['Guillaume', 'Alex']],
+        ['Île de Nantes · Malakoff · Olivettes', 'Nantes', ['Anaïs']],
+        ['Insoumis·es du Pays de Blain', 'Blain', ['Christine', 'Hugo']],
+        ['Jeunes insoumis·es de Nantes', 'Nantes', ['Ismael', 'Noelly']],
+        ['Jeunes insoumis·es de Saint-Nazaire', 'Saint-Nazaire', ['Briac', 'Radwa']],
+        ['La-Chapelle-sur-Erdre insoumise', 'La Chapelle-sur-Erdre', ['Noëlle']],
+        ['Les insoumis·es Herblinois·es', 'Saint-Herblain', ['Romane']],
+        ['Les insoumis·es de Clisson', 'Clisson', ['Annick', 'Françoise']],
+        ['Les insoumis·es de Vertou', 'Vertou', ['Sophie', 'Michel']],
+        ['Nantes Doulon-Bottière', 'Nantes', ['Charlotte', 'Emily']],
+        ['Nantes Ouest', 'Nantes', ['Mathilde', 'Baptiste']],
+        ['Nantes Rond-Point de Rennes / Orvault', 'Orvault', ['Cédric', 'Cassandre']],
+        ['Nantes – Centre', 'Nantes', ['Elsa', 'Alizée']],
+        ['Sainte-Luce et Thouaré insoumises', 'Sainte-Luce-sur-Loire', ['Delphine', 'Timéo']],
+        ['Union Populaire St-Étienne-de-Montluc · Temple · Vigneux · Cordemais', 'Saint-Étienne-de-Montluc', ['Bernadette', 'Gabriel']],
+        ['Jade insoumise', '', ['Michèle', 'Nicolas']],
+        ['GA Loire-Divatte', '', ['Laurent', 'Viviane']],
+        ['GA Presqu\'île', '', ['Christian', 'Sylvie']],
+        ['GA de la Côte Sauvage', '', ['Dominique', 'Thierry']],
+        ['GA Pontchâteau-Herbignac', 'Pontchâteau', ['Jacek']],
+        ['Rive Gauche 44 l\'insoumise', '', ['Julien']],
+    ];
+}
 function lfi_nct_app_view_public_gas() {
     /* On fusionne DEUX sources pour être robuste selon ce qui a été importé :
        1) le registre des GA (nom, commune, contact/contact2) ;
        2) l'organigramme (personnes de niveau admin_ga, avec leur GA).
        Résultat : { nomGA => ['commune'=>…, 'prenoms'=>[…]] }. */
     $gas = [];
+    /* Source 0 : la liste publique intégrée (toujours présente). */
+    foreach (lfi_nct_gas_public_seed() as $s) {
+        $nom = trim((string) ($s[0] ?? '')); if ($nom === '') continue;
+        $gas[$nom] = ['nom' => $nom, 'commune' => (string) ($s[1] ?? ''), 'prenoms' => array_values($s[2] ?? [])];
+    }
     foreach (lfi_nct_carto_all() as $e) {
         $nom = trim((string) ($e['nom'] ?? '')); if ($nom === '') continue;
         if (!isset($gas[$nom])) $gas[$nom] = ['nom' => $nom, 'commune' => (string) ($e['commune'] ?? ''), 'prenoms' => []];
