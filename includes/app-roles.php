@@ -847,6 +847,21 @@ function lfi_nct_app_view_ga_dashboard() {
  *  + un dossier juridique liés. Le membre n'y a PAS accès.        *
  * ============================================================== */
 
+/* AUTO : dès qu'une enquête est soumise AVEC accord de recontact et un moyen
+   de contact, on crée (ou retrouve) le compte locataire lié + son dossier
+   juridique. Plus besoin de « refaire » le compte à la main. */
+add_action('lfi_nct_submission_created', 'lfi_nct_auto_tenant_from_submission', 20, 2);
+function lfi_nct_auto_tenant_from_submission($rid, $ctx) {
+    if (empty($ctx['contact_recontact'])) return; /* RGPD : pas de compte sans accord */
+    if (!function_exists('lfi_nct_ep_ensure_tenant')) return;
+    global $wpdb;
+    $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", (int) $rid));
+    if (!$row) return;
+    if (trim((string) $row->contact_tel) === '' && trim((string) $row->contact_email) === '') return;
+    $uid = lfi_nct_ep_ensure_tenant($row);
+    if ($uid && function_exists('lfi_nct_dossier_ensure_for_tenant')) lfi_nct_dossier_ensure_for_tenant((int) $uid);
+}
+
 /** Crée (ou retrouve) le compte locataire lié à une réponse d'enquête. */
 function lfi_nct_ep_ensure_tenant($row) {
     $existing = get_users(['meta_key' => 'lfi_nct_response_id', 'meta_value' => (int) $row->id, 'number' => 1, 'fields' => ['ID']]);

@@ -635,15 +635,18 @@ function lfi_nct_app_view_public_ga() {
     /* 📅 Actualités & événements. */
     echo '<h3 style="margin:6px 0 8px;color:#0b3d91">📅 Actualités & événements</h3>';
     $shown = false;
-    if ($is_clos && function_exists('lfi_nct_events_upcoming_public')) {
-        $evs = lfi_nct_events_upcoming_public(6);
+    if ($is_clos && function_exists('lfi_nct_upcoming_events') && function_exists('lfi_nct_event_data')) {
+        $evs = lfi_nct_upcoming_events(6);
         if ($evs) {
             $shown = true;
             echo '<div style="display:flex;flex-direction:column;gap:8px">';
             foreach ($evs as $ev) {
-                echo '<div class="lfi-app-card" style="border-left:4px solid #186a3b"><div style="font-weight:800">' . esc_html($ev['titre'] ?? 'Événement') . '</div>';
-                if (!empty($ev['quand'])) echo '<div style="color:#186a3b;font-size:.9em">🗓 ' . esc_html($ev['quand']) . '</div>';
-                if (!empty($ev['lieu']))  echo '<div style="color:#555;font-size:.9em">📍 ' . esc_html($ev['lieu']) . '</div>';
+                $d = lfi_nct_event_data($ev);
+                if (!$d) continue;
+                echo '<div class="lfi-app-card" style="border-left:4px solid #186a3b"><div style="font-weight:800">' . esc_html(get_the_title($ev) ?: ($d['titre'] ?? 'Événement')) . '</div>';
+                $quand = trim((string) ($d['date'] ?? '') . ' ' . (string) ($d['heure_debut'] ?? ''));
+                if ($quand !== '') echo '<div style="color:#186a3b;font-size:.9em">🗓 ' . esc_html($quand) . '</div>';
+                if (!empty($d['adresse'])) echo '<div style="color:#555;font-size:.9em">📍 ' . esc_html($d['adresse']) . '</div>';
                 echo '</div>';
             }
             echo '</div>';
