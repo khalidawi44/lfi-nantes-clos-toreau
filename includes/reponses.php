@@ -391,6 +391,37 @@ function lfi_nct_app_view_repondre() {
     }
     echo '</div>';
 
+    /* ===== HISTORIQUE DU FIL (replié) — pour se rappeler ce qui s'est dit,
+       sans parasiter le focus sur la réponse en cours. ===== */
+    $hist = [];
+    foreach ((array) ($notes['email_recu'] ?? []) as $e) {
+        $hist[] = ['dir' => 'recu', 'date' => (string) ($e['date'] ?? ''), 'qui' => (string) ($e['de'] ?? ''), 'objet' => (string) ($e['objet'] ?? ''), 'corps' => (string) ($e['corps'] ?? '')];
+    }
+    foreach ((array) ($notes['email_log'] ?? []) as $e) {
+        $hist[] = ['dir' => 'envoye', 'date' => (string) ($e['date'] ?? ''), 'qui' => (string) ($e['to'] ?? ($e['de'] ?? '')), 'objet' => (string) ($e['objet'] ?? ''), 'corps' => (string) ($e['corps'] ?? '')];
+    }
+    foreach ((array) ($notes['replies'] ?? []) as $e) {
+        $hist[] = ['dir' => 'envoye', 'date' => (string) ($e['date'] ?? ''), 'qui' => (string) ($e['to'] ?? ''), 'objet' => (string) ($e['subject'] ?? ($e['objet'] ?? '')), 'corps' => (string) ($e['body'] ?? '')];
+    }
+    usort($hist, function ($a, $b) { return strtotime($a['date'] ?: '1970') <=> strtotime($b['date'] ?: '1970'); });
+    if (count($hist) > 1) {
+        echo '<details class="lfi-app-card" style="border-left:4px solid #8a6d1f;margin-top:10px"><summary style="cursor:pointer;font-weight:800;color:#8a6d1f;list-style:none">🧵 Historique du fil (' . count($hist) . ' message' . (count($hist) > 1 ? 's' : '') . ') — ce qu\'on s\'est dit</summary>';
+        echo '<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">';
+        foreach ($hist as $h) {
+            $recu = ($h['dir'] === 'recu');
+            $col  = $recu ? '#0066a3' : '#186a3b';
+            $ico  = $recu ? '📥 Reçu' : '📤 Envoyé';
+            $when = $h['date'] ? wp_date('j M Y', strtotime($h['date'])) : '';
+            echo '<div style="border-left:3px solid ' . $col . ';background:#fafafa;border-radius:6px;padding:8px 10px">';
+            echo '<div style="font-size:.8em;color:' . $col . ';font-weight:700">' . $ico . ($when ? ' · ' . esc_html($when) : '') . '</div>';
+            if ($h['objet'] !== '') echo '<div style="font-size:.86em;font-weight:600;margin-top:1px">' . esc_html($h['objet']) . '</div>';
+            $corps = trim($h['corps']);
+            if ($corps !== '') echo '<div style="font-size:.84em;color:#444;white-space:pre-wrap;margin-top:3px;max-height:150px;overflow:auto">' . esc_html($corps) . '</div>';
+            echo '</div>';
+        }
+        echo '</div></details>';
+    }
+
     /* VERROU MANDAT : pas d'email à NMH sans adhésion signée. */
     if (!$has_mandate) {
         echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><strong>🔒 Adhésion requise.</strong> On n\'écrit jamais à NMH au nom du locataire sans mandat (adhésion signée). '
