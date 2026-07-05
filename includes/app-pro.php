@@ -579,6 +579,40 @@ function lfi_nct_app_view_dossier() {
             : (function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
     }
 
+    /* 📎 Dépôt d'une pièce dans une ÉTAPE → auto-clôture de l'étape (le robot
+       range par date, analyse, coche). Manuel toujours possible (rouvrir/retirer). */
+    if (!empty($_POST['lfi_app_step_piece']) && check_admin_referer('lfi_app_step_piece')) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $skey = sanitize_text_field(wp_unslash($_POST['step_key'] ?? ''));
+        $sidx = (int) ($_POST['step_idx'] ?? -1);
+        $ok = false;
+        if (!empty($_FILES['piece']['tmp_name']) && $skey !== '' && (int) $_FILES['piece']['size'] <= 12 * 1024 * 1024) {
+            $upload = wp_handle_upload($_FILES['piece'], ['test_form' => false]);
+            if (empty($upload['error'])) {
+                $att = wp_insert_attachment(['post_mime_type' => $upload['type'], 'post_title' => 'Pièce dossier — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $upload['file']);
+                if (!is_wp_error($att) && $att) {
+                    update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
+                    update_post_meta($att, '_lfi_step', $skey);
+                    wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $upload['file']));
+                    if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $upload['file']);
+                    $ok = true;
+                }
+            }
+        }
+        if ($ok && $sidx >= 0) { /* le robot coche et clôt l'étape */
+            $st = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
+            if (is_array($st) && isset($st[$sidx])) { $st[$sidx]['done'] = true; update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($st)); }
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, ($ok ? 'piece_ok' : 'piece_err') => 1]) . '#parcours'); exit;
+    }
+    if (!empty($_POST['lfi_app_step_piece_del']) && check_admin_referer('lfi_app_step_piece')) {
+        $att = (int) ($_POST['att_id'] ?? 0);
+        if ($att && (int) get_post_meta($att, '_lfi_tenant_user_id', true) === (int) $u->ID) wp_delete_attachment($att, true);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#parcours'); exit;
+    }
+
     /* Parcours de suivi : ajout / coche / suppression d'étapes */
     if (!empty($_POST['lfi_app_dossier_step']) && check_admin_referer('lfi_app_dossier_step')) {
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
@@ -647,6 +681,8 @@ function lfi_nct_app_view_dossier() {
 
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');
     if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
+    if (!empty($_GET['piece_ok']))    lfi_nct_app_flash('📎 Pièce versée et rangée par date — l\'étape est cochée automatiquement.');
+    if (!empty($_GET['piece_err']))   lfi_nct_app_flash('⚠️ Dépôt impossible (fichier manquant ou trop lourd — max 12 Mo, image ou PDF).', 'error');
     if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Coupe posée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure). Les membres du GA verront la victoire à l\'ouverture de l\'app.');
     if (!empty($_GET['unwon'])) lfi_nct_app_flash('Coupe annulée.');
     if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
@@ -1423,6 +1459,28 @@ function lfi_nct_dossier_render_juridique_guidance($u, $row) {
     if (function_exists('lfi_nct_avocat_assign_box')) lfi_nct_avocat_assign_box($u);
 }
 
+/** Clé stable d'une étape (pour rattacher ses pièces). */
+function lfi_nct_step_key($text, $idx) {
+    return 'st' . substr(md5((string) $text . '|' . (int) $idx), 0, 12);
+}
+/** Pièces (photos/PDF) versées dans une étape — triées par DATE (prise de vue). */
+function lfi_nct_step_pieces($uid, $skey) {
+    if ($skey === '') return [];
+    $q = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 50,
+        'meta_query' => [
+            ['key' => '_lfi_tenant_user_id', 'value' => (int) $uid],
+            ['key' => '_lfi_step', 'value' => $skey],
+        ],
+    ]);
+    usort($q, function ($a, $b) {
+        $ta = (int) get_post_meta($a->ID, '_lfi_capture_ts', true) ?: strtotime($a->post_date);
+        $tb = (int) get_post_meta($b->ID, '_lfi_capture_ts', true) ?: strtotime($b->post_date);
+        return $ta <=> $tb;
+    });
+    return $q;
+}
+
 function lfi_nct_dossier_render_parcours($u) {
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
@@ -1470,7 +1528,7 @@ function lfi_nct_dossier_render_parcours($u) {
         echo '</div></a>';
     }
 
-    echo '<details open style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
+    echo '<details open id="parcours" style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden;scroll-margin-top:70px">';
     echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
     echo '<span>🧭 Parcours de suivi';
     $todo = count(array_filter($steps, function ($s) { return empty($s['done']) && empty($s['skipped']); }));
@@ -1487,42 +1545,62 @@ function lfi_nct_dossier_render_parcours($u) {
     echo '</form>';
     echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Le parcours-type démarre par « le locataire s\'empare de sa fiche » (partage de l\'espace, pièces, adhésion, objectif) puis va à l\'amiable avant le juridique. Tu peux tout modifier.</small></div>';
 
-    /* Liste des étapes — UNE SEULE FORM : on coche PLUSIEURS cases puis on
-       enregistre en une fois (plus de rechargement à chaque clic). */
+    /* Étapes = ACCORDÉONS. Chaque étape s'ouvre (hamburger) : on y dépose des
+       pièces/photos → le robot les range par date et COCHE/CLÔT l'étape tout
+       seul. On garde la main : rouvrir, retirer une pièce, supprimer l'étape. */
     if (empty($steps)) {
         echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Clique « ✨ Générer le parcours automatique » ci-dessus, ou ajoute une action à la main.</div>';
     } else {
-        echo '<form method="post">';
-        wp_nonce_field('lfi_app_dossier_step');
-        echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="batch">';
-        echo '<div class="lfi-app-help" style="margin:4px 0"><small>Coche tout ce qui est fait, <strong>puis</strong> « 💾 Enregistrer » — tu peux en cocher plusieurs d\'un coup.</small></div>';
-        echo '<ol style="list-style:none;padding:0;margin:8px 0">';
+        echo '<div class="lfi-app-help" style="margin:4px 0"><small>Ouvre une étape → <strong>dépose tes preuves</strong> (photos punaises, PV, courriers…). Dès qu\'une pièce est versée, l\'étape se <strong>coche automatiquement</strong>. Tu peux rouvrir, retirer une pièce, ré-en déposer.</small></div>';
         foreach ($steps as $idx => $s) {
-            /* Étape rendue « inutile » (urgence gagnée avant qu'on la fasse) :
-               affichée barrée, en gris, SANS case — elle ne compte plus. */
             if (!empty($s['skipped'])) {
-                echo '<li style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:8px;margin-bottom:5px;background:#f4f4f4;border-left:3px solid #bbb">';
-                echo '<span style="width:22px;text-align:center;flex-shrink:0">⏭️</span>';
-                echo '<div style="flex:1"><div style="text-decoration:line-through;color:#999;font-weight:500">' . esc_html($s['text'] ?? '') . '</div>';
-                echo '<div style="font-size:.78em;color:#aaa;margin-top:1px">inutile — urgence gagnée avant</div></div>';
-                echo '</li>';
+                echo '<div style="padding:8px 10px;border-radius:8px;margin-bottom:5px;background:#f4f4f4;border-left:3px solid #bbb"><span style="text-decoration:line-through;color:#999">⏭️ ' . esc_html($s['text'] ?? '') . '</span> <span style="font-size:.78em;color:#aaa">— inutile (urgence gagnée avant)</span></div>';
                 continue;
             }
-            $done = !empty($s['done']);
-            $who = $s['who'] ?? 'admin';
-            $badge = $who === 'tenant' ? '<span style="background:#fff3cd;color:#8a6d1f;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">🏠 locataire</span>' : '<span style="background:#e7f0fb;color:#0066a3;font-size:.68em;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap">👤 toi</span>';
-            echo '<li style="display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:8px;margin-bottom:5px;background:' . ($done ? '#e8f5ea' : '#fafafa') . ';border-left:3px solid ' . ($done ? '#186a3b' : ($who === 'tenant' ? '#d39e00' : '#c8102e')) . '">';
-            echo '<input type="checkbox" name="step_done[]" value="' . $idx . '" ' . checked($done, true, false) . ' style="width:22px;height:22px;margin-top:2px;flex-shrink:0">';
-            echo '<div style="flex:1"><div style="font-weight:600;' . ($done ? 'text-decoration:line-through;color:#888' : 'color:#1a1a1a') . '">' . esc_html($s['text']) . ' ' . $badge . '</div>';
+            $done  = !empty($s['done']);
+            $who   = $s['who'] ?? 'admin';
+            $badge = $who === 'tenant' ? '<span style="background:#fff3cd;color:#8a6d1f;font-size:.66em;font-weight:700;padding:1px 6px;border-radius:8px">🏠 locataire</span>' : '<span style="background:#e7f0fb;color:#0066a3;font-size:.66em;font-weight:700;padding:1px 6px;border-radius:8px">👤 toi</span>';
+            $skey  = lfi_nct_step_key($s['text'] ?? '', $idx);
+            $pieces = function_exists('lfi_nct_step_pieces') ? lfi_nct_step_pieces($u->ID, $skey) : [];
+            $np = count($pieces);
+            $col = $done ? '#186a3b' : ($who === 'tenant' ? '#d39e00' : '#c8102e');
+            echo '<details style="margin-bottom:6px;background:' . ($done ? '#f0f8f1' : '#fff') . ';border:1px solid #eee;border-left:4px solid ' . $col . ';border-radius:8px;overflow:hidden"' . ($done ? '' : ' open') . '>';
+            echo '<summary style="cursor:pointer;list-style:none;padding:9px 11px;font-weight:600;color:' . ($done ? '#5a7a5f' : '#1a1a1a') . '">' . ($done ? '✅ ' : '📂 ') . esc_html($s['text']) . ' ' . $badge . ($np ? ' <span style="color:#0066a3;font-size:.8em;font-weight:700">· 📎 ' . $np . '</span>' : '') . '</summary>';
+            echo '<div style="padding:2px 11px 11px">';
             if (!empty($s['echeance'])) {
                 $late = (!$done && strtotime($s['echeance']) < strtotime(current_time('Y-m-d')));
-                echo '<div style="font-size:.82em;color:' . ($late ? '#c8102e' : '#888') . ';margin-top:2px">' . ($late ? '⚠ en retard — ' : '🗓 ') . 'échéance ' . esc_html(wp_date('j M Y', strtotime($s['echeance']))) . '</div>';
+                echo '<div style="font-size:.82em;color:' . ($late ? '#c8102e' : '#888') . ';margin-bottom:6px">' . ($late ? '⚠ en retard — ' : '🗓 ') . 'échéance ' . esc_html(wp_date('j M Y', strtotime($s['echeance']))) . '</div>';
             }
-            echo '</div></li>';
+            /* Pièces versées (triées par date). */
+            if ($pieces) {
+                echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+                foreach ($pieces as $p) {
+                    $isimg = strpos((string) $p->post_mime_type, 'image/') === 0;
+                    $th = $isimg ? (wp_get_attachment_image_url($p->ID, 'thumbnail') ?: wp_get_attachment_url($p->ID)) : '';
+                    $lab = function_exists('lfi_nct_photo_capture_label') ? lfi_nct_photo_capture_label($p->ID) : '';
+                    echo '<div style="text-align:center;width:78px">';
+                    echo '<a href="' . esc_url(wp_get_attachment_url($p->ID)) . '" target="_blank" rel="noopener">';
+                    echo $th ? '<img src="' . esc_url($th) . '" style="width:74px;height:74px;object-fit:cover;border-radius:6px;border:1px solid #ccc">' : '<div style="width:74px;height:74px;border-radius:6px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:1.6em;background:#f4f4f4">📄</div>';
+                    echo '</a>';
+                    echo '<div style="font-size:.62em;color:#888;line-height:1.1;margin-top:1px">' . esc_html($lab) . '</div>';
+                    echo '<form method="post" onsubmit="return confirm(\'Retirer cette pièce ?\')" style="margin:0">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_step_piece_del" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '"><button type="submit" class="btn-ghost" style="font-size:.6em;padding:1px 5px">🗑</button></form>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
+            /* Dépôt d'une pièce → coche auto. */
+            echo '<form method="post" enctype="multipart/form-data" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_app_step_piece" value="1"><input type="hidden" name="step_key" value="' . esc_attr($skey) . '"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
+            echo '<input type="file" name="piece" accept="image/*,application/pdf" capture="environment" required style="font-size:.8em;max-width:190px">';
+            echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
+            echo '</form>';
+            /* Contrôle manuel : rouvrir / marquer faite + supprimer l'étape. */
+            echo '<div style="display:flex;gap:6px;margin-top:7px">';
+            echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="toggle"><input type="hidden" name="step_idx" value="' . (int) $idx . '"><button type="submit" class="btn-ghost" style="font-size:.78em">' . ($done ? '↩ Rouvrir' : '✅ Marquer faite') . '</button></form>';
+            echo '<form method="post" onsubmit="return confirm(\'Supprimer cette étape ?\')" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="del"><input type="hidden" name="step_idx" value="' . (int) $idx . '"><button type="submit" class="btn-ghost" style="font-size:.72em;color:#c8102e">🗑 Étape</button></form>';
+            echo '</div>';
+            echo '</div></details>';
         }
-        echo '</ol>';
-        echo '<button type="submit" class="btn-primary" style="background:#186a3b;width:100%">💾 Enregistrer les étapes cochées</button>';
-        echo '</form>';
     }
 
     /* Ajout d'une étape — avec dropdown de suggestions */
