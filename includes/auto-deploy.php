@@ -80,4 +80,48 @@ function lfi_nct_auto_deploy() {
             update_option('lfi_nct_auto_fabrice_v2', '1', false);
         }
     }
+
+    /* 3) TOUS LES ADMINS DE GA : à partir de la carto, on enregistre chaque GA
+       dans le registre + on crée le compte de ses 2 admins (si un email valide)
+       et on les rattache comme binôme. Ils pourront se connecter et gérer LEUR
+       GA (page + événements cloisonnés). Idempotent. */
+    if (get_option('lfi_nct_auto_ga_admins_v1') !== '1' && function_exists('lfi_nct_carto_all')) {
+        $role   = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+        $custom = get_option('lfi_nct_ga_custom', []);  if (!is_array($custom)) $custom = [];
+        $pairs  = get_option('lfi_nct_ga_admins', []);  if (!is_array($pairs))  $pairs  = [];
+        $known  = []; foreach ($custom as $g) { if (!empty($g['slug'])) $known[$g['slug']] = 1; }
+        foreach (lfi_nct_carto_all() as $e) {
+            $nom = trim((string) ($e['nom'] ?? '')); if ($nom === '') continue;
+            if (stripos($nom, 'clos toreau') !== false) continue; /* déjà géré */
+            $slug = sanitize_title($nom); if ($slug === '') continue;
+            if (!isset($known[$slug])) {
+                $custom[] = ['slug' => $slug, 'nom' => $nom, 'secteur' => (string) ($e['commune'] ?? ''), 'custom' => 1];
+                $known[$slug] = 1;
+            }
+            $adm = [];
+            foreach ([['contact', 'email'], ['contact2', 'email2']] as $c) {
+                $name  = trim((string) ($e[$c[0]] ?? ''));
+                $email = trim((string) ($e[$c[1]] ?? ''));
+                if ($email === '' || !is_email($email)) continue; /* pas d'email valide → on ne crée pas (il ne pourrait pas se connecter) */
+                $u = get_user_by('email', $email);
+                $uid = $u ? (int) $u->ID : 0;
+                if (!$uid) {
+                    $p = explode(' ', $name, 2); $prenom = $p[0] ?? $name; $nomf = $p[1] ?? '';
+                    $login = function_exists('lfi_nct_app_make_username') ? lfi_nct_app_make_username($prenom, $nomf) : sanitize_user(current(explode('@', $email)), true);
+                    $pwd   = function_exists('lfi_nct_app_make_password') ? lfi_nct_app_make_password() : wp_generate_password(16);
+                    $newuid = wp_insert_user(['user_login' => $login ?: sanitize_user(current(explode('@', $email)) . '-' . wp_rand(100, 999)), 'user_pass' => $pwd, 'user_email' => $email, 'first_name' => $prenom, 'last_name' => $nomf, 'display_name' => $name ?: $login, 'role' => $role]);
+                    if (!is_wp_error($newuid)) $uid = (int) $newuid;
+                }
+                if ($uid) {
+                    if ((string) get_user_meta($uid, 'lfi_nct_ga', true) === '') update_user_meta($uid, 'lfi_nct_ga', $slug);
+                    update_user_meta($uid, 'lfi_nct_ga_role', 'admin');
+                    $adm[] = $uid;
+                }
+            }
+            if ($adm) $pairs[$slug] = ['f' => (int) ($adm[0] ?? 0), 'h' => (int) ($adm[1] ?? 0)];
+        }
+        update_option('lfi_nct_ga_custom', array_values($custom), false);
+        update_option('lfi_nct_ga_admins', $pairs, false);
+        update_option('lfi_nct_auto_ga_admins_v1', '1', false);
+    }
 }
