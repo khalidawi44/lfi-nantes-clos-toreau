@@ -672,6 +672,8 @@ function lfi_nct_app_view_dossier() {
                 if (!is_wp_error($att) && $att) {
                     update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
                     update_post_meta($att, '_lfi_step', $skey);
+                    $cat = lfi_nct_piece_categorize((string) ($_FILES['piece']['name'] ?? ''), (string) $upload['type']);
+                    update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
                     wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $upload['file']));
                     if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $upload['file']);
                     $ok = true;
@@ -1565,6 +1567,41 @@ function lfi_nct_step_pieces($uid, $skey) {
         return $ta <=> $tb;
     });
     return $q;
+}
+
+/** 🤖 ROBOT : analyse le nom/type d'une pièce → catégorie (PV, expertise,
+ *  courrier, médical, facture, photo…). */
+function lfi_nct_piece_categorize($filename, $mime = '', $context = '') {
+    $h = mb_strtolower((string) $filename . ' ' . (string) $context);
+    if (preg_match('/(pv|constat|schs|sihs|insalub|proc.s.verbal|hygi)/u', $h))                  return ['cat' => 'pv',        'label' => '📋 PV / constat'];
+    if (preg_match('/(expert|meurgey|entomolog|mus.um)/u', $h))                                    return ['cat' => 'expertise', 'label' => '🔬 Expertise'];
+    if (preg_match('/(mise.?en.?demeure|lrar|recommand|courrier|r.ponse|nmh|bailleur|morineau)/u', $h)) return ['cat' => 'courrier',  'label' => '✉️ Courrier'];
+    if (preg_match('/(certificat|m.dic|ordonnance|docteur|cmi|sant.)/u', $h))                      return ['cat' => 'medical',   'label' => '🩺 Certificat médical'];
+    if (preg_match('/(facture|devis|frais|note.?d.honoraire)/u', $h))                              return ['cat' => 'facture',   'label' => '💶 Facture / devis'];
+    if (strpos((string) $mime, 'image/') === 0 || preg_match('/\.(jpg|jpeg|png|heic|heif|webp|gif)$/u', $h)) return ['cat' => 'photo', 'label' => '📷 Photo preuve'];
+    if (strpos((string) $mime, 'pdf') !== false || preg_match('/\.pdf$/u', $h))                    return ['cat' => 'doc',       'label' => '📄 Document'];
+    return ['cat' => 'autre', 'label' => '📎 Pièce'];
+}
+/** 🤖 ROBOT : trouve l'ÉTAPE du parcours qui correspond à une catégorie de pièce
+ *  → range la pièce dans la bonne étape automatiquement. Renvoie la clé d'étape. */
+function lfi_nct_piece_autostep($uid, $cat) {
+    $map = [
+        'pv'        => ['constat', 'schs', 'hygi', 'insalub', 'pv', 'référé', 'refere'],
+        'expertise' => ['expert', 'constat', 'preuve'],
+        'courrier'  => ['mise en demeure', 'relance', 'nmh', 'courrier', 'amiable', 'réponse', 'reponse'],
+        'medical'   => ['certificat', 'médic', 'medic', 'santé', 'sante', 'préjudice', 'prejudice'],
+        'photo'     => ['constitu', 'preuve', 'photo', 'pièce', 'piece', 'constat'],
+        'facture'   => ['frais', 'préjudice', 'prejudice', 'chiffr', 'facture'],
+    ];
+    $keys = $map[$cat] ?? [];
+    if (!$keys) return '';
+    $steps = get_user_meta((int) $uid, 'lfi_nct_suivi_steps', true);
+    if (!is_array($steps)) return '';
+    foreach ($steps as $i => $s) {
+        $t = mb_strtolower((string) ($s['text'] ?? ''));
+        foreach ($keys as $k) if ($k !== '' && mb_strpos($t, $k) !== false) return lfi_nct_step_key($s['text'] ?? '', $i);
+    }
+    return '';
 }
 
 function lfi_nct_dossier_render_parcours($u) {
