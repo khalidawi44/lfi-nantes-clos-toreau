@@ -158,6 +158,8 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
         $dossier = lfi_nct_mailcheck_match_dossier($subject, $body, (int) $box['referent'], $from);
         if ($dossier) {
             lfi_nct_mailcheck_prepare_reply($dossier, $o, $subject, $body);
+            /* PIÈCES JOINTES → rangées dans le dossier du locataire. */
+            lfi_nct_mailcheck_import_attachments($mbox, $uid, (int) ($dossier->tenant_user_id ?? 0));
             $out['prepares']++;
         } elseif (function_exists('lfi_nct_inbox_unmatched')) {
             /* Aucun dossier trouvé → file « à rattacher » : l'email n'est PAS
@@ -191,6 +193,59 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
 
 function lfi_nct_mailcheck_log($rep) {
     update_option('lfi_nct_mailcheck_last', array_merge($rep, ['at' => current_time('mysql')]), false);
+}
+
+/**
+ * Importe les PIÈCES JOINTES (images / PDF) d'un email dans le dossier du
+ * locataire : chaque PJ devient une pièce du dossier (meta _lfi_tenant_user_id),
+ * rangée par date. Renvoie le nombre de pièces importées.
+ */
+function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
+    $tenant_uid = (int) $tenant_uid;
+    if (!$tenant_uid) return 0;
+    $struct = @imap_fetchstructure($mbox, $uid, FT_UID);
+    if (!$struct) return 0;
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    $n = 0;
+    $ok_ext = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif', 'pdf'];
+    $walk = function ($parts, $prefix) use (&$walk, $mbox, $uid, $tenant_uid, &$n, $ok_ext) {
+        foreach ($parts as $i => $part) {
+            $partno = ($prefix === '') ? (string) ($i + 1) : $prefix . '.' . ($i + 1);
+            if (!empty($part->parts)) { $walk($part->parts, $partno); continue; }
+            $filename = '';
+            if (!empty($part->ifdparameters)) foreach ($part->dparameters as $d) { if (strtolower($d->attribute) === 'filename') $filename = $d->value; }
+            if ($filename === '' && !empty($part->ifparameters)) foreach ($part->parameters as $p) { if (strtolower($p->attribute) === 'name') $filename = $p->value; }
+            $is_att = (!empty($part->ifdisposition) && in_array(strtolower((string) $part->disposition), ['attachment', 'inline'], true)) || ((int) ($part->type ?? -1) === 5);
+            if (!$is_att && $filename === '') continue;
+            if ($filename === '') $filename = 'piece-' . $partno . '.' . strtolower((string) ($part->subtype ?? 'bin'));
+            $filename = (string) imap_utf8($filename);
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            if (!in_array($ext, $ok_ext, true)) continue;
+            $raw = @imap_fetchbody($mbox, $uid, $partno, FT_UID | FT_PEEK);
+            if ($raw === false || $raw === '') continue;
+            $enc = (int) ($part->encoding ?? 0);
+            if ($enc === 3) $raw = base64_decode($raw);
+            elseif ($enc === 4) $raw = quoted_printable_decode($raw);
+            if ($raw === '' || strlen($raw) > 15 * 1024 * 1024) continue;
+            $up = wp_upload_dir();
+            if (!empty($up['error'])) continue;
+            $safe = wp_unique_filename($up['path'], sanitize_file_name($filename) ?: ('piece-' . $partno . '.' . $ext));
+            $path = trailingslashit($up['path']) . $safe;
+            if (file_put_contents($path, $raw) === false) continue;
+            $ft  = wp_check_filetype($safe);
+            $att = wp_insert_attachment(['post_mime_type' => $ft['type'] ?: 'application/octet-stream', 'post_title' => $safe, 'post_status' => 'private'], $path);
+            if (is_wp_error($att) || !$att) { @unlink($path); continue; }
+            wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $path));
+            update_post_meta($att, '_lfi_tenant_user_id', $tenant_uid);
+            update_post_meta($att, '_lfi_tenant_piece', 'Pièce jointe email');
+            if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $path);
+            $n++;
+        }
+    };
+    $parts = (!empty($struct->parts)) ? $struct->parts : [$struct];
+    $walk($parts, '');
+    return $n;
 }
 
 /** Corps texte (plain) d'un message IMAP. */
