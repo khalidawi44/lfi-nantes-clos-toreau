@@ -410,6 +410,41 @@ function lfi_nct_app_view_dossier() {
         delete_user_meta($u->ID, 'lfi_nct_response_id');
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'enq_unlinked' => 1])); exit;
     }
+    /* ♻️ RECRÉER l'enquête disparue (même numéro si libre), pré-remplie
+       « nuisibles (cafards, punaises) », reliée à ce locataire. On ne met AUCUNE
+       date ni gravité inventée : l'éditeur s'ouvre pour compléter. */
+    if (!empty($_POST['lfi_dossier_enq_recreate']) && check_admin_referer('lfi_dossier_enq')) {
+        $t_resp = $wpdb->prefix . 'lfi_nct_responses';
+        $rid0   = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+        $exists = $rid0 ? (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t_resp WHERE id = %d", $rid0)) : 0;
+        $me     = wp_get_current_user();
+        $data   = wp_json_encode([
+            'problemes_types'       => ['insectes'],
+            'problemes_types_autre' => 'cafards, punaises de lit',
+            'problemes_gravite'     => 0,
+            'problemes_recurrent'   => 'permanent',
+        ], JSON_UNESCAPED_UNICODE);
+        $fields = [
+            'militant_user_id'  => (int) $me->ID,
+            'militant_login'    => (string) $me->user_login,
+            'submitted_at'      => current_time('mysql'),
+            'adresse'           => (string) ($row->adresse ?? ''),
+            'contact_prenom'    => $u->first_name ?: 'Fabrice',
+            'contact_nom'       => $u->last_name ?: 'Doucet',
+            'contact_tel'       => (string) $tel,
+            'contact_email'     => (string) $u->user_email,
+            'contact_recontact' => 1,
+            'data'              => $data,
+            'ga'                => (string) get_user_meta($u->ID, 'lfi_nct_ga', true),
+        ];
+        if ($rid0 && !$exists) { $fields['id'] = $rid0; $wpdb->insert($t_resp, $fields); $new_id = $rid0; }
+        else { $wpdb->insert($t_resp, $fields); $new_id = (int) $wpdb->insert_id; }
+        update_user_meta($u->ID, 'lfi_nct_response_id', $new_id);
+        /* S'assurer qu'il est bien reconnu comme LOCATAIRE (sinon son dossier ne
+           s'ouvre pas) — rôle AJOUTÉ, on ne retire jamais superadmin. */
+        if (defined('LFI_NCT_ROLE_TENANT') && !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) $u->add_role(LFI_NCT_ROLE_TENANT);
+        wp_safe_redirect(lfi_nct_app_url('enquete-edit', ['id' => $new_id, 'recreated' => 1])); exit;
+    }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
        usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
@@ -525,6 +560,7 @@ function lfi_nct_app_view_dossier() {
     echo   '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px">';
     echo     '<a style="' . $bw . '" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Modifier la fiche</a>';
     if ($rid) echo '<a style="' . $bw . '" href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => $rid])) . '">📋 Modifier l\'enquête</a>';
+    echo     '<a style="' . $bg . '" href="#dossier-photos">📎 Pièces & photos (' . count($photos) . ')</a>';
     if ($tel && !$sms_blocked) echo '<a style="' . $bg . '" href="sms:' . esc_attr($tel_clean) . '">📱 SMS</a>';
     if ($tel) echo '<a style="' . $bg . '" href="tel:' . esc_attr($tel_clean) . '">📞 Appeler</a>';
     if ($mail_ok) echo '<a style="' . $bg . '" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email</a>';
@@ -553,10 +589,10 @@ function lfi_nct_app_view_dossier() {
             echo '</form></div>';
         } else {
             echo '<div class="head"><div class="who" style="color:#8a6d1f">👻 Enquête #' . (int) $rid . ' introuvable</div></div>';
-            echo '<div class="com" style="font-size:.92em">Ce dossier pointe vers l\'enquête <strong>#' . (int) $rid . '</strong> qui n\'existe plus (supprimée définitivement). Tu peux délier ce numéro et en relier une autre.</div>';
+            echo '<div class="com" style="font-size:.92em">Ce dossier pointe vers l\'enquête <strong>#' . (int) $rid . '</strong> qui n\'existe plus. Tu peux la <strong>recréer avec le même numéro</strong> (pré-remplie « nuisibles : cafards, punaises »), puis compléter les dates et la gravité dans l\'éditeur.</div>';
             echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' . wp_nonce_field('lfi_dossier_enq', '_wpnonce', true, false);
-            echo '<button type="submit" name="lfi_dossier_enq_unlink" value="1" class="btn-ghost" onclick="return confirm(\'Délier l\\\'enquête #' . (int) $rid . ' de ce dossier ?\')">🔓 Délier l\'enquête #' . (int) $rid . '</button>';
-            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquete')) . '">➕ Lier une autre enquête</a>';
+            echo '<button type="submit" name="lfi_dossier_enq_recreate" value="1" class="btn-primary" style="background:#186a3b">♻️ Recréer l\'enquête #' . (int) $rid . ' (nuisibles)</button>';
+            echo '<button type="submit" name="lfi_dossier_enq_unlink" value="1" class="btn-ghost" onclick="return confirm(\'Délier l\\\'enquête #' . (int) $rid . ' de ce dossier ?\')">🔓 Délier</button>';
             echo '</form></div>';
         }
         echo '</div>';
@@ -692,7 +728,7 @@ function lfi_nct_app_view_dossier() {
     lfi_nct_dossier_render_suivi($u, $row);
 
     /* Photos — dans l'ordre CHRONOLOGIQUE (date de prise de vue). */
-    echo '<h3 style="margin:18px 0 8px">📷 Photos envoyées (' . count($photos) . ') <small style="font-weight:400;color:#888">· classées par date de prise de vue</small></h3>';
+    echo '<h3 id="dossier-photos" style="margin:18px 0 8px;scroll-margin-top:70px">📷 Photos envoyées (' . count($photos) . ') <small style="font-weight:400;color:#888">· classées par date de prise de vue</small></h3>';
     if (empty($photos)) {
         echo '<div class="lfi-app-empty">Aucune photo encore envoyée.</div>';
     } else {

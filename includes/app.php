@@ -3733,6 +3733,7 @@ function lfi_nct_app_view_enquete_edit() {
     $ref = function_exists('lfi_nct_response_ref') ? lfi_nct_response_ref($row->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($row) : '') : '';
 
     lfi_nct_app_screen_open('✏️ Éditer' . ($ref ? ' — ' . $ref : ''), 'Corrige les informations de cette enquête');
+    if (!empty($_GET['recreated'])) lfi_nct_app_flash('♻️ Enquête #' . (int) $id . ' recréée (nuisibles : cafards, punaises). Complète ici les dates, la gravité et l\'adresse — je n\'invente rien.');
 
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_enq_edit_' . $id);
