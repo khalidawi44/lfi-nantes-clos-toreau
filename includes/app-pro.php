@@ -409,11 +409,19 @@ function lfi_nct_dossier_render_chrono($u) {
         foreach ($list as $e) {
             $lab = (string) ($e['label'] ?? '');
             echo '<div style="display:flex;gap:8px;align-items:flex-start;border-left:3px solid ' . (!empty($e['auto']) ? '#0066a3' : '#0b3d91') . ';background:#f6f8fc;border-radius:6px;padding:6px 9px">';
+            echo '<input type="checkbox" form="lfi-chrono-bulk" name="chrono_sel[]" value="' . (int) ($e['id'] ?? 0) . '" title="Sélectionner" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto">';
             echo '<div style="font-weight:800;color:#0b3d91;font-size:.82em;white-space:nowrap;min-width:78px">' . esc_html($lab ?: '—') . '</div>';
             echo '<div style="flex:1;font-size:.88em;color:#333">' . esc_html((string) ($e['txt'] ?? '')) . (!empty($e['auto']) ? ' <span style="color:#0066a3;font-size:.85em">· auto</span>' : '') . '</div>';
             echo '<form method="post" onsubmit="return confirm(\'Retirer cette ligne ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_del" value="' . (int) ($e['id'] ?? 0) . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
             echo '</div>';
         }
+        echo '</div>';
+    }
+    /* 🧹 Tri/suppression multiple (cases reliées par form=) + tout effacer. */
+    if (!empty($list)) {
+        echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
+        echo '<form id="lfi-chrono-bulk" method="post" onsubmit="return confirm(\'Supprimer les lignes cochées ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_bulk_del" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;border-color:#c8102e;color:#c8102e">🗑 Supprimer la sélection</button></form>';
+        echo '<form method="post" onsubmit="return confirm(\'Tout effacer la chronologie ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_reset" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#c8102e">🧹 Tout effacer</button></form>';
         echo '</div>';
     }
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#0b3d91;font-weight:700;font-size:.9em">➕ Ajouter une date</summary>';
@@ -623,6 +631,16 @@ function lfi_nct_app_view_dossier() {
         $cid = (int) $_POST['lfi_chrono_del'];
         $list = array_values(array_filter(lfi_nct_chrono_get($u->ID), function ($e) use ($cid) { return (int) ($e['id'] ?? 0) !== $cid; }));
         lfi_nct_chrono_save($u->ID, $list);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+    if (!empty($_POST['lfi_chrono_bulk_del']) && check_admin_referer('lfi_chrono')) {
+        $sel = array_map('intval', (array) ($_POST['chrono_sel'] ?? []));
+        $list = array_values(array_filter(lfi_nct_chrono_get($u->ID), function ($e) use ($sel) { return !in_array((int) ($e['id'] ?? 0), $sel, true); }));
+        lfi_nct_chrono_save($u->ID, $list);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+    if (!empty($_POST['lfi_chrono_reset']) && check_admin_referer('lfi_chrono')) {
+        lfi_nct_chrono_save($u->ID, []);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
     }
 
