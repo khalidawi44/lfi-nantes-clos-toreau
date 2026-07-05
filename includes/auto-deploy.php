@@ -31,6 +31,16 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* 1-reset) REMISE À ZÉRO du pipeline d'import des emails, demandée avant une
+       relance de pêche propre (« tout remettre à zéro »). Vide la boîte de
+       collecte + la mémoire anti-doublon + les emails/pièces IMPORTÉS de tous
+       les dossiers. Ne touche PAS aux enquêtes, mandats, chronologies
+       reconstruites/saisies à la main. S'exécute UNE seule fois. */
+    if (get_option('lfi_nct_emails_reset_v1') !== '1' && function_exists('lfi_nct_emails_full_reset')) {
+        try { lfi_nct_emails_full_reset(); } catch (\Throwable $e) {}
+        update_option('lfi_nct_emails_reset_v1', '1', false);
+    }
+
     /* 1bis) Sommet NATIONAL de l'organigramme (Mélenchon + Bompard) — ajoutés
        s'ils manquent, en haut de la pyramide. */
     if (get_option('lfi_nct_auto_national_v2') !== '1' && function_exists('lfi_nct_carto_people_all') && function_exists('lfi_nct_carto_people_save')) {
