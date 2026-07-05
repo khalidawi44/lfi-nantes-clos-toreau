@@ -111,7 +111,8 @@ function lfi_nct_generate_reply_body($row, $recu, $intention, $precisions, $sign
         ? "Je vous rappelle vos obligations légales de délivrance d'un logement décent et vous demande une réponse écrite et datée sous 8 jours. À défaut, je saisirai les autorités compétentes (SCHS, et le cas échéant la juridiction)."
         : "Je privilégie une résolution amiable et rapide, et je reste à votre disposition.";
 
-    /* Au BAILLEUR : signature de l'ASSOCIATION mandatée (jamais LFI — cadre légal). */
+    /* Au BAILLEUR : l'ASSOCIATION parle pour le locataire (Union des Quartiers
+       Libres) + LFI mentionnée comme SOUTIEN — 2 casquettes distinctes. */
     $signature = function_exists('lfi_nct_email_signature')
         ? lfi_nct_email_signature('nmh', $signataire, $nom)
         : "\n\nCordialement,\n" . $signataire . "\nUnion des Quartiers Libres — au nom et pour le compte de " . $nom . ".";
@@ -404,22 +405,47 @@ function lfi_nct_app_view_repondre() {
         $hist[] = ['dir' => 'envoye', 'date' => (string) ($e['date'] ?? ''), 'qui' => (string) ($e['to'] ?? ''), 'objet' => (string) ($e['subject'] ?? ($e['objet'] ?? '')), 'corps' => (string) ($e['body'] ?? '')];
     }
     usort($hist, function ($a, $b) { return strtotime($a['date'] ?: '1970') <=> strtotime($b['date'] ?: '1970'); });
-    if (count($hist) > 1) {
-        echo '<details class="lfi-app-card" style="border-left:4px solid #8a6d1f;margin-top:10px"><summary style="cursor:pointer;font-weight:800;color:#8a6d1f;list-style:none">🧵 Historique du fil (' . count($hist) . ' message' . (count($hist) > 1 ? 's' : '') . ') — ce qu\'on s\'est dit</summary>';
-        echo '<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">';
+    if (count($hist) >= 1) {
+        /* Séparation PAR INTERLOCUTEUR (d'après l'email) : NMH / Service Hygiène /
+           avocat… On rattache chaque message à sa « personne » et on propose une
+           liste déroulante pour n'afficher qu'un seul fil à la fois. */
+        $interlos = [];
+        foreach ($hist as $i => $h) {
+            $who = function_exists('lfi_nct_interlocuteur') ? lfi_nct_interlocuteur($h['qui']) : ['label' => 'Autre', 'key' => 'autre', 'ico' => '✉️'];
+            $hist[$i]['ik']    = $who['key'];
+            $hist[$i]['ilabel'] = $who['ico'] . ' ' . $who['label'];
+            if (!isset($interlos[$who['key']])) $interlos[$who['key']] = ['label' => $who['ico'] . ' ' . $who['label'], 'n' => 0];
+            $interlos[$who['key']]['n']++;
+        }
+        /* Interlocuteur du message en cours = filtre par défaut. */
+        $cur = function_exists('lfi_nct_interlocuteur') ? lfi_nct_interlocuteur($recu['de'] ?? '') : ['key' => ''];
+        $def_ik = (isset($interlos[$cur['key']])) ? $cur['key'] : '__all__';
+
+        echo '<details class="lfi-app-card" style="border-left:4px solid #8a6d1f;margin-top:10px" open><summary style="cursor:pointer;font-weight:800;color:#8a6d1f;list-style:none">🧵 Historique du fil (' . count($hist) . ') — par interlocuteur</summary>';
+        /* Liste déroulante des interlocuteurs. */
+        if (count($interlos) > 1) {
+            echo '<div style="margin-top:8px"><label style="font-size:.82em;color:#555">👤 Interlocuteur : <select onchange="lfiThreadFilter(this.value)" style="padding:6px 8px;border:1px solid #ccc;border-radius:8px;font-size:.9em">';
+            echo '<option value="__all__"' . selected($def_ik, '__all__', false) . '>Tous les interlocuteurs (' . count($hist) . ')</option>';
+            foreach ($interlos as $k => $info) echo '<option value="' . esc_attr($k) . '"' . selected($def_ik, $k, false) . '>' . esc_html($info['label']) . ' (' . (int) $info['n'] . ')</option>';
+            echo '</select></label></div>';
+        }
+        echo '<div id="lfi-thread" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">';
         foreach ($hist as $h) {
-            $recu = ($h['dir'] === 'recu');
-            $col  = $recu ? '#0066a3' : '#186a3b';
-            $ico  = $recu ? '📥 Reçu' : '📤 Envoyé';
+            $recu2 = ($h['dir'] === 'recu');
+            $col  = $recu2 ? '#0066a3' : '#186a3b';
+            $ico  = $recu2 ? '📥 Reçu' : '📤 Envoyé';
             $when = $h['date'] ? wp_date('j M Y', strtotime($h['date'])) : '';
-            echo '<div style="border-left:3px solid ' . $col . ';background:#fafafa;border-radius:6px;padding:8px 10px">';
-            echo '<div style="font-size:.8em;color:' . $col . ';font-weight:700">' . $ico . ($when ? ' · ' . esc_html($when) : '') . '</div>';
+            $hide = ($def_ik !== '__all__' && $h['ik'] !== $def_ik) ? 'display:none' : '';
+            echo '<div class="lfi-thread-item" data-ik="' . esc_attr($h['ik']) . '" style="border-left:3px solid ' . $col . ';background:#fafafa;border-radius:6px;padding:8px 10px;' . $hide . '">';
+            echo '<div style="font-size:.8em;color:' . $col . ';font-weight:700">' . $ico . ($when ? ' · ' . esc_html($when) : '') . ' <span style="color:#8a6d1f">· ' . esc_html($h['ilabel']) . '</span></div>';
             if ($h['objet'] !== '') echo '<div style="font-size:.86em;font-weight:600;margin-top:1px">' . esc_html($h['objet']) . '</div>';
             $corps = trim($h['corps']);
             if ($corps !== '') echo '<div style="font-size:.84em;color:#444;white-space:pre-wrap;margin-top:3px;max-height:150px;overflow:auto">' . esc_html($corps) . '</div>';
             echo '</div>';
         }
-        echo '</div></details>';
+        echo '</div>';
+        echo '<script>function lfiThreadFilter(k){document.querySelectorAll("#lfi-thread .lfi-thread-item").forEach(function(it){it.style.display=(k==="__all__"||it.getAttribute("data-ik")===k)?"":"none";});}</script>';
+        echo '</details>';
     }
 
     /* VERROU MANDAT : pas d'email à NMH sans adhésion signée. */
@@ -444,7 +470,7 @@ function lfi_nct_app_view_repondre() {
 
     /* Casquette : au bailleur = l'ASSOCIATION seule (jamais LFI). */
     echo '<div class="lfi-app-card" style="border-left:4px solid #c8102e">';
-    echo '<div class="head"><div class="who">✍️ Réponse prête</div><div class="badge" style="background:#c8102e;color:#fff">🏢 Casquette : Association (jamais LFI)</div></div>';
+    echo '<div class="head"><div class="who">✍️ Réponse prête</div><div class="badge" style="background:#c8102e;color:#fff">🏢 Quartier Libre (pour le locataire) · LFI en soutien</div></div>';
     if (function_exists('lfi_nct_signature_logos_html')) echo lfi_nct_signature_logos_html('nmh');
 
     /* Chips d'affinage (regénère instantanément côté serveur). */

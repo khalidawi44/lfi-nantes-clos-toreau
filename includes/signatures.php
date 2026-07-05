@@ -29,10 +29,13 @@ function lfi_nct_logo_lfi_url() {
 function lfi_nct_email_signature($ctx, $signataire = '', $person = '') {
     $signataire = $signataire !== '' ? $signataire : lfi_nct_signataire_defaut();
     switch ($ctx) {
-        case 'nmh': /* au bailleur : l'ASSOCIATION mandatée, jamais LFI */
+        case 'nmh': /* au bailleur : l'ASSOCIATION parle POUR le locataire
+                       (Union des Quartiers Libres) + LFI mentionnée comme SOUTIEN
+                       (2 casquettes distinctes, jamais confondues). */
             $s = "\n\nCordialement,\n" . $signataire . "\n"
                . "Union des Quartiers Libres — association d'accompagnement des locataires";
             if ($person !== '') $s .= "\nAgissant au nom et pour le compte de " . $person . ", qui nous a mandatés.";
+            $s .= "\nAvec le soutien de La France Insoumise.";
             return $s;
         case 'locataire': /* fraternel, entre voisins */
             return "\n\nOn est là pour vous, courage — à très vite.\n" . $signataire . "\n"

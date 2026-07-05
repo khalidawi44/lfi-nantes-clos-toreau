@@ -14,9 +14,14 @@
   (jamais par nom ni adresse).
 - Ne JAMAIS partager l'enquête terrain avec les élu·es (partenaires).
 
-## Casquettes / signatures (cadre légal)
-- Au **bailleur** (NMH) : c'est l'**association** mandatée (Union des Quartiers
-  Libres) — **jamais LFI**.
+## Casquettes / signatures (cadre légal) — VARIER selon l'interlocuteur
+- **Règle : on VARIE la casquette selon l'interlocuteur** (ce n'est PAS « jamais
+  LFI »). Les 2 casquettes sont **distinctes** mais peuvent coexister.
+- Au **bailleur** (NMH) : l'**association** (Union des Quartiers Libres) **parle
+  POUR le locataire** (mandatée) ; on **peut mentionner La France Insoumise comme
+  SOUTIEN** (« Avec le soutien de La France Insoumise »). Fabrice porte les deux
+  casquettes, distinctes : Quartier Libre = quand il parle pour le locataire ;
+  LFI = en soutien / autre casquette, séparée.
 - Au **locataire** : fraternel, entre voisins (association).
 - À l'**avocat** : LFI + Union des Quartiers Libres. Fabrice **n'est pas avocat**
   → **jamais « confraternellement »** (utiliser « Bien cordialement »).

@@ -165,6 +165,40 @@ function lfi_nct_inbox_unmatched_save($list) {
     update_option('lfi_nct_inbox_unmatched', array_slice(array_values($list), -200), false);
 }
 
+/* Nettoyage AUTOMATIQUE des doublons déjà importés, UNE seule fois après ce
+   déploiement (sur tous les dossiers + la file « à rattacher »). Idempotent. */
+add_action('init', 'lfi_nct_inbox_dedup_once', 20);
+function lfi_nct_inbox_dedup_once() {
+    if (get_option('lfi_nct_dedup_auto_v2') === '1') return;
+    if (!function_exists('lfi_nct_inbox_dedup_existing')) return;
+    try { lfi_nct_inbox_dedup_existing(); } catch (\Throwable $e) {}
+    update_option('lfi_nct_dedup_auto_v2', '1', false);
+}
+
+/**
+ * IDENTIFIE L'INTERLOCUTEUR d'un email d'après son adresse (et le libellé « De »).
+ * Sert à SÉPARER les fils par personne (M. Moreno=NMH, M. Lejeune=Service Hygiène,
+ * avocat, préfecture…). Renvoie ['email','label','key','ico'].
+ */
+function lfi_nct_interlocuteur($str) {
+    $s = (string) $str;
+    $email = '';
+    if (preg_match('/[\w.\-+]+@[\w.\-]+\.[\w.\-]+/', $s, $m)) $email = strtolower($m[0]);
+    $dom = $email ? (string) substr(strrchr($email, '@'), 1) : '';
+    $hay = strtolower($s);
+    if (strpos($hay, 'nmh') !== false || strpos($hay, 'nantesmetropolehabitat') !== false || strpos($hay, 'moreno') !== false)
+        return ['email' => $email, 'label' => 'NMH (Nantes Métropole Habitat)', 'key' => 'nmh', 'ico' => '🏢'];
+    if (strpos($hay, 'schs') !== false || strpos($hay, 'hygiene') !== false || strpos($hay, 'hygiène') !== false
+        || strpos($hay, 'sihs') !== false || strpos($hay, 'lejeune') !== false || strpos($hay, 'ars') !== false || strpos($hay, 'sante') !== false)
+        return ['email' => $email, 'label' => 'Service Hygiène / Santé', 'key' => 'schs', 'ico' => '🩺'];
+    if (strpos($hay, 'avocat') !== false || strpos($hay, 'supiot') !== false || strpos($hay, 'justice') !== false || strpos($hay, 'barreau') !== false)
+        return ['email' => $email, 'label' => 'Avocat·e', 'key' => 'avocat', 'ico' => '⚖️'];
+    if (strpos($hay, 'prefecture') !== false || strpos($hay, 'prefet') !== false || strpos($hay, 'gouv.fr') !== false)
+        return ['email' => $email, 'label' => 'Préfecture / État', 'key' => 'etat', 'ico' => '🏛️'];
+    if ($email !== '') return ['email' => $email, 'label' => $email, 'key' => $email, 'ico' => '✉️'];
+    return ['email' => '', 'label' => 'Autre', 'key' => 'autre', 'ico' => '✉️'];
+}
+
 /* -------------------------------------------------------------- *
  *  ANTI-DOUBLON GLOBAL — un email n'est importé QU'UNE fois,      *
  *  quel que soit le chemin (push Apps Script « inbox » ou pêche   *
