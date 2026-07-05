@@ -284,6 +284,14 @@ function lfi_nct_mailcheck_match_dossier($subject, $body = '', $referent = 0, $f
             if (preg_match('/(?<![\p{L}])' . preg_quote($nl, '/') . '(?![\p{L}])/u', $low)) return $r;
         }
     }
+    /* REPLI : aucun AUTRE locataire nommé → si l'EXPÉDITEUR est lui-même un
+       locataire avec son propre dossier logement (cas Fabrice : membre ET
+       locataire apt 88), l'email concerne SON dossier → on classe chez lui. */
+    if ($sender_uid) {
+        foreach ($rows as $r) {
+            if ((int) $r->tenant_user_id === $sender_uid) return $r;
+        }
+    }
     return null;
 }
 

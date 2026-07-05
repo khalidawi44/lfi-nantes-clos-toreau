@@ -220,6 +220,27 @@ function lfi_nct_dossier_get($id) {
  *  OU adresse canonique. Renvoie la ligne la plus récente, ou null *
  *  si aucun dossier n'existe encore pour ce locataire.             *
  * ============================================================== */
+/** Retourne le dossier juridique du locataire, en le CRÉANT s'il n'existe pas
+ *  (sinon les emails n'ont nulle part où être classés). */
+function lfi_nct_dossier_ensure_for_tenant($uid) {
+    $d = lfi_nct_dossier_find_for_tenant((int) $uid);
+    if ($d) return $d;
+    global $wpdb;
+    $u = get_userdata((int) $uid); if (!$u) return null;
+    $owner = (int) lfi_nct_dossier_owner_id();
+    $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    $resp = $rid ? $wpdb->get_row($wpdb->prepare("SELECT adresse, etage FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
+    $wpdb->insert($td, [
+        'owner_user_id' => $owner, 'tenant_user_id' => (int) $uid,
+        'tenant_prenom' => $u->first_name, 'tenant_nom' => $u->last_name ?: $u->display_name,
+        'tenant_adresse'=> $resp->adresse ?? '', 'tenant_etage' => $resp->etage ?? '',
+        'tenant_email'  => $u->user_email, 'tenant_tel' => (string) get_user_meta($uid, 'lfi_nct_tel', true),
+        'statut' => 'ouvert',
+    ]);
+    return $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE id = %d", (int) $wpdb->insert_id));
+}
+
 function lfi_nct_dossier_find_for_tenant($uid) {
     global $wpdb;
     $uid = (int) $uid;
