@@ -355,6 +355,76 @@ function lfi_nct_app_view_dossiers() {
     lfi_nct_app_screen_close();
 }
 
+/* ============================================================== *
+ *  CHRONOLOGIE STRUCTURÉE du dossier (par locataire) — une vraie   *
+ *  timeline, PAS des notes. S'auto-alimente quand le dossier évolue *
+ *  (emails reçus/envoyés) et reste éditable/triable à la main.      *
+ * ============================================================== */
+function lfi_nct_chrono_get($uid) {
+    $c = get_user_meta((int) $uid, 'lfi_nct_chrono', true);
+    return is_array($c) ? $c : [];
+}
+function lfi_nct_chrono_norm_date($s) {
+    $s = trim((string) $s);
+    if (preg_match('#(\d{1,2})/(\d{1,2})/(\d{4})#', $s, $m)) return sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
+    if (preg_match('#(\d{4})-(\d{2})-(\d{2})#', $s, $m)) return $m[1] . '-' . $m[2] . '-' . $m[3];
+    if (preg_match('#\b(20\d{2})\b#', $s, $m)) return $m[1] . '-00-00';
+    return '';
+}
+function lfi_nct_chrono_save($uid, $list) {
+    usort($list, function ($a, $b) {
+        $c = strcmp((string) ($a['d'] ?? ''), (string) ($b['d'] ?? ''));
+        return $c !== 0 ? $c : strcmp((string) ($a['label'] ?? ''), (string) ($b['label'] ?? ''));
+    });
+    update_user_meta((int) $uid, 'lfi_nct_chrono', array_values($list));
+}
+/** Ajoute une entrée (dédupliquée). $label = date affichée ; on en déduit un tri. */
+function lfi_nct_chrono_add($uid, $label, $txt, $auto = false) {
+    $txt = trim((string) $txt); if ($txt === '') return false;
+    $label = trim((string) $label);
+    $list = lfi_nct_chrono_get($uid);
+    foreach ($list as $e) { if (mb_strtolower(trim((string) ($e['txt'] ?? ''))) === mb_strtolower($txt)) return false; }
+    $list[] = ['id' => (int) (round(microtime(true) * 1000) % 1000000000), 'd' => lfi_nct_chrono_norm_date($label), 'label' => $label, 'txt' => $txt, 'auto' => $auto ? 1 : 0];
+    lfi_nct_chrono_save($uid, $list);
+    return true;
+}
+/** Entrée auto « email » — appelée quand un email est classé dans le dossier. */
+function lfi_nct_chrono_add_email($uid, $sens, $qui, $objet, $date = '') {
+    if (!$uid) return;
+    $who = function_exists('lfi_nct_interlocuteur') ? lfi_nct_interlocuteur($qui) : ['ico' => '✉️', 'label' => ''];
+    $lab = $date ?: wp_date('Y-m-d');
+    $ico = ($sens === 'recu') ? '📥 Email reçu de' : '📤 Email envoyé à';
+    $txt = $ico . ' ' . trim($who['ico'] . ' ' . ($who['label'] ?: 'interlocuteur')) . ($objet !== '' ? ' — « ' . mb_substr((string) $objet, 0, 70) . ' »' : '');
+    lfi_nct_chrono_add($uid, $lab, $txt, true);
+}
+/** Rend la section « 📅 Chronologie » dans le dossier (triée, éditable). */
+function lfi_nct_dossier_render_chrono($u) {
+    $list = lfi_nct_chrono_get($u->ID);
+    echo '<div class="lfi-app-card" style="border-left:4px solid #0b3d91;margin-bottom:12px" id="dossier-chrono">';
+    echo '<div class="head"><div class="who">📅 Chronologie du dossier</div><div class="badge" style="background:#0b3d91;color:#fff">' . count($list) . '</div></div>';
+    if (empty($list)) {
+        echo '<div class="com" style="font-size:.9em;color:#777">Aucune entrée. Ajoute les dates clés ci-dessous — et chaque email classé viendra s\'ajouter tout seul.</div>';
+    } else {
+        echo '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">';
+        foreach ($list as $e) {
+            $lab = (string) ($e['label'] ?? '');
+            echo '<div style="display:flex;gap:8px;align-items:flex-start;border-left:3px solid ' . (!empty($e['auto']) ? '#0066a3' : '#0b3d91') . ';background:#f6f8fc;border-radius:6px;padding:6px 9px">';
+            echo '<div style="font-weight:800;color:#0b3d91;font-size:.82em;white-space:nowrap;min-width:78px">' . esc_html($lab ?: '—') . '</div>';
+            echo '<div style="flex:1;font-size:.88em;color:#333">' . esc_html((string) ($e['txt'] ?? '')) . (!empty($e['auto']) ? ' <span style="color:#0066a3;font-size:.85em">· auto</span>' : '') . '</div>';
+            echo '<form method="post" onsubmit="return confirm(\'Retirer cette ligne ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_del" value="' . (int) ($e['id'] ?? 0) . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+    echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#0b3d91;font-weight:700;font-size:.9em">➕ Ajouter une date</summary>';
+    echo '<form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false);
+    echo '<input type="text" name="chrono_date" placeholder="ex. 20/08/2025 ou 2020" style="width:150px;padding:7px;border:1px solid #ccc;border-radius:6px">';
+    echo '<input type="text" name="chrono_txt" placeholder="Événement…" style="flex:1;min-width:160px;padding:7px;border:1px solid #ccc;border-radius:6px">';
+    echo '<button type="submit" name="lfi_chrono_add" value="1" class="btn-primary" style="background:#0b3d91">Ajouter</button>';
+    echo '</form></details>';
+    echo '</div>';
+}
+
 function lfi_nct_app_view_dossier() {
     if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
@@ -470,9 +540,13 @@ function lfi_nct_app_view_dossier() {
             . "12/06/2026 — Réponse NMH (« nous prenons note… néanmoins concernant les interventions de désinsectisation… »).\n"
             . "16/06/2026 — Huissier : « désignés pour la délivrance d'actes, pas pour la réalisation d'un constat ».\n"
             . "01/07/2026 — Visite chez Maître Gouache (avocat) ; dépôt de la modification des statuts de l'association.";
-        $old = (string) get_user_meta($u->ID, 'lfi_nct_admin_notes', true);
-        if (strpos($old, 'CHRONOLOGIE — Fabrice DOUCET') === false) {
-            update_user_meta($u->ID, 'lfi_nct_admin_notes', $chrono . ($old !== '' ? "\n\n— — —\n" . $old : ''));
+        /* On alimente la CHRONOLOGIE structurée (pas les notes) : une entrée par
+           ligne datée « DATE — événement ». */
+        foreach (preg_split('/\r\n|\r|\n/', $chrono) as $ln) {
+            $ln = trim($ln); if ($ln === '' || stripos($ln, 'CHRONOLOGIE — Fabrice') === 0) continue;
+            $parts = preg_split('/\s+[—-]\s+/u', $ln, 2);
+            if (count($parts) === 2) lfi_nct_chrono_add($u->ID, trim($parts[0]), trim($parts[1]), false);
+            else lfi_nct_chrono_add($u->ID, '', $ln, false);
         }
         /* Mandat OK (président/adhérent, pas de formulaire à signer). */
         if (function_exists('lfi_nct_dossier_find_for_tenant') && function_exists('lfi_nct_dossier_mandat_set')) {
@@ -480,6 +554,17 @@ function lfi_nct_app_view_dossier() {
             if ($dj) lfi_nct_dossier_mandat_set((int) $dj->id, 1);
         }
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'reco' => 1])); exit;
+    }
+    /* Chronologie : ajout / retrait d'une ligne. */
+    if (!empty($_POST['lfi_chrono_add']) && check_admin_referer('lfi_chrono')) {
+        lfi_nct_chrono_add($u->ID, sanitize_text_field(wp_unslash($_POST['chrono_date'] ?? '')), sanitize_text_field(wp_unslash($_POST['chrono_txt'] ?? '')), false);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+    if (isset($_POST['lfi_chrono_del']) && check_admin_referer('lfi_chrono')) {
+        $cid = (int) $_POST['lfi_chrono_del'];
+        $list = array_values(array_filter(lfi_nct_chrono_get($u->ID), function ($e) use ($cid) { return (int) ($e['id'] ?? 0) !== $cid; }));
+        lfi_nct_chrono_save($u->ID, $list);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
     }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
@@ -567,7 +652,7 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
     if (!empty($_GET['enq_restored'])) lfi_nct_app_flash('♻️ Enquête restaurée depuis la corbeille — le dossier est de nouveau complet.');
     if (!empty($_GET['enq_unlinked'])) lfi_nct_app_flash('Enquête déliée du dossier.');
-    if (!empty($_GET['reco'])) lfi_nct_app_flash('🔧 Dossier reconstruit : chronologie injectée dans les 📝 Notes du GA (relis/corrige librement) + mandat coché (président). Pense à recréer/relier l\'enquête #6 si besoin.');
+    if (!empty($_GET['reco'])) lfi_nct_app_flash('🔧 Dossier reconstruit : chronologie ajoutée dans la 📅 Chronologie (triée par date, éditable) + mandat coché (président). Pense à recréer/relier l\'enquête #6 si besoin.');
 
     /* ===== BANNIÈRE — nom en GROS + n° d'enquête + éditer fiche/enquête ===== */
     $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
@@ -649,6 +734,9 @@ function lfi_nct_app_view_dossier() {
 
     /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
     lfi_nct_dossier_render_batailles($u, $row);
+
+    /* ===== CHRONOLOGIE (timeline structurée, auto-alimentée) ===== */
+    lfi_nct_dossier_render_chrono($u);
 
     /* ===== Partager l'espace avec le locataire (le fait entrer dans l'app) ===== */
     echo '<details class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px"' . ($share_link !== '' ? ' open' : '') . '>';
