@@ -507,6 +507,20 @@ function lfi_nct_inbox_assign($queue_id, $tenant_uid) {
     foreach ($q as $e) { if ((int) ($e['id'] ?? 0) === $queue_id) $email = $e; else $rest[] = $e; }
     if (!$email || !$tenant_uid) return false;
     $res = lfi_nct_inbox_file($tenant_uid, $email['from'] ?? '', $email['to'] ?? '', $email['cc'] ?? '', $email['objet'] ?? '', $email['body'] ?? '', $email['date'] ?? '', $email['message_id'] ?? '');
+    /* Les PIÈCES JOINTES importées en attente suivent l'email chez le locataire :
+       on leur pose le bon propriétaire + l'étape auto (photos jamais perdues). */
+    if (!empty($email['att_ids']) && is_array($email['att_ids'])) {
+        foreach ($email['att_ids'] as $aid) {
+            $aid = (int) $aid; if (!$aid || !get_post($aid)) continue;
+            update_post_meta($aid, '_lfi_tenant_user_id', $tenant_uid);
+            delete_post_meta($aid, '_lfi_inbox_pending');
+            if (function_exists('lfi_nct_piece_autostep')) {
+                $cat = (string) get_post_meta($aid, '_lfi_piece_cat', true) ?: 'autre';
+                $sk = lfi_nct_piece_autostep($tenant_uid, $cat);
+                if ($sk !== '') update_post_meta($aid, '_lfi_step', $sk);
+            }
+        }
+    }
     /* Le robot apprend : on mémorise les adresses tierces pour la prochaine fois. */
     $all = array_merge(lfi_nct_inbox_emails($email['from'] ?? ''), lfi_nct_inbox_emails($email['to'] ?? ''), lfi_nct_inbox_emails($email['cc'] ?? ''));
     lfi_nct_inbox_learn($tenant_uid, $all);
@@ -558,6 +572,10 @@ function lfi_nct_app_view_inbox_import() {
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['regen' => 1])); exit;
     }
     if (!empty($_POST['lfi_inbox_clear']) && check_admin_referer('lfi_inbox_cfg')) {
+        /* On supprime aussi les pièces jointes en attente de ces emails. */
+        foreach (lfi_nct_inbox_unmatched() as $e) {
+            foreach ((array) ($e['att_ids'] ?? []) as $aid) { if ((int) $aid) wp_delete_attachment((int) $aid, true); }
+        }
         lfi_nct_inbox_unmatched_save([]);
         wp_safe_redirect(lfi_nct_app_url('inbox-import', ['cleared' => 1])); exit;
     }
@@ -584,10 +602,13 @@ function lfi_nct_app_view_inbox_import() {
         }
         if (!empty($_POST['do_del']) || !empty($_POST['bulk_del'])) { /* supprimer SANS liste noire */
             $del = !empty($_POST['do_del']) ? [(int) $_POST['do_del']] : array_map('intval', (array) ($_POST['ids'] ?? []));
-            $q = array_values(array_filter(lfi_nct_inbox_unmatched(), function ($e) use ($del) {
-                return !in_array((int) ($e['id'] ?? 0), $del, true);
-            }));
-            lfi_nct_inbox_unmatched_save($q);
+            $q = [];
+            foreach (lfi_nct_inbox_unmatched() as $e) {
+                if (in_array((int) ($e['id'] ?? 0), $del, true)) {
+                    foreach ((array) ($e['att_ids'] ?? []) as $aid) { if ((int) $aid) wp_delete_attachment((int) $aid, true); }
+                } else { $q[] = $e; }
+            }
+            lfi_nct_inbox_unmatched_save(array_values($q));
             wp_safe_redirect(lfi_nct_app_url('inbox-import', ['deleted' => count($del) ?: 1])); exit;
         }
         if (!empty($_POST['do_member'])) {                       /* créer un membre du GA */
@@ -711,6 +732,8 @@ function lfi_nct_app_view_inbox_import() {
             echo '<div class="head" style="align-items:center"><label style="display:flex;gap:8px;align-items:center;flex:1;min-width:0"><input type="checkbox" class="lfi-ib-ck" name="ids[]" value="' . $qid . '" style="width:18px;height:18px;flex:0 0 auto"><span class="who" style="overflow:hidden;text-overflow:ellipsis">' . esc_html($e['objet'] ?: '(sans objet)') . '</span></label><div class="when" style="font-size:.78em;color:#888">' . esc_html($e['date'] ?? '') . '</div></div>';
             echo '<div class="meta"><span class="meta-chip">de ' . esc_html($e['from'] ?? '') . '</span>';
             if (!empty($e['to'])) echo '<span class="meta-chip">→ ' . esc_html($e['to']) . '</span>';
+            $nph = count((array) ($e['att_ids'] ?? []));
+            if ($nph > 0) echo '<span class="meta-chip" style="background:#eef7ee;color:#186a3b;font-weight:700">📎 ' . (int) $nph . ' photo(s)/PDF — suivront le rangement</span>';
             echo '</div>';
             if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
             if (!empty($e['body'])) echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3;font-weight:600">📄 Voir le mail complet</summary><div style="white-space:pre-wrap;font-size:.82em;color:#444;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px;max-height:320px;overflow:auto">' . esc_html($e['body']) . '</div></details>';

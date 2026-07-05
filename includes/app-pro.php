@@ -1134,8 +1134,14 @@ function lfi_nct_render_home_locataire_news() {
        la demande — le check automatique tourne en plus, tout seul. */
     $btn = function_exists('lfi_nct_mailcheck_run_button') ? lfi_nct_mailcheck_run_button('🎣 Pêcher les emails maintenant') : '';
     if ($new_total > 0) {
+        /* Résumé COHÉRENT : on n'affiche que les parts non nulles (plus de
+           « 0 email/photo » à côté d'emails visibles). */
+        $bits = [];
+        if ($new_count > 0) $bits[] = (int) $new_count . ' nouvel email/photo';
+        if ($unmatched > 0) $bits[] = (int) $unmatched . ' à rattacher';
+        $lead = ($new_count > 0) ? ($new_count . ' nouveauté' . ($new_count > 1 ? 's' : '')) : ($unmatched . ' à rattacher');
         echo '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:#fdeef0;border:2px solid #c8102e;border-radius:12px;padding:11px 14px;margin-bottom:12px">';
-        echo '<div style="font-weight:800;color:#c8102e">🔔 ' . (int) $new_total . ' nouveauté' . ($new_total > 1 ? 's' : '') . ' <span style="font-weight:600;color:#a33">— ' . (int) $new_count . ' email/photo · ' . (int) $unmatched . ' à rattacher</span></div>';
+        echo '<div style="font-weight:800;color:#c8102e">🔔 ' . esc_html($lead) . ($bits ? ' <span style="font-weight:600;color:#a33">— ' . esc_html(implode(' · ', $bits)) . '</span>' : '') . '</div>';
         echo '<div>' . $btn . '</div></div>';
     } else {
         echo '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;background:#f4f7fb;border:1px solid #d6e2f0;border-radius:12px;padding:9px 14px;margin-bottom:12px">';
@@ -1170,8 +1176,20 @@ function lfi_nct_render_home_locataire_news() {
             echo '<span style="color:#0066a3;font-weight:800">→</span></a>';
         }
         echo '</div>';
-        echo '<div style="margin-top:6px;text-align:right"><a href="' . esc_url(lfi_nct_app_url('', ['locnews_seen' => 1])) . '" style="font-size:.82em;color:#666">✓ Tout marquer vu</a></div>';
+        if (count($events) > 8) echo '<div style="font-size:.8em;color:#888;margin-top:4px">… et ' . (count($events) - 8) . ' autre(s). « Voir tout » ci-dessous.</div>';
     }
+
+    /* Barre d'outils : voir tout · marquer vu · purger tous les emails. */
+    $reset_post = admin_url('admin-post.php');
+    echo '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;margin-top:10px;border-top:1px solid #dce7f2;padding-top:8px">';
+    echo '<a href="' . esc_url(lfi_nct_app_url('inbox-import')) . '" style="font-size:.84em;color:#0066a3;font-weight:700;text-decoration:none">🗂 Voir tout / gérer les emails →</a>';
+    echo '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">';
+    if (!empty($events)) echo '<a href="' . esc_url(lfi_nct_app_url('', ['locnews_seen' => 1])) . '" style="font-size:.82em;color:#666">✓ Tout marquer vu</a>';
+    echo '<form method="post" action="' . esc_url($reset_post) . '" style="margin:0" onsubmit="return confirm(\'PURGER tous les emails importés (boîte + tous les dossiers) et leurs pièces jointes email ? Les enquêtes et chronologies reconstruites ne bougent pas.\');">'
+        . wp_nonce_field('lfi_nct_emails_reset', '_wpnonce', true, false)
+        . '<input type="hidden" name="action" value="lfi_nct_emails_reset">'
+        . '<button type="submit" style="background:none;border:none;color:#c8102e;font-size:.82em;font-weight:700;cursor:pointer;padding:0">🧹 Purger tous les emails</button></form>';
+    echo '</div></div>';
     echo '</div>';
 
     /* Marquer vu si demandé. */
