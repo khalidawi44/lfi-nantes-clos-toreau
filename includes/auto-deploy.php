@@ -59,7 +59,7 @@ function lfi_nct_auto_deploy() {
     /* 2) Reconstruction complète du dossier de Fabrice (enquête #6, dossier
        juridique, mandat, chronologie). On ne pose le drapeau QUE si Fabrice
        existe — sinon on réessaiera au prochain chargement. */
-    if (get_option('lfi_nct_auto_fabrice') !== '1' && function_exists('lfi_nct_fabrice_reconstruct')) {
+    if (get_option('lfi_nct_auto_fabrice_v2') !== '1' && function_exists('lfi_nct_fabrice_reconstruct')) {
         $fu = get_user_by('email', 'fabrice.doucet44@gmail.com') ?: get_user_by('email', 'nantessudclostoreau@gmail.com');
         if (!$fu) {
             /* Repli : un compte dont le nom affiché contient « Doucet ». */
@@ -68,7 +68,7 @@ function lfi_nct_auto_deploy() {
         }
         if ($fu) {
             try { lfi_nct_fabrice_reconstruct($fu); } catch (\Throwable $e) {}
-            update_option('lfi_nct_auto_fabrice', '1', false);
+            update_option('lfi_nct_auto_fabrice_v2', '1', false);
         }
     }
 }
