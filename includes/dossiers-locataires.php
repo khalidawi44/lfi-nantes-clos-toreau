@@ -2043,7 +2043,7 @@ function lfi_nct_app_view_dossier_send_email() {
     echo '<label>Copie (CC) — optionnel<input type="text" name="email_cc" value="' . esc_attr($defaults['cc']) . '"></label>';
 
     echo '<label style="display:flex;align-items:center;gap:6px;margin:6px 0">';
-    echo '<input type="checkbox" name="email_bcc_self" value="1" checked> Recevoir une copie cachée pour mon archive';
+    echo '<input type="checkbox" name="email_bcc_self" value="1"> Recevoir une copie cachée (⚠️ crée des faux retours si c\'est la boîte collectrice — laisser décoché)';
     echo '</label>';
 
     echo '<label>Objet<input type="text" name="email_subject" value="' . esc_attr($defaults['subject']) . '" required></label>';
@@ -2084,12 +2084,10 @@ function lfi_nct_dossier_email_defaults($letter_key, $dossier, $bailleur) {
     $to_nmh    = trim($bailleur['email'] ?? '');
     $cc_agence = trim($bailleur['agence_email'] ?? 'yvonnic.morineau@nmh.fr');
 
-    /* La COPIE (CC) part TOUJOURS vers notre propre archive Gmail, jamais
-       vers le bailleur : NMH/Morineau n'a pas à connaître nos correspondances
-       (en particulier la saisine du service d'hygiène ou de l'ARS). Quand le
-       courrier est ADRESSÉ au bailleur, l'agence est mise dans le « À »,
-       pas en copie. */
-    $ga_archive = lfi_nct_ga_gmail();
+    /* PLUS DE CC vers la boîte collectrice : la copie revenait dans la boîte et
+       était réimportée comme un email « reçu » → FAUX doublons. On n'archive
+       plus par CC ; l'email envoyé est déjà consigné dans le dossier. */
+    $ga_archive = '';
 
     /* Destinataires « bailleur » : on regroupe l'adresse générale NMH et
        l'agence (Morineau) dans le « À ». */
