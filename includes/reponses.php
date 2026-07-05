@@ -117,10 +117,19 @@ function lfi_nct_generate_reply_body($row, $recu, $intention, $precisions, $sign
         ? lfi_nct_email_signature('nmh', $signataire, $nom)
         : "\n\nCordialement,\n" . $signataire . "\nUnion des Quartiers Libres — au nom et pour le compte de " . $nom . ".";
 
-    $body = $intro . "\n" . $coeur . "\n";
-    if ($penal !== '') $body .= "\n" . $penal . "\n";
-    $body .= "\n" . $cloture . $signature;
-    return $body;
+    /* Corps SANS signature (la signature est traitée à part, jamais modifiée). */
+    $corps_seul = $intro . "\n" . $coeur . "\n";
+    if ($penal !== '') $corps_seul .= "\n" . $penal . "\n";
+    $corps_seul .= "\n" . $cloture;
+
+    /* VRAIE IA (si la clé Claude est configurée) : on améliore la FORME du
+       corps — ton, fluidité — sans jamais inventer un fait (garde-fous dans le
+       prompt). Sinon, on garde le texte assemblé en PHP. */
+    if (function_exists('lfi_nct_ai_polish_reply') && lfi_nct_ai_enabled()) {
+        $corps_seul = lfi_nct_ai_polish_reply($corps_seul, $recu, $presse);
+    }
+
+    return $corps_seul . $signature;
 }
 
 /* ============================================================== *
