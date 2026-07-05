@@ -46,6 +46,43 @@ function lfi_nct_robot_public_contacts() {
     return ['tel' => $tel, 'contact' => $contact, 'rdv' => $rdv];
 }
 
+/**
+ * Cherche des locataires par NOM (comptes + table des dossiers), dans le
+ * périmètre du GA. Renvoie [uid => nom affiché]. Nettoie les mots-outils.
+ */
+function lfi_nct_robot_search_tenants($q) {
+    global $wpdb;
+    $terms = trim(preg_replace('/\b(dossier|locataire|locataires|de|du|des|la|le|les|madame|monsieur|mme|mr|m|numero|numéro|n°|ouvre|ouvrir|cherche|trouve)\b/iu', ' ', mb_strtolower((string) $q)));
+    $terms = trim(preg_replace('/\s+/', ' ', $terms));
+    if ($terms === '' || mb_strlen($terms) < 2) return [];
+    $out = [];
+
+    /* a) Comptes locataires (display_name / login / email). */
+    $args = ['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant',
+             'number' => 30, 'fields' => ['ID', 'display_name'],
+             'search' => '*' . $terms . '*', 'search_columns' => ['display_name', 'user_login', 'user_email', 'user_nicename']];
+    if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
+    foreach (get_users($args) as $u) $out[(int) $u->ID] = $u->display_name ?: ('Locataire #' . $u->ID);
+
+    /* b) Table des dossiers (tenant_prenom / tenant_nom) — le nom peut y être
+       alors que le compte porte un autre libellé. */
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $like = '%' . $wpdb->esc_like($terms) . '%';
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT tenant_user_id, tenant_prenom, tenant_nom FROM $t
+         WHERE tenant_user_id > 0 AND (tenant_nom LIKE %s OR tenant_prenom LIKE %s OR CONCAT(tenant_prenom,' ',tenant_nom) LIKE %s)
+         LIMIT 30", $like, $like, $like)) ?: [];
+    foreach ($rows as $r) {
+        $uid = (int) $r->tenant_user_id;
+        if (!$uid || isset($out[$uid])) continue;
+        if (function_exists('lfi_nct_uid_in_scope') && !lfi_nct_uid_in_scope($uid)) continue; /* cloisonnement */
+        $nm = trim($r->tenant_prenom . ' ' . $r->tenant_nom);
+        if ($nm === '') { $uu = get_userdata($uid); $nm = $uu ? $uu->display_name : ('Dossier #' . $uid); }
+        $out[$uid] = $nm;
+    }
+    return $out;
+}
+
 /** Puces de suggestions rapides (chat + plein écran). */
 function lfi_nct_robot_chips($is_admin) {
     if ($is_admin) {
@@ -137,28 +174,22 @@ function lfi_nct_robot_answer_admin_html($q) {
             lfi_nct_robot_render_dossier_card($d->tenant_user_id, trim($d->tenant_prenom . ' ' . $d->tenant_nom), $d->tenant_adresse);
             $answered = true;
         } else {
-            /* b) recherche par nom parmi les locataires du GA */
-            $terms = trim(preg_replace('/\b(dossier|locataire|locataires|de|du|la|le|numero|numéro|n°)\b/iu', ' ', $q));
-            $args = ['role' => defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant', 'number' => 20, 'fields' => ['ID', 'display_name']];
-            if ($terms !== '') { $args['search'] = '*' . $terms . '*'; $args['search_columns'] = ['display_name', 'user_login', 'user_email']; }
-            if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
-            $found = get_users($args);
-            if (count($found) === 1) {
-                /* Un seul résultat → on OUVRE directement son dossier (navigation,
-                   pas une liste). */
-                $target = lfi_nct_app_url('dossier', ['uid' => $found[0]->ID]);
-                echo '<div class="lfi-app-help">📂 Ouverture du dossier de <strong>' . esc_html($found[0]->display_name) . '</strong>…</div>';
+            /* b) recherche par nom (comptes + dossiers) dans le périmètre du GA. */
+            $people = lfi_nct_robot_search_tenants($q);
+            if (count($people) === 1) {
+                $uid = (int) array_key_first($people);
+                $target = lfi_nct_app_url('dossier', ['uid' => $uid]);
+                echo '<div class="lfi-app-help">📂 Ouverture du dossier de <strong>' . esc_html($people[$uid]) . '</strong>…</div>';
                 echo '<a class="btn-primary" href="' . esc_url($target) . '">Ouvrir maintenant →</a>';
                 echo '<script>setTimeout(function(){location.href=' . wp_json_encode($target) . ';},350);</script>';
-                $answered = true;
-            } elseif ($found) {
-                echo '<div class="lfi-app-help">' . count($found) . ' locataire(s) trouvé(s) :</div><ul class="lfi-app-list">';
-                foreach ($found as $u) {
-                    echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">🗂 ' . esc_html($u->display_name) . '</div></div>';
+            } elseif ($people) {
+                echo '<div class="lfi-app-help">' . count($people) . ' locataire(s) trouvé(s) :</div><ul class="lfi-app-list">';
+                foreach ($people as $uid => $nm) {
+                    echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">🗂 ' . esc_html($nm) . '</div></div>';
                     echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
-                    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => $u->ID])) . '">📂 Dossier</a>';
-                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
-                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => $u->ID])) . '" target="_blank">🧾 Récap NMH</a>';
+                    echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => (int) $uid])) . '">📂 Dossier</a>';
+                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => (int) $uid])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
+                    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-recap-nmh', ['uid' => (int) $uid])) . '" target="_blank">🧾 Récap NMH</a>';
                     echo '</div></li>';
                 }
                 echo '</ul>';
@@ -208,9 +239,34 @@ function lfi_nct_robot_answer_admin_html($q) {
         $answered = true;
     }
 
+    /* ---- 6) NOM SEUL (ex. « Fadiga ») : on cherche un·e locataire par son nom
+       même sans le mot « dossier ». On regarde les comptes ET les dossiers. ---- */
+    if (!$answered && $q !== '' && mb_strlen(trim($q)) >= 2) {
+        $people = lfi_nct_robot_search_tenants($q);
+        if (count($people) === 1) {
+            $uid = (int) array_key_first($people);
+            $target = lfi_nct_app_url('dossier', ['uid' => $uid]);
+            echo '<div class="lfi-app-help">📂 Ouverture du dossier de <strong>' . esc_html($people[$uid]) . '</strong>…</div>';
+            echo '<a class="btn-primary" href="' . esc_url($target) . '">Ouvrir maintenant →</a>';
+            echo '<script>setTimeout(function(){location.href=' . wp_json_encode($target) . ';},350);</script>';
+            $answered = true;
+        } elseif ($people) {
+            echo '<div class="lfi-app-help">' . count($people) . ' locataire(s) trouvé(s) pour « ' . esc_html($q) . ' » :</div><ul class="lfi-app-list">';
+            foreach ($people as $uid => $nm) {
+                echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">🗂 ' . esc_html($nm) . '</div></div>';
+                echo '<div class="row-actions" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
+                echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('dossier', ['uid' => (int) $uid])) . '">📂 Dossier</a>';
+                echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => (int) $uid])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
+                echo '</div></li>';
+            }
+            echo '</ul>';
+            $answered = true;
+        }
+    }
+
     /* ---- Fallback ---- */
     if (!$answered) {
-        echo '<div class="lfi-app-empty">Je n\'ai pas compris « ' . esc_html($q) . ' ». Essaie : <em>dossier locataire &lt;nom ou n°&gt;</em>, <em>enquête RE01</em>, <em>stats</em>, <em>carte</em>, <em>contacts NMH</em>, <em>que faire pour…</em></div>';
+        echo '<div class="lfi-app-empty">Je n\'ai pas compris « ' . esc_html($q) . ' ». Essaie : <em>le nom d\'un·e locataire</em>, <em>dossier locataire &lt;nom ou n°&gt;</em>, <em>enquête RE01</em>, <em>stats</em>, <em>carte</em>, <em>contacts NMH</em>, <em>que faire pour…</em></div>';
     }
 
     return ob_get_clean();
