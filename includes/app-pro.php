@@ -445,6 +445,42 @@ function lfi_nct_app_view_dossier() {
         if (defined('LFI_NCT_ROLE_TENANT') && !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) $u->add_role(LFI_NCT_ROLE_TENANT);
         wp_safe_redirect(lfi_nct_app_url('enquete-edit', ['id' => $new_id, 'recreated' => 1])); exit;
     }
+    /* 🔧 RECONSTRUIRE le dossier (chronologie punaises injectée dans les NOTES,
+       éditable) + MANDAT OK (président/adhérent). Uniquement le dossier Fabrice. */
+    if (!empty($_POST['lfi_dossier_reconstruct']) && check_admin_referer('lfi_dossier_reco')) {
+        $chrono = "CHRONOLOGIE — Fabrice DOUCET · apt 88, 14 rue de Saint-Jean-de-Luz, 44200 Nantes · punaises de lit (À RELIRE/CORRIGER)\n"
+            . "2020 — Première infestation de l'étage ; traitement partiel (interventions 03 et 17/09/2020) ; participation de 80 € imposée au locataire.\n"
+            . "17/07/2025 — Expertise entomologique de M. François Meurgey (Muséum de Nantes) : confirmation punaises de lit.\n"
+            . "31/07/2025 — Constat SCHS (base du PV).\n"
+            . "20/08/2025 — PV SCHS (réf. JL.FM.20082025) : présence actuelle de punaises de lit, immeuble 14 rue Saint-Jean-de-Luz.\n"
+            . "21/08/2025 — PV du voisin M. Kaba (apt 87) : infestation mitoyenne.\n"
+            . "12/06/2025 et 08/08/2025 — 2 mises en demeure de la Mairie à NMH, restées non exécutées.\n"
+            . "17/09/2025 — Ordonnance de référés (demande rejetée) ; orientation Conseil d'État.\n"
+            . "14/12/2025 — Indemnité « réparations locatives ».\n"
+            . "23/03/2026 — Traitement préventif de contrôle : constat de blattes (garantie 6 mois) — victoire partielle.\n"
+            . "10/05/2026 — Piqûre de Souleyman (fils) ; troubles du sommeil persistants.\n"
+            . "11/05/2026 — Appel NMH (dossier 2026-33305) ; bon de commande évoqué pour l'apt 87 ; intervention partielle.\n"
+            . "19/05/2026 — Aide juridictionnelle totale (BAJ TJ Nantes, N-44109-2026-003859) ; avocate désignée Me Julie Supiot (Barreau de Nantes, 06 67 93 26 18).\n"
+            . "26/05/2026 — Piqûres (Fabrice + fils Souleyman).\n"
+            . "27/05 et 03/06/2026 — Interventions/visites « SIHS punaises ».\n"
+            . "06/06/2026 — Email à NMH ; NMH relance le prestataire (Sapiens) pour un nouveau RDV.\n"
+            . "08/06/2026 — Départ du logement (inhabitable).\n"
+            . "09/06/2026 — Réponse de NMH reçue.\n"
+            . "11/06/2026 — Punaise vivante photographiée (IMG_1258) ; PJ de mise en demeure ; demande n°3.\n"
+            . "12/06/2026 — Réponse NMH (« nous prenons note… néanmoins concernant les interventions de désinsectisation… »).\n"
+            . "16/06/2026 — Huissier : « désignés pour la délivrance d'actes, pas pour la réalisation d'un constat ».\n"
+            . "01/07/2026 — Visite chez Maître Gouache (avocat) ; dépôt de la modification des statuts de l'association.";
+        $old = (string) get_user_meta($u->ID, 'lfi_nct_admin_notes', true);
+        if (strpos($old, 'CHRONOLOGIE — Fabrice DOUCET') === false) {
+            update_user_meta($u->ID, 'lfi_nct_admin_notes', $chrono . ($old !== '' ? "\n\n— — —\n" . $old : ''));
+        }
+        /* Mandat OK (président/adhérent, pas de formulaire à signer). */
+        if (function_exists('lfi_nct_dossier_find_for_tenant') && function_exists('lfi_nct_dossier_mandat_set')) {
+            $dj = lfi_nct_dossier_find_for_tenant($u->ID);
+            if ($dj) lfi_nct_dossier_mandat_set((int) $dj->id, 1);
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'reco' => 1])); exit;
+    }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
        usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
@@ -531,6 +567,7 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
     if (!empty($_GET['enq_restored'])) lfi_nct_app_flash('♻️ Enquête restaurée depuis la corbeille — le dossier est de nouveau complet.');
     if (!empty($_GET['enq_unlinked'])) lfi_nct_app_flash('Enquête déliée du dossier.');
+    if (!empty($_GET['reco'])) lfi_nct_app_flash('🔧 Dossier reconstruit : chronologie injectée dans les 📝 Notes du GA (relis/corrige librement) + mandat coché (président). Pense à recréer/relier l\'enquête #6 si besoin.');
 
     /* ===== BANNIÈRE — nom en GROS + n° d'enquête + éditer fiche/enquête ===== */
     $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
@@ -596,6 +633,18 @@ function lfi_nct_app_view_dossier() {
             echo '</form></div>';
         }
         echo '</div>';
+    }
+
+    /* 🔧 Reconstruction du dossier — UNIQUEMENT sur le dossier de Fabrice
+       (président). Injecte la chronologie punaises dans les notes + mandat OK. */
+    $is_fabrice = (stripos((string) $u->display_name, 'doucet') !== false)
+        || (stripos((string) $u->user_email, 'doucet') !== false)
+        || (stripos((string) $u->user_email, 'nantessudclostoreau') !== false);
+    if ($is_fabrice) {
+        echo '<details class="lfi-app-card" style="border-left:4px solid #6a1b9a;margin-bottom:12px"><summary style="cursor:pointer;font-weight:800;color:#6a1b9a">🔧 Reconstruire mon dossier (chronologie punaises + mandat président)</summary>';
+        echo '<div class="com" style="font-size:.92em;margin-top:6px">Injecte la <strong>chronologie complète</strong> (2020 → 2026) dans tes 📝 <strong>Notes du GA</strong> (éditable, tu corriges ce que tu veux) et coche le <strong>mandat</strong> (tu es président·e de l\'association → pas de formulaire d\'adhésion à signer). N\'écrase rien : ajoute en tête des notes.</div>';
+        echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_dossier_reco', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_reconstruct" value="1"><button type="submit" class="btn-primary" style="background:#6a1b9a">🔧 Reconstruire maintenant</button></form>';
+        echo '<div class="lfi-app-help" style="margin-top:6px"><small>⚠️ Relis la chronologie après coup — je n\'invente pas, mais vérifie chaque date dans ton vrai dossier.</small></div></details>';
     }
 
     /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
