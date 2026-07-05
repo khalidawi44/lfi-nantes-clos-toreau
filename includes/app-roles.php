@@ -2650,14 +2650,22 @@ function lfi_nct_app_view_comptes_ga() {
     <?php
 
     /* Section : Créer manuellement */
-    echo '<details class="lfi-app-collapse"><summary>+ Créer un membre GA manuellement</summary>';
+    /* Pré-remplissage possible par lien (ex. depuis un profil Action Populaire) :
+       ?new_prenom=&new_nom=&new_email=&new_tel= → le formulaire s'ouvre pré-rempli. */
+    $np = isset($_GET['new_prenom']) ? sanitize_text_field(wp_unslash($_GET['new_prenom'])) : '';
+    $nn = isset($_GET['new_nom'])    ? sanitize_text_field(wp_unslash($_GET['new_nom']))    : '';
+    $ne = isset($_GET['new_email'])  ? sanitize_email(wp_unslash($_GET['new_email']))        : '';
+    $nt = isset($_GET['new_tel'])    ? sanitize_text_field(wp_unslash($_GET['new_tel']))     : '';
+    $openf = ($np !== '' || $ne !== '' || $nt !== '') ? ' open' : '';
+    echo '<details class="lfi-app-collapse"' . $openf . '><summary>+ Créer un membre GA manuellement</summary>';
+    if ($openf) echo '<div class="lfi-app-help" style="background:#eef7ee;border-left:4px solid #186a3b;margin:6px 0"><small>✅ Pré-rempli — vérifie et clique « Créer le compte ».</small></div>';
     echo '<form method="post" class="lfi-app-form">';
     wp_nonce_field('lfi_app_create_ga');
     echo '<input type="hidden" name="lfi_app_create_ga" value="1">';
-    echo '<label>Prénom<input type="text" name="prenom" required></label>';
-    echo '<label>Nom<input type="text" name="nom"></label>';
-    echo '<label>Email<input type="email" name="email"></label>';
-    echo '<label>Téléphone<input type="tel" name="tel" placeholder="06 12 34 56 78"></label>';
+    echo '<label>Prénom<input type="text" name="prenom" value="' . esc_attr($np) . '" required></label>';
+    echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($nn) . '"></label>';
+    echo '<label>Email<input type="email" name="email" value="' . esc_attr($ne) . '"></label>';
+    echo '<label>Téléphone<input type="tel" name="tel" value="' . esc_attr($nt) . '" placeholder="06 12 34 56 78"></label>';
     echo '<button type="submit" class="btn-primary">✓ Créer le compte</button>';
     echo '</form></details>';
 
