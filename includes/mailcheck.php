@@ -239,6 +239,15 @@ function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
             wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $path));
             update_post_meta($att, '_lfi_tenant_user_id', $tenant_uid);
             update_post_meta($att, '_lfi_tenant_piece', 'Pièce jointe email');
+            /* 🤖 Le robot analyse la pièce et la range dans la bonne étape. */
+            if (function_exists('lfi_nct_piece_categorize')) {
+                $cat = lfi_nct_piece_categorize($filename, (string) ($ft['type'] ?? ''));
+                update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
+                if (function_exists('lfi_nct_piece_autostep')) {
+                    $sk = lfi_nct_piece_autostep($tenant_uid, $cat['cat']);
+                    if ($sk !== '') update_post_meta($att, '_lfi_step', $sk);
+                }
+            }
             if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $path);
             $n++;
         }
