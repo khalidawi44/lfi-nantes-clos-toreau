@@ -3532,6 +3532,11 @@ function lfi_nct_app_view_enquetes() {
         return;
     }
 
+    /* 🔎 Recherche instantanée — par NUMÉRO (#6), nom, adresse, tél, email. */
+    echo '<input id="enq-search" type="search" placeholder="🔎 Numéro (ex. 6 ou #6), nom, adresse…" oninput="lfiEnqFilter(this.value)" style="width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:10px;margin:4px 0 10px;font-size:1em">';
+    echo '<script>function lfiEnqFilter(q){q=(q||"").toLowerCase().trim().replace(/^#/,"");var n=0;document.querySelectorAll(".enq-item").forEach(function(it){var s=it.getAttribute("data-s")||"";var ok=(!q||s.indexOf(q)!==-1);it.style.display=ok?"":"none";if(ok)n++;});var e=document.getElementById("enq-none");if(e)e.style.display=n?"none":"block";}</script>';
+    echo '<div id="enq-none" style="display:none;color:#888;text-align:center;padding:12px">Aucune enquête ne correspond.</div>';
+
     /* Tout est dans un formulaire pour la sélection multiple + suppression. */
     if ($can_manage) {
         echo '<form method="post" id="lfi-enq-form">';
@@ -3547,9 +3552,12 @@ function lfi_nct_app_view_enquetes() {
         $ref  = function_exists('lfi_nct_response_ref')
             ? lfi_nct_response_ref($r->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($r) : '')
             : '';
-        echo '<li class="lfi-app-card">';
+        $adr_n = trim(((string) $r->adresse) . ' ' . ((string) $r->etage));
+        $needle = mb_strtolower('#' . (int) $r->id . ' ' . (int) $r->id . ' ' . $name . ' ' . $adr_n . ' ' . $ref . ' ' . ((string) $r->contact_tel) . ' ' . ((string) $r->contact_email));
+        echo '<li class="lfi-app-card enq-item" data-s="' . esc_attr($needle) . '">';
         echo '<div class="head"><div class="who">';
         if ($can_manage) echo '<input type="checkbox" name="ids[]" value="' . (int) $r->id . '" style="width:18px;height:18px;margin-right:8px;vertical-align:middle" aria-label="Sélectionner">';
+        echo '<span style="display:inline-block;background:#0066a3;color:#fff;font-weight:800;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle">#' . (int) $r->id . '</span>';
         if ($ref) echo '<span style="display:inline-block;background:#c8102e;color:#fff;font-weight:700;font-size:.72em;padding:2px 7px;border-radius:6px;margin-right:6px;vertical-align:middle;letter-spacing:.5px">' . esc_html($ref) . '</span>';
         echo esc_html($name) . '</div>';
         echo '<div class="when">' . esc_html(wp_date('j M', strtotime($r->submitted_at))) . '</div>';
