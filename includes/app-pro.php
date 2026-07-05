@@ -539,7 +539,7 @@ function lfi_nct_app_view_dossier() {
             . "11/06/2026 — Punaise vivante photographiée (IMG_1258) ; PJ de mise en demeure ; demande n°3.\n"
             . "12/06/2026 — Réponse NMH (« nous prenons note… néanmoins concernant les interventions de désinsectisation… »).\n"
             . "16/06/2026 — Huissier : « désignés pour la délivrance d'actes, pas pour la réalisation d'un constat ».\n"
-            . "01/07/2026 — Visite chez Maître Gouache (avocat) ; dépôt de la modification des statuts de l'association.";
+            . "01/07/2026 — Point avec Maître Julie Supiot (avocate désignée, aide juridictionnelle) ; dépôt de la modification des statuts de l'association.";
         /* On alimente la CHRONOLOGIE structurée (pas les notes) : une entrée par
            ligne datée « DATE — événement ». */
         foreach (preg_split('/\r\n|\r|\n/', $chrono) as $ln) {
@@ -634,6 +634,14 @@ function lfi_nct_app_view_dossier() {
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
+        } elseif ($action === 'bulk_del') {
+            /* Suppression MULTIPLE : on retire toutes les étapes cochées. */
+            $rm = array_map('intval', (array) ($_POST['step_sel'] ?? []));
+            rsort($rm); /* du plus grand index au plus petit pour ne pas décaler */
+            foreach ($rm as $i) { if (isset($steps[$i])) array_splice($steps, $i, 1); }
+        } elseif ($action === 'reset') {
+            /* Tout effacer le parcours. */
+            $steps = [];
         } elseif ($action === 'autofill') {
             /* Génère le parcours-type (n'ajoute que les étapes manquantes). */
             $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
@@ -1065,9 +1073,10 @@ function lfi_nct_render_home_locataire_news() {
         echo '<div style="display:flex;flex-direction:column;gap:5px;margin-top:4px">';
         foreach (array_slice($events, 0, 8) as $e) {
             $is_new = $e['t'] > $seen;
-            /* Un EMAIL REÇU → écran épuré « Répondre » (email en entier + réponse
-               prête + envoi). Le reste (envoyé / photo) → le dossier. */
-            $url = (($e['lbl'] ?? '') === 'Email reçu')
+            /* TOUT email (reçu OU envoyé) → écran épuré « Répondre » : on voit
+               l'email en entier + le fil + la réponse. Seules les PHOTOS → dossier. */
+            $is_mail = in_array($e['lbl'] ?? '', ['Email reçu', 'Email envoyé'], true);
+            $url = $is_mail
                 ? lfi_nct_app_url('repondre', ['uid' => $e['uid']])
                 : lfi_nct_app_url('dossier', ['uid' => $e['uid']]);
             echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid ' . ($is_new ? '#c8102e' : '#e0e0e0') . ';border-radius:8px;padding:8px 10px">';
@@ -1565,7 +1574,9 @@ function lfi_nct_dossier_render_parcours($u) {
             $np = count($pieces);
             $col = $done ? '#186a3b' : ($who === 'tenant' ? '#d39e00' : '#c8102e');
             echo '<details style="margin-bottom:6px;background:' . ($done ? '#f0f8f1' : '#fff') . ';border:1px solid #eee;border-left:4px solid ' . $col . ';border-radius:8px;overflow:hidden"' . ($done ? '' : ' open') . '>';
-            echo '<summary style="cursor:pointer;list-style:none;padding:9px 11px;font-weight:600;color:' . ($done ? '#5a7a5f' : '#1a1a1a') . '">' . ($done ? '✅ ' : '📂 ') . esc_html($s['text']) . ' ' . $badge . ($np ? ' <span style="color:#0066a3;font-size:.8em;font-weight:700">· 📎 ' . $np . '</span>' : '') . '</summary>';
+            echo '<summary style="cursor:pointer;list-style:none;padding:9px 11px;font-weight:600;color:' . ($done ? '#5a7a5f' : '#1a1a1a') . '">';
+            echo '<input type="checkbox" form="lfi-step-bulk" name="step_sel[]" value="' . (int) $idx . '" onclick="event.stopPropagation()" title="Sélectionner pour suppression multiple" style="margin-right:7px;vertical-align:middle;width:17px;height:17px">';
+            echo ($done ? '✅ ' : '📂 ') . esc_html($s['text']) . ' ' . $badge . ($np ? ' <span style="color:#0066a3;font-size:.8em;font-weight:700">· 📎 ' . $np . '</span>' : '') . '</summary>';
             echo '<div style="padding:2px 11px 11px">';
             if (!empty($s['echeance'])) {
                 $late = (!$done && strtotime($s['echeance']) < strtotime(current_time('Y-m-d')));
@@ -1601,6 +1612,12 @@ function lfi_nct_dossier_render_parcours($u) {
             echo '</div>';
             echo '</div></details>';
         }
+        /* 🧹 Outils de tri/suppression : sélection MULTIPLE + tout effacer.
+           (les cases dans les accordéons sont reliées à ce formulaire par form=) */
+        echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">';
+        echo '<form id="lfi-step-bulk" method="post" onsubmit="return confirm(\'Supprimer les étapes cochées ?\')" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="bulk_del"><button type="submit" class="btn-ghost" style="font-size:.82em;border-color:#c8102e;color:#c8102e">🗑 Supprimer la sélection</button></form>';
+        echo '<form method="post" onsubmit="return confirm(\'Tout effacer le parcours ? (les étapes seulement — les pièces déjà versées restent)\')" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="reset"><button type="submit" class="btn-ghost" style="font-size:.82em;color:#c8102e">🧹 Tout effacer le parcours</button></form>';
+        echo '</div>';
     }
 
     /* Ajout d'une étape — avec dropdown de suggestions */
