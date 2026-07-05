@@ -367,7 +367,28 @@ function lfi_nct_carto_first_name($name) {
     return $p[0];
 }
 function lfi_nct_app_view_public_gas() {
-    $list = lfi_nct_carto_all();
+    /* On fusionne DEUX sources pour être robuste selon ce qui a été importé :
+       1) le registre des GA (nom, commune, contact/contact2) ;
+       2) l'organigramme (personnes de niveau admin_ga, avec leur GA).
+       Résultat : { nomGA => ['commune'=>…, 'prenoms'=>[…]] }. */
+    $gas = [];
+    foreach (lfi_nct_carto_all() as $e) {
+        $nom = trim((string) ($e['nom'] ?? '')); if ($nom === '') continue;
+        if (!isset($gas[$nom])) $gas[$nom] = ['nom' => $nom, 'commune' => (string) ($e['commune'] ?? ''), 'prenoms' => []];
+        foreach ([lfi_nct_carto_first_name($e['contact'] ?? ''), lfi_nct_carto_first_name($e['contact2'] ?? '')] as $pr) {
+            if ($pr !== '' && !in_array($pr, $gas[$nom]['prenoms'], true)) $gas[$nom]['prenoms'][] = $pr;
+        }
+    }
+    if (function_exists('lfi_nct_carto_people_all')) {
+        foreach (lfi_nct_carto_people_all() as $p) {
+            if (($p['niveau'] ?? '') !== 'admin_ga') continue;
+            $ga = trim((string) ($p['ga_nom'] ?? '')); if ($ga === '') continue;
+            if (!isset($gas[$ga])) $gas[$ga] = ['nom' => $ga, 'commune' => '', 'prenoms' => []];
+            $pr = lfi_nct_carto_first_name($p['nom'] ?? '');
+            if ($pr !== '' && !in_array($pr, $gas[$ga]['prenoms'], true)) $gas[$ga]['prenoms'][] = $pr;
+        }
+    }
+    $list = array_values($gas);
     /* Tri par commune puis nom. */
     usort($list, function ($a, $b) {
         $ca = mb_strtolower((string) ($a['commune'] ?? '')); $cb = mb_strtolower((string) ($b['commune'] ?? ''));
@@ -397,11 +418,7 @@ function lfi_nct_app_view_public_gas() {
     foreach ($list as $e) {
         $nom = (string) ($e['nom'] ?? ''); if ($nom === '') continue;
         $commune = (string) ($e['commune'] ?? '');
-        $prenoms = array_values(array_filter([
-            lfi_nct_carto_first_name($e['contact'] ?? ''),
-            lfi_nct_carto_first_name($e['contact2'] ?? ''),
-        ]));
-        $anim = $prenoms ? implode(' & ', $prenoms) : '';
+        $anim = !empty($e['prenoms']) ? implode(' & ', $e['prenoms']) : '';
         $needle = mb_strtolower($nom . ' ' . $commune);
         echo '<div class="ga-item" data-s="' . esc_attr($needle) . '" style="background:#fff;border:1px solid #e6e6e6;border-left:4px solid #c8102e;border-radius:10px;padding:11px 13px">';
         echo '<div style="font-weight:800;color:#1a1a1a">🏳️ ' . esc_html($nom) . '</div>';
