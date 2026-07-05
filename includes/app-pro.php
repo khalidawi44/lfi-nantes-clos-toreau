@@ -800,7 +800,11 @@ function lfi_nct_render_home_locataire_news() {
         echo '<div style="display:flex;flex-direction:column;gap:5px;margin-top:4px">';
         foreach (array_slice($events, 0, 8) as $e) {
             $is_new = $e['t'] > $seen;
-            $url = lfi_nct_app_url('dossier', ['uid' => $e['uid']]);
+            /* Un EMAIL REÇU → écran épuré « Répondre » (email en entier + réponse
+               prête + envoi). Le reste (envoyé / photo) → le dossier. */
+            $url = (($e['lbl'] ?? '') === 'Email reçu')
+                ? lfi_nct_app_url('repondre', ['uid' => $e['uid']])
+                : lfi_nct_app_url('dossier', ['uid' => $e['uid']]);
             echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid ' . ($is_new ? '#c8102e' : '#e0e0e0') . ';border-radius:8px;padding:8px 10px">';
             echo '<span style="font-size:1.15em">' . $e['ico'] . '</span>';
             echo '<span style="flex:1"><strong>' . esc_html($e['name']) . '</strong> <span style="color:#888;font-size:.9em">— ' . esc_html($e['lbl']) . ($e['objet'] ? ' · ' . esc_html(mb_substr($e['objet'], 0, 40)) : '') . '</span></span>';
