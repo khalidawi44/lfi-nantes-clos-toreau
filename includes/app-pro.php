@@ -469,14 +469,7 @@ function lfi_nct_app_view_dossier() {
         $u->user_email
     )) : [];
 
-    lfi_nct_app_screen_open('📂 ' . $u->display_name, $rid ? 'Enquête #' . $rid : 'Compte sans enquête liée');
-
-    /* Bouton retour — revient à la page précédente sans repasser par le menu */
-    echo '<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
-    echo '<a class="btn-ghost" href="#" onclick="if(history.length>1){history.back();return false;}">↩ Page précédente</a>';
-    echo '<a class="btn-primary" style="background:#6a1b9a" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note pour l\'avocat (PDF)</a>';
-    echo '</div>';
+    lfi_nct_app_screen_open('📂 Dossier locataire', '');
 
     if (!empty($_GET['notes_saved'])) lfi_nct_app_flash('Notes enregistrées.');
     if (!empty($_GET['step_saved']))  lfi_nct_app_flash('✅ Parcours de suivi mis à jour.');
@@ -484,34 +477,54 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_GET['unwon'])) lfi_nct_app_flash('Coupe annulée.');
     if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
 
+    /* ===== BANNIÈRE — nom en GROS + n° d'enquête + éditer fiche/enquête ===== */
+    $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
+    $mail_ok = ($u->user_email && stripos($u->user_email, '@tenant.') === false && stripos($u->user_email, '@partenaire.') === false);
+    $initiale = mb_strtoupper(mb_substr($u->display_name, 0, 1));
+    $tel_clean = $tel ? preg_replace('/[^\d+]/', '', $tel) : '';
+    echo '<div style="background:linear-gradient(135deg,#c8102e,#7d0a1c);color:#fff;border-radius:16px;padding:16px 16px 14px;margin-bottom:12px;box-shadow:0 3px 14px rgba(200,16,46,.22)">';
+    echo   '<div style="display:flex;gap:13px;align-items:center">';
+    echo     '<div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:1.5em;font-weight:900;flex:0 0 auto">' . esc_html($initiale) . '</div>';
+    echo     '<div style="flex:1;min-width:0">';
+    echo       '<div style="font-size:1.45em;font-weight:900;line-height:1.12">' . esc_html($u->display_name) . '</div>';
+    if ($rid) echo '<a href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => $rid])) . '" style="display:inline-block;margin-top:5px;background:#fff;color:#7d0a1c;font-weight:800;font-size:.8em;padding:2px 10px;border-radius:20px;text-decoration:none">📋 Enquête #' . (int) $rid . ' · modifier</a>';
+    else      echo '<a href="' . esc_url(lfi_nct_app_url('enquete')) . '" style="display:inline-block;margin-top:5px;background:rgba(255,255,255,.25);color:#fff;font-weight:700;font-size:.8em;padding:2px 10px;border-radius:20px;text-decoration:none">➕ Lier une enquête</a>';
+    echo     '</div>';
+    echo   '</div>';
+    /* Coordonnées compactes. */
+    echo   '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px;font-size:.85em">';
+    if ($row && $row->adresse) echo '<span style="background:rgba(255,255,255,.16);padding:3px 9px;border-radius:14px">📍 ' . esc_html(trim($row->adresse . ($row->etage ? ' · ét. ' . $row->etage : ''))) . '</span>';
+    if ($tel)     echo '<span style="background:rgba(255,255,255,.16);padding:3px 9px;border-radius:14px">📞 ' . esc_html($tel) . '</span>';
+    if ($mail_ok) echo '<span style="background:rgba(255,255,255,.16);padding:3px 9px;border-radius:14px">✉️ ' . esc_html($u->user_email) . '</span>';
+    echo   '</div>';
+    /* Actions principales : MODIFIER FICHE / ENQUÊTE + contact direct. */
+    $bw = 'background:#fff;color:#7d0a1c;text-decoration:none;font-weight:800;font-size:.85em;padding:7px 12px;border-radius:9px;display:inline-block';
+    $bg = 'background:rgba(255,255,255,.16);color:#fff;text-decoration:none;font-weight:700;font-size:.85em;padding:7px 12px;border-radius:9px;display:inline-block';
+    echo   '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px">';
+    echo     '<a style="' . $bw . '" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Modifier la fiche</a>';
+    if ($rid) echo '<a style="' . $bw . '" href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => $rid])) . '">📋 Modifier l\'enquête</a>';
+    if ($tel && !$sms_blocked) echo '<a style="' . $bg . '" href="sms:' . esc_attr($tel_clean) . '">📱 SMS</a>';
+    if ($tel) echo '<a style="' . $bg . '" href="tel:' . esc_attr($tel_clean) . '">📞 Appeler</a>';
+    if ($mail_ok) echo '<a style="' . $bg . '" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email</a>';
+    echo   '</div>';
+    echo '</div>';
+
+    /* Ligne secondaire discrète : retour + PDF avocat + (dé)blocage SMS. */
+    echo '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:.82em">';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires'])) . '">← Tous les locataires</a>';
+    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('dossier-avocat', ['uid' => $u->ID])) . '" target="_blank">⚖️ Note avocat (PDF)</a>';
+    if ($tel && function_exists('lfi_nct_sms_block_toggle_link')) {
+        $lbl = $sms_blocked ? '↩ Réautoriser les SMS' : '🚫 Ne plus lui envoyer de SMS';
+        echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_sms_block_toggle_link($tel, $u->display_name)) . '">' . $lbl . '</a>';
+    }
+    echo '</div>';
+
     /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
     lfi_nct_dossier_render_batailles($u, $row);
 
-    /* Profil + actions */
-    echo '<div class="lfi-app-card">';
-    echo '<div class="head"><div class="who">👤 Profil</div><div class="badge">@' . esc_html($u->user_login) . '</div></div>';
-    echo '<div class="meta">';
-    if ($tel) echo '<a class="meta-chip" href="tel:' . esc_attr($tel) . '">📞 ' . esc_html($tel) . '</a>';
-    if ($u->user_email) echo '<a class="meta-chip" href="mailto:' . esc_attr($u->user_email) . '">✉️ ' . esc_html($u->user_email) . '</a>';
-    if ($row && $row->adresse) echo '<span class="meta-chip">📍 ' . esc_html(trim($row->adresse . ($row->etage ? ' · ét. ' . $row->etage : ''))) . '</span>';
-    echo '</div>';
-    $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
-    echo '<div class="row-actions">';
-    if ($tel && !$sms_blocked) echo '<a class="btn-primary" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📱 SMS direct</a>';
-    if ($tel &&  $sms_blocked) echo '<span class="btn-ghost" style="opacity:.6;cursor:not-allowed" title="A demandé à ne plus recevoir de SMS">🚫 SMS refusés</span>';
-    if ($tel) echo '<a class="btn-ghost" href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '">📞 Appeler</a>';
-    if ($u->user_email) echo '<a class="btn-ghost" href="mailto:' . esc_attr($u->user_email) . '">✉️ Email perso</a>';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('comptes', ['tab' => 'locataires', 'open' => $u->ID])) . '">✏️ Éditer la fiche</a>';
-    if ($tel && function_exists('lfi_nct_sms_block_toggle_link')) {
-        $lbl = $sms_blocked ? '↩ Réautoriser les SMS' : '🚫 Ne plus lui envoyer de SMS';
-        echo '<a class="btn-ghost" style="font-size:.85em" href="' . esc_url(lfi_nct_sms_block_toggle_link($tel, $u->display_name)) . '">' . $lbl . '</a>';
-    }
-    echo '</div>';
-    echo '</div>';
-
     /* ===== Partager l'espace avec le locataire (le fait entrer dans l'app) ===== */
-    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px">';
-    echo '<div class="head"><div class="who">🔗 Partager l\'espace avec le locataire</div></div>';
+    echo '<details class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px"' . ($share_link !== '' ? ' open' : '') . '>';
+    echo '<summary style="cursor:pointer;font-weight:800;color:#0066a3;list-style:none">🔗 Partager l\'espace avec le locataire</summary>';
     $mail_t = sanitize_email((string) $u->user_email);
     $has_mail = ($mail_t !== '' && is_email($mail_t) && stripos($mail_t, '@tenant.') === false && stripos($mail_t, '@partenaire.') === false);
     echo '<div class="com" style="font-size:.92em">Envoie-lui son <strong>espace personnel</strong> : il se connecte en 1 clic, choisit son mot de passe, puis <strong>complète sa fiche</strong>, <strong>dépose ses pièces</strong> et ses <strong>photos</strong>. Tout reste dans son dossier.</div>';
@@ -556,7 +569,7 @@ function lfi_nct_app_view_dossier() {
         echo '<button type="submit" class="btn-primary" style="background:#0066a3">' . esc_html($lbl) . '</button></form>';
         echo '<div class="lfi-app-help" style="margin-top:4px"><small>Le lien connecte ' . esc_html($u->display_name) . ' d\'un seul clic, sans identifiant (usage unique, 14 jours).</small></div>';
     }
-    echo '</div>';
+    echo '</details>';
 
     /* Problèmes signalés */
     if ($problem) {
