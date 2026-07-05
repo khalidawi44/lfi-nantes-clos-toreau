@@ -548,11 +548,11 @@ function lfi_nct_app_view_dossier() {
             if (count($parts) === 2) lfi_nct_chrono_add($u->ID, trim($parts[0]), trim($parts[1]), false);
             else lfi_nct_chrono_add($u->ID, '', $ln, false);
         }
-        /* Mandat OK (président/adhérent, pas de formulaire à signer). */
-        if (function_exists('lfi_nct_dossier_find_for_tenant') && function_exists('lfi_nct_dossier_mandat_set')) {
-            $dj = lfi_nct_dossier_find_for_tenant($u->ID);
-            if ($dj) lfi_nct_dossier_mandat_set((int) $dj->id, 1);
-        }
+        /* Dossier juridique garanti (sinon les emails n'ont nulle part où aller)
+           + mandat OK (président/adhérent, pas de formulaire à signer). */
+        $dj = function_exists('lfi_nct_dossier_ensure_for_tenant') ? lfi_nct_dossier_ensure_for_tenant($u->ID)
+            : (function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null);
+        if ($dj && function_exists('lfi_nct_dossier_mandat_set')) lfi_nct_dossier_mandat_set((int) $dj->id, 1);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'reco' => 1])); exit;
     }
     /* Chronologie : ajout / retrait d'une ligne. */
