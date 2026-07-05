@@ -955,14 +955,24 @@ function lfi_nct_app_shortcode() {
         echo '</div></div></div>';
     }
 
-    /* Rendu final protégé : ces 3 fonctions ne doivent jamais blanchir
+    /* MODE FOCUS — sur les écrans « une tâche à la fois » (lire/répondre à un
+       email, éditer une enquête, générer une réponse), on n'affiche AUCUN
+       bouton flottant : rien ne parasite l'action en cours. Seule la navbar
+       (retour / accueil) reste. */
+    $focus_views = ['repondre', 'generer-reponse', 'enquete-edit', 'dossier-avocat'];
+    $vue_now = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
+    $is_focus = in_array($vue_now, $focus_views, true);
+
+    /* Rendu final protégé : ces fonctions ne doivent jamais blanchir
        la page si l'une d'elles échoue. */
     try {
         lfi_nct_app_render_styles();
         lfi_nct_app_render_register_sw();
-        if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
-        lfi_nct_app_render_assistant_button();
-        if (function_exists('lfi_nct_app_render_feedback_button')) lfi_nct_app_render_feedback_button();
+        if (!$is_focus) {
+            if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
+            lfi_nct_app_render_assistant_button();
+            if (function_exists('lfi_nct_app_render_feedback_button')) lfi_nct_app_render_feedback_button();
+        }
     } catch (\Throwable $e) {
         if (function_exists('error_log')) error_log('[LFI app] Erreur rendu final : ' . $e->getMessage());
     }
