@@ -425,6 +425,65 @@ function lfi_nct_dossier_render_chrono($u) {
     echo '</div>';
 }
 
+/**
+ * Reconstruction COMPLÈTE du dossier de Fabrice (idempotent) : rôle locataire,
+ * enquête #6 (restaurée si en corbeille / recréée si disparue), dossier
+ * juridique garanti, mandat coché (président), chronologie punaises 2020→2026
+ * injectée. Appelée par le bouton ET par l'auto-déploiement (aucun clic requis).
+ */
+function lfi_nct_fabrice_reconstruct($u) {
+    global $wpdb;
+    $uid = (int) $u->ID;
+    if (defined('LFI_NCT_ROLE_TENANT') && !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) $u->add_role(LFI_NCT_ROLE_TENANT);
+
+    /* Enquête #6 : restaurer (corbeille) ou recréer (disparue), reliée à Fabrice. */
+    $t_resp = $wpdb->prefix . 'lfi_nct_responses';
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    $r = $rid ? $wpdb->get_row($wpdb->prepare("SELECT id, deleted_at FROM $t_resp WHERE id = %d", $rid)) : null;
+    if ($rid && $r && !empty($r->deleted_at)) {
+        $wpdb->query($wpdb->prepare("UPDATE $t_resp SET deleted_at = NULL WHERE id = %d", $rid));
+    } elseif ($rid && !$r) {
+        $data = wp_json_encode(['problemes_types' => ['insectes'], 'problemes_types_autre' => 'cafards, punaises de lit', 'problemes_gravite' => 8, 'problemes_recurrent' => 'permanent'], JSON_UNESCAPED_UNICODE);
+        $wpdb->insert($t_resp, [
+            'id' => $rid, 'militant_user_id' => $uid, 'militant_login' => (string) $u->user_login,
+            'submitted_at' => current_time('mysql'), 'adresse' => '14 rue de Saint-Jean-de-Luz', 'etage' => 'Apt 88',
+            'contact_prenom' => $u->first_name ?: 'Fabrice', 'contact_nom' => $u->last_name ?: 'Doucet',
+            'contact_tel' => (string) get_user_meta($uid, 'lfi_nct_tel', true), 'contact_email' => (string) $u->user_email,
+            'contact_recontact' => 1, 'data' => $data, 'ga' => (string) get_user_meta($uid, 'lfi_nct_ga', true),
+        ]);
+    }
+
+    /* Dossier juridique garanti + mandat (président). */
+    $dj = function_exists('lfi_nct_dossier_ensure_for_tenant') ? lfi_nct_dossier_ensure_for_tenant($uid) : null;
+    if ($dj && function_exists('lfi_nct_dossier_mandat_set')) lfi_nct_dossier_mandat_set((int) $dj->id, 1);
+
+    /* Chronologie 2020→2026 (dédupliquée à l'ajout). */
+    $chrono = [
+        ['2020', "Première infestation de l'étage ; traitement partiel (interventions 03 et 17/09/2020) ; participation de 80 € imposée au locataire."],
+        ['17/07/2025', "Expertise entomologique de M. François Meurgey (Muséum de Nantes) : confirmation punaises de lit."],
+        ['31/07/2025', "Constat SCHS (base du PV)."],
+        ['20/08/2025', "PV SCHS (réf. JL.FM.20082025) : présence actuelle de punaises de lit, immeuble 14 rue Saint-Jean-de-Luz."],
+        ['21/08/2025', "PV du voisin M. Kaba (apt 87) : infestation mitoyenne."],
+        ['12/06/2025 et 08/08/2025', "2 mises en demeure de la Mairie à NMH, restées non exécutées."],
+        ['17/09/2025', "Ordonnance de référés (demande rejetée) ; orientation Conseil d'État."],
+        ['14/12/2025', "Indemnité « réparations locatives »."],
+        ['23/03/2026', "Traitement préventif de contrôle : constat de blattes (garantie 6 mois) — victoire partielle."],
+        ['10/05/2026', "Piqûre de Souleyman (fils) ; troubles du sommeil persistants."],
+        ['11/05/2026', "Appel NMH (dossier 2026-33305) ; bon de commande évoqué pour l'apt 87 ; intervention partielle."],
+        ['19/05/2026', "Aide juridictionnelle totale (BAJ TJ Nantes, N-44109-2026-003859) ; avocate désignée Me Julie Supiot (Barreau de Nantes, 06 67 93 26 18)."],
+        ['26/05/2026', "Piqûres (Fabrice + fils Souleyman)."],
+        ['27/05 et 03/06/2026', "Interventions/visites « SIHS punaises »."],
+        ['06/06/2026', "Email à NMH ; NMH relance le prestataire (Sapiens) pour un nouveau RDV."],
+        ['08/06/2026', "Départ du logement (inhabitable)."],
+        ['09/06/2026', "Réponse de NMH reçue."],
+        ['11/06/2026', "Punaise vivante photographiée (IMG_1258) ; PJ de mise en demeure ; demande n°3."],
+        ['12/06/2026', "Réponse NMH (« nous prenons note… néanmoins concernant les interventions de désinsectisation… »)."],
+        ['16/06/2026', "Huissier : « désignés pour la délivrance d'actes, pas pour la réalisation d'un constat »."],
+        ['01/07/2026', "Point avec Maître Julie Supiot (avocate désignée, aide juridictionnelle) ; dépôt de la modification des statuts de l'association."],
+    ];
+    if (function_exists('lfi_nct_chrono_add')) foreach ($chrono as $c) lfi_nct_chrono_add($uid, $c[0], $c[1], false);
+}
+
 function lfi_nct_app_view_dossier() {
     if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
