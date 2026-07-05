@@ -196,6 +196,87 @@ function lfi_nct_mailcheck_log($rep) {
 }
 
 /**
+ * REMISE À ZÉRO du pipeline d'import des emails — pour repartir propre avant une
+ * relance de pêche. On efface UNIQUEMENT ce qui vient de l'import automatique :
+ *   - la boîte de collecte (emails non rattachés) ;
+ *   - la mémoire anti-doublon (IMAP + globale) → la pêche re-télécharge tout ;
+ *   - dans CHAQUE dossier : les emails reçus/envoyés IMPORTÉS (src mailcheck/inbox)
+ *     et les brouillons auto (replies src=mailcheck), + la mémoire inbox_seen ;
+ *   - les PIÈCES JOINTES importées par email (tag « Pièce jointe email ») ;
+ *   - les entrées de chronologie créées par un email (📥/📤).
+ * On NE TOUCHE PAS : les enquêtes, mandats, chronologies reconstruites/saisies à
+ * la main, les emails saisis manuellement, ni les brouillons rédigés par un membre.
+ * @return array  Compteurs pour l'affichage.
+ */
+function lfi_nct_emails_full_reset() {
+    global $wpdb;
+    $rep = ['dossiers' => 0, 'emails' => 0, 'replies' => 0, 'pieces' => 0, 'chrono' => 0, 'boite' => 0];
+
+    /* 1) Boîte de collecte + mémoires anti-doublon. */
+    if (function_exists('lfi_nct_inbox_unmatched')) $rep['boite'] = count(lfi_nct_inbox_unmatched());
+    update_option('lfi_nct_inbox_unmatched', [], false);
+    update_option('lfi_nct_mailcheck_seen', [], false);
+    update_option('lfi_nct_inbox_seen_global', [], false);
+
+    /* 2) Chaque dossier : on retire les items IMPORTÉS de notes. */
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rows = $wpdb->get_results("SELECT id, tenant_user_id, notes FROM $t");
+    $imported = ['mailcheck', 'inbox'];
+    foreach ((array) $rows as $r) {
+        $notes = json_decode((string) $r->notes, true);
+        if (!is_array($notes)) continue;
+        $touched = false;
+        foreach (['email_recu', 'email_log'] as $k) {
+            if (!empty($notes[$k]) && is_array($notes[$k])) {
+                $before = count($notes[$k]);
+                $notes[$k] = array_values(array_filter($notes[$k], function ($e) use ($imported) {
+                    return !in_array((string) ($e['src'] ?? ''), $imported, true);
+                }));
+                $rep['emails'] += $before - count($notes[$k]);
+                if (count($notes[$k]) !== $before) $touched = true;
+            }
+        }
+        if (!empty($notes['replies']) && is_array($notes['replies'])) {
+            $before = count($notes['replies']);
+            $notes['replies'] = array_values(array_filter($notes['replies'], function ($e) {
+                return (string) ($e['src'] ?? '') !== 'mailcheck'; /* on garde les brouillons rédigés par un membre */
+            }));
+            $rep['replies'] += $before - count($notes['replies']);
+            if (count($notes['replies']) !== $before) $touched = true;
+        }
+        if (isset($notes['inbox_seen'])) { unset($notes['inbox_seen']); $touched = true; }
+        if ($touched) {
+            $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => (int) $r->id]);
+            $rep['dossiers']++;
+        }
+
+        /* 3) Chronologie : retirer UNIQUEMENT les entrées créées par un email. */
+        $tuid = (int) ($r->tenant_user_id ?? 0);
+        if ($tuid && function_exists('lfi_nct_chrono_get')) {
+            $list = lfi_nct_chrono_get($tuid);
+            if ($list) {
+                $before = count($list);
+                $list = array_values(array_filter($list, function ($e) {
+                    $txt = (string) ($e['txt'] ?? '');
+                    return !(strpos($txt, '📥 Email reçu') === 0 || strpos($txt, '📤 Email envoyé') === 0);
+                }));
+                if (count($list) !== $before) { lfi_nct_chrono_save($tuid, $list); $rep['chrono'] += $before - count($list); }
+            }
+        }
+    }
+
+    /* 4) Pièces jointes importées par email (tag distinctif). */
+    $atts = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => '_lfi_tenant_piece', 'value' => 'Pièce jointe email']],
+    ]);
+    foreach ((array) $atts as $aid) { if (wp_delete_attachment((int) $aid, true)) $rep['pieces']++; }
+
+    update_option('lfi_nct_emails_reset_last', array_merge($rep, ['at' => current_time('mysql')]), false);
+    return $rep;
+}
+
+/**
  * Importe les PIÈCES JOINTES (images / PDF) d'un email dans le dossier du
  * locataire : chaque PJ devient une pièce du dossier (meta _lfi_tenant_user_id),
  * rangée par date. Renvoie le nombre de pièces importées.
@@ -476,6 +557,18 @@ function lfi_nct_mailcheck_run_handler() {
     exit;
 }
 
+/* Remise à zéro du pipeline d'import — bouton réutilisable (super-admin). */
+add_action('admin_post_lfi_nct_emails_reset', 'lfi_nct_emails_reset_handler');
+function lfi_nct_emails_reset_handler() {
+    if (!current_user_can('manage_options')) wp_die('Non autorisé');
+    check_admin_referer('lfi_nct_emails_reset');
+    $rep = lfi_nct_emails_full_reset();
+    set_transient('lfi_nct_reset_' . get_current_user_id(), $rep, 180);
+    $back = wp_get_referer(); if (!$back) $back = lfi_nct_app_url('mailcheck');
+    wp_safe_redirect(add_query_arg('reset', 1, remove_query_arg('reset', $back)));
+    exit;
+}
+
 /** Le petit bouton « pêche maintenant » (formulaire POST vers admin-post). */
 function lfi_nct_mailcheck_run_button($label = '🎣 Aller à la pêche maintenant', $bg = '#0066a3') {
     if (!current_user_can('manage_options')) return '';
@@ -541,8 +634,27 @@ function lfi_nct_app_view_mailcheck() {
     $imap = function_exists('imap_open');
     $last = get_option('lfi_nct_mailcheck_last', []);
 
+    /* Flash remise à zéro. */
+    if (!empty($_GET['reset'])) {
+        $rr = get_transient('lfi_nct_reset_' . get_current_user_id());
+        if (is_array($rr)) {
+            delete_transient('lfi_nct_reset_' . get_current_user_id());
+            lfi_nct_app_flash('🧹 Remise à zéro faite : ' . (int) $rr['emails'] . ' email(s) importé(s) retiré(s), ' . (int) $rr['replies'] . ' brouillon(s) auto, ' . (int) $rr['pieces'] . ' pièce(s) jointe(s), ' . (int) $rr['chrono'] . ' entrée(s) de chrono, boîte vidée. Tu peux relancer la pêche.');
+        }
+    }
+
     /* Pêche à la demande — le gros bouton, tout en haut. */
     echo '<div style="margin-bottom:12px">' . lfi_nct_mailcheck_run_button('🎣 Aller à la pêche maintenant') . '</div>';
+
+    /* Remise à zéro du pipeline d'import (réutilisable, avec confirmation). */
+    $reset_url = admin_url('admin-post.php');
+    echo '<details style="margin-bottom:12px"><summary style="cursor:pointer;color:#c8102e;font-weight:600">🧹 Vider tous les emails importés (remise à zéro)</summary>'
+        . '<div style="background:#fdeef0;border-left:4px solid #c8102e;border-radius:8px;padding:10px 12px;margin-top:8px">'
+        . '<small>Efface la boîte de collecte, la mémoire anti-doublon et TOUS les emails + pièces jointes <strong>importés automatiquement</strong> dans les dossiers. Ne touche pas aux enquêtes, mandats, chronologies reconstruites/saisies à la main, ni aux brouillons que tu as rédigés. Ensuite tu relances la pêche pour tout reclasser proprement.</small>'
+        . '<form method="post" action="' . esc_url($reset_url) . '" style="margin:8px 0 0" onsubmit="return confirm(\'Vider tous les emails importés et la boîte de collecte ? Les enquêtes et chronologies reconstruites ne bougent pas.\');">'
+        . wp_nonce_field('lfi_nct_emails_reset', '_wpnonce', true, false)
+        . '<input type="hidden" name="action" value="lfi_nct_emails_reset">'
+        . '<button type="submit" class="btn-primary" style="background:#c8102e">🧹 Confirmer la remise à zéro</button></form></div></details>';
 
     echo '<ul class="lfi-app-list">';
     echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($en ? '#186a3b' : '#999') . '"><div class="head"><div class="who">' . ($en ? '🟢 Surveillance auto activée' : '⚪ Surveillance auto désactivée') . '</div></div><div class="com">Le check tourne tout seul toutes les 4 h 30 sur le serveur — et tu peux pêcher à la main quand tu veux (bouton ci-dessus).</div></li>';
