@@ -513,6 +513,24 @@ function lfi_nct_app_view_mailcheck() {
         wp_safe_redirect(lfi_nct_app_url('mailcheck', ['saved' => 1])); exit;
     }
 
+    /* Enregistrer la clé API Claude (vraie IA) + le modèle + l'activation. */
+    if (!empty($_POST['lfi_ai_cfg']) && check_admin_referer('lfi_ai_cfg')) {
+        $k = trim((string) wp_unslash($_POST['claude_key'] ?? ''));
+        /* On ne réécrit la clé que si l'utilisateur en a saisi une nouvelle
+           (le champ affiche des points quand elle est déjà là → on ignore). */
+        if ($k !== '' && strpos($k, '•') === false) update_option('lfi_nct_claude_api_key', $k, false);
+        $mo = sanitize_text_field(wp_unslash($_POST['claude_model'] ?? 'claude-sonnet-5'));
+        if (!array_key_exists($mo, lfi_nct_ai_models())) $mo = 'claude-sonnet-5';
+        update_option('lfi_nct_claude_model', $mo, false);
+        update_option('lfi_nct_claude_enabled', empty($_POST['claude_enabled']) ? '0' : '1', false);
+        /* Test de connexion immédiat si demandé. */
+        if (!empty($_POST['claude_test'])) {
+            list($ok, $msg) = lfi_nct_ai_ping();
+            set_transient('lfi_nct_ai_ping_' . get_current_user_id(), ['ok' => $ok, 'msg' => $msg], 120);
+        }
+        wp_safe_redirect(lfi_nct_app_url('mailcheck', ['aisaved' => 1]) . '#sec-ia'); exit;
+    }
+
     lfi_nct_app_screen_open('📬 Check des emails', 'Automatique 24/7 + pêche à la demande');
     if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Réglages enregistrés.');
     echo lfi_nct_mailcheck_peche_flash();
@@ -548,6 +566,45 @@ function lfi_nct_app_view_mailcheck() {
 
     /* Ce que la pêche attrape / n'attrape pas — pour ne pas se tromper. */
     echo '<div class="lfi-app-help" style="background:#eef4fb;border-left:4px solid #0066a3"><small>ℹ️ Cette pêche surveille les <strong>réponses de NMH, des institutions et des avocats</strong> (elle prépare un brouillon dans le bon dossier). Un email que <em>tu</em> t\'envoies depuis ta propre boîte pour tester ne sera pas reconnu ici. Les <strong>pièces jointes / photos</strong> ne sont pas encore importées automatiquement (seul le texte l\'est).</small></div>';
+
+    /* ============================================================== *
+     *  VRAIE IA CLAUDE — clé API + modèle                             *
+     * ============================================================== */
+    echo '<h3 id="sec-ia" style="margin:22px 0 6px">🤖 Intelligence artificielle Claude</h3>';
+    if (!empty($_GET['aisaved'])) lfi_nct_app_flash('✅ Réglages IA enregistrés.');
+    $ping = get_transient('lfi_nct_ai_ping_' . get_current_user_id());
+    if (is_array($ping)) {
+        delete_transient('lfi_nct_ai_ping_' . get_current_user_id());
+        $c = !empty($ping['ok']) ? '#186a3b' : '#c8102e';
+        $b = !empty($ping['ok']) ? '#eef7ee' : '#fdeef0';
+        echo '<div style="background:' . $b . ';border-left:4px solid ' . $c . ';border-radius:10px;padding:10px 12px;margin-bottom:10px"><strong style="color:' . $c . '">' . (!empty($ping['ok']) ? '✅ ' : '⚠️ ') . esc_html($ping['msg']) . '</strong></div>';
+    }
+
+    $ai_on   = lfi_nct_ai_enabled();
+    $ai_key  = lfi_nct_ai_key() !== '';
+    $ai_mod  = lfi_nct_ai_model();
+    $ai_err  = (string) get_option('lfi_nct_claude_last_error', '');
+    $ai_use  = get_option('lfi_nct_claude_usage', []);
+
+    echo '<div class="lfi-app-help">Sans clé, les robots tournent par <strong>mots-clés</strong> (basique). Avec ta clé Claude, la <strong>génération des réponses</strong> et le <strong>classement des emails</strong> passent en vraie IA. La clé reste sur TON serveur, jamais dans ce dépôt. C\'est ton compte Anthropic qui est facturé (~5 €/mois avec Sonnet pour ~400 emails).</div>';
+
+    echo '<ul class="lfi-app-list">';
+    echo '<li class="lfi-app-card" style="border-left:4px solid ' . ($ai_on ? '#186a3b' : '#999') . '"><div class="head"><div class="who">' . ($ai_on ? '🟢 IA Claude active' : ($ai_key ? '⚪ IA en pause' : '⚪ IA non configurée')) . '</div></div><div class="meta"><span class="meta-chip">Clé : ' . ($ai_key ? '✅ enregistrée' : '❌ manquante') . '</span><span class="meta-chip">Modèle : ' . esc_html($ai_mod) . '</span>';
+    if (is_array($ai_use) && !empty($ai_use['calls'])) echo '<span class="meta-chip">Ce mois : ' . (int) $ai_use['calls'] . ' appel(s)</span>';
+    echo '</div>';
+    if ($ai_err !== '') echo '<div class="com" style="color:#c8102e">⚠️ Dernier souci : ' . esc_html($ai_err) . '</div>';
+    echo '</li></ul>';
+
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px" action="' . esc_url(lfi_nct_app_url('mailcheck')) . '#sec-ia">' . wp_nonce_field('lfi_ai_cfg', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_ai_cfg" value="1">';
+    echo '<label>🔑 Clé API Claude (commence par <code>sk-ant-</code>)<input type="password" name="claude_key" autocomplete="off" value="" placeholder="' . ($ai_key ? '•••••••••••• (déjà enregistrée — laisser vide pour garder)' : 'sk-ant-...') . '"></label>';
+    echo '<label>🧠 Modèle<select name="claude_model">';
+    foreach (lfi_nct_ai_models() as $mk => $ml) echo '<option value="' . esc_attr($mk) . '" ' . selected($ai_mod, $mk, false) . '>' . esc_html($ml) . '</option>';
+    echo '</select></label>';
+    echo '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" name="claude_enabled" value="1" ' . checked(get_option('lfi_nct_claude_enabled', '1') === '1', true, false) . '> <span>Activer la vraie IA Claude</span></label>';
+    echo '<label style="display:flex;gap:8px;align-items:center;margin-top:2px"><input type="checkbox" name="claude_test" value="1"> <span>Tester la connexion en enregistrant</span></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer la clé Claude</button></form>';
+    echo '<div class="lfi-app-help"><small>La clé se crée sur <strong>console.anthropic.com → API Keys → Create Key</strong>. Pense à ajouter du crédit (<strong>Billing → Add credits</strong>) et, si tu veux, un plafond mensuel (<strong>Usage limits</strong>).</small></div>';
 
     lfi_nct_app_screen_close();
 }
