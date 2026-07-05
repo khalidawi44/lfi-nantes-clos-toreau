@@ -41,6 +41,20 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_emails_reset_v1', '1', false);
     }
 
+    /* 1-fabrice-pieces) Vider TOUTES les pièces du dossier de Fabrice Doucet,
+       demandé pour repartir d'un fichier .md décortiqué. Une seule fois. */
+    if (get_option('lfi_nct_fabrice_pieces_purge_v1') !== '1' && function_exists('lfi_nct_dossier_purge_pieces')) {
+        $fu = get_user_by('email', 'fabrice.doucet44@gmail.com') ?: get_user_by('email', 'nantessudclostoreau@gmail.com');
+        if (!$fu) {
+            $cands = get_users(['search' => '*doucet*', 'search_columns' => ['display_name', 'user_login', 'user_nicename'], 'number' => 1]);
+            $fu = $cands ? $cands[0] : null;
+        }
+        if ($fu) {
+            try { lfi_nct_dossier_purge_pieces((int) $fu->ID); } catch (\Throwable $e) {}
+            update_option('lfi_nct_fabrice_pieces_purge_v1', '1', false);
+        }
+    }
+
     /* 1bis) Sommet NATIONAL de l'organigramme (Mélenchon + Bompard) — ajoutés
        s'ils manquent, en haut de la pyramide. */
     if (get_option('lfi_nct_auto_national_v2') !== '1' && function_exists('lfi_nct_carto_people_all') && function_exists('lfi_nct_carto_people_save')) {

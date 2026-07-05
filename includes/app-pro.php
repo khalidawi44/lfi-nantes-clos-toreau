@@ -497,6 +497,46 @@ function lfi_nct_fabrice_reconstruct($u) {
     if (function_exists('lfi_nct_chrono_add')) foreach ($chrono as $c) lfi_nct_chrono_add($uid, $c[0], $c[1], false);
 }
 
+/** Supprime TOUTES les pièces (attachments) d'un locataire. Renvoie le nombre. */
+function lfi_nct_dossier_purge_pieces($uid) {
+    $uid = (int) $uid; if (!$uid) return 0;
+    $atts = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => $uid]],
+    ]);
+    $n = 0;
+    foreach ((array) $atts as $aid) { if (wp_delete_attachment((int) $aid, true)) $n++; }
+    return $n;
+}
+
+/** Section « 📄 Importer un dossier (.md) » + « 🗑 Vider les pièces ». */
+function lfi_nct_dossier_render_import_md($u) {
+    $ai = function_exists('lfi_nct_ai_enabled') && lfi_nct_ai_enabled();
+    echo '<div class="lfi-app-card" style="border:2px solid #4b2e83;background:#faf8ff;margin-bottom:12px" id="import-md">';
+    echo '<div class="head"><div class="who">📄 Importer un dossier (.md) — le robot classe tout</div></div>';
+
+    if (isset($_GET['md_chrono']) || isset($_GET['md_pieces'])) {
+        echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#186a3b">✅ Import terminé</strong> — ' . (int) ($_GET['md_chrono'] ?? 0) . ' événement(s) ajouté(s) à la chronologie · ' . (int) ($_GET['md_pieces'] ?? 0) . ' pièce(s) rangée(s).</div>';
+    }
+    if (isset($_GET['pieces_purged'])) {
+        echo '<div style="background:#fdeef0;border-left:4px solid #c8102e;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#c8102e">🗑 ' . (int) $_GET['pieces_purged'] . ' pièce(s) supprimée(s).</strong></div>';
+    }
+
+    echo '<div class="com" style="font-size:.9em;color:#555">Tu rédiges le dossier (ici dans Claude) en <strong>Markdown</strong> avec les dates, puis tu déposes le fichier <code>.md</code> : le robot le <strong>décortique date par date</strong> et remplit la <strong>chronologie</strong>. ' . ($ai ? 'Analyse par <strong>IA Claude</strong>.' : '⚠️ Sans clé Claude : lecture basique des lignes datées.') . ' Tu peux joindre en même temps les <strong>photos / PDF</strong> → rangés comme pièces.</div>';
+
+    echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form" style="margin-top:8px">' . wp_nonce_field('lfi_app_md_import', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_app_md_import" value="1">';
+    echo '<label>📄 Fichier du dossier (.md ou .txt)<input type="file" name="mdfile" accept=".md,.markdown,.txt,text/markdown,text/plain"></label>';
+    echo '<label>… ou colle le texte du dossier ici<textarea name="md_paste" rows="5" placeholder="# Dossier…\n17/07/2025 : …\n20/08/2025 : …"></textarea></label>';
+    echo '<label>📎 Photos / PDF à joindre (plusieurs possibles)<input type="file" name="pieces[]" accept="image/*,application/pdf" multiple></label>';
+    echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🤖 Importer et classer</button></form>';
+
+    echo '<form method="post" onsubmit="return confirm(\'Supprimer TOUTES les pièces de ce dossier ? (photos, PDF, documents importés)\');" style="margin-top:8px">' . wp_nonce_field('lfi_app_pieces_purge', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_app_pieces_purge" value="1">';
+    echo '<button type="submit" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1">🗑 Supprimer toutes les pièces de ce dossier</button></form>';
+    echo '</div>';
+}
+
 function lfi_nct_app_view_dossier() {
     if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
@@ -647,6 +687,85 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_POST['lfi_chrono_reset']) && check_admin_referer('lfi_chrono')) {
         lfi_nct_chrono_save($u->ID, []);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+
+    /* 🗑 Supprimer TOUTES les pièces du dossier (repartir propre). */
+    if (!empty($_POST['lfi_app_pieces_purge']) && check_admin_referer('lfi_app_pieces_purge')) {
+        $n = lfi_nct_dossier_purge_pieces($u->ID);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'pieces_purged' => $n]) . '#import-md'); exit;
+    }
+
+    /* 📄 IMPORT d'un dossier rédigé (.md) : le robot décortique la chronologie
+       date par date, et range les photos/PDF joints comme pièces. */
+    if (!empty($_POST['lfi_app_md_import']) && check_admin_referer('lfi_app_md_import')) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+        $added_chrono = 0; $added_pieces = 0;
+
+        /* 1) Le texte : fichier .md/.txt téléversé OU zone de texte collée. */
+        $md_text = '';
+        if (!empty($_FILES['mdfile']['tmp_name']) && (int) $_FILES['mdfile']['size'] <= 3 * 1024 * 1024) {
+            $md_text = (string) @file_get_contents($_FILES['mdfile']['tmp_name']);
+        }
+        if (trim($md_text) === '' && !empty($_POST['md_paste'])) $md_text = (string) wp_unslash($_POST['md_paste']);
+        $md_text = wp_check_invalid_utf8($md_text, true);
+
+        if (trim($md_text) !== '' && function_exists('lfi_nct_md_extract_chrono')) {
+            foreach (lfi_nct_md_extract_chrono($md_text) as $e) {
+                $lab = trim((string) ($e['date'] ?? ''));
+                $ev  = trim((string) ($e['event'] ?? ''));
+                if ($ev === '') continue;
+                if (lfi_nct_chrono_add($u->ID, $lab !== '' ? $lab : wp_date('Y-m-d'), $ev, true)) $added_chrono++;
+            }
+            /* On garde le .md source comme pièce « document » (traçabilité). */
+            $up = wp_upload_dir();
+            if (empty($up['error'])) {
+                $fname = wp_unique_filename($up['path'], 'dossier-' . $u->ID . '-' . wp_date('Ymd-His') . '.md');
+                $fpath = trailingslashit($up['path']) . $fname;
+                if (@file_put_contents($fpath, $md_text) !== false) {
+                    $att = wp_insert_attachment(['post_mime_type' => 'text/markdown', 'post_title' => 'Dossier importé (.md) — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $fpath);
+                    if (!is_wp_error($att) && $att) {
+                        update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
+                        update_post_meta($att, '_lfi_piece_cat', 'document');
+                        update_post_meta($att, '_lfi_tenant_piece', 'Document importé (.md)');
+                    }
+                }
+            }
+        }
+
+        /* 2) Les pièces jointes (photos / PDF) → rangées + catégorisées + étape. */
+        if (!empty($_FILES['pieces']) && is_array($_FILES['pieces']['name'])) {
+            $cnt = count($_FILES['pieces']['name']);
+            for ($i = 0; $i < $cnt; $i++) {
+                if (empty($_FILES['pieces']['tmp_name'][$i]) || (int) $_FILES['pieces']['size'][$i] > 15 * 1024 * 1024) continue;
+                $file = [
+                    'name'     => $_FILES['pieces']['name'][$i],
+                    'type'     => $_FILES['pieces']['type'][$i],
+                    'tmp_name' => $_FILES['pieces']['tmp_name'][$i],
+                    'error'    => $_FILES['pieces']['error'][$i],
+                    'size'     => $_FILES['pieces']['size'][$i],
+                ];
+                $upload = wp_handle_upload($file, ['test_form' => false]);
+                if (!empty($upload['error'])) continue;
+                $att = wp_insert_attachment(['post_mime_type' => $upload['type'], 'post_title' => 'Pièce importée — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $upload['file']);
+                if (is_wp_error($att) || !$att) continue;
+                update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
+                update_post_meta($att, '_lfi_tenant_piece', 'Pièce importée');
+                wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $upload['file']));
+                if (function_exists('lfi_nct_piece_categorize')) {
+                    $cat = lfi_nct_piece_categorize((string) $file['name'], (string) $upload['type']);
+                    update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
+                    if (function_exists('lfi_nct_piece_autostep')) {
+                        $sk = lfi_nct_piece_autostep($u->ID, $cat['cat']);
+                        if ($sk !== '') update_post_meta($att, '_lfi_step', $sk);
+                    }
+                }
+                if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $upload['file']);
+                $added_pieces++;
+            }
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'md_chrono' => $added_chrono, 'md_pieces' => $added_pieces]) . '#import-md'); exit;
     }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
@@ -865,6 +984,9 @@ function lfi_nct_app_view_dossier() {
 
     /* ===== CHRONOLOGIE (timeline structurée, auto-alimentée) ===== */
     lfi_nct_dossier_render_chrono($u);
+
+    /* ===== IMPORT .md (chronologie décortiquée par l'IA) + vider les pièces ===== */
+    lfi_nct_dossier_render_import_md($u);
 
     /* ===== Partager l'espace avec le locataire (le fait entrer dans l'app) ===== */
     echo '<details class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-top:12px"' . ($share_link !== '' ? ' open' : '') . '>';
