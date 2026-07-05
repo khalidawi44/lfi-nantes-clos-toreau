@@ -3536,6 +3536,31 @@ function lfi_nct_app_view_enquetes() {
     }
     echo '</div>';
 
+    /* 🔢 TROUS DE NUMÉROTATION — on garde en mémoire les numéros manquants.
+       On distingue ce qui est EN CORBEILLE (récupérable) de ce qui a disparu
+       pour de bon (supprimé définitivement / jamais existé). */
+    if ($can_manage) {
+        $active_ids  = array_map('intval', (array) $wpdb->get_col("SELECT id FROM $table WHERE deleted_at IS NULL" . $sc));
+        $trashed_ids = array_map('intval', (array) $wpdb->get_col("SELECT id FROM $table WHERE deleted_at IS NOT NULL" . $sc));
+        $present = array_merge($active_ids, $trashed_ids);
+        if ($present) {
+            $lo = min($present); $hi = max($present);
+            $trashset = array_flip($trashed_ids); $presentset = array_flip($present);
+            $gone = []; $trashed_list = [];
+            for ($n = $lo; $n <= $hi; $n++) {
+                if (isset($trashset[$n])) $trashed_list[] = $n;
+                elseif (!isset($presentset[$n])) $gone[] = $n;
+            }
+            if ($trashed_list || $gone) {
+                echo '<div class="lfi-app-help" style="background:#fff8e6;border-left:4px solid #d39e00;margin:2px 0 10px"><small>';
+                echo '🔢 <strong>Numéros #' . $lo . ' → #' . $hi . '</strong>. ';
+                if ($trashed_list) echo '🗑 <strong>En corbeille (récupérable) :</strong> ' . implode(', ', array_map(function ($n) { return '#' . $n; }, $trashed_list)) . ' → <a href="' . esc_url(lfi_nct_app_url('enquetes-corbeille')) . '" style="font-weight:700">restaurer</a>. ';
+                if ($gone) echo '⚠️ <strong>Disparus définitivement :</strong> ' . implode(', ', array_map(function ($n) { return '#' . $n; }, $gone)) . '.';
+                echo '</small></div>';
+            }
+        }
+    }
+
     if (empty($rows)) {
         echo '<div class="lfi-app-empty">Aucune réponse pour ce filtre.</div>';
         lfi_nct_app_screen_close();

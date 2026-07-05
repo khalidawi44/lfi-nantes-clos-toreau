@@ -400,6 +400,16 @@ function lfi_nct_app_view_dossier() {
         if (function_exists('lfi_nct_victoire_annuler')) lfi_nct_victoire_annuler($u->ID, $bataille);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'unwon' => 1])); exit;
     }
+    /* 👻 Enquête FANTÔME liée au dossier : restaurer (si en corbeille) ou délier. */
+    if (!empty($_POST['lfi_dossier_enq_restore']) && check_admin_referer('lfi_dossier_enq')) {
+        $rid0 = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+        if ($rid0) $wpdb->query($wpdb->prepare("UPDATE {$wpdb->prefix}lfi_nct_responses SET deleted_at = NULL WHERE id = %d AND deleted_at IS NOT NULL", $rid0));
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'enq_restored' => 1])); exit;
+    }
+    if (!empty($_POST['lfi_dossier_enq_unlink']) && check_admin_referer('lfi_dossier_enq')) {
+        delete_user_meta($u->ID, 'lfi_nct_response_id');
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'enq_unlinked' => 1])); exit;
+    }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
        usage unique) → à envoyer par SMS. Le locataire se connecte, choisit son
@@ -452,7 +462,15 @@ function lfi_nct_app_view_dossier() {
     $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
     $admin_notes = (string) get_user_meta($u->ID, 'lfi_nct_admin_notes', true);
     $row = $rid ? $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)) : null;
-    $problem = $row ? lfi_nct_app_enq_problem($row) : null;
+    /* 👻 État de l'enquête liée : '' = ok · 'trashed' = en corbeille · 'missing' = disparue. */
+    $enq_ghost = '';
+    if ($rid) {
+        if (!$row) $enq_ghost = 'missing';
+        elseif (!empty($row->deleted_at)) $enq_ghost = 'trashed';
+    }
+    /* Une enquête en corbeille ne doit pas alimenter le dossier comme si elle
+       était active. */
+    $problem = ($row && $enq_ghost === '') ? lfi_nct_app_enq_problem($row) : null;
 
     /* Photos — CLASSÉES par date de prise de vue (chronologie), pas par upload. */
     $photos = function_exists('lfi_nct_tenant_photos_chrono')
@@ -476,6 +494,8 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_GET['won']))  lfi_nct_app_flash('🏆 Coupe posée ! Une réussite ANONYME est prête dans « 🏆 Réussites » — relis-la et publie-la (aucun nom n\'y figure). Les membres du GA verront la victoire à l\'ouverture de l\'app.');
     if (!empty($_GET['unwon'])) lfi_nct_app_flash('Coupe annulée.');
     if (!empty($_GET['avocat_ok'])) lfi_nct_app_flash('⚖️ Dossier confié à l\'avocat·e. Il/elle le voit dans son espace (note + pièces + ligne directe).');
+    if (!empty($_GET['enq_restored'])) lfi_nct_app_flash('♻️ Enquête restaurée depuis la corbeille — le dossier est de nouveau complet.');
+    if (!empty($_GET['enq_unlinked'])) lfi_nct_app_flash('Enquête déliée du dossier.');
 
     /* ===== BANNIÈRE — nom en GROS + n° d'enquête + éditer fiche/enquête ===== */
     $sms_blocked = ($tel && function_exists('lfi_nct_sms_is_blocked')) ? lfi_nct_sms_is_blocked($tel) : false;
@@ -487,7 +507,9 @@ function lfi_nct_app_view_dossier() {
     echo     '<div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:1.5em;font-weight:900;flex:0 0 auto">' . esc_html($initiale) . '</div>';
     echo     '<div style="flex:1;min-width:0">';
     echo       '<div style="font-size:1.45em;font-weight:900;line-height:1.12">' . esc_html($u->display_name) . '</div>';
-    if ($rid) echo '<a href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => $rid])) . '" style="display:inline-block;margin-top:5px;background:#fff;color:#7d0a1c;font-weight:800;font-size:.8em;padding:2px 10px;border-radius:20px;text-decoration:none">📋 Enquête #' . (int) $rid . ' · modifier</a>';
+    if ($rid && $enq_ghost === '') echo '<a href="' . esc_url(lfi_nct_app_url('enquete-edit', ['id' => $rid])) . '" style="display:inline-block;margin-top:5px;background:#fff;color:#7d0a1c;font-weight:800;font-size:.8em;padding:2px 10px;border-radius:20px;text-decoration:none">📋 Enquête #' . (int) $rid . ' · modifier</a>';
+    elseif ($rid && $enq_ghost === 'trashed') echo '<span style="display:inline-block;margin-top:5px;background:#ffe08a;color:#6b4e00;font-weight:800;font-size:.8em;padding:2px 10px;border-radius:20px">🗑 Enquête #' . (int) $rid . ' en corbeille</span>';
+    elseif ($rid && $enq_ghost === 'missing') echo '<span style="display:inline-block;margin-top:5px;background:rgba(255,255,255,.25);color:#fff;font-weight:800;font-size:.8em;padding:2px 10px;border-radius:20px">👻 Enquête #' . (int) $rid . ' introuvable</span>';
     else      echo '<a href="' . esc_url(lfi_nct_app_url('enquete')) . '" style="display:inline-block;margin-top:5px;background:rgba(255,255,255,.25);color:#fff;font-weight:700;font-size:.8em;padding:2px 10px;border-radius:20px;text-decoration:none">➕ Lier une enquête</a>';
     echo     '</div>';
     echo   '</div>';
@@ -518,6 +540,27 @@ function lfi_nct_app_view_dossier() {
         echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_sms_block_toggle_link($tel, $u->display_name)) . '">' . $lbl . '</a>';
     }
     echo '</div>';
+
+    /* 👻 ALERTE ENQUÊTE FANTÔME — enquête liée disparue : proposer de restaurer. */
+    if ($enq_ghost === 'trashed' || $enq_ghost === 'missing') {
+        echo '<div class="lfi-app-card" style="border-left:4px solid #d39e00;background:#fff8e6;margin-bottom:12px">';
+        if ($enq_ghost === 'trashed') {
+            echo '<div class="head"><div class="who" style="color:#8a6d1f">🗑 L\'enquête #' . (int) $rid . ' est en corbeille</div></div>';
+            echo '<div class="com" style="font-size:.92em">Ce dossier est lié à l\'enquête <strong>#' . (int) $rid . '</strong> qui a été mise à la corbeille. Restaure-la pour retrouver l\'adresse, les problèmes signalés et la gravité.</div>';
+            echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' . wp_nonce_field('lfi_dossier_enq', '_wpnonce', true, false);
+            echo '<button type="submit" name="lfi_dossier_enq_restore" value="1" class="btn-primary" style="background:#186a3b">♻️ Restaurer l\'enquête #' . (int) $rid . '</button>';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes-corbeille')) . '">🗑 Voir la corbeille</a>';
+            echo '</form></div>';
+        } else {
+            echo '<div class="head"><div class="who" style="color:#8a6d1f">👻 Enquête #' . (int) $rid . ' introuvable</div></div>';
+            echo '<div class="com" style="font-size:.92em">Ce dossier pointe vers l\'enquête <strong>#' . (int) $rid . '</strong> qui n\'existe plus (supprimée définitivement). Tu peux délier ce numéro et en relier une autre.</div>';
+            echo '<form method="post" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' . wp_nonce_field('lfi_dossier_enq', '_wpnonce', true, false);
+            echo '<button type="submit" name="lfi_dossier_enq_unlink" value="1" class="btn-ghost" onclick="return confirm(\'Délier l\\\'enquête #' . (int) $rid . ' de ce dossier ?\')">🔓 Délier l\'enquête #' . (int) $rid . '</button>';
+            echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquete')) . '">➕ Lier une autre enquête</a>';
+            echo '</form></div>';
+        }
+        echo '</div>';
+    }
 
     /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
     lfi_nct_dossier_render_batailles($u, $row);
@@ -866,10 +909,22 @@ function lfi_nct_render_home_tenant_actions() {
         if ($idx < 0) continue; /* tout est fait */
         $done_n = 0; foreach ($steps as $s) if (!empty($s['done'])) $done_n++;
         $who = $steps[$idx]['who'] ?? 'admin';
-        $row = ['uid' => (int) $u->ID, 'name' => $u->display_name, 'idx' => $idx, 'text' => (string) $steps[$idx]['text'], 'total' => count($steps), 'donen' => $done_n];
+        $row = ['uid' => (int) $u->ID, 'name' => $u->display_name, 'idx' => $idx, 'text' => (string) $steps[$idx]['text'], 'total' => count($steps), 'donen' => $done_n, 'echeance' => (string) ($steps[$idx]['echeance'] ?? '')];
         if ($who === 'tenant') $waiting[] = $row; else $mine[] = $row;
     }
     if (empty($mine) && empty($waiting)) return;
+
+    /* Tri « du plus urgent au moins urgent » : d'abord ceux qui ont une échéance
+       (la plus proche / dépassée en tête), puis ceux sans échéance. */
+    $urg = function ($a, $b) {
+        $ea = trim((string) $a['echeance']); $eb = trim((string) $b['echeance']);
+        if ($ea === '' && $eb === '') return 0;
+        if ($ea === '') return 1;   /* sans échéance → après */
+        if ($eb === '') return -1;
+        return strtotime($ea) <=> strtotime($eb); /* échéance la plus proche d'abord */
+    };
+    usort($mine, $urg);
+    usort($waiting, $urg);
 
     if (!empty($mine)) {
         /* Accordéon (ouvert) : la liste est BORNÉE dans un cadre déroulant — plus
