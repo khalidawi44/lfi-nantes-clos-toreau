@@ -684,6 +684,7 @@ function lfi_nct_app_shortcode() {
         'infos-cles'             => 'lfi_nct_app_view_infos_cles',
         'signaler-bug'           => 'lfi_nct_app_view_signaler_bug',
         'victoires'              => 'lfi_nct_app_view_victoires',
+        'annuaire'               => 'lfi_nct_app_view_public_gas',
     ];
     if (isset($public_routes[$vue_public]) && function_exists($public_routes[$vue_public])) {
         call_user_func($public_routes[$vue_public]);

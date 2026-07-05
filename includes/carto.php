@@ -353,3 +353,82 @@ function lfi_nct_app_view_carto() {
 
     lfi_nct_app_screen_close();
 }
+
+/* ============================================================== *
+ *  VUE PUBLIQUE — ANNUAIRE LÉGER DES GA (?vue=annuaire)           *
+ *  Chaque GA + sa commune + le PRÉNOM de qui l'anime.            *
+ *  JAMAIS d'email, JAMAIS de nom de famille. Sans connexion.     *
+ * ============================================================== */
+/** Prénom seul (public). */
+function lfi_nct_carto_first_name($name) {
+    $name = trim(preg_replace('/\s+/', ' ', (string) $name));
+    if ($name === '') return '';
+    $p = explode(' ', $name);
+    return $p[0];
+}
+function lfi_nct_app_view_public_gas() {
+    $list = lfi_nct_carto_all();
+    /* Tri par commune puis nom. */
+    usort($list, function ($a, $b) {
+        $ca = mb_strtolower((string) ($a['commune'] ?? '')); $cb = mb_strtolower((string) ($b['commune'] ?? ''));
+        if ($ca === $cb) return strcasecmp((string) ($a['nom'] ?? ''), (string) ($b['nom'] ?? ''));
+        return strcmp($ca, $cb);
+    });
+
+    lfi_nct_app_screen_open('✊ Groupes d\'Action — Loire-Atlantique', 'Trouve le groupe près de chez toi et rejoins-nous');
+
+    /* Bannière légère aux couleurs LFI. */
+    $logo = function_exists('lfi_nct_logo_lfi_url') ? lfi_nct_logo_lfi_url() : '';
+    echo '<div style="background:linear-gradient(135deg,#c8102e,#8a0b20);color:#fff;border-radius:14px;padding:16px 18px;margin-bottom:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">';
+    if ($logo) echo '<img src="' . esc_url($logo) . '" alt="La France Insoumise" style="height:46px;width:auto;background:#fff;border-radius:8px;padding:4px">';
+    echo '<div style="flex:1;min-width:180px"><div style="font-size:1.15em;font-weight:900;line-height:1.2">La France Insoumise · Loire-Atlantique</div><div style="opacity:.92;font-size:.92em">' . count($list) . ' groupes d\'action près de chez toi. Rejoins le tien.</div></div>';
+    echo '</div>';
+
+    if (empty($list)) {
+        echo '<div class="lfi-app-empty">L\'annuaire des groupes arrive très bientôt.</div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    /* Filtre instantané (commune / nom du GA). */
+    echo '<input id="ga-filter" type="search" placeholder="🔎 Ta commune ou ton quartier…" oninput="lfiGaFilter(this.value)" style="width:100%;padding:11px 13px;border:1px solid #ccc;border-radius:10px;margin-bottom:12px;font-size:1em">';
+
+    echo '<div id="ga-list" style="display:flex;flex-direction:column;gap:8px">';
+    foreach ($list as $e) {
+        $nom = (string) ($e['nom'] ?? ''); if ($nom === '') continue;
+        $commune = (string) ($e['commune'] ?? '');
+        $prenoms = array_values(array_filter([
+            lfi_nct_carto_first_name($e['contact'] ?? ''),
+            lfi_nct_carto_first_name($e['contact2'] ?? ''),
+        ]));
+        $anim = $prenoms ? implode(' & ', $prenoms) : '';
+        $needle = mb_strtolower($nom . ' ' . $commune);
+        echo '<div class="ga-item" data-s="' . esc_attr($needle) . '" style="background:#fff;border:1px solid #e6e6e6;border-left:4px solid #c8102e;border-radius:10px;padding:11px 13px">';
+        echo '<div style="font-weight:800;color:#1a1a1a">🏳️ ' . esc_html($nom) . '</div>';
+        if ($commune !== '') echo '<div style="color:#0066a3;font-size:.9em;font-weight:600;margin-top:1px">📍 ' . esc_html($commune) . '</div>';
+        if ($anim !== '') echo '<div style="color:#555;font-size:.9em;margin-top:3px">✊ Animé par <strong>' . esc_html($anim) . '</strong></div>';
+        echo '</div>';
+    }
+    echo '</div>';
+    echo '<div id="ga-none" style="display:none;color:#888;text-align:center;padding:14px">Aucun groupe trouvé pour « <span id="ga-q"></span> ». Écris-nous, on t\'oriente.</div>';
+
+    /* Lien vers les combats/victoires (route publique existante). */
+    echo '<div style="text-align:center;margin-top:16px"><a href="' . esc_url(lfi_nct_app_url('victoires')) . '" style="display:inline-block;background:#186a3b;color:#fff;padding:11px 18px;border-radius:10px;text-decoration:none;font-weight:800">🏆 Voir nos combats gagnés</a></div>';
+    echo '<div class="lfi-app-help" style="margin-top:12px;text-align:center"><small>Pour préserver la vie privée, seuls les <strong>prénoms</strong> des animateur·ices sont affichés — jamais d\'email ni de nom de famille.</small></div>';
+
+    ?>
+    <script>
+    function lfiGaFilter(q){
+        q = (q||'').toLowerCase().trim();
+        var items = document.querySelectorAll('#ga-list .ga-item'), shown = 0;
+        items.forEach(function(it){
+            var ok = !q || (it.getAttribute('data-s')||'').indexOf(q) !== -1;
+            it.style.display = ok ? '' : 'none'; if (ok) shown++;
+        });
+        var none = document.getElementById('ga-none');
+        if (none){ none.style.display = shown ? 'none' : 'block'; var s=document.getElementById('ga-q'); if(s) s.textContent = q; }
+    }
+    </script>
+    <?php
+    lfi_nct_app_screen_close();
+}
