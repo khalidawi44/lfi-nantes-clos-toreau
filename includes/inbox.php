@@ -782,7 +782,7 @@ var LFI_LABEL = "lfi-importe";
 function lfiImportEmails() {
   var label = GmailApp.getUserLabelByName(LFI_LABEL) || GmailApp.createLabel(LFI_LABEL);
   // emails récents non encore importés
-  var threads = GmailApp.search('newer_than:2d -label:' + LFI_LABEL, 0, 50);
+  var threads = GmailApp.search('newer_than:60d -label:' + LFI_LABEL, 0, 100);
   for (var i = 0; i < threads.length; i++) {
     var msgs = threads[i].getMessages();
     for (var j = 0; j < msgs.length; j++) {

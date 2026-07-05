@@ -89,8 +89,8 @@ function lfi_nct_mailcheck_do() {
         if ($r['error'] !== '') $errors[] = $box['label'] . ' : ' . $r['error'];
     }
 
-    /* On borne l'historique des vus. */
-    if (count($seen) > 800) $seen = array_slice($seen, -800);
+    /* On borne l'historique des vus (fenêtre large → mémoire plus grande). */
+    if (count($seen) > 3000) $seen = array_slice($seen, -3000);
     update_option('lfi_nct_mailcheck_seen', $seen, false);
     $rep['ok']  = empty($errors);
     $rep['msg'] = $errors ? implode(' | ', $errors) : 'Terminé.';
@@ -106,8 +106,15 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
     $mbox = @imap_open('{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX', $box['user'], $box['pw'], 0, 1);
     if (!$mbox) { $out['error'] = 'connexion IMAP échouée : ' . imap_last_error(); return $out; }
 
-    $since = date('d-M-Y', strtotime('-3 days'));
-    $ids = @imap_search($mbox, 'UNSEEN SINCE "' . $since . '"', SE_UID) ?: [];
+    /* Fenêtre de pêche : par défaut 60 jours, et on lit AUSSI les emails DÉJÀ LUS
+       (pas seulement les non-lus) — sinon tout ce que tu as ouvert dans Gmail est
+       ignoré et la boîte paraît « à jour » alors qu'elle est pleine. L'anti-doublon
+       (mémoire « seen ») évite de re-traiter un email déjà importé. */
+    $days  = (int) get_option('lfi_nct_mailcheck_days', 60); if ($days < 1) $days = 60;
+    $since = date('d-M-Y', strtotime('-' . $days . ' days'));
+    $ids = @imap_search($mbox, 'SINCE "' . $since . '"', SE_UID) ?: [];
+    /* Les plus récents d'abord (limite de sécurité sur un très gros backlog). */
+    if (is_array($ids)) { rsort($ids); $ids = array_slice($ids, 0, 400); }
     $senders = lfi_nct_mailcheck_senders();
 
     foreach ($ids as $uid) {
