@@ -56,6 +56,15 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_national_v2', '1', false);
     }
 
+    /* 1ter) Dossier juridique GARANTI pour TOUS les locataires (sinon certains
+       n'apparaissent nulle part de façon cohérente et leurs PDF sont vides). */
+    if (get_option('lfi_nct_auto_dossiers') !== '1' && function_exists('lfi_nct_dossier_ensure_for_tenant')) {
+        $role = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+        $tenants = get_users(['role' => $role, 'number' => 800, 'fields' => ['ID']]);
+        foreach ($tenants as $t) { try { lfi_nct_dossier_ensure_for_tenant((int) $t->ID); } catch (\Throwable $e) {} }
+        update_option('lfi_nct_auto_dossiers', '1', false);
+    }
+
     /* 2) Reconstruction complète du dossier de Fabrice (enquête #6, dossier
        juridique, mandat, chronologie). On ne pose le drapeau QUE si Fabrice
        existe — sinon on réessaiera au prochain chargement. */

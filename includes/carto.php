@@ -434,12 +434,12 @@ function lfi_nct_gas_public_seed() {
         ['Nantes – Centre', 'Nantes', ['Elsa', 'Alizée']],
         ['Sainte-Luce et Thouaré insoumises', 'Sainte-Luce-sur-Loire', ['Delphine', 'Timéo']],
         ['Union Populaire St-Étienne-de-Montluc · Temple · Vigneux · Cordemais', 'Saint-Étienne-de-Montluc', ['Bernadette', 'Gabriel']],
-        ['Jade insoumise', '', ['Michèle', 'Nicolas']],
-        ['GA Loire-Divatte', '', ['Laurent', 'Viviane']],
-        ['GA Presqu\'île', '', ['Christian', 'Sylvie']],
-        ['GA de la Côte Sauvage', '', ['Dominique', 'Thierry']],
+        ['Jade insoumise', 'Pornic', ['Michèle', 'Nicolas']],
+        ['GA Loire-Divatte', 'Le Loroux-Bottereau', ['Laurent', 'Viviane']],
+        ['GA Presqu\'île', 'La Baule-Escoublac', ['Christian', 'Sylvie']],
+        ['GA de la Côte Sauvage', 'Le Croisic', ['Dominique', 'Thierry']],
         ['GA Pontchâteau-Herbignac', 'Pontchâteau', ['Jacek']],
-        ['Rive Gauche 44 l\'insoumise', '', ['Julien']],
+        ['Rive Gauche 44 l\'insoumise', 'Rezé', ['Julien']],
     ];
 }
 /** Slug stable d'un GA (pour l'URL de sa page publique). */
@@ -461,6 +461,8 @@ function lfi_nct_commune_coords() {
         'clisson' => [47.0881, -1.2861], 'vertou' => [47.1686, -1.4667], 'orvault' => [47.2717, -1.6222],
         'sainte-luce-sur-loire' => [47.2456, -1.4844], 'saint-étienne-de-montluc' => [47.2764, -1.7803], 'saint-etienne-de-montluc' => [47.2764, -1.7803],
         'pontchâteau' => [47.4381, -2.0894], 'pontchateau' => [47.4381, -2.0894],
+        'le loroux-bottereau' => [47.2419, -1.3486], 'la baule-escoublac' => [47.2864, -2.3936],
+        'la baule' => [47.2864, -2.3936], 'le croisic' => [47.2933, -2.5108],
     ];
 }
 /** Liste FUSIONNÉE des GA (seed intégré + registre carto + organigramme),
