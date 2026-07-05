@@ -339,7 +339,21 @@ function lfi_nct_mailcheck_match_dossier($subject, $body = '', $referent = 0, $f
         $cands[] = $r;
     }
 
-    /* On cherche le nom (mot entier) d'ABORD dans l'OBJET (le plus fiable), puis
+    /* 1) Match par ADRESSE EMAIL (bien plus fiable que le nom) : une adresse
+       présente dans l'email (from/objet/corps) qui correspond au tenant_email
+       d'un dossier candidat → c'est lui. */
+    $emails_in = [];
+    if (preg_match_all('/[\w.\-+]+@[\w.\-]+\.[\w.\-]+/u', $from . ' ' . $subject . ' ' . $body, $mm)) {
+        $emails_in = array_map('mb_strtolower', $mm[0]);
+    }
+    if ($emails_in) {
+        foreach ($cands as $r) {
+            $te = mb_strtolower(trim((string) ($r->tenant_email ?? '')));
+            if ($te !== '' && in_array($te, $emails_in, true)) return $r;
+        }
+    }
+
+    /* 2) On cherche le nom (mot entier) d'ABORD dans l'OBJET (le plus fiable), puis
        dans objet + corps. Bornes des deux côtés → évite « Ba » dans « bail ». */
     foreach ([$subject, $subject . ' ' . $body] as $txt) {
         $low = mb_strtolower((string) $txt);
