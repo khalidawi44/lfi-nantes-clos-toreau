@@ -145,6 +145,17 @@ function lfi_nct_app_view_carto() {
         wp_safe_redirect(add_query_arg('imported', $n, $back)); exit;
     }
 
+    /* Charger TOUTE la cartographie (42 GA + organigramme) en 1 clic, dédoublonné. */
+    if (!empty($_POST['lfi_carto_seed']) && check_admin_referer('lfi_carto_seed') && function_exists('lfi_nct_carto_seed_load')) {
+        $rep = lfi_nct_carto_seed_load();
+        wp_safe_redirect(add_query_arg([
+            'seed_ga'  => (int) $rep['ga_add'],
+            'seed_gad' => (int) $rep['ga_dup'],
+            'seed_pp'  => (int) $rep['ppl_add'],
+            'seed_ppd' => (int) $rep['ppl_dup'],
+        ], $back)); exit;
+    }
+
     /* Changer le statut. */
     if (!empty($_POST['lfi_carto_status']) && check_admin_referer('lfi_carto_status')) {
         $id = (int) ($_POST['id'] ?? 0);
@@ -231,6 +242,17 @@ function lfi_nct_app_view_carto() {
     if (isset($_GET['pimported']))  lfi_nct_app_flash('✅ ' . (int) $_GET['pimported'] . ' personne(s) importée(s).');
     if (!empty($_GET['pdeleted']))  lfi_nct_app_flash('🗑 Personne retirée.');
     echo '<div class="lfi-app-help" style="background:#fdeef0;border-left:4px solid #c8102e"><small>🔒 <strong>Privé</strong> — visible par toi seul (superadmin). Ce sont des contacts de GA, aucune donnée d\'enquête ni de locataire.<br>👁️ <strong>Affichage protégé</strong> : seuls le GA et « <em>Prénom N.</em> » sont montrés. Les <strong>emails ne sont jamais affichés en clair</strong> (masqués <code>••</code>) — ils restent stockés pour l\'envoi automatique et s\'utilisent via les boutons ✉️/📱.</small></div>';
+
+    if (isset($_GET['seed_ga'])) {
+        lfi_nct_app_flash('✅ Cartographie chargée : ' . (int) $_GET['seed_ga'] . ' GA + ' . (int) ($_GET['seed_pp'] ?? 0) . ' personnes ajoutés · doublons évités : ' . (int) ($_GET['seed_gad'] ?? 0) . ' GA / ' . (int) ($_GET['seed_ppd'] ?? 0) . ' personnes.');
+    }
+
+    /* Chargement en 1 clic de toute la cartographie compilée (dédoublonné). */
+    $nb_ga_now = count(lfi_nct_carto_all());
+    echo '<details class="lfi-app-card" style="border-left:4px solid #186a3b"' . ($nb_ga_now === 0 ? ' open' : '') . '><summary style="cursor:pointer;font-weight:800;color:#186a3b">📥 Charger toute la cartographie (42 GA + organigramme) en 1 clic</summary>';
+    echo '<div class="com" style="font-size:.92em;margin-top:6px">Charge d\'un coup les 42 GA de Loire-Atlantique et l\'organigramme (députés, boucle départementale, admins de GA). <strong>Dédoublonné</strong> : rien n\'est ajouté deux fois, tu peux cliquer sans risque.</div>';
+    echo '<form method="post" style="margin-top:8px">' . wp_nonce_field('lfi_carto_seed', '_wpnonce', true, false) . '<input type="hidden" name="lfi_carto_seed" value="1"><button type="submit" class="btn-primary" style="background:#186a3b">📥 Tout charger maintenant</button></form>';
+    echo '<div class="lfi-app-help" style="margin-top:6px"><small>Actuellement : <strong>' . (int) $nb_ga_now . '</strong> GA dans le registre.</small></div></details>';
 
     /* Compteurs + filtre. */
     $counts = ['' => count($list)];
