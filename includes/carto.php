@@ -442,40 +442,61 @@ function lfi_nct_gas_public_seed() {
         ['Rive Gauche 44 l\'insoumise', '', ['Julien']],
     ];
 }
-function lfi_nct_app_view_public_gas() {
-    /* On fusionne DEUX sources pour être robuste selon ce qui a été importé :
-       1) le registre des GA (nom, commune, contact/contact2) ;
-       2) l'organigramme (personnes de niveau admin_ga, avec leur GA).
-       Résultat : { nomGA => ['commune'=>…, 'prenoms'=>[…]] }. */
+/** Slug stable d'un GA (pour l'URL de sa page publique). */
+function lfi_nct_ga_slug($nom) {
+    return substr(md5(mb_strtolower(trim(preg_replace('/\s+/', ' ', (string) $nom)))), 0, 12);
+}
+/** Coordonnées (lat,lng) des communes de Loire-Atlantique où on a un GA. */
+function lfi_nct_commune_coords() {
+    return [
+        'nantes' => [47.2184, -1.5536], 'rezé' => [47.1836, -1.5497], 'reze' => [47.1836, -1.5497],
+        'saint-nazaire' => [47.2735, -2.2135], 'guérande' => [47.3286, -2.4289], 'guerande' => [47.3286, -2.4289],
+        'saint-lyphard' => [47.3969, -2.3122], 'machecoul' => [46.9931, -1.8256], 'couëron' => [47.2156, -1.7208], 'coueron' => [47.2156, -1.7208],
+        'bouguenais' => [47.1758, -1.6167], 'savenay' => [47.3608, -1.9436], 'vallet' => [47.1614, -1.2647],
+        'carquefou' => [47.2969, -1.4933], 'donges' => [47.3186, -2.0736], 'derval' => [47.6672, -1.6708],
+        'paimbœuf' => [47.2889, -2.0311], 'paimboeuf' => [47.2889, -2.0311], 'pornic' => [47.1147, -2.1050],
+        'saint-sébastien-sur-loire' => [47.2075, -1.5011], 'saint-sebastien-sur-loire' => [47.2075, -1.5011],
+        'ancenis' => [47.3667, -1.1772], 'blain' => [47.4767, -1.7622],
+        'la chapelle-sur-erdre' => [47.2989, -1.5461], 'saint-herblain' => [47.2122, -1.6486],
+        'clisson' => [47.0881, -1.2861], 'vertou' => [47.1686, -1.4667], 'orvault' => [47.2717, -1.6222],
+        'sainte-luce-sur-loire' => [47.2456, -1.4844], 'saint-étienne-de-montluc' => [47.2764, -1.7803], 'saint-etienne-de-montluc' => [47.2764, -1.7803],
+        'pontchâteau' => [47.4381, -2.0894], 'pontchateau' => [47.4381, -2.0894],
+    ];
+}
+/** Liste FUSIONNÉE des GA (seed intégré + registre carto + organigramme),
+ *  dédupliquée par nom, triée. Réutilisée par l'annuaire ET la page GA. */
+function lfi_nct_public_gas_list() {
     $gas = [];
-    /* Source 0 : la liste publique intégrée (toujours présente). */
     foreach (lfi_nct_gas_public_seed() as $s) {
         $nom = trim((string) ($s[0] ?? '')); if ($nom === '') continue;
         $gas[$nom] = ['nom' => $nom, 'commune' => (string) ($s[1] ?? ''), 'prenoms' => array_values($s[2] ?? [])];
     }
-    foreach (lfi_nct_carto_all() as $e) {
+    if (function_exists('lfi_nct_carto_all')) foreach (lfi_nct_carto_all() as $e) {
         $nom = trim((string) ($e['nom'] ?? '')); if ($nom === '') continue;
         if (!isset($gas[$nom])) $gas[$nom] = ['nom' => $nom, 'commune' => (string) ($e['commune'] ?? ''), 'prenoms' => []];
+        if (($gas[$nom]['commune'] ?? '') === '' && !empty($e['commune'])) $gas[$nom]['commune'] = (string) $e['commune'];
         foreach ([lfi_nct_carto_first_name($e['contact'] ?? ''), lfi_nct_carto_first_name($e['contact2'] ?? '')] as $pr) {
             if ($pr !== '' && !in_array($pr, $gas[$nom]['prenoms'], true)) $gas[$nom]['prenoms'][] = $pr;
         }
     }
-    if (function_exists('lfi_nct_carto_people_all')) {
-        foreach (lfi_nct_carto_people_all() as $p) {
-            if (($p['niveau'] ?? '') !== 'admin_ga') continue;
-            $ga = trim((string) ($p['ga_nom'] ?? '')); if ($ga === '') continue;
-            if (!isset($gas[$ga])) $gas[$ga] = ['nom' => $ga, 'commune' => '', 'prenoms' => []];
-            $pr = lfi_nct_carto_first_name($p['nom'] ?? '');
-            if ($pr !== '' && !in_array($pr, $gas[$ga]['prenoms'], true)) $gas[$ga]['prenoms'][] = $pr;
-        }
+    if (function_exists('lfi_nct_carto_people_all')) foreach (lfi_nct_carto_people_all() as $p) {
+        if (($p['niveau'] ?? '') !== 'admin_ga') continue;
+        $ga = trim((string) ($p['ga_nom'] ?? '')); if ($ga === '') continue;
+        if (!isset($gas[$ga])) $gas[$ga] = ['nom' => $ga, 'commune' => '', 'prenoms' => []];
+        $pr = lfi_nct_carto_first_name($p['nom'] ?? '');
+        if ($pr !== '' && !in_array($pr, $gas[$ga]['prenoms'], true)) $gas[$ga]['prenoms'][] = $pr;
     }
     $list = array_values($gas);
-    /* Tri par commune puis nom. */
     usort($list, function ($a, $b) {
         $ca = mb_strtolower((string) ($a['commune'] ?? '')); $cb = mb_strtolower((string) ($b['commune'] ?? ''));
         if ($ca === $cb) return strcasecmp((string) ($a['nom'] ?? ''), (string) ($b['nom'] ?? ''));
         return strcmp($ca, $cb);
     });
+    return $list;
+}
+
+function lfi_nct_app_view_public_gas() {
+    $list = lfi_nct_public_gas_list();
 
     lfi_nct_app_screen_open('✊ Groupes d\'Action — Loire-Atlantique', 'Trouve le groupe près de chez toi et rejoins-nous');
 
@@ -492,6 +513,31 @@ function lfi_nct_app_view_public_gas() {
         return;
     }
 
+    /* 🗺️ CARTE : un marqueur par GA (par commune), clic = petite fenêtre →
+       « Entrer dans le GA ». */
+    $coords = lfi_nct_commune_coords();
+    $markers = [];
+    $seen_comm = [];
+    foreach ($list as $e) {
+        $nom = (string) ($e['nom'] ?? ''); if ($nom === '') continue;
+        $ck = mb_strtolower(trim((string) ($e['commune'] ?? '')));
+        if ($ck === '' || !isset($coords[$ck])) continue;
+        [$lat, $lng] = $coords[$ck];
+        /* Décale légèrement les GA d'une même commune pour ne pas les empiler. */
+        $n = $seen_comm[$ck] ?? 0; $seen_comm[$ck] = $n + 1;
+        if ($n > 0) { $lat += 0.006 * cos($n) * $n; $lng += 0.008 * sin($n) * $n; }
+        $markers[] = [
+            'lat' => $lat, 'lng' => $lng, 'nom' => $nom,
+            'commune' => (string) ($e['commune'] ?? ''),
+            'anim' => !empty($e['prenoms']) ? implode(' & ', $e['prenoms']) : '',
+            'url' => lfi_nct_app_url('ga', ['g' => lfi_nct_ga_slug($nom)]),
+        ];
+    }
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    echo '<div id="ga-map" style="height:320px;border-radius:12px;overflow:hidden;margin-bottom:12px;border:1px solid #ddd;background:#eef"></div>';
+    echo '<script>var LFI_GA_MARKERS=' . wp_json_encode($markers) . ';</script>';
+
     /* Filtre instantané (commune / nom du GA). */
     echo '<input id="ga-filter" type="search" placeholder="🔎 Ta commune ou ton quartier…" oninput="lfiGaFilter(this.value)" style="width:100%;padding:11px 13px;border:1px solid #ccc;border-radius:10px;margin-bottom:12px;font-size:1em">';
 
@@ -501,11 +547,12 @@ function lfi_nct_app_view_public_gas() {
         $commune = (string) ($e['commune'] ?? '');
         $anim = !empty($e['prenoms']) ? implode(' & ', $e['prenoms']) : '';
         $needle = mb_strtolower($nom . ' ' . $commune);
-        echo '<div class="ga-item" data-s="' . esc_attr($needle) . '" style="background:#fff;border:1px solid #e6e6e6;border-left:4px solid #c8102e;border-radius:10px;padding:11px 13px">';
-        echo '<div style="font-weight:800;color:#1a1a1a">🏳️ ' . esc_html($nom) . '</div>';
+        $url = lfi_nct_app_url('ga', ['g' => lfi_nct_ga_slug($nom)]);
+        echo '<a class="ga-item" href="' . esc_url($url) . '" data-s="' . esc_attr($needle) . '" style="text-decoration:none;color:inherit;display:block;background:#fff;border:1px solid #e6e6e6;border-left:4px solid #c8102e;border-radius:10px;padding:11px 13px">';
+        echo '<div style="font-weight:800;color:#1a1a1a">🏳️ ' . esc_html($nom) . ' <span style="color:#c8102e;font-weight:700;float:right">→</span></div>';
         if ($commune !== '') echo '<div style="color:#0066a3;font-size:.9em;font-weight:600;margin-top:1px">📍 ' . esc_html($commune) . '</div>';
         if ($anim !== '') echo '<div style="color:#555;font-size:.9em;margin-top:3px">✊ Animé par <strong>' . esc_html($anim) . '</strong></div>';
-        echo '</div>';
+        echo '</a>';
     }
     echo '</div>';
     echo '<div id="ga-none" style="display:none;color:#888;text-align:center;padding:14px">Aucun groupe trouvé pour « <span id="ga-q"></span> ». Écris-nous, on t\'oriente.</div>';
@@ -526,7 +573,77 @@ function lfi_nct_app_view_public_gas() {
         var none = document.getElementById('ga-none');
         if (none){ none.style.display = shown ? 'none' : 'block'; var s=document.getElementById('ga-q'); if(s) s.textContent = q; }
     }
+    (function initGaMap(){
+        if (typeof L === 'undefined' || !document.getElementById('ga-map')) { return setTimeout(initGaMap, 200); }
+        var map = L.map('ga-map', {scrollWheelZoom:false}).setView([47.28, -1.75], 9);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+        var pts = [];
+        (window.LFI_GA_MARKERS||[]).forEach(function(m){
+            if (!m.lat) return;
+            var mk = L.marker([m.lat, m.lng]).addTo(map);
+            mk.bindPopup('<div style="min-width:150px"><strong>'+m.nom+'</strong><br><span style="color:#0066a3">📍 '+(m.commune||'')+'</span>'+(m.anim?'<br>✊ Animé par <strong>'+m.anim+'</strong>':'')+'<br><a href="'+m.url+'" style="display:inline-block;margin-top:6px;background:#c8102e;color:#fff;padding:5px 10px;border-radius:6px;text-decoration:none;font-weight:700">Entrer dans le GA →</a></div>');
+            pts.push([m.lat, m.lng]);
+        });
+        if (pts.length) map.fitBounds(pts, {padding:[30,30], maxZoom:11});
+    })();
     </script>
     <?php
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  PAGE PUBLIQUE D'UN GA (?vue=ga&g=slug) — infos + actualités +  *
+ *  événements. Prénoms seulement, aucun email.                    *
+ * ============================================================== */
+function lfi_nct_app_view_public_ga() {
+    $slug = isset($_GET['g']) ? sanitize_text_field(wp_unslash($_GET['g'])) : '';
+    $ga = null;
+    foreach (lfi_nct_public_gas_list() as $e) {
+        if (lfi_nct_ga_slug($e['nom']) === $slug) { $ga = $e; break; }
+    }
+    if (!$ga) { wp_safe_redirect(lfi_nct_app_url('annuaire')); exit; }
+
+    $nom = (string) $ga['nom'];
+    $commune = (string) ($ga['commune'] ?? '');
+    $anim = !empty($ga['prenoms']) ? implode(' & ', $ga['prenoms']) : '';
+    $is_clos = (stripos($nom, 'clos toreau') !== false);
+
+    lfi_nct_app_screen_open('🏳️ ' . $nom, $commune ?: 'Groupe d\'action France Insoumise');
+
+    echo '<div style="background:linear-gradient(135deg,#c8102e,#8a0b20);color:#fff;border-radius:14px;padding:16px 18px;margin-bottom:14px">';
+    echo '<div style="font-size:1.2em;font-weight:900;line-height:1.2">' . esc_html($nom) . '</div>';
+    if ($commune) echo '<div style="opacity:.92;margin-top:2px">📍 ' . esc_html($commune) . '</div>';
+    if ($anim) echo '<div style="opacity:.92;margin-top:2px">✊ Animé par <strong>' . esc_html($anim) . '</strong></div>';
+    echo '</div>';
+    echo '<div style="margin-bottom:12px"><a href="' . esc_url(lfi_nct_app_url('annuaire')) . '" style="color:#666;text-decoration:none">← Tous les groupes</a></div>';
+
+    /* 📅 Actualités & événements. */
+    echo '<h3 style="margin:6px 0 8px;color:#0b3d91">📅 Actualités & événements</h3>';
+    $shown = false;
+    if ($is_clos && function_exists('lfi_nct_events_upcoming_public')) {
+        $evs = lfi_nct_events_upcoming_public(6);
+        if ($evs) {
+            $shown = true;
+            echo '<div style="display:flex;flex-direction:column;gap:8px">';
+            foreach ($evs as $ev) {
+                echo '<div class="lfi-app-card" style="border-left:4px solid #186a3b"><div style="font-weight:800">' . esc_html($ev['titre'] ?? 'Événement') . '</div>';
+                if (!empty($ev['quand'])) echo '<div style="color:#186a3b;font-size:.9em">🗓 ' . esc_html($ev['quand']) . '</div>';
+                if (!empty($ev['lieu']))  echo '<div style="color:#555;font-size:.9em">📍 ' . esc_html($ev['lieu']) . '</div>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+    }
+    if (!$shown) {
+        echo '<div class="lfi-app-help">Les prochaines actions et événements de ce groupe arrivent bientôt. <strong>Rejoins-le</strong> pour être au courant en premier.</div>';
+    }
+
+    /* CTA rejoindre (via le formulaire d'enquête / contact public). */
+    echo '<div style="text-align:center;margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">';
+    echo '<a href="' . esc_url(lfi_nct_app_url('victoires')) . '" style="background:#186a3b;color:#fff;padding:11px 16px;border-radius:10px;text-decoration:none;font-weight:800">🏆 Nos combats gagnés</a>';
+    echo '<a href="' . esc_url(home_url('/')) . '" style="background:#c8102e;color:#fff;padding:11px 16px;border-radius:10px;text-decoration:none;font-weight:800">✊ Rejoindre / nous écrire</a>';
+    echo '</div>';
+    echo '<div class="lfi-app-help" style="margin-top:12px;text-align:center"><small>Vie privée : seuls les <strong>prénoms</strong> des animateur·ices sont affichés.</small></div>';
+
     lfi_nct_app_screen_close();
 }
