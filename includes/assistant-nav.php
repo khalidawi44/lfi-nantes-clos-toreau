@@ -34,7 +34,9 @@ function lfi_nct_assist_actions() {
         $add('📁', 'Dossiers juridiques', 'dossiers-juridiques', 'juridique lrar mise en demeure lettre', []);
         $add('⚖️', 'Avocats partenaires', 'avocats', 'avocat me valet goache confier defense', []);
         $add('🏢', 'Bailleurs sociaux', 'bailleurs', 'bailleur nmh hlm interlocuteur agence config', []);
-        $add('📥', 'Import email (auto)', 'inbox-import', 'email gmail import correspondance nmh boite rattacher', []);
+        $add('📬', 'Check des emails (pêche + IA)', 'mailcheck', 'email emails mail courrier peche pecher imap gmail boite check surveillance ia claude cle api reponse repondre nmh', []);
+        $add('📥', 'Import email (auto) / à rattacher', 'inbox-import', 'email emails mail import importer correspondance nmh boite rattacher gmail apps script purger voir tout', []);
+        $add('🎨', 'Logos & signatures', 'signatures-cfg', 'email signature logo casquette quartier libre lfi entete papier', []);
         $add('🚫', 'Liste noire SMS', 'sms-blocklist', 'sms stop bloquer ne plus recevoir opposition', []);
         $add('📲', 'SMS aux locataires', 'sms-locataires', 'sms message texto locataire', []);
         $add('🔎', 'Jurisprudence', 'jurisprudence', 'jurisprudence judilibre decision tribunal', []);
