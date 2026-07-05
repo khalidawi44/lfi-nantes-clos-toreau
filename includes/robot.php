@@ -143,7 +143,15 @@ function lfi_nct_robot_answer_admin_html($q) {
             if ($terms !== '') { $args['search'] = '*' . $terms . '*'; $args['search_columns'] = ['display_name', 'user_login', 'user_email']; }
             if (function_exists('lfi_nct_users_ga_query')) $args = lfi_nct_users_ga_query($args);
             $found = get_users($args);
-            if ($found) {
+            if (count($found) === 1) {
+                /* Un seul résultat → on OUVRE directement son dossier (navigation,
+                   pas une liste). */
+                $target = lfi_nct_app_url('dossier', ['uid' => $found[0]->ID]);
+                echo '<div class="lfi-app-help">📂 Ouverture du dossier de <strong>' . esc_html($found[0]->display_name) . '</strong>…</div>';
+                echo '<a class="btn-primary" href="' . esc_url($target) . '">Ouvrir maintenant →</a>';
+                echo '<script>setTimeout(function(){location.href=' . wp_json_encode($target) . ';},350);</script>';
+                $answered = true;
+            } elseif ($found) {
                 echo '<div class="lfi-app-help">' . count($found) . ' locataire(s) trouvé(s) :</div><ul class="lfi-app-list">';
                 foreach ($found as $u) {
                     echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">🗂 ' . esc_html($u->display_name) . '</div></div>';

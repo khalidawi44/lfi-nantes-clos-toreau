@@ -443,6 +443,11 @@ function lfi_nct_fabrice_reconstruct($u) {
     global $wpdb;
     $uid = (int) $u->ID;
     if (defined('LFI_NCT_ROLE_TENANT') && !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) $u->add_role(LFI_NCT_ROLE_TENANT);
+    /* Rattacher au GA Clos Toreau : sinon la recherche/liste cloisonnée par GA
+       l'exclut → « dossier locataire Doucet » ne le trouve pas. */
+    if ((string) get_user_meta($uid, 'lfi_nct_ga', true) === '' && function_exists('lfi_nct_creation_ga')) {
+        $cga = lfi_nct_creation_ga(); if ($cga) update_user_meta($uid, 'lfi_nct_ga', $cga);
+    }
 
     /* Enquête #6 : restaurer (corbeille) ou recréer (disparue), reliée à Fabrice. */
     $t_resp = $wpdb->prefix . 'lfi_nct_responses';
