@@ -169,6 +169,10 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
             $dup = false;
             foreach ($q as $e) if ($mid !== '' && (($e['dedup'] ?? '') === $mid || ($e['message_id'] ?? '') === $mid)) { $dup = true; break; }
             if (!$dup) {
+                /* On importe QUAND MÊME les pièces jointes (en attente) — une
+                   photo ne doit JAMAIS être perdue parce que le locataire n'est
+                   pas encore reconnu. Elles suivront l'email quand tu le rangeras. */
+                $att_ids = lfi_nct_mailcheck_import_attachments($mbox, $uid, 0);
                 $q[] = [
                     'id'         => (int) round(microtime(true) * 1000) + ($uid % 1000),
                     'from'       => (string) ($o->from ?? ''),
@@ -180,10 +184,12 @@ function lfi_nct_mailcheck_scan_box($box, &$seen) {
                     'dedup'      => $mid,
                     'date'       => wp_date('Y-m-d H:i'),
                     'extrait'    => mb_substr($body, 0, 200),
+                    'att_ids'    => array_map('intval', (array) $att_ids),
                     'src'        => 'mailcheck',
                 ];
                 lfi_nct_inbox_unmatched_save($q);
                 $out['unmatched'] = ($out['unmatched'] ?? 0) + 1;
+                $out['pieces'] = ($out['pieces'] ?? 0) + count($att_ids);
             }
         }
     }
@@ -277,20 +283,23 @@ function lfi_nct_emails_full_reset() {
 }
 
 /**
- * Importe les PIÈCES JOINTES (images / PDF) d'un email dans le dossier du
- * locataire : chaque PJ devient une pièce du dossier (meta _lfi_tenant_user_id),
- * rangée par date. Renvoie le nombre de pièces importées.
+ * Importe les PIÈCES JOINTES (images / PDF) d'un email. Si $tenant_uid > 0, la
+ * pièce est rangée dans le dossier du locataire (meta _lfi_tenant_user_id +
+ * étape auto). Si $tenant_uid = 0 (email « à rattacher », locataire pas encore
+ * connu), la pièce est quand même importée mais mise EN ATTENTE (_lfi_inbox_pending)
+ * — elle sera rattachée au bon locataire quand tu rangeras l'email. On ne perd
+ * JAMAIS une photo.
+ * @return int[]  Les IDs des pièces créées.
  */
 function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
     $tenant_uid = (int) $tenant_uid;
-    if (!$tenant_uid) return 0;
     $struct = @imap_fetchstructure($mbox, $uid, FT_UID);
-    if (!$struct) return 0;
+    if (!$struct) return [];
     require_once ABSPATH . 'wp-admin/includes/image.php';
     require_once ABSPATH . 'wp-admin/includes/file.php';
-    $n = 0;
+    $ids = [];
     $ok_ext = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif', 'pdf'];
-    $walk = function ($parts, $prefix) use (&$walk, $mbox, $uid, $tenant_uid, &$n, $ok_ext) {
+    $walk = function ($parts, $prefix) use (&$walk, $mbox, $uid, $tenant_uid, &$ids, $ok_ext) {
         foreach ($parts as $i => $part) {
             $partno = ($prefix === '') ? (string) ($i + 1) : $prefix . '.' . ($i + 1);
             if (!empty($part->parts)) { $walk($part->parts, $partno); continue; }
@@ -320,22 +329,24 @@ function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
             wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $path));
             update_post_meta($att, '_lfi_tenant_user_id', $tenant_uid);
             update_post_meta($att, '_lfi_tenant_piece', 'Pièce jointe email');
-            /* 🤖 Le robot analyse la pièce et la range dans la bonne étape. */
+            /* 🤖 Catégorie (toujours) + étape auto (seulement si on connaît le
+               locataire). Sinon on met la pièce EN ATTENTE de rattachement. */
             if (function_exists('lfi_nct_piece_categorize')) {
                 $cat = lfi_nct_piece_categorize($filename, (string) ($ft['type'] ?? ''));
                 update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
-                if (function_exists('lfi_nct_piece_autostep')) {
+                if ($tenant_uid > 0 && function_exists('lfi_nct_piece_autostep')) {
                     $sk = lfi_nct_piece_autostep($tenant_uid, $cat['cat']);
                     if ($sk !== '') update_post_meta($att, '_lfi_step', $sk);
                 }
             }
+            if ($tenant_uid === 0) update_post_meta($att, '_lfi_inbox_pending', 1);
             if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $path);
-            $n++;
+            $ids[] = (int) $att;
         }
     };
     $parts = (!empty($struct->parts)) ? $struct->parts : [$struct];
     $walk($parts, '');
-    return $n;
+    return $ids;
 }
 
 /** Corps texte (plain) d'un message IMAP. */
