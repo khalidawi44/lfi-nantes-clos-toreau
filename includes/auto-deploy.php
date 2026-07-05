@@ -85,10 +85,11 @@ function lfi_nct_auto_deploy() {
        dans le registre + on crée le compte de ses 2 admins (si un email valide)
        et on les rattache comme binôme. Ils pourront se connecter et gérer LEUR
        GA (page + événements cloisonnés). Idempotent. */
-    if (get_option('lfi_nct_auto_ga_admins_v1') !== '1' && function_exists('lfi_nct_carto_all')) {
+    if (get_option('lfi_nct_auto_ga_admins_v2') !== '1' && function_exists('lfi_nct_carto_all')) {
         $role   = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
         $custom = get_option('lfi_nct_ga_custom', []);  if (!is_array($custom)) $custom = [];
         $pairs  = get_option('lfi_nct_ga_admins', []);  if (!is_array($pairs))  $pairs  = [];
+        $pivots = get_option('lfi_nct_ga_pivots', []);  if (!is_array($pivots)) $pivots = [];
         $known  = []; foreach ($custom as $g) { if (!empty($g['slug'])) $known[$g['slug']] = 1; }
         foreach (lfi_nct_carto_all() as $e) {
             $nom = trim((string) ($e['nom'] ?? '')); if ($nom === '') continue;
@@ -118,10 +119,16 @@ function lfi_nct_auto_deploy() {
                     $adm[] = $uid;
                 }
             }
-            if ($adm) $pairs[$slug] = ['f' => (int) ($adm[0] ?? 0), 'h' => (int) ($adm[1] ?? 0)];
+            if ($adm) {
+                $pairs[$slug] = ['f' => (int) ($adm[0] ?? 0), 'h' => (int) ($adm[1] ?? 0)];
+                /* Pivot = 1er admin : ancre l'espace du GA (sinon « administrateur
+                   à configurer » dans le sélecteur « 👁 Espace affiché »). */
+                if (empty($pivots[$slug])) $pivots[$slug] = (int) $adm[0];
+            }
         }
         update_option('lfi_nct_ga_custom', array_values($custom), false);
         update_option('lfi_nct_ga_admins', $pairs, false);
-        update_option('lfi_nct_auto_ga_admins_v1', '1', false);
+        update_option('lfi_nct_ga_pivots', $pivots, false);
+        update_option('lfi_nct_auto_ga_admins_v2', '1', false);
     }
 }
