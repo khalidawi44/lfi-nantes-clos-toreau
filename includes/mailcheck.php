@@ -331,6 +331,10 @@ function lfi_nct_mailcheck_prepare_reply($row, $o, $subject, $body) {
     $notes['replies'] = isset($notes['replies']) && is_array($notes['replies']) ? $notes['replies'] : [];
     $notes['replies'][] = ['to' => $to, 'subject' => $rep_subject, 'body' => $reply, 'objet' => 'Auto : ' . mb_substr($subject, 0, 60), 'date' => wp_date('Y-m-d'), 'src' => 'mailcheck'];
     $wpdb->update($t, ['notes' => wp_json_encode($notes), 'updated_at' => current_time('mysql')], ['id' => (int) $row->id]);
+    /* Auto-alimentation de la chronologie du dossier. */
+    if (function_exists('lfi_nct_chrono_add_email')) {
+        lfi_nct_chrono_add_email((int) ($row->tenant_user_id ?? 0), 'recu', $to, $subject, wp_date('Y-m-d'));
+    }
 }
 
 /* ============================================================== *

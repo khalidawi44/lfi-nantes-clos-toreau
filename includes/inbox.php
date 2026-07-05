@@ -492,6 +492,10 @@ function lfi_nct_inbox_file($tenant_uid, $from, $to, $cc, $subject, $body, $date
     if ($recu && function_exists('lfi_nct_victoire_detect_from_email')) {
         lfi_nct_victoire_detect_from_email($tenant_uid, $subject, $body, (int) $d->id);
     }
+    /* Auto-alimentation de la CHRONOLOGIE du dossier (le dossier évolue tout seul). */
+    if (function_exists('lfi_nct_chrono_add_email')) {
+        lfi_nct_chrono_add_email($tenant_uid, $recu ? 'recu' : 'envoye', $recu ? $from : $to, $subject, $date ?: current_time('Y-m-d'));
+    }
     return ['matched' => true, 'dossier_id' => (int) $d->id, 'sens' => $recu ? 'recu' : 'envoye', 'tenant_uid' => $tenant_uid];
 }
 
