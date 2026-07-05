@@ -509,6 +509,19 @@ function lfi_nct_app_view_public_gas() {
     echo '<div style="flex:1;min-width:180px"><div style="font-size:1.15em;font-weight:900;line-height:1.2">La France Insoumise · Loire-Atlantique</div><div style="opacity:.92;font-size:.92em">' . count($list) . ' groupes d\'action près de chez toi. Rejoins le tien.</div></div>';
     echo '</div>';
 
+    /* 🏆 Combats gagnés (à l'identique du site) — en tête, sous la bannière. */
+    if (function_exists('lfi_nct_reussites')) {
+        $pubs = array_values(array_filter((array) lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
+        if ($pubs) {
+            usort($pubs, function ($a, $b) { return strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? '')); });
+            echo '<div style="background:#eef7ee;border:1px solid #cfe8d4;border-radius:12px;padding:12px 14px;margin-bottom:14px">';
+            echo '<div style="font-weight:900;color:#186a3b">🏆 Nos combats gagnés (' . count($pubs) . ')</div>';
+            foreach (array_slice($pubs, 0, 3) as $r) echo '<div style="font-size:.9em;color:#333;margin-top:4px">✅ ' . esc_html((string) ($r['titre'] ?? 'Victoire')) . '</div>';
+            echo '<div style="margin-top:6px"><a href="' . esc_url(lfi_nct_app_url('victoires')) . '" style="color:#186a3b;font-weight:800;font-size:.9em;text-decoration:none">Tout voir →</a></div>';
+            echo '</div>';
+        }
+    }
+
     if (empty($list)) {
         echo '<div class="lfi-app-empty">L\'annuaire des groupes arrive très bientôt.</div>';
         lfi_nct_app_screen_close();
