@@ -31,6 +31,30 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* 1bis) Sommet NATIONAL de l'organigramme (Mélenchon + Bompard) — ajoutés
+       s'ils manquent, en haut de la pyramide. */
+    if (get_option('lfi_nct_auto_national') !== '1' && function_exists('lfi_nct_carto_people_all') && function_exists('lfi_nct_carto_people_save')) {
+        $people = lfi_nct_carto_people_all();
+        $has = [];
+        foreach ($people as $p) $has[mb_strtolower(trim((string) ($p['nom'] ?? '')))] = 1;
+        $nat = [
+            ['Jean-Luc Mélenchon', 'Fondateur · La France Insoumise', ''],
+            ['Manuel Bompard', 'Coordinateur national de La France Insoumise', 'manuel.bompard@assemblee-nationale.fr'],
+        ];
+        $changed = false;
+        foreach ($nat as $n) {
+            if (isset($has[mb_strtolower($n[0])])) continue;
+            $people[] = [
+                'id' => (function_exists('lfi_nct_carto_next_id') ? lfi_nct_carto_next_id($people) : count($people) + 1),
+                'nom' => $n[0], 'fonction' => $n[1], 'email' => $n[2], 'ap_url' => '',
+                'niveau' => 'national', 'ga_nom' => '', 'ga_membres' => 0,
+            ];
+            $changed = true;
+        }
+        if ($changed) lfi_nct_carto_people_save($people);
+        update_option('lfi_nct_auto_national', '1', false);
+    }
+
     /* 2) Reconstruction complète du dossier de Fabrice (enquête #6, dossier
        juridique, mandat, chronologie). On ne pose le drapeau QUE si Fabrice
        existe — sinon on réessaiera au prochain chargement. */
