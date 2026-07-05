@@ -85,7 +85,7 @@ function lfi_nct_auto_deploy() {
        dans le registre + on crée le compte de ses 2 admins (si un email valide)
        et on les rattache comme binôme. Ils pourront se connecter et gérer LEUR
        GA (page + événements cloisonnés). Idempotent. */
-    if (get_option('lfi_nct_auto_ga_admins_v2') !== '1' && function_exists('lfi_nct_carto_all')) {
+    if (get_option('lfi_nct_auto_ga_admins_v3') !== '1' && function_exists('lfi_nct_carto_all')) {
         $role   = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
         $custom = get_option('lfi_nct_ga_custom', []);  if (!is_array($custom)) $custom = [];
         $pairs  = get_option('lfi_nct_ga_admins', []);  if (!is_array($pairs))  $pairs  = [];
@@ -103,20 +103,33 @@ function lfi_nct_auto_deploy() {
             foreach ([['contact', 'email'], ['contact2', 'email2']] as $c) {
                 $name  = trim((string) ($e[$c[0]] ?? ''));
                 $email = trim((string) ($e[$c[1]] ?? ''));
-                if ($email === '' || !is_email($email)) continue; /* pas d'email valide → on ne crée pas (il ne pourrait pas se connecter) */
-                $u = get_user_by('email', $email);
-                $uid = $u ? (int) $u->ID : 0;
+                if ($name === '' && $email === '') continue; /* rien du tout → on saute */
+                /* PAS besoin d'email pour être admin (ex. Evan à Rezé). Clé
+                   d'idempotence par nom quand il n'y a pas d'email. */
+                $akey = $slug . '|' . sanitize_title($name !== '' ? $name : $email);
+                $has_mail = ($email !== '' && is_email($email));
+                $uid = 0;
+                $ex = get_users(['meta_key' => 'lfi_nct_carto_admin_key', 'meta_value' => $akey, 'number' => 1, 'fields' => ['ID']]);
+                if ($ex) $uid = (int) (is_object($ex[0]) ? $ex[0]->ID : $ex[0]);
+                if (!$uid && $has_mail) { $u = get_user_by('email', $email); if ($u) $uid = (int) $u->ID; }
                 if (!$uid) {
-                    $p = explode(' ', $name, 2); $prenom = $p[0] ?? $name; $nomf = $p[1] ?? '';
-                    $login = function_exists('lfi_nct_app_make_username') ? lfi_nct_app_make_username($prenom, $nomf) : sanitize_user(current(explode('@', $email)), true);
-                    $pwd   = function_exists('lfi_nct_app_make_password') ? lfi_nct_app_make_password() : wp_generate_password(16);
-                    $newuid = wp_insert_user(['user_login' => $login ?: sanitize_user(current(explode('@', $email)) . '-' . wp_rand(100, 999)), 'user_pass' => $pwd, 'user_email' => $email, 'first_name' => $prenom, 'last_name' => $nomf, 'display_name' => $name ?: $login, 'role' => $role]);
-                    if (!is_wp_error($newuid)) $uid = (int) $newuid;
+                    $p = explode(' ', $name, 2); $prenom = ($p[0] ?? '') ?: ($name ?: 'Admin'); $nomf = $p[1] ?? '';
+                    $base  = $has_mail ? current(explode('@', $email)) : sanitize_title($name);
+                    $login = function_exists('lfi_nct_app_make_username') ? lfi_nct_app_make_username($prenom, $nomf ?: $slug) : '';
+                    if ($login === '' || username_exists($login)) $login = sanitize_user(($base ?: 'ga') . '-' . wp_rand(100, 999), true);
+                    if ($login === '' || username_exists($login)) $login = 'ga-' . $slug . '-' . wp_rand(1000, 9999);
+                    $pwd = function_exists('lfi_nct_app_make_password') ? lfi_nct_app_make_password() : wp_generate_password(16);
+                    $args = ['user_login' => $login, 'user_pass' => $pwd, 'first_name' => $prenom, 'last_name' => $nomf, 'display_name' => ($name ?: $login), 'role' => $role];
+                    if ($has_mail) $args['user_email'] = $email; /* sinon email vide = OK sous WP */
+                    $newuid = wp_insert_user($args);
+                    if (!is_wp_error($newuid)) { $uid = (int) $newuid; update_user_meta($uid, 'lfi_nct_carto_admin_key', $akey); }
+                } elseif (!get_user_meta($uid, 'lfi_nct_carto_admin_key', true)) {
+                    update_user_meta($uid, 'lfi_nct_carto_admin_key', $akey);
                 }
                 if ($uid) {
                     if ((string) get_user_meta($uid, 'lfi_nct_ga', true) === '') update_user_meta($uid, 'lfi_nct_ga', $slug);
                     update_user_meta($uid, 'lfi_nct_ga_role', 'admin');
-                    $adm[] = $uid;
+                    if ($name === '' && $email === '') { /* garde-fou */ } else $adm[] = $uid;
                 }
             }
             if ($adm) {
@@ -129,6 +142,6 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_ga_custom', array_values($custom), false);
         update_option('lfi_nct_ga_admins', $pairs, false);
         update_option('lfi_nct_ga_pivots', $pivots, false);
-        update_option('lfi_nct_auto_ga_admins_v2', '1', false);
+        update_option('lfi_nct_auto_ga_admins_v3', '1', false);
     }
 }
