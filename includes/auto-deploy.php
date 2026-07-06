@@ -55,6 +55,13 @@ function lfi_nct_auto_deploy() {
         }
     }
 
+    /* 1-logos) Nettoyage des LOGOS/ICÔNES de signature importés par erreur comme
+       pièces (une fois). */
+    if (get_option('lfi_nct_cleanup_logos_v1') !== '1' && function_exists('lfi_nct_cleanup_email_logos')) {
+        try { lfi_nct_cleanup_email_logos(); } catch (\Throwable $e) {}
+        update_option('lfi_nct_cleanup_logos_v1', '1', false);
+    }
+
     /* 1bis) Sommet NATIONAL de l'organigramme (Mélenchon + Bompard) — ajoutés
        s'ils manquent, en haut de la pyramide. */
     if (get_option('lfi_nct_auto_national_v2') !== '1' && function_exists('lfi_nct_carto_people_all') && function_exists('lfi_nct_carto_people_save')) {
