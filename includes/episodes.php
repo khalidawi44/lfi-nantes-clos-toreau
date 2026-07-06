@@ -192,6 +192,59 @@ function lfi_nct_episode_group_count($uid, $groupe) {
     return $n;
 }
 
+/* ============================================================== *
+ *  PRÉJUDICE par incident → INDEMNITÉ GLOBALE par dossier         *
+ *  juridique. Postes simples (libellé + montant) cumulés sur      *
+ *  toute la lignée du trouble. Le chiffrage détaillé 15 postes    *
+ *  reste dans l'outil « Préjudice ».                              *
+ * ============================================================== */
+/** Ajoute un poste de préjudice à un épisode. */
+function lfi_nct_episode_prej_add($uid, $id, $label, $montant, $date = '') {
+    $label = sanitize_text_field((string) $label);
+    $montant = round((float) str_replace(',', '.', (string) $montant), 2);
+    if ($label === '' && $montant <= 0) return false;
+    $list = lfi_nct_episodes_get($uid);
+    foreach ($list as $i => $e) {
+        if ((int) ($e['id'] ?? 0) === (int) $id) {
+            if (empty($list[$i]['prejudice']) || !is_array($list[$i]['prejudice'])) $list[$i]['prejudice'] = [];
+            $list[$i]['prejudice'][] = ['label' => ($label !== '' ? $label : 'Poste'), 'montant' => $montant, 'date' => sanitize_text_field((string) $date)];
+            lfi_nct_episodes_save($uid, $list); return true;
+        }
+    }
+    return false;
+}
+/** Retire un poste de préjudice. */
+function lfi_nct_episode_prej_del($uid, $id, $idx) {
+    $list = lfi_nct_episodes_get($uid);
+    foreach ($list as $i => $e) {
+        if ((int) ($e['id'] ?? 0) === (int) $id && isset($list[$i]['prejudice'][(int) $idx])) {
+            array_splice($list[$i]['prejudice'], (int) $idx, 1);
+            lfi_nct_episodes_save($uid, $list); return true;
+        }
+    }
+    return false;
+}
+/** Total préjudice d'un épisode. */
+function lfi_nct_episode_prej_total($e) {
+    $t = 0.0;
+    foreach ((array) ($e['prejudice'] ?? []) as $p) $t += (float) ($p['montant'] ?? 0);
+    return $t;
+}
+/** Total préjudice CUMULÉ d'un dossier juridique (tous les incidents groupés). */
+function lfi_nct_episode_group_prej_total($uid, $groupe) {
+    $groupe = (int) $groupe; $t = 0.0;
+    foreach (lfi_nct_episodes_get($uid) as $e) if (lfi_nct_episode_groupe($e) === $groupe) $t += lfi_nct_episode_prej_total($e);
+    return $t;
+}
+/** Épisodes d'un dossier juridique (triés du plus ancien au plus récent). */
+function lfi_nct_episode_group_members($uid, $groupe) {
+    $groupe = (int) $groupe;
+    $out = array_values(array_filter(lfi_nct_episodes_get($uid), function ($e) use ($groupe) { return lfi_nct_episode_groupe($e) === $groupe; }));
+    usort($out, function ($a, $b) { return strcmp((string) ($a['ouvert'] ?? ''), (string) ($b['ouvert'] ?? '')); });
+    return $out;
+}
+function lfi_nct_episode_eur($v) { return number_format((float) $v, 0, ',', ' ') . ' €'; }
+
 /** Renomme / retype un épisode. */
 function lfi_nct_episode_update($uid, $id, $fields) {
     $list = lfi_nct_episodes_get($uid);

@@ -934,6 +934,12 @@ function lfi_nct_app_view_dossier() {
         } elseif ($act === 'reopen' && $eid) {
             lfi_nct_episode_set_clos_urgence($u->ID, $eid, false);
             wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'prej_add' && $eid && function_exists('lfi_nct_episode_prej_add')) {
+            lfi_nct_episode_prej_add($u->ID, $eid, wp_unslash($_POST['prej_label'] ?? ''), wp_unslash($_POST['prej_montant'] ?? ''), wp_unslash($_POST['prej_date'] ?? ''));
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'prej_del' && $eid && function_exists('lfi_nct_episode_prej_del')) {
+            lfi_nct_episode_prej_del($u->ID, $eid, (int) ($_POST['prej_idx'] ?? -1));
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
         } elseif ($act === 'grp_sep' && $eid) {
             /* Séparer : cet incident devient son PROPRE dossier juridique. */
             lfi_nct_episode_set_groupe($u->ID, $eid, $eid);
@@ -2364,6 +2370,43 @@ function lfi_nct_dossier_render_episodes_bar($u) {
             echo '<button type="submit" class="btn-ghost" style="font-size:.76em;color:#c8102e">✂️ Séparer (juridique distinct)</button></form>';
         }
         echo '</div></div>';
+
+        /* 💶 PRÉJUDICE de cet incident (postes simples) + total. */
+        $prej = (isset($cur['prejudice']) && is_array($cur['prejudice'])) ? $cur['prejudice'] : [];
+        $eur = function_exists('lfi_nct_episode_eur') ? 'lfi_nct_episode_eur' : function ($v) { return number_format((float) $v, 0, ',', ' ') . ' €'; };
+        echo '<div style="margin-top:8px;border-top:1px dashed #dfe6f0;padding-top:8px">';
+        echo '<div style="font-size:.8em;font-weight:800;color:#186a3b">💶 Préjudice de cet incident' . (($t = lfi_nct_episode_prej_total($cur)) > 0 ? ' — <strong>' . $eur($t) . '</strong>' : '') . '</div>';
+        if ($prej) {
+            echo '<div style="margin:5px 0">';
+            foreach ($prej as $pi => $p) {
+                echo '<div style="display:flex;align-items:center;gap:6px;font-size:.82em;background:#f1f8f2;border-radius:6px;padding:3px 7px;margin-bottom:3px">';
+                echo '<span style="flex:1">' . esc_html($p['label'] ?? '') . ($p['date'] ?? '' ? ' <span style="color:#888">· ' . esc_html($p['date']) . '</span>' : '') . '</span>';
+                echo '<strong style="color:#186a3b">' . $eur($p['montant'] ?? 0) . '</strong>';
+                echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="prej_del"><input type="hidden" name="ep_id" value="' . (int) $active . '"><input type="hidden" name="prej_idx" value="' . (int) $pi . '"><button type="submit" class="btn-ghost" style="font-size:.7em;padding:0 5px;color:#c8102e">✕</button></form>';
+                echo '</div>';
+            }
+            echo '</div>';
+        }
+        echo '<form method="post" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:3px">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="prej_add"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+        echo '<input type="text" name="prej_label" placeholder="Poste (ex : nuits gâchées)" style="font-size:.78em;flex:1;min-width:120px">';
+        echo '<input type="number" step="0.01" min="0" name="prej_montant" placeholder="€" style="font-size:.78em;width:80px">';
+        echo '<button type="submit" class="btn-ghost" style="font-size:.78em">+ Ajouter</button></form>';
+        echo '<div style="font-size:.72em;color:#888;margin-top:2px">Chiffrage détaillé (15 postes) : outil « 💶 Préjudice ». Ici = postes cumulés pour l\'indemnité globale.</div>';
+        echo '</div>';
+
+        /* ⚖️ INDEMNITÉ GLOBALE du dossier juridique = somme de tous les incidents groupés. */
+        if ($gcount > 1 && function_exists('lfi_nct_episode_group_members')) {
+            $gtot = lfi_nct_episode_group_prej_total($uid, $grp);
+            echo '<div style="margin-top:8px;background:#f3eefb;border:1px solid #d9c9f0;border-radius:10px;padding:10px 12px">';
+            echo '<div style="font-weight:900;color:#6b3fa0">⚖️ Indemnité globale demandée — <strong>' . $eur($gtot) . '</strong></div>';
+            echo '<div style="font-size:.78em;color:#7a5f9a;margin-top:2px">Somme du préjudice de tous les incidents de ce dossier juridique (' . (int) $gcount . ') :</div>';
+            echo '<div style="margin-top:4px">';
+            foreach (lfi_nct_episode_group_members($uid, $grp) as $ge) {
+                echo '<div style="display:flex;justify-content:space-between;font-size:.8em;color:#4a3a5f;padding:1px 0"><span>' . esc_html($ge['titre'] ?? 'Incident') . '</span><span><strong>' . $eur(lfi_nct_episode_prej_total($ge)) . '</strong></span></div>';
+            }
+            echo '</div></div>';
+        }
     }
 
     /* Nouvel incident. */
