@@ -230,10 +230,12 @@ function lfi_nct_demo_stats() {
     /* Réussites publiées (toutes). */
     $publiees = 0;
     if (function_exists('lfi_nct_reussites')) foreach (lfi_nct_reussites() as $r) if (!empty($r['publie'])) $publiees++;
-    /* Locataires ayant demandé à être suivis — RÉSEAU ENTIER (recontact = oui). */
-    $suivis = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_responses WHERE contact_recontact = 1 AND (deleted_at IS NULL)");
-    /* Foyers accompagnés = dossiers ouverts (distinct locataires) — solide, non disputé. */
+    /* Foyers accompagnés = dossiers ouverts (distinct locataires) — solide. */
     $foyers = (int) $wpdb->get_var("SELECT COUNT(DISTINCT tenant_user_id) FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id > 0");
+    /* « Locataires suivis » = la MÊME chose qu'un foyer accompagné (un·e
+       locataire suivi·e = un foyer). On évite l'incohérence 17 vs 16 (avant :
+       demandes de recontact ≠ dossiers ouverts). */
+    $suivis = $foyers;
     return ['victoires' => $victoires, 'familles' => count($familles), 'publiees' => $publiees, 'suivis' => $suivis, 'foyers' => $foyers];
 }
 
