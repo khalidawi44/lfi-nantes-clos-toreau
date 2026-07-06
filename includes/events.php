@@ -258,7 +258,7 @@ function lfi_nct_event_data($id_or_post) {
 
 /** Géocode une adresse (Nominatim/OSM), résultat mis en cache 30 j. Renvoie
  *  ['lat'=>float,'lng'=>float] ou null. Usage serveur, tolérant aux pannes. */
-function lfi_nct_geocode($query) {
+function lfi_nct_evt_geocode($query) {
     $query = trim((string) $query);
     if ($query === '' || !function_exists('wp_remote_get')) return null;
     $key = 'lfi_geo_' . md5($query);
