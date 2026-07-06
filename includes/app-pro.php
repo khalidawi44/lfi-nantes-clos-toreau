@@ -395,13 +395,24 @@ function lfi_nct_chrono_save($uid, $list) {
     });
     update_user_meta((int) $uid, 'lfi_nct_chrono', array_values($list));
 }
-/** Ajoute une entrée (dédupliquée). $label = date affichée ; on en déduit un tri. */
+/** Ajoute une entrée APRÈS vérification (rationnel + pas de doublon). */
 function lfi_nct_chrono_add($uid, $label, $txt, $auto = false) {
     $txt = trim((string) $txt); if ($txt === '') return false;
+    /* 1) RATIONNEL : au moins 5 caractères ET une lettre (on refuse « ). », un
+       simple numéro « 003859 », les fragments « Erreur d'extraction »…). */
+    if (mb_strlen($txt) < 5 || !preg_match('/\p{L}/u', $txt)) return false;
+    if (preg_match('/erreur d\'?extraction|non retenu/iu', $txt)) return false;
     $label = trim((string) $label);
+    $nd  = lfi_nct_chrono_norm_date($label);
+    $pfx = mb_strtolower(mb_substr(trim(preg_replace('/\s+/u', ' ', $txt)), 0, 45));
     $list = lfi_nct_chrono_get($uid);
-    foreach ($list as $e) { if (mb_strtolower(trim((string) ($e['txt'] ?? ''))) === mb_strtolower($txt)) return false; }
-    $list[] = ['id' => (int) (round(microtime(true) * 1000) % 1000000000), 'd' => lfi_nct_chrono_norm_date($label), 'label' => $label, 'txt' => $txt, 'auto' => $auto ? 1 : 0];
+    /* 2) PAS DE DOUBLON : texte identique, OU même jour + même début de phrase. */
+    foreach ($list as $e) {
+        if (mb_strtolower(trim((string) ($e['txt'] ?? ''))) === mb_strtolower($txt)) return false;
+        if ($nd !== '' && (string) ($e['d'] ?? '') === $nd
+            && mb_strtolower(mb_substr(trim(preg_replace('/\s+/u', ' ', (string) ($e['txt'] ?? ''))), 0, 45)) === $pfx) return false;
+    }
+    $list[] = ['id' => (int) (round(microtime(true) * 1000) % 1000000000), 'd' => $nd, 'label' => $label, 'txt' => $txt, 'auto' => $auto ? 1 : 0];
     lfi_nct_chrono_save($uid, $list);
     return true;
 }
@@ -484,10 +495,11 @@ function lfi_nct_dossier_render_chrono($u) {
                 echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-left:26px">';
                 foreach ($ep as $pp) {
                     $mime = (string) get_post_mime_type($pp->ID);
+                    $purl = wp_get_attachment_url($pp->ID);
                     $th = (strpos($mime, 'image/') === 0)
                         ? wp_get_attachment_image($pp->ID, [64, 64], true, ['style' => 'width:52px;height:52px;object-fit:cover;border-radius:6px;display:block'])
                         : '<div style="width:52px;height:52px;border-radius:6px;background:#eef;display:flex;align-items:center;justify-content:center">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
-                    echo '<div style="position:relative">' . $th;
+                    echo '<div style="position:relative"><a href="' . esc_url($purl) . '" target="_blank" rel="noopener" style="display:block">' . $th . '</a>';
                     echo '<form method="post" style="position:absolute;top:-6px;right:-6px;margin:0">' . wp_nonce_field('lfi_app_piece_link', '_wpnonce', true, false)
                        . '<input type="hidden" name="lfi_app_piece_link" value="1"><input type="hidden" name="att_id" value="' . (int) $pp->ID . '"><input type="hidden" name="chrono_id" value="0">'
                        . '<button type="submit" title="Détacher de l\'événement" style="width:18px;height:18px;border-radius:50%;border:none;background:#c8102e;color:#fff;font-size:.7em;line-height:1;cursor:pointer">✕</button></form>';
@@ -671,6 +683,25 @@ function lfi_nct_dossier_purge_pieces($uid) {
     return $n;
 }
 
+/** Section « 📊 Synthèse & chiffrage du préjudice » (importée du .md, éditable). */
+function lfi_nct_dossier_render_synthese($u) {
+    $syn = (string) get_user_meta($u->ID, 'lfi_nct_dossier_synthese', true);
+    $open = ($syn !== '') ? ' open' : '';
+    echo '<details class="lfi-app-card" style="border:2px solid #0b3d91;background:#f4f8ff;margin-bottom:12px" id="synthese"' . $open . '>';
+    echo '<summary style="cursor:pointer;font-weight:800;color:#0b3d91">📊 Synthèse & chiffrage du préjudice</summary>';
+    if (!empty($_GET['syn_saved'])) echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:8px 10px;margin:6px 0;color:#186a3b;font-weight:700">✅ Synthèse enregistrée.</div>';
+    echo '<div class="com" style="font-size:.86em;color:#555">Le robot en sort le <strong>chiffrage du préjudice</strong> (postes, montants, justification) et le contexte à partir du <code>.md</code>. Tu peux corriger ici.</div>';
+    if ($syn !== '') {
+        echo '<div style="background:#fff;border:1px solid #d6e2f0;border-radius:8px;padding:10px;margin:8px 0;white-space:pre-wrap;font-size:.9em">' . esc_html($syn) . '</div>';
+    } else {
+        echo '<div class="lfi-app-empty" style="font-size:.9em;margin:8px 0">Rien pour l\'instant — importe un <code>.md</code> qui contient le calcul du préjudice, ou saisis-le ci-dessous.</div>';
+    }
+    echo '<form method="post">' . wp_nonce_field('lfi_app_synthese', '_wpnonce', true, false);
+    echo '<textarea name="synthese" rows="8" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:.9em">' . esc_textarea($syn) . '</textarea>';
+    echo '<button type="submit" name="lfi_app_synthese_save" value="1" class="btn-primary" style="background:#0b3d91;margin-top:6px">💾 Enregistrer la synthèse</button></form>';
+    echo '</details>';
+}
+
 /** Section « 📄 Importer un dossier (.md) » + « 🗑 Vider les pièces ». */
 function lfi_nct_dossier_render_import_md($u) {
     $ai = function_exists('lfi_nct_ai_enabled') && lfi_nct_ai_enabled();
@@ -748,12 +779,17 @@ function lfi_nct_dossier_render_import_md($u) {
             echo '<div style="display:flex;flex-wrap:wrap;gap:10px">';
             foreach ($items as $p) {
                 $mime = (string) get_post_mime_type($p->ID);
+                $url  = wp_get_attachment_url($p->ID);
+                $fname = basename((string) get_attached_file($p->ID)) ?: get_the_title($p->ID);
+                $is_pdf = (strpos($mime, 'pdf') !== false);
                 $thumb = (strpos($mime, 'image/') === 0)
-                    ? wp_get_attachment_image($p->ID, [92, 92], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
-                    : '<div style="width:80px;height:80px;border-radius:8px;background:#efeaf7;display:flex;align-items:center;justify-content:center;font-size:1.8em">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
+                    ? wp_get_attachment_image($p->ID, [96, 96], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
+                    : '<div style="width:80px;height:80px;border-radius:8px;background:' . ($is_pdf ? '#fde8e8' : '#efeaf7') . ';display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.5em">' . ($is_pdf ? '📄' : '📎') . '<span style="font-size:.42em;color:#a33;font-weight:700;margin-top:2px">OUVRIR</span></div>';
                 $cur_link = (int) get_post_meta($p->ID, '_lfi_chrono_id', true);
                 echo '<div style="width:96px;text-align:center">';
-                echo $thumb;
+                /* Clic → ouvre l'ORIGINAL (photo en grand / PDF dans l'onglet). */
+                echo '<a href="' . esc_url($url) . '" target="_blank" rel="noopener" style="text-decoration:none;display:block">' . $thumb . '</a>';
+                echo '<div style="font-size:.58em;color:#666;margin:1px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' . esc_attr($fname) . '">' . esc_html($fname) . '</div>';
                 if ($chrono_opts) {
                     echo '<form method="post" style="margin:2px 0 0">' . wp_nonce_field('lfi_app_piece_link', '_wpnonce', true, false)
                        . '<input type="hidden" name="lfi_app_piece_link" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
@@ -806,6 +842,12 @@ function lfi_nct_app_view_dossier() {
         update_user_meta($u->ID, 'lfi_nct_admin_notes', $notes);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'notes_saved' => 1]));
         exit;
+    }
+
+    /* 📊 Enregistrer / corriger la SYNTHÈSE (chiffrage du préjudice). */
+    if (isset($_POST['lfi_app_synthese_save']) && check_admin_referer('lfi_app_synthese')) {
+        update_user_meta($u->ID, 'lfi_nct_dossier_synthese', wp_kses_post(wp_unslash($_POST['synthese'] ?? '')));
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'syn_saved' => 1]) . '#synthese'); exit;
     }
 
     /* 🔗 RATTACHER une pièce à un ÉVÉNEMENT daté de la chronologie (ou détacher). */
@@ -1000,6 +1042,11 @@ function lfi_nct_app_view_dossier() {
                 $ev  = trim((string) ($e['event'] ?? ''));
                 if ($ev === '') continue;
                 if (lfi_nct_chrono_add($u->ID, $lab !== '' ? $lab : wp_date('Y-m-d'), $ev, true)) $added_chrono++;
+            }
+            /* SYNTHÈSE / chiffrage du préjudice (parties non datées du .md). */
+            if (function_exists('lfi_nct_md_extract_synthese')) {
+                $syn = lfi_nct_md_extract_synthese($md_text);
+                if ($syn !== '') update_user_meta($u->ID, 'lfi_nct_dossier_synthese', wp_kses_post($syn));
             }
             /* On garde le .md source comme pièce « document » (traçabilité). */
             $up = wp_upload_dir();
@@ -1274,6 +1321,9 @@ function lfi_nct_app_view_dossier() {
 
     /* ===== CHRONOLOGIE (timeline structurée, auto-alimentée) ===== */
     lfi_nct_dossier_render_chrono($u);
+
+    /* ===== SYNTHÈSE / chiffrage du préjudice (importé du .md) ===== */
+    lfi_nct_dossier_render_synthese($u);
 
     /* ===== IMPORT .md (chronologie décortiquée par l'IA) + vider les pièces ===== */
     lfi_nct_dossier_render_import_md($u);
