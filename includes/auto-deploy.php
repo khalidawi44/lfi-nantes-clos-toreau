@@ -69,6 +69,23 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_emails_photos_dedup_v1', '1', false);
     }
 
+    /* 1-elus-dedup) MÉNAGE : supprime les comptes ÉLU·ES en DOUBLE (même nom) —
+       garde le plus ancien (ex. William Aucant recréé par erreur). Une fois. */
+    if (get_option('lfi_nct_partner_dedup_v1') !== '1') {
+        $role_pa = defined('LFI_NCT_ROLE_PARTNER') ? LFI_NCT_ROLE_PARTNER : 'lfi_nct_partenaire';
+        $parts = get_users(['role' => $role_pa, 'fields' => ['ID', 'display_name'], 'orderby' => 'ID', 'order' => 'ASC', 'number' => 500]);
+        $byname = [];
+        if (!function_exists('wp_delete_user')) require_once ABSPATH . 'wp-admin/includes/user.php';
+        foreach ($parts as $u) {
+            $k = mb_strtolower(trim((string) $u->display_name));
+            if ($k === '') continue;
+            if (isset($byname[$k])) {
+                if (function_exists('wp_delete_user')) { try { wp_delete_user((int) $u->ID, (int) $byname[$k]); } catch (\Throwable $e) {} }
+            } else { $byname[$k] = (int) $u->ID; }
+        }
+        update_option('lfi_nct_partner_dedup_v1', '1', false);
+    }
+
     /* 1-elus) COMPTES des élu·es (municipaux, départementaux, députés, national) à
        partir de l'organigramme : chacun devient un compte PARTENAIRE (espace élu·e
        + prévisualisable « Voir en tant que »). Idempotent. */

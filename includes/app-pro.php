@@ -3715,38 +3715,54 @@ function lfi_nct_app_view_preview_picker() {
     $gas      = get_users(['role' => $role_ga, 'fields' => ['ID', 'display_name', 'user_login'], 'number' => 400, 'orderby' => 'display_name', 'order' => 'ASC']);
     $tenants  = get_users(['role' => $role_te, 'fields' => ['ID', 'display_name', 'user_login'], 'number' => 400, 'orderby' => 'display_name', 'order' => 'ASC']);
 
-    /* National (Bompard & co. = drapeau démo national) vs élus municipaux. */
-    $national = []; $municipaux = [];
+    /* Anti-doublon d'AFFICHAGE : un même nom n'apparaît qu'une fois (garde le
+       compte le plus ancien = plus petit ID). */
+    $dedup = function ($list) {
+        $seen = []; $out = [];
+        foreach ($list as $u) {
+            $k = mb_strtolower(trim((string) $u->display_name));
+            if ($k !== '' && isset($seen[$k])) continue;
+            $seen[$k] = 1; $out[] = $u;
+        }
+        return $out;
+    };
+    /* Répartition des PARTENAIRES : national / élus municipaux / coordinateurs
+       (trésorier, coordination, relations, référent…). */
+    $national = []; $elus = []; $coord = [];
     foreach ($partners as $u) {
-        if (get_user_meta($u->ID, 'lfi_nct_demo_national', true)) $national[] = $u; else $municipaux[] = $u;
+        if (get_user_meta($u->ID, 'lfi_nct_demo_national', true)) { $national[] = $u; continue; }
+        $f = mb_strtolower((string) get_user_meta($u->ID, 'lfi_nct_elu_fonction', true));
+        if (preg_match('/(coordinateur|coordination|tr.sorier|secr.taire|responsable|r.f.rent|gestion|relations|parrainage)/u', $f)) $coord[] = $u;
+        else $elus[] = $u;
     }
-    /* Admins de GA vs membres simples (meta lfi_nct_ga_role = 'admin'). */
+    /* Admins (gestionnaires) de GA vs membres simples. */
     $ga_admins = []; $ga_membres = [];
     foreach ($gas as $u) {
         if ((string) get_user_meta($u->ID, 'lfi_nct_ga_role', true) === 'admin') $ga_admins[] = $u; else $ga_membres[] = $u;
     }
 
-    lfi_nct_app_screen_open('👁 Voir en tant que…', 'Chaque strate de l\'application, bien séparée');
-    echo '<div class="lfi-app-help">Choisis une personne pour voir <strong>exactement</strong> ce qu\'elle voit dans l\'app. Un bandeau en haut te rappelle que tu es en aperçu — touche <strong>« × Sortir »</strong> pour revenir. Rien n\'est modifié.</div>';
+    lfi_nct_app_screen_open('👁 Voir en tant que…', 'Chaque strate, bien séparée');
+    echo '<div class="lfi-app-help">Touche une strate pour la déplier, puis « Voir en tant que ». Un bandeau te rappelle l\'aperçu — « × Sortir » pour revenir. Rien n\'est modifié.</div>';
 
-    /* Renderer d'une strate. */
-    $render = function ($titre, $couleur, $badge, $list) {
-        echo '<h3 style="margin:18px 0 8px;color:' . $couleur . '">' . $titre . ' (' . count($list) . ')</h3>';
-        if (empty($list)) { echo '<div class="lfi-app-empty" style="font-size:.9em">Personne pour l\'instant.</div>'; return; }
-        echo '<ul class="lfi-app-list">';
+    /* Chaque strate = un ACCORDÉON (replié). */
+    $render = function ($titre, $couleur, $badge, $list) use ($dedup) {
+        $list = $dedup($list);
+        echo '<details class="lfi-app-card" style="border-left:4px solid ' . $couleur . ';margin-bottom:8px"><summary style="cursor:pointer;font-weight:800;color:' . $couleur . '">' . $titre . ' (' . count($list) . ')</summary>';
+        if (empty($list)) { echo '<div class="lfi-app-empty" style="font-size:.9em;margin-top:6px">Personne pour l\'instant.</div>'; echo '</details>'; return; }
+        echo '<ul class="lfi-app-list" style="margin-top:8px">';
         foreach ($list as $u) {
-            echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($u->display_name ?: $u->user_login) . '</div><div class="badge" style="background:' . $couleur . ';color:#fff">' . esc_html($badge) . '</div></div>';
+            echo '<li class="lfi-app-card" style="padding:9px 12px"><div class="head"><div class="who">' . esc_html($u->display_name ?: $u->user_login) . '</div><div class="badge" style="background:' . $couleur . ';color:#fff">' . esc_html($badge) . '</div></div>';
             echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir en tant que ' . esc_html($u->display_name ?: $u->user_login) . '</a></div></li>';
         }
-        echo '</ul>';
+        echo '</ul></details>';
     };
 
-    $render('🏛️ National (Bompard, coordination)', '#c8102e', 'National', $national);
-    $render('🏢 Élus municipaux / partenaires',    '#8a6d1f', 'Élu·e',    $municipaux);
-    $render('⭐ Admins de GA',                       '#6a1b9a', 'Admin GA', $ga_admins);
-    $render('👥 Membres de GA',                      '#0b3d91', 'Membre',   $ga_membres);
-    $render('🏠 Locataires',                         '#186a3b', 'Locataire', $tenants);
+    $render('🏛️ National',              '#c8102e', 'National',   $national);
+    $render('🏢 Élus municipaux',        '#8a6d1f', 'Élu·e',      $elus);
+    $render('🎯 Coordinateurs / fonctions', '#0b6a6a', 'Coordination', $coord);
+    $render('⭐ Gestionnaires de GA',     '#6a1b9a', 'Gestion GA', $ga_admins);
+    $render('👥 Membres de GA',           '#0b3d91', 'Membre',     $ga_membres);
+    $render('🏠 Locataires',              '#186a3b', 'Locataire',  $tenants);
 
     lfi_nct_app_screen_close();
 }
