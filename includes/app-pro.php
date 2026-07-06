@@ -3692,54 +3692,46 @@ function lfi_nct_app_view_preview_picker() {
     }
     if (!$real_admin_id) return;
 
-    $tenants = get_users([
-        'role' => LFI_NCT_ROLE_TENANT,
-        'fields' => ['ID', 'display_name', 'user_login'],
-        'number' => 200,
-        'orderby' => 'display_name', 'order' => 'ASC',
-    ]);
-    $gas = get_users([
-        'role' => LFI_NCT_ROLE_GA,
-        'fields' => ['ID', 'display_name', 'user_login'],
-        'number' => 200,
-        'orderby' => 'display_name', 'order' => 'ASC',
-    ]);
+    /* --- On récupère tout le monde, puis on répartit PAR STRATE. --- */
+    $role_ga     = defined('LFI_NCT_ROLE_GA') ? LFI_NCT_ROLE_GA : 'lfi_nct_ga_member';
+    $role_te     = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+    $role_pa     = defined('LFI_NCT_ROLE_PARTNER') ? LFI_NCT_ROLE_PARTNER : 'lfi_nct_partenaire';
+    $partners = get_users(['role' => $role_pa, 'fields' => ['ID', 'display_name', 'user_login'], 'number' => 300, 'orderby' => 'display_name', 'order' => 'ASC']);
+    $gas      = get_users(['role' => $role_ga, 'fields' => ['ID', 'display_name', 'user_login'], 'number' => 400, 'orderby' => 'display_name', 'order' => 'ASC']);
+    $tenants  = get_users(['role' => $role_te, 'fields' => ['ID', 'display_name', 'user_login'], 'number' => 400, 'orderby' => 'display_name', 'order' => 'ASC']);
 
-    lfi_nct_app_screen_open('👁 Aperçu de l\'app', 'Voir ce que voient les autres utilisateurs');
-
-    echo '<div class="lfi-app-help">Choisis un·e locataire ou un membre du GA pour visualiser exactement ce qu\'il·elle voit dans l\'app. Tu pourras cliquer dans l\'interface comme eux. Un bandeau rouge en haut te rappelle que tu es en mode aperçu. Touche « Sortir » pour revenir à la vue admin.</div>';
-
-    echo '<h3 style="margin:18px 0 8px">🏠 Locataires (' . count($tenants) . ')</h3>';
-    if (empty($tenants)) {
-        echo '<div class="lfi-app-empty">Aucun compte locataire créé.</div>';
-    } else {
-        echo '<ul class="lfi-app-list">';
-        foreach ($tenants as $u) {
-            echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">Locataire</div></div>';
-            echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span></div>';
-            echo '<div class="row-actions">';
-            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir comme ' . esc_html($u->display_name) . '</a>';
-            echo '</div></li>';
-        }
-        echo '</ul>';
+    /* National (Bompard & co. = drapeau démo national) vs élus municipaux. */
+    $national = []; $municipaux = [];
+    foreach ($partners as $u) {
+        if (get_user_meta($u->ID, 'lfi_nct_demo_national', true)) $national[] = $u; else $municipaux[] = $u;
+    }
+    /* Admins de GA vs membres simples (meta lfi_nct_ga_role = 'admin'). */
+    $ga_admins = []; $ga_membres = [];
+    foreach ($gas as $u) {
+        if ((string) get_user_meta($u->ID, 'lfi_nct_ga_role', true) === 'admin') $ga_admins[] = $u; else $ga_membres[] = $u;
     }
 
-    echo '<h3 style="margin:18px 0 8px">👥 Membres du GA (' . count($gas) . ')</h3>';
-    if (empty($gas)) {
-        echo '<div class="lfi-app-empty">Aucun compte GA créé.</div>';
-    } else {
+    lfi_nct_app_screen_open('👁 Voir en tant que…', 'Chaque strate de l\'application, bien séparée');
+    echo '<div class="lfi-app-help">Choisis une personne pour voir <strong>exactement</strong> ce qu\'elle voit dans l\'app. Un bandeau en haut te rappelle que tu es en aperçu — touche <strong>« × Sortir »</strong> pour revenir. Rien n\'est modifié.</div>';
+
+    /* Renderer d'une strate. */
+    $render = function ($titre, $couleur, $badge, $list) {
+        echo '<h3 style="margin:18px 0 8px;color:' . $couleur . '">' . $titre . ' (' . count($list) . ')</h3>';
+        if (empty($list)) { echo '<div class="lfi-app-empty" style="font-size:.9em">Personne pour l\'instant.</div>'; return; }
         echo '<ul class="lfi-app-list">';
-        foreach ($gas as $u) {
+        foreach ($list as $u) {
             echo '<li class="lfi-app-card">';
-            echo '<div class="head"><div class="who">' . esc_html($u->display_name) . '</div><div class="badge">GA</div></div>';
-            echo '<div class="meta"><span class="meta-chip">@' . esc_html($u->user_login) . '</span></div>';
-            echo '<div class="row-actions">';
-            echo '<a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir comme ' . esc_html($u->display_name) . '</a>';
-            echo '</div></li>';
+            echo '<div class="head"><div class="who">' . esc_html($u->display_name ?: $u->user_login) . '</div><div class="badge" style="background:' . $couleur . ';color:#fff">' . esc_html($badge) . '</div></div>';
+            echo '<div class="row-actions" style="margin-top:6px"><a class="btn-primary" href="' . esc_url(lfi_nct_app_url('preview-set', ['uid' => $u->ID])) . '">👁 Voir en tant que ' . esc_html($u->display_name ?: $u->user_login) . '</a></div></li>';
         }
         echo '</ul>';
-    }
+    };
+
+    $render('🏛️ National (Bompard, coordination)', '#c8102e', 'National', $national);
+    $render('🏢 Élus municipaux / partenaires',    '#8a6d1f', 'Élu·e',    $municipaux);
+    $render('⭐ Admins de GA',                       '#6a1b9a', 'Admin GA', $ga_admins);
+    $render('👥 Membres de GA',                      '#0b3d91', 'Membre',   $ga_membres);
+    $render('🏠 Locataires',                         '#186a3b', 'Locataire', $tenants);
 
     lfi_nct_app_screen_close();
 }
