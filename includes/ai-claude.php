@@ -294,6 +294,28 @@ function lfi_nct_md_extract_synthese($md) {
     return $out;
 }
 
+/**
+ * Repère les ENTITÉS utiles pour monter le dossier juridique dans un .md :
+ * l'avocat·e (à créer + rattacher), la référence d'aide juridictionnelle.
+ * Renvoie un tableau (vide si IA absente). Ne rien inventer.
+ */
+function lfi_nct_md_extract_entities($md) {
+    if (!lfi_nct_ai_enabled()) return [];
+    $md = mb_substr(trim((string) $md), 0, 40000);
+    if ($md === '') return [];
+    $system =
+        "Tu lis un dossier logement (Markdown). Tu repères les ENTITÉS utiles pour monter le dossier juridique. "
+        . "Tu réponds UNIQUEMENT par un objet JSON, sans texte autour :\n"
+        . '{"avocat":{"nom":"","email":"","tel":"","barreau":""},"aide_juridictionnelle":""}' . "\n"
+        . "N'INVENTE RIEN : si une info n'est pas écrite, laisse la chaîne vide. "
+        . "avocat.nom = un vrai nom de personne (ex. « Me Julie Supiot »), JAMAIS une institution ou le bailleur. "
+        . "aide_juridictionnelle = la référence/numéro du BAJ si présent.";
+    $out = lfi_nct_ai_call($system, $md, 600);
+    if ($out === null) return [];
+    if (preg_match('/\{.*\}/s', $out, $m)) { $j = json_decode($m[0], true); if (is_array($j)) return $j; }
+    return [];
+}
+
 /** Repli sans IA : repère les lignes commençant par une date. */
 function lfi_nct_md_extract_chrono_regex($md) {
     $res = [];

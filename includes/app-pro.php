@@ -710,7 +710,8 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<summary style="cursor:pointer;font-weight:800;color:#4b2e83">📄 Importer un dossier (.md) — le robot classe tout</summary>';
 
     if (isset($_GET['md_chrono']) || isset($_GET['md_pieces'])) {
-        echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#186a3b">✅ Import terminé</strong> — ' . (int) ($_GET['md_chrono'] ?? 0) . ' événement(s) ajouté(s) à la chronologie · ' . (int) ($_GET['md_pieces'] ?? 0) . ' pièce(s) rangée(s).</div>';
+        $av_msg = !empty($_GET['md_avocat']) ? ' · ⚖️ avocat·e « ' . esc_html(rawurldecode((string) $_GET['md_avocat'])) . ' » créé·e et rattaché·e' : '';
+        echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#186a3b">✅ Import terminé</strong> — ' . (int) ($_GET['md_chrono'] ?? 0) . ' événement(s) ajouté(s) à la chronologie · ' . (int) ($_GET['md_pieces'] ?? 0) . ' pièce(s) rangée(s)' . $av_msg . '.</div>';
     }
     if (isset($_GET['pieces_purged'])) {
         echo '<div style="background:#fdeef0;border-left:4px solid #c8102e;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#c8102e">🗑 ' . (int) $_GET['pieces_purged'] . ' pièce(s) supprimée(s).</strong></div>';
@@ -1026,7 +1027,7 @@ function lfi_nct_app_view_dossier() {
         require_once ABSPATH . 'wp-admin/includes/file.php';
         require_once ABSPATH . 'wp-admin/includes/image.php';
         require_once ABSPATH . 'wp-admin/includes/media.php';
-        $added_chrono = 0; $added_pieces = 0;
+        $added_chrono = 0; $added_pieces = 0; $md_avocat = '';
 
         /* 1) Le texte : fichier .md/.txt téléversé OU zone de texte collée. */
         $md_text = '';
@@ -1047,6 +1048,16 @@ function lfi_nct_app_view_dossier() {
             if (function_exists('lfi_nct_md_extract_synthese')) {
                 $syn = lfi_nct_md_extract_synthese($md_text);
                 if ($syn !== '') update_user_meta($u->ID, 'lfi_nct_dossier_synthese', wp_kses_post($syn));
+            }
+            /* ENTITÉS : si le .md nomme l'avocat·e → on la CRÉE et on la RATTACHE. */
+            if (function_exists('lfi_nct_md_extract_entities')) {
+                $ent = lfi_nct_md_extract_entities($md_text);
+                $av  = is_array($ent) ? ($ent['avocat'] ?? null) : null;
+                $anom = is_array($av) ? trim((string) ($av['nom'] ?? '')) : '';
+                if ($anom !== '' && function_exists('lfi_nct_avocat_ensure') && function_exists('lfi_nct_avocat_assign_tenant')) {
+                    $aid = lfi_nct_avocat_ensure($anom, (string) ($av['email'] ?? ''), (string) ($av['tel'] ?? ''), (string) ($av['barreau'] ?? ''));
+                    if ($aid) { lfi_nct_avocat_assign_tenant($u->ID, $aid); $md_avocat = $anom; }
+                }
             }
             /* On garde le .md source comme pièce « document » (traçabilité). */
             $up = wp_upload_dir();
@@ -1102,7 +1113,9 @@ function lfi_nct_app_view_dossier() {
             $added_pieces += lfi_nct_dossier_import_zip($_FILES['zipfile']['tmp_name'], (int) $u->ID);
         }
 
-        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'md_chrono' => $added_chrono, 'md_pieces' => $added_pieces]) . '#import-md'); exit;
+        $args = ['uid' => $u->ID, 'md_chrono' => $added_chrono, 'md_pieces' => $added_pieces];
+        if (!empty($md_avocat)) $args['md_avocat'] = rawurlencode($md_avocat);
+        wp_safe_redirect(lfi_nct_app_url('dossier', $args) . '#import-md'); exit;
     }
 
     /* Partage de l'espace avec le locataire : génère le lien magique (sur clic,
