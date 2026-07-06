@@ -3032,8 +3032,8 @@ function lfi_nct_app_view_evenement_add() {
                    géolocalisées depuis l'adresse. */
                 $lat = (float) str_replace(',', '.', (string) wp_unslash($_POST['lat'] ?? ''));
                 $lng = (float) str_replace(',', '.', (string) wp_unslash($_POST['lng'] ?? ''));
-                if ((!$lat || !$lng) && function_exists('lfi_nct_geocode') && ($place || $ville)) {
-                    $g = lfi_nct_geocode(trim($place . ' ' . $ville));
+                if ((!$lat || !$lng) && function_exists('lfi_nct_evt_geocode') && ($place || $ville)) {
+                    $g = lfi_nct_evt_geocode(trim($place . ' ' . $ville));
                     if ($g) { $lat = $g['lat']; $lng = $g['lng']; }
                 }
                 if ($lat && $lng) { update_post_meta($pid, '_lfi_evt_lat', $lat); update_post_meta($pid, '_lfi_evt_lng', $lng); }
@@ -3119,8 +3119,8 @@ function lfi_nct_app_view_evenement_edit() {
             /* 🗺 Coordonnées : saisies, sinon géolocalisées depuis l'adresse. */
             $lat = (float) str_replace(',', '.', (string) wp_unslash($_POST['lat'] ?? ''));
             $lng = (float) str_replace(',', '.', (string) wp_unslash($_POST['lng'] ?? ''));
-            if ((!$lat || !$lng) && function_exists('lfi_nct_geocode') && ($place || $ville)) {
-                $g = lfi_nct_geocode(trim($place . ' ' . $ville));
+            if ((!$lat || !$lng) && function_exists('lfi_nct_evt_geocode') && ($place || $ville)) {
+                $g = lfi_nct_evt_geocode(trim($place . ' ' . $ville));
                 if ($g) { $lat = $g['lat']; $lng = $g['lng']; }
             }
             if ($lat && $lng) { update_post_meta($id, '_lfi_evt_lat', $lat); update_post_meta($id, '_lfi_evt_lng', $lng); }
