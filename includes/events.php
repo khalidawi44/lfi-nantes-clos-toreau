@@ -242,6 +242,8 @@ function lfi_nct_event_data($id_or_post) {
         'capacite'       => (int) get_post_meta($id, '_lfi_evt_capacite', true),
         'rsvp_actif'     => get_post_meta($id, '_lfi_evt_rsvp_actif', true) !== '0',
         'url_ap'         => get_post_meta($id, '_lfi_evt_url_ap', true),
+        'lat'            => (float) get_post_meta($id, '_lfi_evt_lat', true),
+        'lng'            => (float) get_post_meta($id, '_lfi_evt_lng', true),
         'ts'             => $ts,
         'is_past'        => $is_past,
         'jour'           => $ts ? date_i18n('l', $ts) : '',
@@ -253,6 +255,49 @@ function lfi_nct_event_data($id_or_post) {
 /* ------------------------------------------------------------------ */
 /* Bandeau + RSVP sur la page single                                    */
 /* ------------------------------------------------------------------ */
+
+/** Géocode une adresse (Nominatim/OSM), résultat mis en cache 30 j. Renvoie
+ *  ['lat'=>float,'lng'=>float] ou null. Usage serveur, tolérant aux pannes. */
+function lfi_nct_geocode($query) {
+    $query = trim((string) $query);
+    if ($query === '' || !function_exists('wp_remote_get')) return null;
+    $key = 'lfi_geo_' . md5($query);
+    $cached = get_transient($key);
+    if ($cached !== false) return is_array($cached) && $cached ? $cached : null;
+    $resp = wp_remote_get(
+        'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' . rawurlencode($query),
+        ['timeout' => 8, 'headers' => ['User-Agent' => 'lfi-nct-app/1.0 (' . get_option('admin_email') . ')']]
+    );
+    $out = null;
+    if (!is_wp_error($resp)) {
+        $body = json_decode(wp_remote_retrieve_body($resp), true);
+        if (!empty($body[0]['lat']) && !empty($body[0]['lon'])) {
+            $out = ['lat' => (float) $body[0]['lat'], 'lng' => (float) $body[0]['lon']];
+        }
+    }
+    set_transient($key, $out ?: [], 30 * DAY_IN_SECONDS);
+    return $out;
+}
+
+/** Carte AUTONOME du point de rendez-vous (OpenStreetMap embarqué, sans lib JS)
+ *  + boutons Itinéraire / Agrandir. Rendue seulement si des coordonnées existent. */
+function lfi_nct_event_map_html($lat, $lng, $label = '', $height = 220) {
+    $lat = (float) $lat; $lng = (float) $lng;
+    if (!$lat || !$lng) return '';
+    $d = 0.006;
+    $bbox = ($lng - $d) . ',' . ($lat - $d) . ',' . ($lng + $d) . ',' . ($lat + $d);
+    $src  = 'https://www.openstreetmap.org/export/embed.html?bbox=' . rawurlencode($bbox) . '&layer=mapnik&marker=' . $lat . ',' . $lng;
+    $osm  = 'https://www.openstreetmap.org/?mlat=' . $lat . '&mlon=' . $lng . '#map=17/' . $lat . '/' . $lng;
+    $gmap = 'https://www.google.com/maps/search/?api=1&query=' . $lat . ',' . $lng;
+    $out  = '<div class="lfi-evt-map" style="margin:12px 0;border-radius:12px;overflow:hidden;border:1px solid #dfe6f0">';
+    $out .= '<iframe title="Carte — point de rendez-vous" src="' . esc_url($src) . '" style="width:100%;height:' . (int) $height . 'px;border:0;display:block" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>';
+    if ($label !== '') $out .= '<div style="padding:7px 10px;font-size:.85em;color:#444;background:#f6f8fb">📍 <strong>Point de rendez-vous :</strong> ' . esc_html($label) . '</div>';
+    $out .= '<div style="display:flex;gap:8px;padding:8px;background:#f6f8fb">';
+    $out .= '<a href="' . esc_url($gmap) . '" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;background:#c8102e;color:#fff;font-weight:700;padding:9px;border-radius:8px">🧭 Itinéraire</a>';
+    $out .= '<a href="' . esc_url($osm) . '" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;background:#fff;color:#0b3d91;font-weight:700;padding:9px;border-radius:8px;border:1px solid #dfe6f0">🗺 Agrandir</a>';
+    $out .= '</div></div>';
+    return $out;
+}
 
 add_filter('the_content', 'lfi_nct_event_render_content', 20);
 function lfi_nct_event_render_content($content) {
@@ -278,6 +323,10 @@ function lfi_nct_event_render_content($content) {
                   . 'style="display:inline-block;background:#c8102e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:700">'
                   . '✊ S\'inscrire sur Action Populaire</a>'
                   . '<div style="font-size:.82em;color:#777;margin-top:.3em">L\'inscription officielle se fait sur Action Populaire. Tu peux aussi confirmer ta venue ci-dessous.</div></div>';
+    }
+    /* 🗺 Carte + point de rendez-vous (si coordonnées connues). */
+    if (!empty($data['lat']) && !empty($data['lng'])) {
+        $bandeau .= lfi_nct_event_map_html($data['lat'], $data['lng'], trim((string) ($data['adresse'] ?: $data['lieu'])), 240);
     }
     $bandeau .= '</div>';
 

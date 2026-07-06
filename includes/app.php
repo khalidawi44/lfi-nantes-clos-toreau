@@ -2931,6 +2931,12 @@ function lfi_nct_app_view_evenements() {
             if ($date)  echo '<span class="meta-chip">🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</span>';
             if ($place) echo '<span class="meta-chip">📍 ' . esc_html($place) . ($city ? ', ' . esc_html($city) : '') . '</span>';
             echo '</div>';
+            /* 🗺 Carte + point de rendez-vous (si coordonnées connues). */
+            $elat = (float) get_post_meta($p->ID, '_lfi_evt_lat', true);
+            $elng = (float) get_post_meta($p->ID, '_lfi_evt_lng', true);
+            if ($elat && $elng && function_exists('lfi_nct_event_map_html')) {
+                echo lfi_nct_event_map_html($elat, $elng, trim($place . ($city ? ', ' . $city : '')), 200);
+            }
             $ev_url   = get_permalink($p);
             $ev_title = get_the_title($p);
             echo '<div class="row-actions" style="flex-wrap:wrap;gap:6px">';
@@ -2990,10 +2996,21 @@ function lfi_nct_app_view_evenement_add() {
             if (!is_wp_error($pid) && $pid) {
                 update_post_meta($pid, '_ag_event_date',  sanitize_text_field(wp_unslash($_POST['date']  ?? '')));
                 update_post_meta($pid, '_ag_event_time',  sanitize_text_field(wp_unslash($_POST['heure'] ?? '')));
-                update_post_meta($pid, '_ag_event_place', sanitize_text_field(wp_unslash($_POST['lieu']  ?? '')));
-                update_post_meta($pid, '_ag_event_city',  sanitize_text_field(wp_unslash($_POST['ville'] ?? '')));
+                $place = sanitize_text_field(wp_unslash($_POST['lieu']  ?? ''));
+                $ville = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
+                update_post_meta($pid, '_ag_event_place', $place);
+                update_post_meta($pid, '_ag_event_city',  $ville);
                 $ap = esc_url_raw(wp_unslash($_POST['ap_url'] ?? ''));
                 if ($ap) update_post_meta($pid, '_lfi_evt_ap_url', $ap);
+                /* 🗺 Coordonnées du point de RDV : saisies à la main, sinon
+                   géolocalisées depuis l'adresse. */
+                $lat = (float) str_replace(',', '.', (string) wp_unslash($_POST['lat'] ?? ''));
+                $lng = (float) str_replace(',', '.', (string) wp_unslash($_POST['lng'] ?? ''));
+                if ((!$lat || !$lng) && function_exists('lfi_nct_geocode') && ($place || $ville)) {
+                    $g = lfi_nct_geocode(trim($place . ' ' . $ville));
+                    if ($g) { $lat = $g['lat']; $lng = $g['lng']; }
+                }
+                if ($lat && $lng) { update_post_meta($pid, '_lfi_evt_lat', $lat); update_post_meta($pid, '_lfi_evt_lng', $lng); }
                 /* Rattache l'événement au GA courant (cloisonnement des événements). */
                 if (function_exists('lfi_nct_creation_ga')) update_post_meta($pid, '_lfi_evt_ga', lfi_nct_creation_ga());
                 update_post_meta($pid, '_lfi_evt_internal', 1);
@@ -3013,6 +3030,11 @@ function lfi_nct_app_view_evenement_add() {
     echo '<label>Heure<input type="text" name="heure" placeholder="Ex : 14h – 23h"></label>';
     echo '<label>Lieu<input type="text" name="lieu" placeholder="Ex : Parc de la Crapaudine"></label>';
     echo '<label>Ville<input type="text" name="ville" placeholder="Ex : Nantes"></label>';
+    echo '<div class="lfi-app-help" style="margin:2px 0"><small>🗺 Une carte avec le point de RDV s\'affiche toute seule dès qu\'il y a une adresse. Tu peux forcer un point précis avec les coordonnées ci-dessous (facultatif).</small></div>';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label style="margin:0">Latitude (option)<input type="text" name="lat" placeholder="47.1938" inputmode="decimal"></label>';
+    echo '<label style="margin:0">Longitude (option)<input type="text" name="lng" placeholder="-1.5307" inputmode="decimal"></label>';
+    echo '</div>';
     echo '<label>Lien Action Populaire (inscription)<input type="url" name="ap_url" placeholder="https://actionpopulaire.fr/evenements/…" inputmode="url" autocapitalize="none"></label>';
     echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…"></textarea></label>';
     echo '<button type="submit" class="btn-primary">✅ Créer l\'événement</button>';
@@ -3061,11 +3083,21 @@ function lfi_nct_app_view_evenement_edit() {
             ]);
             update_post_meta($id, '_ag_event_date',  sanitize_text_field(wp_unslash($_POST['date']  ?? '')));
             update_post_meta($id, '_ag_event_time',  sanitize_text_field(wp_unslash($_POST['heure'] ?? '')));
-            update_post_meta($id, '_ag_event_place', sanitize_text_field(wp_unslash($_POST['lieu']  ?? '')));
-            update_post_meta($id, '_ag_event_city',  sanitize_text_field(wp_unslash($_POST['ville'] ?? '')));
+            $place = sanitize_text_field(wp_unslash($_POST['lieu']  ?? ''));
+            $ville = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
+            update_post_meta($id, '_ag_event_place', $place);
+            update_post_meta($id, '_ag_event_city',  $ville);
             $ap = esc_url_raw(wp_unslash($_POST['ap_url'] ?? ''));
             if ($ap) { update_post_meta($id, '_lfi_evt_ap_url', $ap); }
             else     { delete_post_meta($id, '_lfi_evt_ap_url'); }
+            /* 🗺 Coordonnées : saisies, sinon géolocalisées depuis l'adresse. */
+            $lat = (float) str_replace(',', '.', (string) wp_unslash($_POST['lat'] ?? ''));
+            $lng = (float) str_replace(',', '.', (string) wp_unslash($_POST['lng'] ?? ''));
+            if ((!$lat || !$lng) && function_exists('lfi_nct_geocode') && ($place || $ville)) {
+                $g = lfi_nct_geocode(trim($place . ' ' . $ville));
+                if ($g) { $lat = $g['lat']; $lng = $g['lng']; }
+            }
+            if ($lat && $lng) { update_post_meta($id, '_lfi_evt_lat', $lat); update_post_meta($id, '_lfi_evt_lng', $lng); }
             wp_safe_redirect(lfi_nct_app_url('evenements', ['evt_upd' => 1]));
             exit;
         }
@@ -3078,6 +3110,8 @@ function lfi_nct_app_view_evenement_edit() {
     $v_place = get_post_meta($id, '_ag_event_place', true);
     $v_city  = get_post_meta($id, '_ag_event_city',  true);
     $v_ap    = get_post_meta($id, '_lfi_evt_ap_url', true);
+    $v_lat   = get_post_meta($id, '_lfi_evt_lat', true);
+    $v_lng   = get_post_meta($id, '_lfi_evt_lng', true);
     $v_desc  = $p->post_content;
 
     lfi_nct_app_screen_open('✏️ Éditer l\'événement', 'Corrige les informations de cet événement');
@@ -3089,6 +3123,11 @@ function lfi_nct_app_view_evenement_edit() {
     echo '<label>Heure<input type="text" name="heure" value="' . esc_attr($v_time) . '" placeholder="Ex : 14h – 23h"></label>';
     echo '<label>Lieu<input type="text" name="lieu" value="' . esc_attr($v_place) . '" placeholder="Ex : Parc de la Crapaudine"></label>';
     echo '<label>Ville<input type="text" name="ville" value="' . esc_attr($v_city) . '" placeholder="Ex : Nantes"></label>';
+    echo '<div class="lfi-app-help" style="margin:2px 0"><small>🗺 Laisse les coordonnées vides pour géolocaliser depuis l\'adresse, ou force un point précis.</small></div>';
+    echo '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    echo '<label style="margin:0">Latitude (option)<input type="text" name="lat" value="' . esc_attr($v_lat) . '" placeholder="47.1938" inputmode="decimal"></label>';
+    echo '<label style="margin:0">Longitude (option)<input type="text" name="lng" value="' . esc_attr($v_lng) . '" placeholder="-1.5307" inputmode="decimal"></label>';
+    echo '</div>';
     echo '<label>Lien Action Populaire (inscription)<input type="url" name="ap_url" value="' . esc_attr($v_ap) . '" placeholder="https://actionpopulaire.fr/evenements/…" inputmode="url" autocapitalize="none"></label>';
     echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…">' . esc_textarea($v_desc) . '</textarea></label>';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
