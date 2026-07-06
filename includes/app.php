@@ -1267,9 +1267,9 @@ function lfi_nct_app_render_dashboard() {
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
         $essentiel = [
             ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_app_url('enquete')],
+            ['🗂', 'Dossiers',    'Locataires + photos',        lfi_nct_app_url('dossiers-juridiques')],
+            ['📬', 'Emails',      'Reçus & réponses',           lfi_nct_app_url('mailcheck')],
             ['📥', 'À envoyer',   'Tes réponses prêtes',        lfi_nct_app_url('a-envoyer')],
-            ['🗂', 'Dossiers',    'Le suivi des locataires',    lfi_nct_app_url('dossiers-juridiques')],
-            ['📓', 'Journal',     'Ton suivi général',          lfi_nct_app_url('journal')],
             ['📅', 'Événements',  'Réunions & actions',         lfi_nct_app_url('evenements')],
         ]; ?>
         <div class="lfi-app-section">
