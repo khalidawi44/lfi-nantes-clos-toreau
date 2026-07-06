@@ -107,7 +107,8 @@ function lfi_nct_email_render($body, $membre, $event_post = null, $tracking_toke
     $event_date_c  = $vars['event_date_complete'];
     $event_titre   = $vars['event_titre'] ?: 'Prochain rendez-vous';
     $event_lieu    = trim(($vars['event_lieu'] ? $vars['event_lieu'] : '') . ($vars['event_adresse'] ? ($vars['event_lieu'] ? ' — ' : '') . $vars['event_adresse'] : ''));
-    $unsubscribe_url = $unsubscribe_token ? home_url('/?lfi_unsub=' . $unsubscribe_token) : home_url('/');
+    $unsubscribe_url = $unsubscribe_token ? home_url('/stop/' . $unsubscribe_token) : home_url('/');
+    $logo_url = (defined('LFI_NCT_URL') ? LFI_NCT_URL : (home_url('/wp-content/plugins/lfi-nantes-clos-toreau/'))) . 'assets/img/logo-lfi.png';
     $pixel_url     = $tracking_token ? home_url('/?lfi_open=' . $tracking_token) : '';
     $cta_url       = $tracking_token ? home_url('/?lfi_click=' . $tracking_token . '&to=' . urlencode($event_url)) : $event_url;
 
@@ -152,8 +153,9 @@ function lfi_nct_email_render($body, $membre, $event_post = null, $tracking_toke
 <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08);max-width:600px">
 
-        <!-- Bandeau rouge LFI -->
-        <tr><td style="background:linear-gradient(135deg,#c8102e 0%,#7a0000 100%);padding:30px 30px 24px;text-align:center">
+        <!-- Bandeau rouge LFI (avec logo) -->
+        <tr><td style="background:linear-gradient(135deg,#c8102e 0%,#7a0000 100%);padding:26px 30px 22px;text-align:center">
+            <img src="' . esc_url($logo_url) . '" alt="La France Insoumise" width="72" height="72" style="display:inline-block;width:72px;height:72px;margin:0 auto 8px;border:0;outline:none">
             <p style="margin:0;color:#fff;font-size:11px;letter-spacing:3px;text-transform:uppercase;opacity:.9">LA FRANCE INSOUMISE</p>
             <h1 style="margin:6px 0 0;color:#fff;font-size:26px;font-weight:900;letter-spacing:.5px">Nantes Sud · Clos Toreau</h1>
             <p style="margin:8px 0 0;color:#fff;font-size:14px;opacity:.95">✊ Groupe d\'Action</p>
@@ -180,9 +182,12 @@ function lfi_nct_email_render($body, $membre, $event_post = null, $tracking_toke
             <p style="margin:0 0 12px">
                 <a href="' . esc_url($site_url) . '" style="color:#c8102e;text-decoration:none;font-weight:600">lfi-nantes-clostoreau.fr</a>
             </p>
+            <p style="margin:0 0 10px">
+                <a href="' . esc_url($unsubscribe_url) . '" style="display:inline-block;color:#c8102e;text-decoration:none;font-weight:700;font-size:13px;border:1px solid #e0b3ba;border-radius:20px;padding:8px 16px">🚫 Ne plus me contacter (emails et SMS)</a>
+            </p>
             <p style="margin:0;font-size:11px;color:#aaa">
-                Tu reçois cet email parce que tu es membre du Groupe d\'Action.<br>
-                <a href="' . esc_url($unsubscribe_url) . '" style="color:#888;text-decoration:underline">Je ne souhaite plus recevoir d\'emails du GA</a>
+                Tu reçois ce message parce que tu es en lien avec le Groupe d\'Action.<br>
+                En cliquant ci-dessus, tu es retiré·e de nos emails <strong>et</strong> de nos SMS — plus aucun message.
             </p>
         </td></tr>
 
@@ -239,15 +244,21 @@ function lfi_nct_email_tracking_handlers() {
         global $wpdb;
         $mem_table = $wpdb->prefix . 'lfi_nct_membres';
         $token = sanitize_text_field($_GET['lfi_unsub']);
+        /* On coupe les EMAILS **et** on inscrit en liste noire SMS : « ne plus me
+           contacter » = plus rien du tout. */
+        $m = $wpdb->get_row($wpdb->prepare("SELECT prenom, nom, tel FROM $mem_table WHERE unsubscribe_token = %s", $token));
         $wpdb->update($mem_table, ['abonne_emails' => 0], ['unsubscribe_token' => $token]);
+        if ($m && !empty($m->tel) && function_exists('lfi_nct_sms_block_add')) {
+            lfi_nct_sms_block_add($m->tel, trim(($m->prenom ?? '') . ' ' . ($m->nom ?? '')), 'désinscription (lien email)');
+        }
         wp_die(
             '<div style="font-family:Arial;padding:40px;text-align:center;max-width:500px;margin:80px auto;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-                <h1 style="color:#c8102e">✅ Désabonnement enregistré</h1>
-                <p>Tu ne recevras plus d\'emails du Groupe d\'Action.</p>
-                <p>Tu peux te réabonner à tout moment en nous contactant.</p>
+                <h1 style="color:#c8102e">✅ C\'est noté</h1>
+                <p>Tu ne recevras <strong>plus aucun message</strong> du Groupe d\'Action — ni email, ni SMS.</p>
+                <p>Tu peux revenir vers nous quand tu veux si tu changes d\'avis.</p>
                 <p style="margin-top:30px"><a href="' . esc_url(home_url('/')) . '" style="color:#c8102e;font-weight:700">Retour au site</a></p>
             </div>',
-            'Désabonnement', ['response' => 200]
+            'Ne plus me contacter', ['response' => 200]
         );
     }
 }
