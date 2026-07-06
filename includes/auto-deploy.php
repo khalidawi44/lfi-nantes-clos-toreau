@@ -158,6 +158,40 @@ function lfi_nct_auto_deploy() {
         }
     }
 
+    /* ─ CORRECTION lieu : l'événement « Diffusion de tracts » (jeudi 9 juillet)
+       est AUSSI au Super U Saint-Jacques (pas le point de RDV par défaut du GA).
+       On force le lieu + coordonnées + heure 18h (même heure/endroit que le
+       mardi) sur les deux GA + le créneau de vote lié. Idempotent. */
+    if (get_option('lfi_nct_fix_evt_tracts_lieu_v1') !== '1' && function_exists('get_posts')) {
+        $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+        $fx_title = 'Diffusion de tracts';
+        $fx_date  = '2026-07-09';
+        $fx_place = 'Super U Saint-Jacques';
+        $fx_city  = '75 Bd Joliot Curie, 44200 Nantes';
+        $fx_lat   = '47.1938031';
+        $fx_lng   = '-1.5307383';
+        $fx_time  = '18h';
+        $done_any = false;
+        foreach (get_posts(['post_type' => $cpt, 'post_status' => 'any', 'posts_per_page' => 300, 'fields' => 'ids']) as $pid) {
+            if (get_the_title($pid) !== $fx_title) continue;
+            if ((string) get_post_meta($pid, '_ag_event_date', true) !== $fx_date) continue;
+            update_post_meta($pid, '_ag_event_place', $fx_place);
+            update_post_meta($pid, '_ag_event_city',  $fx_city);
+            update_post_meta($pid, '_ag_event_time',  $fx_time);
+            update_post_meta($pid, '_lfi_evt_lat',    $fx_lat);
+            update_post_meta($pid, '_lfi_evt_lng',    $fx_lng);
+            $done_any = true;
+            /* Créneau(x) de vote liés à cet événement le 9 juillet. */
+            global $wpdb;
+            $tm = $wpdb->prefix . 'lfi_nct_mobilisation';
+            $wpdb->update($tm,
+                ['lieu' => $fx_place . ', ' . $fx_city, 'note' => $fx_time, 'creneau' => 'soiree'],
+                ['event_id' => (int) $pid, 'date_creneau' => $fx_date]
+            );
+        }
+        if ($done_any) update_option('lfi_nct_fix_evt_tracts_lieu_v1', '1', false);
+    }
+
     /* 1-reset) REMISE À ZÉRO du pipeline d'import des emails, demandée avant une
        relance de pêche propre (« tout remettre à zéro »). Vide la boîte de
        collecte + la mémoire anti-doublon + les emails/pièces IMPORTÉS de tous
