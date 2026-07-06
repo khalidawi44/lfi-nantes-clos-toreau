@@ -192,6 +192,40 @@ function lfi_nct_auto_deploy() {
         if ($done_any) update_option('lfi_nct_fix_evt_tracts_lieu_v1', '1', false);
     }
 
+    /* ─ RATTACHEMENT : les deux tractages (mardi 7 + jeudi 9) sont POUR la
+       Kermesse Républicaine du 14 juillet. On pointe leurs créneaux de vote sur
+       l'événement Kermesse (→ regroupés « Tractage pour la Kermesse » dans la
+       coordination) et on le mentionne dans la description des événements. */
+    if (get_option('lfi_nct_link_tractage_kermesse_v1') !== '1' && function_exists('get_page_by_path')) {
+        $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+        $kerm = defined('LFI_NCT_KERMESSE_SLUG') ? get_page_by_path(LFI_NCT_KERMESSE_SLUG, OBJECT, $cpt) : null;
+        $kerm_id = $kerm ? (int) $kerm->ID : 0;
+        if ($kerm_id) {
+            /* Retrouver mes deux événements tractage (titre + date). */
+            $tract_ids = [];
+            foreach (get_posts(['post_type' => $cpt, 'post_status' => 'any', 'posts_per_page' => 300, 'fields' => 'ids']) as $pid) {
+                $ti = get_the_title($pid); $dt = (string) get_post_meta($pid, '_ag_event_date', true);
+                if (($ti === 'Tractage — Super U Saint-Jacques' && $dt === '2026-07-07')
+                 || ($ti === 'Diffusion de tracts' && $dt === '2026-07-09')) {
+                    $tract_ids[] = (int) $pid;
+                    /* Mention « pour la Kermesse » dans la description (une fois). */
+                    $p = get_post($pid);
+                    if ($p && stripos((string) $p->post_content, 'Kermesse') === false) {
+                        wp_update_post(['ID' => $pid, 'post_content' => trim((string) $p->post_content . "\n\nCe tractage prépare la Kermesse Républicaine du 14 juillet (Nantes Sud).")]);
+                    }
+                }
+            }
+            /* Repointer les créneaux de vote de ces événements vers la Kermesse. */
+            if ($tract_ids) {
+                global $wpdb;
+                $tm = $wpdb->prefix . 'lfi_nct_mobilisation';
+                $in = implode(',', array_map('intval', $tract_ids));
+                $wpdb->query($wpdb->prepare("UPDATE $tm SET event_id = %d WHERE event_id IN ($in)", $kerm_id));
+            }
+            update_option('lfi_nct_link_tractage_kermesse_v1', '1', false);
+        }
+    }
+
     /* 1-reset) REMISE À ZÉRO du pipeline d'import des emails, demandée avant une
        relance de pêche propre (« tout remettre à zéro »). Vide la boîte de
        collecte + la mémoire anti-doublon + les emails/pièces IMPORTÉS de tous
