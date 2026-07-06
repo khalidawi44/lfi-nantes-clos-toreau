@@ -177,44 +177,41 @@ function lfi_nct_app_view_envoyer_photo() {
         $piece = sanitize_text_field(wp_unslash($_POST['piece'] ?? ''));
         $note  = sanitize_textarea_field(wp_unslash($_POST['note'] ?? ''));
 
-        if (empty($_FILES['photo']['tmp_name'])) {
-            $err = 'Choisis une photo à envoyer.';
+        /* PLUSIEURS photos d'un coup (name="photo[]"). On accepte aussi l'ancien
+           format à une seule photo par sécurité. */
+        $names = $_FILES['photo']['name'] ?? null;
+        if (empty($names) || (is_array($names) && !array_filter($names))) {
+            $err = 'Choisis au moins une photo à envoyer.';
         } else {
-            $file = $_FILES['photo'];
-            /* Limite à 8 Mo + image uniquement */
-            if ($file['size'] > 8 * 1024 * 1024) {
-                $err = 'Fichier trop volumineux (max 8 Mo).';
-            } else {
+            $list = is_array($names) ? array_keys($names) : [0];
+            $done = 0; $skipped = 0;
+            foreach ($list as $i) {
+                $file = is_array($names)
+                    ? ['name' => $_FILES['photo']['name'][$i], 'type' => $_FILES['photo']['type'][$i], 'tmp_name' => $_FILES['photo']['tmp_name'][$i], 'error' => $_FILES['photo']['error'][$i], 'size' => $_FILES['photo']['size'][$i]]
+                    : $_FILES['photo'];
+                if (empty($file['tmp_name']) || (int) $file['error'] !== 0) { continue; }
+                if ($file['size'] > 15 * 1024 * 1024) { $skipped++; continue; }
                 $mime = function_exists('mime_content_type') ? mime_content_type($file['tmp_name']) : $file['type'];
-                if (strpos($mime, 'image/') !== 0) {
-                    $err = 'Seules les images sont acceptées (JPEG, PNG, HEIC).';
-                } else {
-                    $upload = wp_handle_upload($file, ['test_form' => false]);
-                    if (!empty($upload['error'])) {
-                        $err = 'Erreur upload : ' . $upload['error'];
-                    } else {
-                        $att_id = wp_insert_attachment([
-                            'post_mime_type' => $upload['type'],
-                            'post_title'     => sprintf('Photo %s — %s', $piece ?: 'logement', $user->display_name),
-                            'post_content'   => $note,
-                            'post_status'    => 'private',
-                            'post_author'    => $user->ID,
-                        ], $upload['file']);
-                        if (is_wp_error($att_id) || !$att_id) {
-                            $err = 'Échec d\'enregistrement de la photo.';
-                        } else {
-                            update_post_meta($att_id, '_lfi_tenant_user_id', $user->ID);
-                            update_post_meta($att_id, '_lfi_tenant_piece', $piece);
-                            update_post_meta($att_id, '_lfi_tenant_note', $note);
-                            $meta = wp_generate_attachment_metadata($att_id, $upload['file']);
-                            wp_update_attachment_metadata($att_id, $meta);
-                            lfi_nct_store_capture_ts($att_id, $upload['file']); /* date de prise de vue (EXIF) */
-                            wp_safe_redirect(lfi_nct_app_url('envoyer-photo', ['uploaded' => 1]));
-                            exit;
-                        }
-                    }
-                }
+                if (strpos((string) $mime, 'image/') !== 0) { $skipped++; continue; }
+                $upload = wp_handle_upload($file, ['test_form' => false]);
+                if (!empty($upload['error'])) { $skipped++; continue; }
+                $att_id = wp_insert_attachment([
+                    'post_mime_type' => $upload['type'],
+                    'post_title'     => sprintf('Photo %s — %s', $piece ?: 'logement', $user->display_name),
+                    'post_content'   => $note,
+                    'post_status'    => 'private',
+                    'post_author'    => $user->ID,
+                ], $upload['file']);
+                if (is_wp_error($att_id) || !$att_id) { $skipped++; continue; }
+                update_post_meta($att_id, '_lfi_tenant_user_id', $user->ID);
+                update_post_meta($att_id, '_lfi_tenant_piece', $piece);
+                update_post_meta($att_id, '_lfi_tenant_note', $note);
+                wp_update_attachment_metadata($att_id, wp_generate_attachment_metadata($att_id, $upload['file']));
+                lfi_nct_store_capture_ts($att_id, $upload['file']); /* date de prise de vue (EXIF) */
+                $done++;
             }
+            if ($done > 0) { wp_safe_redirect(lfi_nct_app_url('envoyer-photo', ['uploaded' => $done] + ($skipped ? ['skip' => $skipped] : []))); exit; }
+            $err = 'Aucune photo envoyée (' . $skipped . ' ignorée·s : trop lourdes ou pas des images).';
         }
     }
 
@@ -235,7 +232,7 @@ function lfi_nct_app_view_envoyer_photo() {
 
     lfi_nct_app_screen_open('📷 Envoyer une photo', 'Documenter votre logement en images');
 
-    if (!empty($_GET['uploaded'])) lfi_nct_app_flash('✅ Photo enregistrée. Le GA y a accès dans votre dossier.');
+    if (!empty($_GET['uploaded'])) lfi_nct_app_flash('✅ ' . (int) $_GET['uploaded'] . ' photo(s) enregistrée(s). Le GA y a accès dans votre dossier.' . (!empty($_GET['skip']) ? ' (' . (int) $_GET['skip'] . ' ignorée·s.)' : ''));
     if (!empty($_GET['deleted']))  lfi_nct_app_flash('🗑 Photo supprimée.');
     if ($err) lfi_nct_app_flash('❌ ' . $err, 'err');
 
@@ -253,9 +250,9 @@ function lfi_nct_app_view_envoyer_photo() {
 
     echo '<label>📝 Que montre la photo ? (description)<textarea name="note" rows="3" placeholder="Ex : moisissures sur le plafond depuis 6 mois, mur sud de la cuisine"></textarea></label>';
 
-    echo '<label>📂 La photo<input type="file" name="photo" accept="image/*" required></label>';
+    echo '<label>📂 Les photos (tu peux en choisir <strong>plusieurs à la fois</strong>)<input type="file" name="photo[]" accept="image/*" multiple required></label>';
 
-    echo '<button type="submit" class="btn-primary big">📤 Envoyer la photo</button>';
+    echo '<button type="submit" class="btn-primary big">📤 Envoyer les photos</button>';
     echo '</form>';
 
     echo '<h3 style="margin:24px 0 10px">📷 Mes photos envoyées (' . count($photos) . ')</h3>';
