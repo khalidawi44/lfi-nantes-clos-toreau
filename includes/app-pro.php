@@ -3173,7 +3173,21 @@ function lfi_nct_app_view_carte($force_all = false) {
                 }
             }, beforeId);
         }
-        map.on('load', function () { addSurveyLayer(); loadBuildings(); });
+        map.on('load', function () {
+            addSurveyLayer(); loadBuildings();
+            /* MARQUEURS DOM (pins) — 100 % fiables : ne peuvent PAS être masqués
+               par l'ordre des couches, un immeuble 3D ou une police manquante.
+               Chaque signalement = une épingle colorée par gravité + popup. */
+            try {
+                markers.forEach(function (m) {
+                    if (typeof m.lng !== 'number' || typeof m.lat !== 'number') return;
+                    new maplibregl.Marker({ color: m.gcolor || '#c8102e' })
+                        .setLngLat([m.lng, m.lat])
+                        .setPopup(new maplibregl.Popup({ offset: 14, closeButton: true }).setHTML(popupHtml(m)))
+                        .addTo(map);
+                });
+            } catch (e) { if (window.console) console.warn('pins', e); }
+        });
 
         /* Liste déroulante « Aller à un signalement » → vole vers le point + popup. */
         var goto = document.getElementById('lfi-map-goto');

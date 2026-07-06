@@ -614,7 +614,10 @@ function lfi_nct_app_view_public_gas() {
         var pts = [];
         (window.LFI_GA_MARKERS||[]).forEach(function(m){
             if (!m.lat) return;
-            var mk = L.marker([m.lat, m.lng]).addTo(map);
+            /* Pastille SVG (circleMarker) : toujours visible, AUCUNE image externe
+               à charger (les épingles L.marker par défaut restaient invisibles
+               quand l'icône PNG d'unpkg ne se chargeait pas). */
+            var mk = L.circleMarker([m.lat, m.lng], {radius:9, color:'#fff', weight:2, fillColor:'#c8102e', fillOpacity:0.9}).addTo(map);
             mk.bindPopup('<div style="min-width:150px"><strong>'+m.nom+'</strong><br><span style="color:#0066a3">📍 '+(m.commune||'')+'</span>'+(m.anim?'<br>✊ Animé par <strong>'+m.anim+'</strong>':'')+'<br><a href="'+m.url+'" style="display:inline-block;margin-top:6px;background:#c8102e;color:#fff;padding:5px 10px;border-radius:6px;text-decoration:none;font-weight:700">Entrer dans le GA →</a></div>');
             pts.push([m.lat, m.lng]);
         });
