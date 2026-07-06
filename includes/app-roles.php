@@ -3054,6 +3054,22 @@ function lfi_nct_app_view_comptes_locataires() {
     /* Cloisonnement : chaque GA ne voit QUE ses locataires. */
     if (function_exists('lfi_nct_users_ga_query')) $args_users = lfi_nct_users_ga_query($args_users);
     $users_tenant = get_users($args_users);
+    /* + TOUTE personne ayant un DOSSIER dans le périmètre, même si son rôle
+       principal n'est pas « locataire » (multi-casquette : Fabrice = membre ET
+       locataire ne doit jamais disparaître de la liste). */
+    if ($search === '') {
+        global $wpdb;
+        $seen_t = []; foreach ($users_tenant as $tu0) $seen_t[(int) $tu0->ID] = 1;
+        $td0 = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $drows0 = $wpdb->get_results("SELECT DISTINCT tenant_user_id FROM $td0 WHERE tenant_user_id > 0") ?: [];
+        foreach ($drows0 as $r0) {
+            $duid0 = (int) $r0->tenant_user_id;
+            if (!$duid0 || isset($seen_t[$duid0])) continue;
+            if (function_exists('lfi_nct_uid_in_scope') && !lfi_nct_uid_in_scope($duid0)) continue;
+            $uu0 = get_userdata($duid0);
+            if ($uu0) { $users_tenant[] = $uu0; $seen_t[$duid0] = 1; }
+        }
+    }
     $n_tenant = count($users_tenant);
 
     /* MÉNAGE : on retire de « enquêtes sans compte » celles qui correspondent en
