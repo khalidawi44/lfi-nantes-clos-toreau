@@ -55,6 +55,20 @@ function lfi_nct_auto_deploy() {
         }
     }
 
+    /* 1-fabrice-wipe) Vider TOTALEMENT le dossier de Fabrice Doucet (pièces +
+       chronologie + emails + notes), demandé pour repartir de zéro. Une fois. */
+    if (get_option('lfi_nct_fabrice_wipe_v1') !== '1' && function_exists('lfi_nct_dossier_wipe_all')) {
+        $fu = get_user_by('email', 'fabrice.doucet44@gmail.com') ?: get_user_by('email', 'nantessudclostoreau@gmail.com');
+        if (!$fu) {
+            $cands = get_users(['search' => '*doucet*', 'search_columns' => ['display_name', 'user_login', 'user_nicename'], 'number' => 1]);
+            $fu = $cands ? $cands[0] : null;
+        }
+        if ($fu) {
+            try { lfi_nct_dossier_wipe_all((int) $fu->ID); } catch (\Throwable $e) {}
+            update_option('lfi_nct_fabrice_wipe_v1', '1', false);
+        }
+    }
+
     /* 1-logos) Nettoyage des LOGOS/ICÔNES de signature importés par erreur comme
        pièces (une fois). */
     if (get_option('lfi_nct_cleanup_logos_v1') !== '1' && function_exists('lfi_nct_cleanup_email_logos')) {
