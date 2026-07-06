@@ -181,6 +181,19 @@ function lfi_nct_app_create_page() {
 /* ============================================================== *
  *  Endpoints racine : manifest, service worker, icônes             *
  * ============================================================== */
+/* URLs COURTES et propres : /lien/<jeton> (connexion) et /stop/<jeton>
+   (ne plus me contacter). On les retransforme en paramètres AVANT que les
+   handlers (désabonnement sur init, connexion sur template_redirect) ne
+   s'exécutent. Pas de rewrite nécessaire : les handlers sortent (exit) avant
+   tout rendu de 404. */
+add_action('init', 'lfi_nct_short_urls_map', 0);
+function lfi_nct_short_urls_map() {
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+    $uri = trim($uri, '/');
+    if (preg_match('~^lien/([^/]+)$~', $uri, $m))      { if (empty($_GET['lfi_login'])) $_GET['lfi_login'] = rawurldecode($m[1]); }
+    elseif (preg_match('~^stop/([^/]+)$~', $uri, $m))  { if (empty($_GET['lfi_unsub'])) $_GET['lfi_unsub'] = rawurldecode($m[1]); }
+}
+
 add_action('init', 'lfi_nct_app_rewrites', 5);
 function lfi_nct_app_rewrites() {
     add_rewrite_rule('^lfi-app-manifest\.json$',     'index.php?lfi_app=manifest', 'top');

@@ -2016,10 +2016,13 @@ function lfi_nct_login_link($uid, $next_url = '') {
     if (!$uid) return '';
     $token = lfi_nct_make_login_token($uid);
     if (!$token) return '';
+    /* URL COURTE et propre quand il n'y a pas de destination spécifique :
+       https://…/lien/<jeton> (au lieu du long ?lfi_login=…). Le mappeur très
+       tôt (init 0) la retransforme en ?lfi_login. Avec destination : forme
+       longue (on garde lfi_next). */
+    if ($next_url === '') return home_url('/lien/' . $token);
     $base = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
-    $args = ['lfi_login' => $token];
-    if ($next_url !== '') $args['lfi_next'] = rawurlencode($next_url);
-    return add_query_arg($args, $base);
+    return add_query_arg(['lfi_login' => $token, 'lfi_next' => rawurlencode($next_url)], $base);
 }
 
 /**
