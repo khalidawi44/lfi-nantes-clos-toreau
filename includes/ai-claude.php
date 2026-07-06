@@ -236,43 +236,62 @@ function lfi_nct_md_extract_chrono($md) {
     if ($md === '') return [];
     $md = mb_substr($md, 0, 40000); /* borne de coût */
 
-    /* On combine DEUX sources et on fusionne, pour ne RIEN rater :
-       - l'IA Claude (comprend les phrases datées, les traitements, etc.) ;
-       - le repli regex (attrape toute ligne datée, même si l'IA en oublie). */
-    $ai = [];
+    /* IA SEULE (la version qui triait bien). Le repli regex ne sert QUE si la
+       clé Claude est absente / l'appel échoue — jamais fusionné avec l'IA (le
+       mélange créait du bruit et des doublons). On dédUplique quand même le
+       résultat sur (date + début de phrase) par sécurité. */
     if (lfi_nct_ai_enabled()) {
         $system =
-            "Tu extrais la CHRONOLOGIE COMPLÈTE d'un dossier de défense d'un locataire, rédigé en Markdown. "
+            "Tu extrais la CHRONOLOGIE d'un dossier de défense d'un locataire, rédigé en Markdown. "
             . "Tu réponds UNIQUEMENT par un tableau JSON valide, sans texte autour :\n"
             . '[{"date":"jj/mm/aaaa","event":"une phrase factuelle"}, ...]' . "\n"
-            . "RÈGLES : extrais TOUS les événements datés écrits dans le texte, SANS EN OUBLIER — y compris les "
-            . "TRAITEMENTS / interventions / désinsectisations, les courriers, les rendez-vous, les constats, "
-            . "les dates de 2020, 2021, 2022, 2023, 2024, 2025, 2026. N'invente RIEN (uniquement ce qui est écrit). "
+            . "RÈGLES : n'extrais QUE des événements réellement datés et écrits dans le texte (jamais inventés) — "
+            . "y compris les traitements / interventions / désinsectisations et les emails datés. "
             . "date = telle qu'écrite (jj/mm/aaaa si possible ; sinon mois/année ou l'année seule). "
-            . "event = une phrase courte et factuelle. Classe du plus ancien au plus récent. Ignore les passages non datés.";
-        $out = lfi_nct_ai_call($system, $md, 8000);
+            . "event = une phrase courte et factuelle. Classe du plus ancien au plus récent. Ignore les passages non datés. "
+            . "Ne mets JAMAIS deux fois le même événement (pas de doublon).";
+        $out = lfi_nct_ai_call($system, $md, 6000);
         if ($out !== null && preg_match('/\[.*\]/s', $out, $m)) {
             $j = json_decode($m[0], true);
             if (is_array($j)) {
+                $res = []; $seen = [];
                 foreach ($j as $e) {
                     if (!is_array($e)) continue;
-                    $ev = trim((string) ($e['event'] ?? ''));
-                    if ($ev !== '') $ai[] = ['date' => trim((string) ($e['date'] ?? '')), 'event' => $ev];
+                    $ev = trim((string) ($e['event'] ?? '')); if ($ev === '') continue;
+                    $d = trim((string) ($e['date'] ?? ''));
+                    $key = mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', $d . mb_substr($ev, 0, 45)));
+                    if (isset($seen[$key])) continue; $seen[$key] = 1;
+                    $res[] = ['date' => $d, 'event' => $ev];
                 }
+                if ($res) return $res;
             }
         }
     }
-    $regex = lfi_nct_md_extract_chrono_regex($md);
+    return lfi_nct_md_extract_chrono_regex($md);
+}
 
-    /* Fusion : on garde tout, dédupliqué sur un mot-clé (date + début de phrase). */
-    $merged = []; $seen = [];
-    foreach (array_merge($ai, $regex) as $e) {
-        $ev = trim((string) ($e['event'] ?? '')); if ($ev === '') continue;
-        $key = mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', ($e['date'] ?? '') . mb_substr($ev, 0, 40)));
-        if (isset($seen[$key])) continue; $seen[$key] = 1;
-        $merged[] = ['date' => (string) ($e['date'] ?? ''), 'event' => $ev];
-    }
-    return $merged;
+/**
+ * Extrait la SYNTHÈSE non datée d'un dossier .md — surtout le CHIFFRAGE DU
+ * PRÉJUDICE (montants, postes, méthode, justification du total), le contexte et
+ * les demandes. Renvoie du Markdown, ou '' si rien / IA absente. Ne rien inventer.
+ */
+function lfi_nct_md_extract_synthese($md) {
+    if (!lfi_nct_ai_enabled()) return '';
+    $md = mb_substr(trim((string) $md), 0, 40000);
+    if ($md === '') return '';
+    $system =
+        "Tu lis un dossier de défense d'un locataire, rédigé en Markdown. "
+        . "Tu RÉSUMES fidèlement les parties IMPORTANTES qui ne sont PAS des dates de chronologie, en priorité :\n"
+        . "1. Le CHIFFRAGE DU PRÉJUDICE : chaque poste, chaque montant, la méthode et la JUSTIFICATION du total.\n"
+        . "2. Le contexte du logement et les demandes (relogement, indemnisation, travaux).\n"
+        . "Réponds en Markdown court et structuré (titres, listes, montants en €). "
+        . "N'INVENTE AUCUN chiffre ni fait : reprends UNIQUEMENT ce qui est écrit. "
+        . "Si le texte ne contient rien de ce type, réponds EXACTEMENT par : (vide)";
+    $out = lfi_nct_ai_call($system, $md, 3000);
+    if ($out === null) return '';
+    $out = trim($out);
+    if ($out === '' || mb_strtolower($out) === '(vide)') return '';
+    return $out;
 }
 
 /** Repli sans IA : repère les lignes commençant par une date. */
