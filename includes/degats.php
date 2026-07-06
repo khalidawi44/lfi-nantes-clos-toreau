@@ -119,11 +119,37 @@ function lfi_nct_app_view_tenant_signaler_degat() {
     if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     $user = wp_get_current_user(); $uid = (int) $user->ID;
 
+    /* On garantit qu'un épisode existe (migration douce) avant de proposer le
+       choix « nouveau problème / problème en cours ». */
+    if (function_exists('lfi_nct_episodes_ensure')) lfi_nct_episodes_ensure($uid);
+
     if (!empty($_POST['lfi_degat_signal']) && check_admin_referer('lfi_degat_signal')) {
         $piece = sanitize_text_field(wp_unslash($_POST['piece'] ?? ''));
         $desc  = sanitize_textarea_field(wp_unslash($_POST['desc'] ?? ''));
+        $mode  = sanitize_key($_POST['ep_mode'] ?? 'new');
+
+        /* 1) Cibler le bon DOSSIER D'INCIDENT (épisode) : nouveau ou en cours. */
+        $ep_id = 0; $ep_titre = '';
+        if (function_exists('lfi_nct_episode_create')) {
+            if ($mode === 'existing' && (int) ($_POST['ep_id'] ?? 0) > 0) {
+                $ep_id = (int) $_POST['ep_id'];
+                lfi_nct_episode_switch($uid, $ep_id);
+            } else {
+                $type  = sanitize_key($_POST['ep_type'] ?? 'autre');
+                $types = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
+                if (!isset($types[$type])) $type = 'autre';
+                $tlabel = $types[$type][1] ?? 'Incident';
+                /* Titre auto lisible : « <type court> — <mois année> ». */
+                $court = trim(preg_replace('/\s*\(.*$/', '', $tlabel));
+                $ep_titre = $court . ' — ' . wp_date('M Y');
+                $ep_id = lfi_nct_episode_create($uid, $ep_titre, $type, $piece);
+            }
+            $ep_titre = '';
+            foreach (lfi_nct_episodes_get($uid) as $e) if ((int) ($e['id'] ?? 0) === $ep_id) $ep_titre = (string) ($e['titre'] ?? '');
+        }
+
+        /* 2) Photos → pièces horodatées, rattachées à CET épisode. */
         $nb_photos = 0;
-        /* Photos (plusieurs), horodatées, rangées comme pièces du locataire. */
         if (!empty($_FILES['photo']['name']) && is_array($_FILES['photo']['name'])) {
             require_once ABSPATH . 'wp-admin/includes/file.php';
             require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -141,27 +167,60 @@ function lfi_nct_app_view_tenant_signaler_degat() {
                 update_post_meta($att, '_lfi_tenant_user_id', $uid);
                 update_post_meta($att, '_lfi_tenant_piece', $piece);
                 update_post_meta($att, '_lfi_piece_cat', 'photo');
+                if ($ep_id) update_post_meta($att, '_lfi_episode', $ep_id);
                 wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $up['file']));
                 if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $up['file']);
                 $nb_photos++;
             }
         }
-        /* Chronologie horodatée. */
+        /* 3) Chronologie horodatée (avec le dossier concerné). */
         if (function_exists('lfi_nct_chrono_add')) {
-            $txt = '🚨 Dégât signalé par le locataire' . ($piece !== '' ? ' — ' . $piece : '') . ($desc !== '' ? ' : ' . mb_substr($desc, 0, 120) : '') . ($nb_photos ? ' (' . $nb_photos . ' photo' . ($nb_photos > 1 ? 's' : '') . ')' : '');
+            $txt = '🚨 Dégât signalé par le locataire' . ($ep_titre !== '' ? ' [' . $ep_titre . ']' : '') . ($piece !== '' ? ' — ' . $piece : '') . ($desc !== '' ? ' : ' . mb_substr($desc, 0, 120) : '') . ($nb_photos ? ' (' . $nb_photos . ' photo' . ($nb_photos > 1 ? 's' : '') . ')' : '');
             lfi_nct_chrono_add($uid, wp_date('d/m/Y'), $txt, true);
         }
-        /* Alerte au membre/admin. */
-        lfi_nct_degat_signal_add($uid, $piece, $desc);
+        /* 4) Alerte au membre/admin. */
+        lfi_nct_degat_signal_add($uid, ($ep_titre !== '' ? $ep_titre . ($piece !== '' ? ' · ' . $piece : '') : $piece), $desc, 'degat');
         wp_safe_redirect(lfi_nct_app_url('signaler-degat', ['ok' => 1])); exit;
     }
+
+    /* Épisodes ouverts (urgence non close) pour le choix « problème en cours ». */
+    $episodes = function_exists('lfi_nct_episodes_get') ? lfi_nct_episodes_get($uid) : [];
+    $ouverts  = array_values(array_filter($episodes, function ($e) { return empty($e['clos_urgence']); }));
+    $etypes   = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
 
     lfi_nct_app_screen_open('🚨 Signaler un dégât', 'Un nouveau problème ? Dites-le, c\'est horodaté');
     if (!empty($_GET['ok'])) lfi_nct_app_flash('✅ Signalement envoyé et horodaté. La personne qui suit votre dossier est prévenue.');
     echo '<div class="lfi-app-help">Un nouveau dégât (fuite, moisissure, panne, nuisibles…) ? Décrivez-le et ajoutez des photos. Tout est <strong>daté automatiquement</strong> et transmis à la personne du GA qui suit votre dossier.</div>';
 
-    echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form">' . wp_nonce_field('lfi_degat_signal', '_wpnonce', true, false);
+    echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form" id="lfi-degat-form">' . wp_nonce_field('lfi_degat_signal', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_degat_signal" value="1">';
+
+    /* ── Choix : NOUVEAU problème vs problème EN COURS ── */
+    echo '<div style="background:#f6f8fb;border:1px solid #dfe6f0;border-radius:12px;padding:12px;margin-bottom:6px">';
+    echo '<div style="font-weight:800;color:#0b3d91;margin-bottom:6px">S\'agit-il d\'un nouveau problème ?</div>';
+    echo '<label style="display:flex;align-items:flex-start;gap:8px;margin:0 0 8px;font-weight:600"><input type="radio" name="ep_mode" value="new" checked onclick="lfiDegatMode()" style="margin-top:3px"> <span>🆕 <strong>Nouveau problème</strong> — on ouvre un dossier séparé (bien rangé, jamais mélangé avec un autre).</span></label>';
+    if (!empty($ouverts)) {
+        echo '<label style="display:flex;align-items:flex-start;gap:8px;margin:0;font-weight:600"><input type="radio" name="ep_mode" value="existing" onclick="lfiDegatMode()" style="margin-top:3px"> <span>➕ <strong>Ça concerne un problème en cours</strong> — on l\'ajoute au bon dossier.</span></label>';
+    }
+    /* Bloc NOUVEAU : type d'incident. */
+    echo '<div id="lfi-degat-new" style="margin-top:8px">';
+    echo '<label style="margin:0">Type de problème<select name="ep_type">';
+    foreach ($etypes as $tk => $tv) echo '<option value="' . esc_attr($tk) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+    echo '</select></label>';
+    echo '</div>';
+    /* Bloc EN COURS : choix du dossier ouvert. */
+    if (!empty($ouverts)) {
+        echo '<div id="lfi-degat-existing" style="margin-top:8px;display:none">';
+        echo '<label style="margin:0">Quel dossier ?<select name="ep_id">';
+        foreach ($ouverts as $e) {
+            $ic = $etypes[$e['type'] ?? ''][0] ?? '📁';
+            echo '<option value="' . (int) ($e['id'] ?? 0) . '">' . $ic . ' ' . esc_html($e['titre'] ?? 'Dossier') . '</option>';
+        }
+        echo '</select></label>';
+        echo '</div>';
+    }
+    echo '</div>';
+
     echo '<label>📍 Quelle pièce / quel endroit ?<select name="piece">';
     foreach (['Cuisine', 'Salle de bain', 'WC', 'Chambre', 'Salon', 'Couloir', 'Entrée', 'Balcon', 'Cave', 'Parties communes', 'Cage d\'escalier', 'Ascenseur', 'Extérieur immeuble', 'Autre'] as $p) {
         echo '<option value="' . esc_attr($p) . '">' . esc_html($p) . '</option>';
@@ -170,6 +229,7 @@ function lfi_nct_app_view_tenant_signaler_degat() {
     echo '<label>📝 Que se passe-t-il ?<textarea name="desc" rows="4" placeholder="Ex : nouvelle fuite sous l\'évier depuis ce matin, l\'eau coule en continu."></textarea></label>';
     echo '<label>📷 Photos (plusieurs possibles)<input type="file" name="photo[]" accept="image/*" multiple></label>';
     echo '<button type="submit" class="btn-primary big" style="background:#c8102e">🚨 Envoyer le signalement</button></form>';
+    echo '<script>function lfiDegatMode(){var n=document.querySelector(\'input[name=ep_mode]:checked\');var isNew=!n||n.value===\'new\';var bn=document.getElementById(\'lfi-degat-new\');var be=document.getElementById(\'lfi-degat-existing\');if(bn)bn.style.display=isNew?\'block\':\'none\';if(be)be.style.display=isNew?\'none\':\'block\';}lfiDegatMode();</script>';
 
     lfi_nct_app_screen_close();
 }
@@ -236,11 +296,17 @@ function lfi_nct_app_view_tenant_suivi() {
     if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
     $uid  = get_current_user_id();
 
+    /* Dossiers d'incident (épisodes) : on garantit qu'au moins un existe, puis on
+       bascule sur celui demandé (les liens/formulaires portent ?ep=). */
+    if (function_exists('lfi_nct_episodes_ensure')) lfi_nct_episodes_ensure($uid);
+    $ep_req = isset($_REQUEST['ep']) ? (int) $_REQUEST['ep'] : 0;
+    if ($ep_req && function_exists('lfi_nct_episode_switch')) lfi_nct_episode_switch($uid, $ep_req);
+
     /* --- Suppression d'une pièce versée par le locataire (tout est supprimable). --- */
     if (!empty($_POST['lfi_suivi_piece_del']) && check_admin_referer('lfi_suivi_contrib')) {
         $att = (int) ($_POST['att_id'] ?? 0);
         if ($att && (int) get_post_meta($att, '_lfi_tenant_user_id', true) === $uid) wp_delete_attachment($att, true);
-        $e = isset($_POST['etape']) ? ['etape' => (int) $_POST['etape']] : [];
+        $e = ['ep' => $ep_req]; if (isset($_POST['etape'])) $e['etape'] = (int) $_POST['etape'];
         wp_safe_redirect(lfi_nct_app_url('mon-suivi', $e)); exit;
     }
 
@@ -277,13 +343,50 @@ function lfi_nct_app_view_tenant_suivi() {
             $note = sanitize_textarea_field(wp_unslash($_POST['note'] ?? ''));
             if ($note !== '' && function_exists('lfi_nct_chrono_add')) lfi_nct_chrono_add($uid, wp_date('d/m/Y'), '📝 ' . $stxt . ' — ' . $note, true);
             update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+            if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($uid);
             /* Alerte au gestionnaire (canal « contribution »). */
             $bits = $done_labels;
             if ($free_n) $bits[] = $free_n . ' photo' . ($free_n > 1 ? 's' : '');
             if ($note !== '') $bits[] = mb_substr($note, 0, 80);
             lfi_nct_degat_signal_add($uid, $stxt, $bits ? implode(' · ', $bits) : 'Contribution du locataire', 'contrib');
         }
-        wp_safe_redirect(lfi_nct_app_url('mon-suivi', ['contrib_ok' => 1, 'etape' => $idx])); exit;
+        wp_safe_redirect(lfi_nct_app_url('mon-suivi', ['ep' => $ep_req, 'contrib_ok' => 1, 'etape' => $idx])); exit;
+    }
+
+    /* =========================================================== *
+     *  SANS ?ep : LISTE DES DOSSIERS D'INCIDENT (épisodes).       *
+     * =========================================================== */
+    if (!$ep_req && function_exists('lfi_nct_episodes_get')) {
+        $episodes = lfi_nct_episodes_get($uid);
+        $etypes = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
+        lfi_nct_app_screen_open('📋 Mes dossiers', 'Chaque problème = un dossier séparé et suivi');
+        if (!empty($_GET['contrib_ok'])) lfi_nct_app_flash('✅ Merci ! Vos éléments sont bien enregistrés.');
+        echo '<div class="lfi-app-help">Chaque problème de logement a <strong>son propre dossier</strong>, suivi séparément. Touchez un dossier pour voir où il en est et apporter ce qu\'on vous demande.</div>';
+        if (empty($episodes)) {
+            echo '<div class="lfi-app-empty">Votre suivi démarre. La personne du GA qui vous accompagne va préparer votre dossier — revenez bientôt.</div>';
+        } else {
+            echo '<div style="display:flex;flex-direction:column;gap:10px">';
+            foreach ($episodes as $e) {
+                $eid = (int) ($e['id'] ?? 0);
+                $prog = function_exists('lfi_nct_episode_progress') ? lfi_nct_episode_progress($e) : ['done' => 0, 'total' => 0, 'pct' => 0];
+                $pend = function_exists('lfi_nct_episode_besoins_pending') ? lfi_nct_episode_besoins_pending($e) : 0;
+                $clos = !empty($e['clos_urgence']);
+                $ic = $etypes[$e['type'] ?? ''][0] ?? '📁';
+                $url = lfi_nct_app_url('mon-suivi', ['ep' => $eid]);
+                echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:block;background:#fff;border:2px solid ' . ($pend ? '#d39e00' : ($clos ? '#a6d3a6' : '#dfe6f0')) . ';border-radius:14px;padding:13px 15px">';
+                echo '<div style="display:flex;align-items:center;gap:10px"><div style="font-size:1.5em">' . $ic . '</div>';
+                echo '<div style="flex:1"><div style="font-weight:900;color:#0b3d91">' . esc_html($e['titre'] ?? 'Dossier') . ($clos ? ' <span style="font-size:.7em;background:#e8f5ea;color:#186a3b;padding:1px 7px;border-radius:9px;vertical-align:middle">urgence réglée</span>' : '') . '</div>';
+                echo '<div style="font-size:.85em;color:#666;margin-top:2px">Avancement : ' . (int) $prog['done'] . '/' . (int) $prog['total'] . ' étapes</div></div>';
+                echo '<div style="font-weight:800;color:#999">›</div></div>';
+                echo '<div style="background:#eee;border-radius:8px;height:8px;margin-top:8px;overflow:hidden"><div style="width:' . (int) $prog['pct'] . '%;height:100%;background:#186a3b"></div></div>';
+                if ($pend) echo '<div style="font-size:.82em;color:#c8102e;font-weight:800;margin-top:6px">⚠️ ' . (int) $pend . ' pièce' . ($pend > 1 ? 's' : '') . ' à fournir — touchez pour ajouter</div>';
+                echo '</a>';
+            }
+            echo '</div>';
+        }
+        echo '<div style="margin-top:14px"><a href="' . esc_url(lfi_nct_app_url('signaler-degat')) . '" class="btn-primary big" style="background:#c8102e;text-decoration:none;display:block;text-align:center">🚨 Signaler un nouveau problème</a></div>';
+        echo '<div class="lfi-app-help" style="margin-top:8px"><small>🔒 Privé : réservé à vous et au GA qui vous accompagne.</small></div>';
+        lfi_nct_app_screen_close(); return;
     }
 
     $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
@@ -305,7 +408,7 @@ function lfi_nct_app_view_tenant_suivi() {
 
         lfi_nct_app_screen_open('📋 ' . $stxt, 'Ce que vous pouvez apporter pour cette étape');
         if (!empty($_GET['contrib_ok'])) lfi_nct_app_flash('✅ Merci ! Vos éléments sont enregistrés et horodatés. La personne qui suit votre dossier est prévenue.');
-        echo '<div style="margin-bottom:10px"><a href="' . esc_url(lfi_nct_app_url('mon-suivi')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">← Retour à mon suivi</a></div>';
+        echo '<div style="margin-bottom:10px"><a href="' . esc_url(lfi_nct_app_url('mon-suivi', ['ep' => $ep_req])) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">← Retour au dossier</a></div>';
 
         if (!empty($step['echeance'])) echo '<div class="lfi-app-help" style="margin-bottom:8px">📅 Échéance : <strong>' . esc_html(wp_date('j M Y', strtotime($step['echeance']))) . '</strong></div>';
 
@@ -321,7 +424,7 @@ function lfi_nct_app_view_tenant_suivi() {
         }
 
         echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form">' . wp_nonce_field('lfi_suivi_contrib', '_wpnonce', true, false);
-        echo '<input type="hidden" name="lfi_suivi_contrib" value="1"><input type="hidden" name="step_idx" value="' . (int) $sel . '">';
+        echo '<input type="hidden" name="lfi_suivi_contrib" value="1"><input type="hidden" name="step_idx" value="' . (int) $sel . '"><input type="hidden" name="ep" value="' . (int) $ep_req . '">';
 
         /* Besoins déclarés par le gestionnaire → un champ ciblé par besoin. */
         foreach ($besoins as $bi => $b) {
@@ -358,7 +461,7 @@ function lfi_nct_app_view_tenant_suivi() {
                 echo '<a href="' . esc_url(wp_get_attachment_url($p->ID)) . '" target="_blank" rel="noopener">';
                 echo $th ? '<img src="' . esc_url($th) . '" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #ccc">' : '<div style="width:80px;height:80px;border-radius:8px;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:1.8em;background:#f4f4f4">📄</div>';
                 echo '</a>';
-                echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\')" style="margin:2px 0 0">' . wp_nonce_field('lfi_suivi_contrib', '_wpnonce', true, false) . '<input type="hidden" name="lfi_suivi_piece_del" value="1"><input type="hidden" name="etape" value="' . (int) $sel . '"><input type="hidden" name="att_id" value="' . (int) $p->ID . '"><button type="submit" class="btn-ghost" style="font-size:.68em;padding:1px 6px;color:#c8102e">🗑 Retirer</button></form>';
+                echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\')" style="margin:2px 0 0">' . wp_nonce_field('lfi_suivi_contrib', '_wpnonce', true, false) . '<input type="hidden" name="lfi_suivi_piece_del" value="1"><input type="hidden" name="etape" value="' . (int) $sel . '"><input type="hidden" name="ep" value="' . (int) $ep_req . '"><input type="hidden" name="att_id" value="' . (int) $p->ID . '"><button type="submit" class="btn-ghost" style="font-size:.68em;padding:1px 6px;color:#c8102e">🗑 Retirer</button></form>';
                 echo '</div>';
             }
             echo '</div>';
@@ -368,10 +471,15 @@ function lfi_nct_app_view_tenant_suivi() {
     }
 
     /* =========================================================== *
-     *  LISTE DES ÉTAPES (chaque étape est cliquable).             *
+     *  PARCOURS D'UN DOSSIER (?ep=N) : les étapes cliquables.     *
      * =========================================================== */
-    lfi_nct_app_screen_open('📋 Où en est mon dossier', 'Ce qu\'on a déjà fait et ce qui suit');
+    $ep_titre = 'Où en est mon dossier';
+    if (function_exists('lfi_nct_episodes_get')) {
+        foreach (lfi_nct_episodes_get($uid) as $e) if ((int) ($e['id'] ?? 0) === $ep_req) $ep_titre = (string) ($e['titre'] ?? $ep_titre);
+    }
+    lfi_nct_app_screen_open('📋 ' . $ep_titre, 'Ce qu\'on a déjà fait et ce qui suit');
     if (!empty($_GET['contrib_ok'])) lfi_nct_app_flash('✅ Merci ! Vos éléments sont bien enregistrés.');
+    echo '<div style="margin-bottom:10px"><a href="' . esc_url(lfi_nct_app_url('mon-suivi')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">← Tous mes dossiers</a></div>';
     echo '<div class="lfi-app-help">Voici, étape par étape, ce que le Groupe d\'Action fait pour vous. <strong>✓ vert = déjà fait</strong>. <strong>Touchez une étape</strong> pour y ajouter ce qu\'on vous demande (photos, dates, montants…).</div>';
 
     /* Indices RÉELS conservés (on saute seulement les étapes rendues inutiles). */
@@ -399,7 +507,7 @@ function lfi_nct_app_view_tenant_suivi() {
         $pending = lfi_nct_suivi_besoins_pending($s);
         $bg = $ok ? '#eef7ee' : ($is_next ? '#fff7e6' : '#fafafa');
         $bd = $pending ? '#d39e00' : ($ok ? '#a6d3a6' : ($is_next ? '#e6c98a' : '#eee'));
-        $url = lfi_nct_app_url('mon-suivi', ['etape' => (int) $idx]);
+        $url = lfi_nct_app_url('mon-suivi', ['ep' => (int) $ep_req, 'etape' => (int) $idx]);
         echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:flex;align-items:flex-start;gap:12px;background:' . $bg . ';border:1px solid ' . $bd . ';border-radius:12px;padding:11px 13px">';
         echo '<div style="width:28px;height:28px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;background:' . ($ok ? '#186a3b' : ($is_next ? '#d39e00' : '#bbb')) . '">' . ($ok ? '✓' : $n) . '</div>';
         echo '<div style="flex:1"><div style="font-weight:700;color:#222">' . esc_html($txt) . '</div>';

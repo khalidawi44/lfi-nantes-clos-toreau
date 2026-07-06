@@ -904,6 +904,42 @@ function lfi_nct_app_view_dossier() {
         return;
     }
 
+    /* ===== ÉPISODES / dossiers d'incident : garantir + basculer + actions =====
+       Chaque incident (ex. infestation 2020 / 2024 / 2025) est un dossier séparé
+       avec son propre parcours. On bascule sur l'épisode demandé (les liens/forms
+       portent ?ep=) AVANT tout traitement du parcours. */
+    if (function_exists('lfi_nct_episodes_ensure')) lfi_nct_episodes_ensure($u->ID);
+    $ep_req = isset($_REQUEST['ep']) ? (int) $_REQUEST['ep'] : 0;
+    if ($ep_req && function_exists('lfi_nct_episode_switch')) lfi_nct_episode_switch($u->ID, $ep_req);
+    /* Défaut : l'épisode ACTIF (persistant) → tous les redirects portent le bon ep. */
+    if (!$ep_req && function_exists('lfi_nct_episode_active_id')) $ep_req = lfi_nct_episode_active_id($u->ID);
+
+    if (!empty($_POST['lfi_app_episode']) && check_admin_referer('lfi_app_episode') && function_exists('lfi_nct_episode_create')) {
+        $act = sanitize_key($_POST['ep_action'] ?? '');
+        $eid = (int) ($_POST['ep_id'] ?? 0);
+        $titre = sanitize_text_field(wp_unslash($_POST['ep_titre'] ?? ''));
+        $type  = sanitize_key($_POST['ep_type'] ?? 'autre');
+        if ($act === 'create') {
+            $new = lfi_nct_episode_create($u->ID, $titre !== '' ? $titre : 'Nouvel incident', $type, '');
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $new]) . '#parcours'); exit;
+        } elseif ($act === 'switch' && $eid) {
+            lfi_nct_episode_switch($u->ID, $eid);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'rename' && $eid) {
+            lfi_nct_episode_update($u->ID, $eid, ['titre' => $titre, 'type' => $type]);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'close' && $eid) {
+            lfi_nct_episode_set_clos_urgence($u->ID, $eid, true);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'reopen' && $eid) {
+            lfi_nct_episode_set_clos_urgence($u->ID, $eid, false);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'delete' && $eid) {
+            lfi_nct_episode_delete($u->ID, $eid);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#parcours'); exit;
+        }
+    }
+
     /* Mise à jour des notes admin */
     if (!empty($_POST['lfi_app_dossier_notes']) && check_admin_referer('lfi_app_dossier_notes')) {
         $notes = sanitize_textarea_field(wp_unslash($_POST['notes'] ?? ''));
@@ -1251,13 +1287,14 @@ function lfi_nct_app_view_dossier() {
         if ($ok && $sidx >= 0) { /* le robot coche et clôt l'étape */
             $st = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
             if (is_array($st) && isset($st[$sidx])) { $st[$sidx]['done'] = true; update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($st)); }
+            if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
         }
-        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, ($ok ? 'piece_ok' : 'piece_err') => 1]) . '#parcours'); exit;
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $ep_req, ($ok ? 'piece_ok' : 'piece_err') => 1]) . '#parcours'); exit;
     }
     if (!empty($_POST['lfi_app_step_piece_del']) && check_admin_referer('lfi_app_step_piece')) {
         $att = (int) ($_POST['att_id'] ?? 0);
         if ($att && (int) get_post_meta($att, '_lfi_tenant_user_id', true) === (int) $u->ID) wp_delete_attachment($att, true);
-        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#parcours'); exit;
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $ep_req]) . '#parcours'); exit;
     }
 
     /* Parcours de suivi : ajout / coche / suppression d'étapes */
@@ -1315,7 +1352,8 @@ function lfi_nct_app_view_dossier() {
             }
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
-        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'step_saved' => 1]));
+        if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $ep_req, 'step_saved' => 1]));
         exit;
     }
 
@@ -2225,7 +2263,85 @@ function lfi_nct_piece_autostep($uid, $cat) {
     return '';
 }
 
+/* Barre des DOSSIERS D'INCIDENT (épisodes) : un même locataire peut avoir
+ *  plusieurs troubles distincts (infestation 2020 / 2024 / 2025). Chacun a son
+ *  parcours. On sélectionne l'épisode actif, on en crée un nouveau, on clôt son
+ *  volet urgence (le juridique, lui, reste global). */
+function lfi_nct_dossier_render_episodes_bar($u) {
+    if (!function_exists('lfi_nct_episodes_get')) return;
+    $uid = (int) $u->ID;
+    $episodes = lfi_nct_episodes_get($uid);
+    if (empty($episodes)) return;
+    $active = function_exists('lfi_nct_episode_active_id') ? lfi_nct_episode_active_id($uid) : 0;
+    $types  = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
+    $ap_nonce = wp_create_nonce('lfi_app_episode');
+
+    echo '<details open style="margin:14px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:12px 15px;font-weight:800;color:#0b3d91;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>🗂️ Dossiers d\'incident <span style="background:#0b3d91;color:#fff;font-size:.7em;padding:1px 7px;border-radius:10px;vertical-align:middle">' . count($episodes) . '</span></span><span style="font-size:1.2em">▾</span></summary>';
+    echo '<div style="padding:0 15px 14px">';
+    echo '<div class="lfi-app-help" style="margin:6px 0"><small>Chaque trouble distinct = <strong>un dossier séparé et cloisonné</strong>, avec son propre parcours (urgence → amiable → clôture). Le dossier <strong>juridique reste global</strong> : on additionne le préjudice de tous pour une indemnité globale.</small></div>';
+
+    /* Onglets des épisodes. */
+    echo '<div style="display:flex;flex-wrap:wrap;gap:7px;margin:8px 0">';
+    foreach ($episodes as $e) {
+        $eid = (int) ($e['id'] ?? 0);
+        $is_active = ($eid === $active);
+        $ic = $types[$e['type'] ?? ''][0] ?? '📁';
+        $clos = !empty($e['clos_urgence']);
+        $pend = function_exists('lfi_nct_episode_besoins_pending') ? lfi_nct_episode_besoins_pending($e) : 0;
+        $prog = function_exists('lfi_nct_episode_progress') ? lfi_nct_episode_progress($e) : ['done' => 0, 'total' => 0];
+        echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="switch"><input type="hidden" name="ep_id" value="' . $eid . '">';
+        echo '<button type="submit" style="cursor:pointer;border-radius:20px;padding:6px 12px;font-size:.82em;font-weight:700;border:2px solid ' . ($is_active ? '#0b3d91' : '#dfe6f0') . ';background:' . ($is_active ? '#0b3d91' : '#fff') . ';color:' . ($is_active ? '#fff' : '#333') . '">';
+        echo $ic . ' ' . esc_html($e['titre'] ?? 'Dossier') . ' <span style="opacity:.75">' . (int) $prog['done'] . '/' . (int) $prog['total'] . '</span>';
+        if ($clos) echo ' ✅';
+        if ($pend) echo ' <span style="color:' . ($is_active ? '#ffd' : '#c8102e') . '">⚠' . (int) $pend . '</span>';
+        echo '</button></form>';
+    }
+    echo '</div>';
+
+    /* Épisode actif : renommer + clore/rouvrir urgence + supprimer. */
+    $cur = null; foreach ($episodes as $e) if ((int) ($e['id'] ?? 0) === $active) { $cur = $e; break; }
+    if ($cur) {
+        $clos = !empty($cur['clos_urgence']);
+        echo '<div style="background:#f6f8fb;border:1px solid #dfe6f0;border-radius:10px;padding:10px 12px;margin-top:4px">';
+        echo '<div style="font-size:.78em;color:#0b3d91;font-weight:800;margin-bottom:5px">✎ Dossier sélectionné</div>';
+        echo '<form method="post" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="rename"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+        echo '<input type="text" name="ep_titre" value="' . esc_attr($cur['titre'] ?? '') . '" style="font-size:.82em;flex:1;min-width:140px">';
+        echo '<select name="ep_type" style="font-size:.8em">';
+        foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '"' . (($cur['type'] ?? '') === $tk ? ' selected' : '') . '>' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+        echo '</select>';
+        echo '<button type="submit" class="btn-ghost" style="font-size:.8em">💾</button></form>';
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">';
+        /* Clore / rouvrir le volet urgence. */
+        echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="' . ($clos ? 'reopen' : 'close') . '"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+        echo '<button type="submit" class="btn-ghost" style="font-size:.8em;' . ($clos ? '' : 'color:#186a3b;border-color:#186a3b') . '">' . ($clos ? '↩ Rouvrir l\'urgence' : '✅ Clore l\'urgence') . '</button></form>';
+        echo '<form method="post" onsubmit="return confirm(\'Supprimer ce dossier d\\\'incident ? (les pièces déjà versées restent dans les pièces du locataire)\')" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="delete"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+        echo '<button type="submit" class="btn-ghost" style="font-size:.75em;color:#c8102e">🗑 Supprimer le dossier</button></form>';
+        echo '</div>';
+        if ($clos) echo '<div style="font-size:.78em;color:#186a3b;margin-top:5px">✅ Urgence close le ' . esc_html(wp_date('j M Y', strtotime($cur['clos_date'] ?: current_time('Y-m-d')))) . ' — le préjudice reste compté dans le juridique global.</div>';
+    }
+
+    /* Nouvel incident. */
+    echo '<form method="post" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px;border-top:1px dashed #dfe6f0;padding-top:9px">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="create">';
+    echo '<span style="font-size:.82em;font-weight:800;color:#c8102e">＋ Nouvel incident :</span>';
+    echo '<select name="ep_type" style="font-size:.8em">';
+    foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+    echo '</select>';
+    echo '<input type="text" name="ep_titre" placeholder="Titre (ex : Infestation 2025)" style="font-size:.82em;flex:1;min-width:130px">';
+    echo '<button type="submit" class="btn-primary" style="font-size:.8em;background:#c8102e">Créer</button></form>';
+
+    echo '</div></details>';
+}
+
 function lfi_nct_dossier_render_parcours($u) {
+    /* Barre des dossiers d'incident (épisodes) : sélectionner / créer / clore. */
+    if (function_exists('lfi_nct_dossier_render_episodes_bar')) lfi_nct_dossier_render_episodes_bar($u);
+
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
 
@@ -2238,6 +2354,7 @@ function lfi_nct_dossier_render_parcours($u) {
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
         if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
+        if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
         if (!is_array($steps)) $steps = [];
     }
