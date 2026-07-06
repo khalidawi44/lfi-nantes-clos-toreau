@@ -197,6 +197,15 @@ function lfi_nct_app_rewrites() {
 }
 add_filter('query_vars', function ($v) { $v[] = 'lfi_app'; $v[] = 'size'; $v[] = 'mask'; return $v; });
 
+/* WordPress ajoute un slash canonique à /.well-known/assetlinks.json (→ 301),
+   ce qui casse la vérification TWA de Google (qui veut un 200 direct). On
+   désactive le redirect canonique pour cet endpoint. */
+add_filter('redirect_canonical', function ($redirect_url, $requested_url) {
+    if (get_query_var('lfi_app') === 'assetlinks') return false;
+    if (isset($_SERVER['REQUEST_URI']) && strpos((string) $_SERVER['REQUEST_URI'], '/.well-known/assetlinks.json') !== false) return false;
+    return $redirect_url;
+}, 10, 2);
+
 add_action('template_redirect', 'lfi_nct_app_serve_endpoints');
 function lfi_nct_app_serve_endpoints() {
     $ep = get_query_var('lfi_app');
