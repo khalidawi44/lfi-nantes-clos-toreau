@@ -414,6 +414,50 @@ function lfi_nct_chrono_add_email($uid, $sens, $qui, $objet, $date = '') {
     $txt = $ico . ' ' . trim($who['ico'] . ' ' . ($who['label'] ?: 'interlocuteur')) . ($objet !== '' ? ' — « ' . mb_substr((string) $objet, 0, 70) . ' »' : '');
     lfi_nct_chrono_add($uid, $lab, $txt, true);
 }
+/** Options « rattacher à un événement » (id => libellé) pour un locataire. */
+function lfi_nct_chrono_link_options($uid) {
+    $opts = [];
+    foreach (lfi_nct_chrono_get($uid) as $e) {
+        $id = (int) ($e['id'] ?? 0); if (!$id) continue;
+        $lbl = trim((string) ($e['label'] ?? '')) . ' — ' . mb_substr((string) ($e['txt'] ?? ''), 0, 45);
+        $opts[$id] = trim($lbl, ' —');
+    }
+    return $opts;
+}
+
+/** Pièces rattachées à un événement chrono donné. */
+function lfi_nct_chrono_event_pieces($uid, $chrono_id) {
+    return get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 50, 'orderby' => 'date', 'order' => 'ASC',
+        'meta_query' => [
+            ['key' => '_lfi_tenant_user_id', 'value' => (int) $uid],
+            ['key' => '_lfi_chrono_id', 'value' => (int) $chrono_id],
+        ],
+    ]);
+}
+
+/** Auto-rattache les pièces à l'événement dont la DATE = leur date de prise de
+ *  vue (jour exact). Renvoie le nombre rattaché. */
+function lfi_nct_pieces_autolink_by_date($uid) {
+    $uid = (int) $uid; if (!$uid) return 0;
+    $events = [];
+    foreach (lfi_nct_chrono_get($uid) as $e) {
+        $d = (string) ($e['d'] ?? ''); /* AAAA-MM-JJ (ou AAAA-00-00) */
+        if ($d !== '' && substr($d, 5) !== '00-00') $events[substr($d, 0, 10)] = (int) ($e['id'] ?? 0);
+    }
+    if (!$events) return 0;
+    $pieces = get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 300, 'fields' => 'ids',
+        'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => $uid]]]);
+    $n = 0;
+    foreach ((array) $pieces as $aid) {
+        if (get_post_meta($aid, '_lfi_chrono_id', true)) continue; /* déjà rattachée */
+        $ts = (int) get_post_meta($aid, '_lfi_capture_ts', true); if (!$ts) $ts = (int) get_post_time('U', true, $aid);
+        $day = $ts ? wp_date('Y-m-d', $ts) : '';
+        if ($day !== '' && isset($events[$day])) { update_post_meta($aid, '_lfi_chrono_id', $events[$day]); $n++; }
+    }
+    return $n;
+}
+
 /** Rend la section « 📅 Chronologie » dans le dossier (triée, éditable). */
 function lfi_nct_dossier_render_chrono($u) {
     $list = lfi_nct_chrono_get($u->ID);
@@ -434,6 +478,23 @@ function lfi_nct_dossier_render_chrono($u) {
             echo '<div style="flex:1;font-size:.88em;color:#333">' . esc_html($etxt) . (!empty($e['auto']) ? ' <span style="color:#0066a3;font-size:.85em">· auto</span>' : '') . '</div>';
             echo '<form method="post" onsubmit="return confirm(\'Retirer cette ligne ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_del" value="' . $eid . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
             echo '</div>';
+            /* 📎 Pièces rattachées à CET événement (clic → agrandir ; ✕ pour détacher). */
+            $ep = $eid ? lfi_nct_chrono_event_pieces($u->ID, $eid) : [];
+            if ($ep) {
+                echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding-left:26px">';
+                foreach ($ep as $pp) {
+                    $mime = (string) get_post_mime_type($pp->ID);
+                    $th = (strpos($mime, 'image/') === 0)
+                        ? wp_get_attachment_image($pp->ID, [64, 64], true, ['style' => 'width:52px;height:52px;object-fit:cover;border-radius:6px;display:block'])
+                        : '<div style="width:52px;height:52px;border-radius:6px;background:#eef;display:flex;align-items:center;justify-content:center">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
+                    echo '<div style="position:relative">' . $th;
+                    echo '<form method="post" style="position:absolute;top:-6px;right:-6px;margin:0">' . wp_nonce_field('lfi_app_piece_link', '_wpnonce', true, false)
+                       . '<input type="hidden" name="lfi_app_piece_link" value="1"><input type="hidden" name="att_id" value="' . (int) $pp->ID . '"><input type="hidden" name="chrono_id" value="0">'
+                       . '<button type="submit" title="Détacher de l\'événement" style="width:18px;height:18px;border-radius:50%;border:none;background:#c8102e;color:#fff;font-size:.7em;line-height:1;cursor:pointer">✕</button></form>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
             /* ✏️ Modifier (date + texte), y compris pour une ligne importée. */
             echo '<details style="margin-top:4px"><summary style="cursor:pointer;color:#0b3d91;font-size:.78em;font-weight:600">✏️ Modifier</summary>';
             echo '<form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false);
@@ -451,7 +512,9 @@ function lfi_nct_dossier_render_chrono($u) {
         echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">';
         echo '<form id="lfi-chrono-bulk" method="post" onsubmit="return confirm(\'Supprimer les lignes cochées ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_bulk_del" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;border-color:#c8102e;color:#c8102e">🗑 Supprimer la sélection</button></form>';
         echo '<form method="post" onsubmit="return confirm(\'Tout effacer la chronologie ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_reset" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#c8102e">🧹 Tout effacer</button></form>';
+        echo '<form method="post" title="Rattache chaque pièce à l\'événement de même date" style="margin:0">' . wp_nonce_field('lfi_app_pieces_autolink', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_pieces_autolink" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#186a3b;border-color:#a9d5b6">🔗 Rattacher les pièces par date</button></form>';
         echo '</div>';
+        if (isset($_GET['autolinked'])) echo '<div style="font-size:.82em;color:#186a3b;margin-top:4px">🔗 ' . (int) $_GET['autolinked'] . ' pièce(s) rattachée(s) à leur événement.</div>';
     }
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#0b3d91;font-weight:700;font-size:.9em">➕ Ajouter une date</summary>';
     echo '<form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false);
@@ -650,6 +713,7 @@ function lfi_nct_dossier_render_import_md($u) {
         'orderby' => 'date', 'order' => 'DESC',
         'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $u->ID]],
     ]);
+    $chrono_opts = function_exists('lfi_nct_chrono_link_options') ? lfi_nct_chrono_link_options((int) $u->ID) : [];
     echo '<div style="margin-top:12px;border-top:1px solid #e2d7f5;padding-top:8px">';
     echo '<div style="font-weight:800;color:#4b2e83;margin-bottom:6px">📎 Toutes les pièces (' . count($all_pieces) . ') — triées par compartiment, chacune supprimable</div>';
     if (empty($all_pieces)) {
@@ -687,8 +751,17 @@ function lfi_nct_dossier_render_import_md($u) {
                 $thumb = (strpos($mime, 'image/') === 0)
                     ? wp_get_attachment_image($p->ID, [92, 92], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
                     : '<div style="width:80px;height:80px;border-radius:8px;background:#efeaf7;display:flex;align-items:center;justify-content:center;font-size:1.8em">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
-                echo '<div style="width:88px;text-align:center">';
+                $cur_link = (int) get_post_meta($p->ID, '_lfi_chrono_id', true);
+                echo '<div style="width:96px;text-align:center">';
                 echo $thumb;
+                if ($chrono_opts) {
+                    echo '<form method="post" style="margin:2px 0 0">' . wp_nonce_field('lfi_app_piece_link', '_wpnonce', true, false)
+                       . '<input type="hidden" name="lfi_app_piece_link" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
+                       . '<select name="chrono_id" onchange="this.form.submit()" style="width:100%;font-size:.62em;padding:2px;border:1px solid ' . ($cur_link ? '#186a3b' : '#ccc') . ';border-radius:5px">';
+                    echo '<option value="0">' . ($cur_link ? '🔗 rattachée' : '— événement —') . '</option>';
+                    foreach ($chrono_opts as $oid => $olbl) echo '<option value="' . (int) $oid . '" ' . selected($cur_link, $oid, false) . '>' . esc_html(mb_substr($olbl, 0, 32)) . '</option>';
+                    echo '</select></form>';
+                }
                 echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\');" style="margin:2px 0 0">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false)
                    . '<input type="hidden" name="lfi_app_step_piece_del" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
                    . '<button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 8px;color:#c8102e;border-color:#f0b6c1">🗑 Suppr.</button></form>';
@@ -714,7 +787,13 @@ function lfi_nct_app_view_dossier() {
     $u = $uid ? get_userdata($uid) : null;
     /* Cloisonnement : on n'ouvre que les locataires de SON GA. */
     $in_scope = !function_exists('lfi_nct_uid_in_scope') || lfi_nct_uid_in_scope($uid);
-    if (!$u || !$in_scope || !in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true)) {
+    /* On ouvre si rôle locataire OU s'il a un DOSSIER (multi-casquette : Fabrice
+       = membre ET locataire ne doit pas être bloqué ici). */
+    $has_dossier = false;
+    if ($uid) {
+        $has_dossier = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d", $uid)) > 0;
+    }
+    if (!$u || !$in_scope || (!in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true) && !$has_dossier)) {
         lfi_nct_app_screen_open('📂 Dossier locataire');
         echo '<div class="lfi-app-empty">Locataire introuvable. <a href="' . esc_url(lfi_nct_app_url('dossiers')) . '">← Retour à la liste</a></div>';
         lfi_nct_app_screen_close(false);
@@ -727,6 +806,23 @@ function lfi_nct_app_view_dossier() {
         update_user_meta($u->ID, 'lfi_nct_admin_notes', $notes);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'notes_saved' => 1]));
         exit;
+    }
+
+    /* 🔗 RATTACHER une pièce à un ÉVÉNEMENT daté de la chronologie (ou détacher). */
+    if (!empty($_POST['lfi_app_piece_link']) && check_admin_referer('lfi_app_piece_link')) {
+        $att = (int) ($_POST['att_id'] ?? 0);
+        $cid = (int) ($_POST['chrono_id'] ?? 0);
+        if ($att && (int) get_post_meta($att, '_lfi_tenant_user_id', true) === (int) $u->ID) {
+            if ($cid) update_post_meta($att, '_lfi_chrono_id', $cid);
+            else delete_post_meta($att, '_lfi_chrono_id');
+        }
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+    /* 🔗 AUTO-rattachement : chaque pièce rejoint l'événement dont la DATE
+       correspond à sa date de prise de vue (_lfi_capture_ts). */
+    if (!empty($_POST['lfi_app_pieces_autolink']) && check_admin_referer('lfi_app_pieces_autolink')) {
+        $n = lfi_nct_pieces_autolink_by_date($u->ID);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'autolinked' => $n]) . '#dossier-chrono'); exit;
     }
 
     /* 🏆 Clore une BATAILLE → coupe + réussite anonyme + célébration du GA.
