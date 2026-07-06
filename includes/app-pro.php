@@ -1854,6 +1854,26 @@ function lfi_nct_render_home_locataire_news() {
     if (!empty($_GET['locnews_seen'])) update_user_meta(get_current_user_id(), 'lfi_nct_locnews_seen', current_time('timestamp'));
 }
 
+/** Masquer / réafficher une action de l'accueil (dossier retiré du fil « Mes
+ *  actions »). Traité en-app (auth garantie), avant tout rendu. */
+add_action('template_redirect', 'lfi_nct_home_action_hide_handler', 1);
+function lfi_nct_home_action_hide_handler() {
+    if (empty($_GET['lfi_hide_action']) && empty($_GET['lfi_unhide_all'])) return;
+    if (!is_user_logged_in()) return;
+    if (!wp_verify_nonce((string) ($_GET['_wpnonce'] ?? ''), 'lfi_home_hide')) return;
+    $me  = get_current_user_id();
+    $app = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    if (!empty($_GET['lfi_unhide_all'])) {
+        delete_user_meta($me, 'lfi_nct_home_actions_hidden');
+    } else {
+        $uid = (int) $_GET['lfi_hide_action'];
+        $h = array_map('intval', (array) get_user_meta($me, 'lfi_nct_home_actions_hidden', true));
+        $h[] = $uid;
+        update_user_meta($me, 'lfi_nct_home_actions_hidden', array_values(array_unique(array_filter($h))));
+    }
+    wp_safe_redirect($app); exit;
+}
+
 /** Fil « Mes actions locataires » sur le tableau de bord : la 1re étape non faite
  *  de chaque dossier suivi, avec « ✓ Fait » (avance) et « Ouvrir le dossier ». */
 function lfi_nct_render_home_tenant_actions() {
@@ -1864,7 +1884,13 @@ function lfi_nct_render_home_tenant_actions() {
     $users = get_users($args);
     $mine = [];   /* étapes où c'est à MOI d'agir */
     $waiting = []; /* en attente du locataire */
+    $me_uid = get_current_user_id();
+    $hidden = array_map('intval', (array) get_user_meta($me_uid, 'lfi_nct_home_actions_hidden', true));
     foreach ($users as $u) {
+        /* On ne se liste pas SOI-MÊME (multi-casquette : on n'invite pas son
+           propre compte), ni les dossiers qu'on a masqués de l'accueil. */
+        if ((int) $u->ID === (int) $me_uid) continue;
+        if (in_array((int) $u->ID, $hidden, true)) continue;
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
         if (!is_array($steps) || empty($steps)) continue;
 
@@ -1916,10 +1942,17 @@ function lfi_nct_render_home_tenant_actions() {
             echo '<div style="background:#f2f8fd;border:1px solid #cfe0f5;border-radius:10px;padding:10px 12px">';
             echo '<div style="font-weight:700">' . esc_html($it['name']) . ' <span style="font-size:.78em;color:#888;font-weight:400">· étape ' . ($it['donen'] + 1) . '/' . $it['total'] . '</span></div>';
             echo '<div style="font-size:.9em;color:#333;margin:2px 0 6px">👉 ' . esc_html($it['text']) . '</div>';
+            $hide_url = wp_nonce_url(add_query_arg('lfi_hide_action', (int) $it['uid'], lfi_nct_app_url()), 'lfi_home_hide');
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
             echo '<a class="btn-primary" style="background:#186a3b;padding:6px 12px;font-size:.85em" href="' . esc_url($done_url) . '">✓ Fait</a>';
             echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em" href="' . esc_url($open_url) . '">📂 Ouvrir le dossier</a>';
+            echo '<a class="btn-ghost" style="padding:6px 12px;font-size:.85em;color:#888" href="' . esc_url($hide_url) . '" title="Retirer de l\'écran d\'accueil (ne supprime pas le dossier)">🙈 Masquer</a>';
             echo '</div></div>';
+        }
+        /* Réafficher tout ce qu'on a masqué. */
+        if (!empty($hidden)) {
+            $unhide = wp_nonce_url(add_query_arg('lfi_unhide_all', 1, lfi_nct_app_url()), 'lfi_home_hide');
+            echo '<div style="text-align:center;margin-top:4px"><a href="' . esc_url($unhide) . '" style="font-size:.8em;color:#0066a3">↩︎ Réafficher les ' . count($hidden) . ' action(s) masquée(s)</a></div>';
         }
         echo '</div></details>';
     }
