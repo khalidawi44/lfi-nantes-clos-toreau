@@ -514,6 +514,29 @@ function lfi_nct_fabrice_reconstruct($u) {
     if (function_exists('lfi_nct_chrono_add')) foreach ($chrono as $c) lfi_nct_chrono_add($uid, $c[0], $c[1], false);
 }
 
+/**
+ * VIDER TOUT le dossier d'un locataire : pièces (photos/PDF/documents),
+ * chronologie, historique des emails (reçus/envoyés/brouillons) et notes du GA.
+ * Garde le compte + l'enquête liée (données de terrain) — on vide le DOSSIER.
+ * @return array Compteurs.
+ */
+function lfi_nct_dossier_wipe_all($uid) {
+    global $wpdb;
+    $uid = (int) $uid; if (!$uid) return ['pieces' => 0, 'chrono' => 0, 'dossiers' => 0];
+    $rep = ['pieces' => lfi_nct_dossier_purge_pieces($uid), 'chrono' => 0, 'dossiers' => 0];
+    if (function_exists('lfi_nct_chrono_get')) { $rep['chrono'] = count(lfi_nct_chrono_get($uid)); lfi_nct_chrono_save($uid, []); }
+    delete_user_meta($uid, 'lfi_nct_admin_notes');
+    $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $rows = $wpdb->get_results($wpdb->prepare("SELECT id, notes FROM $t WHERE tenant_user_id = %d", $uid)) ?: [];
+    foreach ($rows as $r) {
+        $n = json_decode((string) $r->notes, true); if (!is_array($n)) $n = [];
+        unset($n['email_recu'], $n['email_log'], $n['replies'], $n['inbox_seen']);
+        $wpdb->update($t, ['notes' => wp_json_encode($n), 'updated_at' => current_time('mysql')], ['id' => (int) $r->id]);
+        $rep['dossiers']++;
+    }
+    return $rep;
+}
+
 /** Supprime TOUTES les pièces (attachments) d'un locataire. Renvoie le nombre. */
 function lfi_nct_dossier_purge_pieces($uid) {
     $uid = (int) $uid; if (!$uid) return 0;
@@ -552,6 +575,13 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<form method="post" onsubmit="return confirm(\'Supprimer TOUTES les pièces de ce dossier ? (photos, PDF, documents importés)\');" style="margin-top:8px">' . wp_nonce_field('lfi_app_pieces_purge', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_app_pieces_purge" value="1">';
     echo '<button type="submit" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1">🗑 Supprimer toutes les pièces de ce dossier</button></form>';
+
+    /* 🗑 Vider TOUT le dossier (pièces + chronologie + emails + notes). */
+    echo '<form method="post" onsubmit="return confirm(\'⚠️ VIDER TOUT le dossier ? Cela supprime les pièces/photos, la chronologie, tout l\\\'historique des emails et les notes. (Le compte et l\\\'enquête de terrain restent.)\');" style="margin-top:6px">' . wp_nonce_field('lfi_app_dossier_wipe', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_app_dossier_wipe" value="1">';
+    echo '<button type="submit" class="btn-primary" style="background:#c8102e;font-size:.85em">🗑 Vider TOUT le dossier (photos + emails + chronologie)</button></form>';
+
+    if (isset($_GET['wiped'])) echo '<div style="background:#fdeef0;border-left:4px solid #c8102e;border-radius:8px;padding:9px 11px;margin-top:8px"><strong style="color:#c8102e">🗑 Dossier vidé.</strong></div>';
 
     /* 📎 TOUTES les pièces du dossier, chacune SUPPRIMABLE (règle : tout ce qui
        entre doit pouvoir être supprimé depuis l'app — même sans étape). */
@@ -742,6 +772,12 @@ function lfi_nct_app_view_dossier() {
     if (!empty($_POST['lfi_app_pieces_purge']) && check_admin_referer('lfi_app_pieces_purge')) {
         $n = lfi_nct_dossier_purge_pieces($u->ID);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'pieces_purged' => $n]) . '#import-md'); exit;
+    }
+
+    /* 🗑 VIDER TOUT le dossier (pièces + chronologie + emails + notes). */
+    if (!empty($_POST['lfi_app_dossier_wipe']) && check_admin_referer('lfi_app_dossier_wipe')) {
+        $rep = lfi_nct_dossier_wipe_all($u->ID);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'wiped' => (int) $rep['pieces'] + (int) $rep['chrono']]) . '#import-md'); exit;
     }
 
     /* 📄 IMPORT d'un dossier rédigé (.md) : le robot décortique la chronologie

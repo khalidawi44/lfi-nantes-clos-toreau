@@ -41,7 +41,7 @@ function lfi_nct_app_render_ux_boost() {
     #lfiLightbox{position:fixed;inset:0;z-index:100000;background:rgba(10,10,15,.93);
       display:none;align-items:center;justify-content:center;padding:12px;touch-action:none;overflow:hidden}
     #lfiLightbox.open{display:flex}
-    #lfiLightbox img{max-width:100%;max-height:86vh;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);
+    #lfiLightbox img{max-width:98vw;max-height:94vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5);
       object-fit:contain;transform-origin:center center;transition:transform .05s linear;will-change:transform}
     #lfiLightbox .lfiLbBtn{position:fixed;background:#fff;color:#111;border:none;border-radius:50%;
       width:46px;height:46px;font-size:1.4em;font-weight:800;line-height:1;cursor:pointer;
@@ -196,7 +196,7 @@ function lfi_nct_app_render_ux_boost() {
         if (scale <= 1.02){ scale = 1; tx = 0; ty = 0; applyTransform(); }
         var now = Date.now();
         if (now - lastTap < 300 && e.touches.length === 0){
-          scale = (scale > 1.1) ? 1 : 2.4; tx = 0; ty = 0; applyTransform();
+          scale = (scale > 1.1) ? 1 : 3.2; tx = 0; ty = 0; applyTransform();
         }
         lastTap = now;
       }, {passive:true});
