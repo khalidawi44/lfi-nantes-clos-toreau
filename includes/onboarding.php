@@ -244,7 +244,7 @@ function lfi_nct_onboarding_render() {
       </div>
     </div>
     <style>
-    .lfi-onb-overlay{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .lfi-onb-overlay{position:fixed;inset:0;z-index:100060;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
     .lfi-onb-modal{background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35)}
     .lfi-onb-head{color:#fff;padding:16px 20px;border-radius:16px 16px 0 0;position:sticky;top:0}
     .lfi-onb-title{font-weight:800;font-size:1.2em;margin-top:6px}
@@ -474,7 +474,7 @@ function lfi_nct_member_onb_render() {
             <form method="post" action="<?php echo esc_url($ap); ?>" style="text-align:center;margin-top:6px">
               <input type="hidden" name="action" value="lfi_nct_member_onb_skip">
               <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
-              <button type="submit" class="lfi-monb-skip">Plus tard</button>
+              <button type="submit" class="lfi-monb-skip" onclick="var o=document.getElementById('lfi-monb');if(o)o.style.display='none';">Plus tard</button>
             </form>
           </div>
         <?php else: ?>
@@ -505,7 +505,7 @@ function lfi_nct_member_onb_render() {
       </div>
     </div>
     <style>
-    .lfi-monb-ov{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .lfi-monb-ov{position:fixed;inset:0;z-index:100060;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
     .lfi-monb-modal{background:#fff;border-radius:18px;max-width:420px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)}
     .lfi-monb-head{background:#c8102e;color:#fff;padding:18px 20px;border-radius:18px 18px 0 0}
     .lfi-monb-dots{display:flex;gap:6px;margin-bottom:8px}
