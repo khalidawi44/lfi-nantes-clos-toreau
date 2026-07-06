@@ -96,6 +96,68 @@ function lfi_nct_auto_deploy() {
         if ($reze_id || $ct_id) update_option('lfi_nct_seed_evt_tracts_20260709_v1', '1', false);
     }
 
+    /* ─ NOUVEL événement « Tractage » (mardi 7 juillet 2026, 18h, Super U
+       Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes) pour le GA CLOS TOREAU,
+       + créneau soumis au VOTE. Sans toucher aux autres événements. Idempotent
+       (garde par option + anti-doublon titre+date+GA). Coordonnées géocodées. */
+    if (get_option('lfi_nct_seed_evt_tractage_20260707_v1') !== '1' && function_exists('wp_insert_post')) {
+        $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+        $t_title = 'Tractage — Super U Saint-Jacques';
+        $t_date  = '2026-07-07';
+        $t_time  = '18h';
+        $t_place = 'Super U Saint-Jacques';
+        $t_city  = '75 Bd Joliot Curie, 44200 Nantes';
+        $t_lat   = '47.1938031';
+        $t_lng   = '-1.5307383';
+        $t_desc  = 'Tractage. Rendez-vous à 18h devant le Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes.';
+        $t_ga    = 'clos-toreau';
+
+        /* Anti-doublon : même titre + date + GA → on ne recrée pas. */
+        $t_id = 0;
+        foreach (get_posts(['post_type' => $cpt, 'post_status' => 'any', 'posts_per_page' => 300, 'fields' => 'ids']) as $pid) {
+            if (get_the_title($pid) !== $t_title) continue;
+            if ((string) get_post_meta($pid, '_ag_event_date', true) !== $t_date) continue;
+            if ((string) get_post_meta($pid, '_lfi_evt_ga', true) !== $t_ga) continue;
+            $t_id = (int) $pid; break;
+        }
+        if (!$t_id) {
+            $pid = wp_insert_post(['post_type' => $cpt, 'post_status' => 'publish', 'post_title' => $t_title, 'post_content' => $t_desc], true);
+            if (!is_wp_error($pid) && $pid) {
+                update_post_meta($pid, '_ag_event_date',  $t_date);
+                update_post_meta($pid, '_ag_event_time',  $t_time);
+                update_post_meta($pid, '_ag_event_place', $t_place);
+                update_post_meta($pid, '_ag_event_city',  $t_city);
+                update_post_meta($pid, '_lfi_evt_lat',    $t_lat);
+                update_post_meta($pid, '_lfi_evt_lng',    $t_lng);
+                update_post_meta($pid, '_lfi_evt_ga',     $t_ga);
+                update_post_meta($pid, '_lfi_evt_internal', 1);
+                $t_id = (int) $pid;
+            }
+        }
+
+        /* Créneau de mobilisation (tractage) lié → surface comme VOTE Clos Toreau. */
+        if ($t_id) {
+            global $wpdb;
+            $tm = $wpdb->prefix . 'lfi_nct_mobilisation';
+            $exists = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $tm WHERE event_id = %d AND date_creneau = %s", $t_id, $t_date));
+            if (!$exists) {
+                $wpdb->insert($tm, [
+                    'event_id'     => $t_id,
+                    'theme'        => '',
+                    'ga'           => $t_ga,
+                    'created_by'   => 0,
+                    'date_creneau' => $t_date,
+                    'creneau'      => 'soiree',
+                    'type'         => 'tractage',
+                    'lieu'         => $t_place . ', ' . $t_city,
+                    'note'         => $t_time,
+                    'participants' => wp_json_encode([]),
+                ]);
+            }
+            update_option('lfi_nct_seed_evt_tractage_20260707_v1', '1', false);
+        }
+    }
+
     /* 1-reset) REMISE À ZÉRO du pipeline d'import des emails, demandée avant une
        relance de pêche propre (« tout remettre à zéro »). Vide la boîte de
        collecte + la mémoire anti-doublon + les emails/pièces IMPORTÉS de tous
