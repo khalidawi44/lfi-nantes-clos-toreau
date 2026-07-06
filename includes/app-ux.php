@@ -2,12 +2,12 @@
 /**
  * CONFORT D'USAGE DE L'APP (mobile / PWA) — chargé sur toutes les pages de /app/.
  *
- *  1. « Tirer vers le bas pour rafraîchir » (pull-to-refresh) — comme un site
- *     web : en haut de page, on tire vers le bas → la page se recharge. Plus
- *     besoin de fermer/rouvrir l'app pour voir les mises à jour.
- *  2. Visionneuse photo (lightbox) avec un vrai bouton ✕ pour QUITTER — un clic
- *     sur une photo l'ouvre EN GRAND par-dessus la page ; ✕ ou clic à côté ferme.
- *     Fini le « j'ouvre une photo et je ne peux plus revenir ».
+ *  1. Pull-to-refresh : tirer vers le bas en haut de page → recharge.
+ *  2. Galerie photo (lightbox) : clic sur une photo → plein écran, ✕ pour
+ *     quitter, flèches ◀▶ entre les photos, double-tap / pincer pour zoomer.
+ *  3. Bouton flottant « ↑ Haut de page » (apparaît quand on descend) + « ⟳ »
+ *     rafraîchir (pour ceux qui ne connaissent pas le geste).
+ *  4. Mémoire des accordéons : chaque <details> retient s'il est ouvert/fermé.
  *
  * Tout est autonome (vanilla JS + CSS inline), aucune dépendance externe.
  */
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) exit;
 
 function lfi_nct_app_render_ux_boost() {
     static $done = false;
-    if ($done) return; /* une seule fois par page */
+    if ($done) return;
     $done = true;
     ?>
     <style>
@@ -29,45 +29,68 @@ function lfi_nct_app_render_ux_boost() {
       border-radius:50%;display:inline-block}
     #lfiPtr.spin .lfiPtrSpin{animation:lfiSpin .7s linear infinite}
     @keyframes lfiSpin{to{transform:rotate(360deg)}}
-    /* --- Lightbox photo --- */
-    #lfiLightbox{position:fixed;inset:0;z-index:100000;background:rgba(10,10,15,.92);
-      display:none;align-items:center;justify-content:center;padding:20px}
+    /* --- Boutons flottants (haut de page + rafraîchir) --- */
+    #lfiFabStack{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);
+      z-index:99985;display:flex;flex-direction:column;gap:8px;opacity:0;transform:translateY(8px);
+      transition:opacity .18s ease,transform .18s ease;pointer-events:none}
+    #lfiFabStack.show{opacity:1;transform:none;pointer-events:auto}
+    #lfiFabStack button{width:44px;height:44px;border-radius:50%;border:none;background:#fff;color:#0b3d91;
+      font-size:1.25em;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.2);cursor:pointer;line-height:1}
+    #lfiFabStack button:active{transform:scale(.92)}
+    /* --- Lightbox / galerie photo --- */
+    #lfiLightbox{position:fixed;inset:0;z-index:100000;background:rgba(10,10,15,.93);
+      display:none;align-items:center;justify-content:center;padding:12px;touch-action:none;overflow:hidden}
     #lfiLightbox.open{display:flex}
-    #lfiLightbox img{max-width:100%;max-height:88vh;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);object-fit:contain}
-    #lfiLightbox .lfiLbClose{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;
-      width:46px;height:46px;border-radius:50%;border:none;background:#fff;color:#111;font-size:1.5em;
-      font-weight:800;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:2}
+    #lfiLightbox img{max-width:100%;max-height:86vh;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);
+      object-fit:contain;transform-origin:center center;transition:transform .05s linear;will-change:transform}
+    #lfiLightbox .lfiLbBtn{position:fixed;background:#fff;color:#111;border:none;border-radius:50%;
+      width:46px;height:46px;font-size:1.4em;font-weight:800;line-height:1;cursor:pointer;
+      box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:2;display:flex;align-items:center;justify-content:center}
+    #lfiLightbox .lfiLbClose{top:calc(env(safe-area-inset-top,0px) + 12px);right:14px}
+    #lfiLightbox .lfiLbPrev{left:12px;top:50%;transform:translateY(-50%)}
+    #lfiLightbox .lfiLbNext{right:12px;top:50%;transform:translateY(-50%)}
+    #lfiLightbox .lfiLbCount{position:fixed;top:calc(env(safe-area-inset-top,0px) + 18px);left:50%;
+      transform:translateX(-50%);color:#fff;font-family:-apple-system,sans-serif;font-weight:700;font-size:.9em;
+      background:rgba(0,0,0,.4);border-radius:999px;padding:4px 12px;z-index:2}
     #lfiLightbox .lfiLbOpen{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:50%;
       transform:translateX(-50%);background:#fff;color:#111;border:none;border-radius:999px;padding:9px 16px;
-      font-weight:700;font-size:.9em;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+      font-weight:700;font-size:.9em;text-decoration:none;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:2}
+    @media (max-width:520px){#lfiLightbox .lfiLbPrev,#lfiLightbox .lfiLbNext{width:40px;height:40px;font-size:1.2em}}
     </style>
 
     <div id="lfiPtr"><div class="lfiPtrIn"><span class="lfiPtrSpin"></span><span class="lfiPtrTxt">Relâche pour rafraîchir</span></div></div>
+
+    <div id="lfiFabStack">
+      <button type="button" id="lfiFabRefresh" aria-label="Rafraîchir la page" title="Rafraîchir">⟳</button>
+      <button type="button" id="lfiFabTop" aria-label="Revenir en haut" title="Haut de page">↑</button>
+    </div>
+
     <div id="lfiLightbox" role="dialog" aria-modal="true" aria-label="Photo">
-      <button type="button" class="lfiLbClose" aria-label="Fermer la photo">✕</button>
+      <div class="lfiLbCount"></div>
+      <button type="button" class="lfiLbBtn lfiLbClose" aria-label="Fermer la photo">✕</button>
+      <button type="button" class="lfiLbBtn lfiLbPrev" aria-label="Photo précédente">‹</button>
       <img alt="Photo agrandie" src="">
-      <a class="lfiLbOpen" href="#" target="_blank" rel="noopener">⤢ Ouvrir en plein écran</a>
+      <button type="button" class="lfiLbBtn lfiLbNext" aria-label="Photo suivante">›</button>
+      <a class="lfiLbOpen" href="#" target="_blank" rel="noopener">⤢ Plein écran</a>
     </div>
 
     <script>
     (function(){
       if (window.__lfiUxBoot) return; window.__lfiUxBoot = 1;
+      function scrollTop(){ return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0; }
 
       /* ============ 1) PULL-TO-REFRESH ============ */
       var ptr = document.getElementById('lfiPtr');
       var startY = 0, pulling = false, dist = 0, THRESH = 70;
-      function scrollTop(){ return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0; }
       document.addEventListener('touchstart', function(e){
-        if (scrollTop() > 0) { pulling = false; return; }
-        if (document.getElementById('lfiLightbox').classList.contains('open')) return;
+        if (scrollTop() > 0 || document.getElementById('lfiLightbox').classList.contains('open')) { pulling = false; return; }
         startY = e.touches[0].clientY; pulling = true; dist = 0;
       }, {passive:true});
       document.addEventListener('touchmove', function(e){
         if (!pulling) return;
         dist = e.touches[0].clientY - startY;
         if (dist <= 0) { ptr.style.height = '0px'; return; }
-        var h = Math.min(dist * 0.5, 64);
-        ptr.style.height = h + 'px';
+        ptr.style.height = Math.min(dist * 0.5, 64) + 'px';
         ptr.querySelector('.lfiPtrTxt').textContent = (dist > THRESH) ? 'Relâche pour rafraîchir' : 'Tire pour rafraîchir';
       }, {passive:true});
       document.addEventListener('touchend', function(){
@@ -80,35 +103,115 @@ function lfi_nct_app_render_ux_boost() {
         dist = 0;
       });
 
-      /* ============ 2) LIGHTBOX PHOTO ============ */
+      /* ============ 2) BOUTONS FLOTTANTS ============ */
+      var stack = document.getElementById('lfiFabStack');
+      document.getElementById('lfiFabTop').addEventListener('click', function(){ window.scrollTo({top:0,behavior:'smooth'}); });
+      document.getElementById('lfiFabRefresh').addEventListener('click', function(){ location.reload(); });
+      function onScroll(){ if (scrollTop() > 350) stack.classList.add('show'); else stack.classList.remove('show'); }
+      window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+      /* ============ 3) MÉMOIRE DES ACCORDÉONS ============ */
+      function accKey(d){
+        var s = (d.querySelector('summary') && d.querySelector('summary').textContent || '').trim().slice(0,50);
+        return 'lfiacc:' + location.pathname + '|' + s;
+      }
+      try {
+        document.querySelectorAll('details > summary').forEach(function(sm){
+          var d = sm.parentNode, k = accKey(d), v = localStorage.getItem(k);
+          if (v === '1') d.open = true; else if (v === '0') d.open = false;
+          d.addEventListener('toggle', function(){ try{ localStorage.setItem(k, d.open ? '1':'0'); }catch(e){} });
+        });
+      } catch(e){}
+
+      /* ============ 4) GALERIE PHOTO (lightbox + zoom) ============ */
       var lb = document.getElementById('lfiLightbox');
       var lbImg = lb.querySelector('img');
       var lbOpen = lb.querySelector('.lfiLbOpen');
+      var lbCount = lb.querySelector('.lfiLbCount');
+      var gallery = [], gi = 0, scale = 1, tx = 0, ty = 0;
       function isImgUrl(u){ return /\.(jpe?g|png|gif|webp|heic|heif|bmp)(\?|#|$)/i.test(u||''); }
-      function openLb(src, full){
-        lbImg.src = src; lbOpen.href = full || src;
-        lb.classList.add('open'); document.body.style.overflow = 'hidden';
+      function collect(){
+        var set = [], seen = {};
+        document.querySelectorAll('.lfi-app-card img, .lfi-app-list img, #lfiRobotMsgs img, .lfi-app-main img, .lfi-piece img').forEach(function(im){
+          if (im.closest('#lfiLightbox')) return;
+          if (!(im.naturalWidth === 0 || im.width > 24)) return;
+          var a = im.closest('a');
+          var full = (a && isImgUrl(a.getAttribute('href'))) ? a.href : im.src;
+          if (seen[full]) return; seen[full] = 1;
+          set.push({thumb: im.src, full: full});
+        });
+        return set;
       }
-      function closeLb(){ lb.classList.remove('open'); lbImg.src=''; document.body.style.overflow=''; }
+      function applyTransform(){ lbImg.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')'; }
+      function resetZoom(){ scale = 1; tx = 0; ty = 0; applyTransform(); }
+      function show(i){
+        if (!gallery.length) return;
+        gi = (i + gallery.length) % gallery.length;
+        resetZoom();
+        lbImg.src = gallery[gi].thumb; lbOpen.href = gallery[gi].full;
+        var full = new Image(); full.onload = function(){ if (lb.classList.contains('open')) lbImg.src = gallery[gi].full; }; full.src = gallery[gi].full;
+        lbCount.textContent = gallery.length > 1 ? (gi+1)+' / '+gallery.length : '';
+        var multi = gallery.length > 1;
+        lb.querySelector('.lfiLbPrev').style.display = multi ? '' : 'none';
+        lb.querySelector('.lfiLbNext').style.display = multi ? '' : 'none';
+      }
+      function openLb(full){
+        gallery = collect();
+        var idx = 0; for (var j=0;j<gallery.length;j++){ if (gallery[j].full === full){ idx = j; break; } }
+        if (!gallery.length) gallery = [{thumb: full, full: full}];
+        lb.classList.add('open'); document.body.style.overflow = 'hidden'; show(idx);
+      }
+      function closeLb(){ lb.classList.remove('open'); lbImg.src=''; document.body.style.overflow=''; resetZoom(); }
       lb.querySelector('.lfiLbClose').addEventListener('click', closeLb);
+      lb.querySelector('.lfiLbPrev').addEventListener('click', function(e){ e.stopPropagation(); show(gi-1); });
+      lb.querySelector('.lfiLbNext').addEventListener('click', function(e){ e.stopPropagation(); show(gi+1); });
       lb.addEventListener('click', function(e){ if (e.target === lb) closeLb(); });
-      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeLb(); });
+      document.addEventListener('keydown', function(e){
+        if (!lb.classList.contains('open')) return;
+        if (e.key === 'Escape') closeLb();
+        else if (e.key === 'ArrowLeft') show(gi-1);
+        else if (e.key === 'ArrowRight') show(gi+1);
+      });
 
-      /* Un clic sur une image (ou un lien vers une image) DANS le contenu de
-         l'app → on ouvre la lightbox au lieu de quitter la page. */
+      /* Double-tap → zoom ; pincer (2 doigts) → zoom ; glisser si zoomé → déplacer. */
+      var lastTap = 0, pinchStart = 0, pinchScale = 1, panX = 0, panY = 0, panning = false;
+      lbImg.addEventListener('touchstart', function(e){
+        if (e.touches.length === 2){
+          pinchStart = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+          pinchScale = scale;
+        } else if (e.touches.length === 1 && scale > 1){
+          panning = true; panX = e.touches[0].clientX - tx; panY = e.touches[0].clientY - ty;
+        }
+      }, {passive:true});
+      lbImg.addEventListener('touchmove', function(e){
+        if (e.touches.length === 2 && pinchStart){
+          var d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+          scale = Math.max(1, Math.min(4, pinchScale * (d / pinchStart))); applyTransform();
+        } else if (panning && e.touches.length === 1){
+          tx = e.touches[0].clientX - panX; ty = e.touches[0].clientY - panY; applyTransform();
+        }
+      }, {passive:true});
+      lbImg.addEventListener('touchend', function(e){
+        panning = false; pinchStart = 0;
+        if (scale <= 1.02){ scale = 1; tx = 0; ty = 0; applyTransform(); }
+        var now = Date.now();
+        if (now - lastTap < 300 && e.touches.length === 0){
+          scale = (scale > 1.1) ? 1 : 2.4; tx = 0; ty = 0; applyTransform();
+        }
+        lastTap = now;
+      }, {passive:true});
+
+      /* Un clic sur une image (ou un lien-image) DANS l'app → galerie. */
       document.addEventListener('click', function(e){
-        /* a) lien enveloppant une image / pointant vers une image */
         var a = e.target.closest && e.target.closest('a');
-        if (a && (isImgUrl(a.getAttribute('href')) || a.querySelector('img'))) {
+        if (a && (isImgUrl(a.getAttribute('href')) || a.querySelector('img'))){
           var img = a.querySelector('img');
           var full = isImgUrl(a.getAttribute('href')) ? a.href : (img ? img.src : '');
-          if (full) { e.preventDefault(); openLb(img ? img.src : full, full); return; }
+          if (full){ e.preventDefault(); openLb(full); return; }
         }
-        /* b) image nue cliquable dans une carte de l'app */
         var t = e.target;
-        if (t && t.tagName === 'IMG' && t.closest('.lfi-app-card, .lfi-app-list, #lfiRobotMsgs, .lfi-app-main, .lfi-piece')) {
-          /* on évite les petites icônes/logos de la coquille */
-          if (t.naturalWidth === 0 || (t.width > 24)) { e.preventDefault(); openLb(t.src, t.src); }
+        if (t && t.tagName === 'IMG' && t.closest('.lfi-app-card, .lfi-app-list, #lfiRobotMsgs, .lfi-app-main, .lfi-piece')){
+          if (t.naturalWidth === 0 || t.width > 24){ e.preventDefault(); openLb(t.src); }
         }
       }, true);
     })();

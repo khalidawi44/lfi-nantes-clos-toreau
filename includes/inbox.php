@@ -649,10 +649,13 @@ function lfi_nct_app_view_inbox_import() {
     if (!empty($_GET['deleted'])) lfi_nct_app_flash('🗑 ' . (int) $_GET['deleted'] . ' email(s) retiré(s) de la file (sans liste noire).');
     if (isset($_GET['deduped']))  lfi_nct_app_flash('🧹 ' . (int) $_GET['deduped'] . ' doublon(s) retiré(s) (file + dossiers).');
 
-    echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout (le membre met un filtre Gmail qui y transfère ses emails NMH). Le site lit cette boîte toutes les X min et range chaque email dans le <strong>bon dossier locataire</strong>, en triant par adresses (NMH / membre / locataire).</div>';
+    echo '<div class="lfi-app-help">La boîte <strong>' . esc_html($collector) . '</strong> reçoit tout. Le site la lit et range chaque email dans le <strong>bon dossier locataire</strong>. Ce dont tu te sers au quotidien est <strong>en bas</strong> : la file « À rattacher ».</div>';
+
+    /* Toute la CONFIG technique repliée dans un accordéon (rarement utile). */
+    echo '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:800;color:#0b3d91;padding:8px 0">⚙️ Configuration (réglages, clé, script Apps Script, mémo) — rarement utile</summary>';
 
     /* Réglages */
-    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false);
+    echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px;margin-top:8px">' . wp_nonce_field('lfi_inbox_cfg', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_inbox_cfg" value="1">';
     echo '<label>📮 Boîte collectrice<input type="email" name="collector" value="' . esc_attr($collector) . '"></label>';
     echo '<label>🏢 Domaines NMH (séparés par des virgules)<input type="text" name="nmh_domains" value="' . esc_attr($doms) . '"></label>';
@@ -685,6 +688,8 @@ function lfi_nct_app_view_inbox_import() {
           . "3. Créer le filtre → coche « Transférer à » → ajoute : " . $collector . " (à valider une fois).\n"
           . "4. Valide. C'est tout : tes emails avec NMH arrivent tout seuls dans le dossier du locataire concerné. Personne n'accède à ta boîte.";
     echo '<textarea readonly onclick="this.select()" style="width:100%;height:150px;font-size:.85em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($memo) . '</textarea>';
+
+    echo '</details>'; /* fin de la config repliée */
 
     /* File à rattacher */
     $q = lfi_nct_inbox_unmatched();

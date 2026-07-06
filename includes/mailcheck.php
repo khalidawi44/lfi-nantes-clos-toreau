@@ -396,13 +396,51 @@ function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
     return $ids;
 }
 
-/** Corps texte (plain) d'un message IMAP. */
+/** Corps texte (plain) d'un message IMAP — en DÉCODANT le transfert (base64 /
+ *  quoted-printable) et le charset. Sans ça, un email « base64 » s'affichait en
+ *  charabia (« Qm9uam91ciBN… ») et devenait illisible. */
 function lfi_nct_mailcheck_body($mbox, $uid) {
-    $body = @imap_fetchbody($mbox, $uid, '1.1', FT_UID | FT_PEEK);
-    if (!$body) $body = @imap_fetchbody($mbox, $uid, '1', FT_UID | FT_PEEK);
-    if (!$body) $body = @imap_body($mbox, $uid, FT_UID | FT_PEEK);
-    $body = quoted_printable_decode((string) $body);
-    return mb_substr(wp_strip_all_tags((string) $body), 0, 4000);
+    $struct = @imap_fetchstructure($mbox, $uid, FT_UID);
+    $plain = ''; $html = '';
+    if ($struct) {
+        $parts = [];
+        $walk = function ($s, $prefix) use (&$walk, &$parts) {
+            if (!empty($s->parts)) {
+                foreach ($s->parts as $i => $p) { $walk($p, ($prefix === '') ? (string) ($i + 1) : $prefix . '.' . ($i + 1)); }
+            } else {
+                $parts[] = [($prefix === '') ? '1' : $prefix, $s];
+            }
+        };
+        $walk($struct, '');
+        foreach ($parts as $pp) {
+            list($no, $s) = $pp;
+            if ((int) ($s->type ?? 0) !== 0) continue; /* 0 = text seulement */
+            $sub = strtolower((string) ($s->subtype ?? ''));
+            $raw = @imap_fetchbody($mbox, $uid, $no, FT_UID | FT_PEEK);
+            if ($raw === false || $raw === '') continue;
+            $enc = (int) ($s->encoding ?? 0);
+            if ($enc === 3) $raw = base64_decode($raw);
+            elseif ($enc === 4) $raw = quoted_printable_decode($raw);
+            /* charset → UTF-8 (best effort). */
+            $charset = '';
+            if (!empty($s->ifparameters) && !empty($s->parameters)) {
+                foreach ($s->parameters as $prm) { if (strtolower((string) $prm->attribute) === 'charset') $charset = strtolower((string) $prm->value); }
+            }
+            if ($charset && $charset !== 'utf-8' && function_exists('iconv')) {
+                $conv = @iconv($charset, 'UTF-8//TRANSLIT', $raw);
+                if ($conv !== false) $raw = $conv;
+            }
+            if ($sub === 'plain' && $plain === '') $plain = $raw;
+            elseif ($sub === 'html' && $html === '') $html = $raw;
+        }
+    }
+    $body = ($plain !== '') ? $plain : (($html !== '') ? wp_strip_all_tags($html) : '');
+    if (trim($body) === '') { /* repli */
+        $body = quoted_printable_decode((string) @imap_body($mbox, $uid, FT_UID | FT_PEEK));
+        $body = wp_strip_all_tags($body);
+    }
+    if (!mb_check_encoding($body, 'UTF-8')) { $c = @iconv('ISO-8859-1', 'UTF-8//TRANSLIT', $body); if ($c !== false) $body = $c; }
+    return mb_substr(trim($body), 0, 4000);
 }
 
 /**
@@ -722,8 +760,8 @@ function lfi_nct_app_view_mailcheck() {
     }
     echo '</ul>';
 
-    /* Réglages boîte (indispensable pour que la pêche marche). */
-    echo '<h3 style="margin:14px 0 6px">⚙️ Réglages de la boîte</h3>';
+    /* Réglages boîte (accordéon replié — on épure l'écran). */
+    echo '<details style="margin:14px 0 6px"' . ($user === '' || !$pw ? ' open' : '') . '><summary style="cursor:pointer;font-weight:800;color:#0b3d91;margin-bottom:6px">⚙️ Réglages de la boîte</summary>';
     echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px">' . wp_nonce_field('lfi_mailcheck_cfg', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_mailcheck_cfg" value="1">';
     echo '<label>📮 Boîte Gmail de l\'association<input type="email" name="gmail_user" value="' . esc_attr($user) . '" placeholder="nantessudclostoreau@gmail.com"></label>';
@@ -731,6 +769,7 @@ function lfi_nct_app_view_mailcheck() {
     echo '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" name="enabled" value="1" ' . checked($en, true, false) . '> <span>Activer la surveillance automatique (toutes les 4 h 30)</span></label>';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer</button></form>';
     echo '<div class="lfi-app-help"><small>Le mot de passe d\'application se crée dans le compte Google de la boîte : <strong>Gérer le compte → Sécurité → Validation en 2 étapes → Mots de passe des applications</strong>. Ce n\'est pas le mot de passe habituel.</small></div>';
+    echo '</details>';
 
     if (!$imap) echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ L\'extension PHP <code>imap</code> n\'est pas active sur l\'hébergement : tant qu\'elle n\'est pas activée (chez Hostinger), la pêche IMAP ne peut pas lire la boîte. C\'est probablement pourquoi rien n\'est remonté.</small></div>';
 
@@ -765,6 +804,7 @@ function lfi_nct_app_view_mailcheck() {
     if ($ai_err !== '') echo '<div class="com" style="color:#c8102e">⚠️ Dernier souci : ' . esc_html($ai_err) . '</div>';
     echo '</li></ul>';
 
+    echo '<details' . ($ai_key ? '' : ' open') . '><summary style="cursor:pointer;font-weight:800;color:#4b2e83;margin-bottom:6px">🔑 ' . ($ai_key ? 'Modifier la clé / le modèle Claude' : 'Configurer la clé Claude') . '</summary>';
     echo '<form method="post" class="lfi-app-form" style="background:#f8f8f8;padding:12px;border-radius:10px" action="' . esc_url(lfi_nct_app_url('mailcheck')) . '#sec-ia">' . wp_nonce_field('lfi_ai_cfg', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_ai_cfg" value="1">';
     echo '<label>🔑 Clé API Claude (commence par <code>sk-ant-</code>)<input type="password" name="claude_key" autocomplete="off" value="" placeholder="' . ($ai_key ? '•••••••••••• (déjà enregistrée — laisser vide pour garder)' : 'sk-ant-...') . '"></label>';
@@ -775,6 +815,7 @@ function lfi_nct_app_view_mailcheck() {
     echo '<label style="display:flex;gap:8px;align-items:center;margin-top:2px"><input type="checkbox" name="claude_test" value="1"> <span>Tester la connexion en enregistrant</span></label>';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer la clé Claude</button></form>';
     echo '<div class="lfi-app-help"><small>La clé se crée sur <strong>console.anthropic.com → API Keys → Create Key</strong>. Pense à ajouter du crédit (<strong>Billing → Add credits</strong>) et, si tu veux, un plafond mensuel (<strong>Usage limits</strong>).</small></div>';
+    echo '</details>';
 
     lfi_nct_app_screen_close();
 }
