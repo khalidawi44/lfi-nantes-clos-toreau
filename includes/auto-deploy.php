@@ -69,6 +69,44 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_emails_photos_dedup_v1', '1', false);
     }
 
+    /* 1-elus) COMPTES des élu·es (municipaux, départementaux, députés, national) à
+       partir de l'organigramme : chacun devient un compte PARTENAIRE (espace élu·e
+       + prévisualisable « Voir en tant que »). Idempotent. */
+    if (get_option('lfi_nct_elus_accounts_v2') !== '1' && function_exists('lfi_nct_carto_people_all')) {
+        $role_pa = defined('LFI_NCT_ROLE_PARTNER') ? LFI_NCT_ROLE_PARTNER : 'lfi_nct_partenaire';
+        foreach (lfi_nct_carto_people_all() as $p) {
+            $nom = trim((string) ($p['nom'] ?? '')); if ($nom === '') continue;
+            $niveau = mb_strtolower((string) ($p['niveau'] ?? ''));
+            $fonction = mb_strtolower((string) ($p['fonction'] ?? ''));
+            $is_elu = in_array($niveau, ['national', 'departemental', 'départemental', 'municipal'], true)
+                || preg_match('/(.lu|depute|d.put.|conseil|maire|s.nateur|adjoint|coordinateur|parrainage)/u', $fonction);
+            if (!$is_elu) continue;
+            $key   = sanitize_title($nom);
+            $email = trim((string) ($p['email'] ?? ''));
+            $uid = 0;
+            $ex = get_users(['meta_key' => 'lfi_nct_carto_person_key', 'meta_value' => $key, 'number' => 1, 'fields' => ['ID']]);
+            if ($ex) $uid = (int) (is_object($ex[0]) ? $ex[0]->ID : $ex[0]);
+            if (!$uid && $email !== '' && is_email($email)) { $u = get_user_by('email', $email); if ($u) $uid = (int) $u->ID; }
+            if (!$uid) {
+                $parts = explode(' ', $nom, 2); $prenom = $parts[0] ?? ''; $nomf = $parts[1] ?? '';
+                $login = function_exists('lfi_nct_app_make_username') ? lfi_nct_app_make_username($prenom, $nomf ?: 'elu') : sanitize_user($key, true);
+                if ($login === '' || username_exists($login)) $login = 'elu-' . $key . '-' . wp_rand(100, 999);
+                $args = ['user_login' => $login, 'user_pass' => wp_generate_password(16), 'first_name' => $prenom, 'last_name' => $nomf, 'display_name' => $nom, 'role' => $role_pa];
+                if ($email !== '' && is_email($email) && !email_exists($email)) $args['user_email'] = $email;
+                $newuid = wp_insert_user($args);
+                if (!is_wp_error($newuid)) { $uid = (int) $newuid; update_user_meta($uid, 'lfi_nct_carto_person_key', $key); }
+            } else {
+                if (!get_user_meta($uid, 'lfi_nct_carto_person_key', true)) update_user_meta($uid, 'lfi_nct_carto_person_key', $key);
+                if (function_exists('lfi_nct_user_role_partner') && !lfi_nct_user_role_partner($uid)) { $wu = new WP_User($uid); $wu->add_role($role_pa); }
+            }
+            if ($uid) {
+                if ($niveau === 'national') update_user_meta($uid, 'lfi_nct_demo_national', 1);
+                if (($p['fonction'] ?? '') !== '') update_user_meta($uid, 'lfi_nct_elu_fonction', (string) $p['fonction']);
+            }
+        }
+        update_option('lfi_nct_elus_accounts_v2', '1', false);
+    }
+
     /* 1-national-dedup) Retirer les DOUBLONS de l'organigramme national (une fois). */
     if (get_option('lfi_nct_carto_people_dedup_v1') !== '1' && function_exists('lfi_nct_carto_people_dedupe')) {
         try { lfi_nct_carto_people_dedupe(); } catch (\Throwable $e) {}
