@@ -610,15 +610,38 @@ function lfi_nct_tableau_reussites_shortcode($atts) {
               $titre_pub = (function_exists('lfi_nct_reussite_flag_names') && lfi_nct_reussite_flag_names($titre_raw))
                   ? 'Une victoire obtenue pour une famille'
                   : (function_exists('lfi_nct_reussite_anonymize') ? lfi_nct_reussite_anonymize($titre_raw) : $titre_raw);
+              /* RÉCIT DÉTAILLÉ, ANONYME (situation + où on en est). */
+              $anon = function ($t) { $t = (string) $t; return function_exists('lfi_nct_reussite_anonymize') ? lfi_nct_reussite_anonymize($t) : $t; };
+              $situation = trim($anon($r['situation'] ?? ''));
+              $detail    = trim($anon($r['resultat_detail'] ?? ''));
+              $recit = '';
+              if ($situation !== '') $recit .= '<p style="line-height:1.6;margin:0 0 10px">' . nl2br(esc_html($situation)) . '</p>';
+              if ($detail !== '')    $recit .= '<p style="line-height:1.6;margin:0;background:#f3f7f4;border-left:3px solid #186a3b;padding:8px 10px;border-radius:6px"><strong>Où on en est :</strong> ' . esc_html($detail) . '</p>';
+              $has_recit = ($recit !== '');
           ?>
-            <div style="background:#fff;border-radius:14px;padding:14px 15px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-left:5px solid <?php echo esc_attr($m[2]); ?>;position:relative">
+            <div class="lfi-reussite-card" <?php if ($has_recit): ?>data-titre="<?php echo esc_attr($titre_pub); ?>" data-recit="<?php echo esc_attr($recit); ?>" onclick="lfiReussiteOpen(this)" style="cursor:pointer;<?php endif; ?>background:#fff;border-radius:14px;padding:14px 15px;box-shadow:0 6px 16px rgba(0,0,0,.10);border-left:5px solid <?php echo esc_attr($m[2]); ?>;position:relative">
               <div style="position:absolute;top:10px;right:12px;font-size:22px"><?php echo $medaille; ?></div>
               <div style="display:inline-block;background:#186a3b;color:#fff;font-weight:800;padding:2px 9px;border-radius:20px;font-size:.72em">✅ GAGNÉ</div>
               <div style="font-weight:900;font-size:1.02em;margin:8px 0 4px;color:#1a1a1a;padding-right:26px"><?php echo esc_html($titre_pub); ?></div>
               <div style="font-size:.9em;color:<?php echo esc_attr($m[2]); ?>;font-weight:700"><?php echo $m[0] . ' ' . esc_html(lfi_nct_reussite_resultats()[$k] ?? ''); ?></div>
-              <?php if (!empty($r['quartier'])): ?><div style="font-size:.8em;color:#888;margin-top:4px">📍 <?php echo esc_html($r['quartier']); ?> · récit anonyme</div><?php endif; ?>
+              <div style="font-size:.8em;color:#888;margin-top:4px"><?php if (!empty($r['quartier'])): ?>📍 <?php echo esc_html($r['quartier']); ?> · <?php endif; ?><?php echo $has_recit ? '<span style="color:#0066a3;font-weight:700">📖 Lire le récit →</span>' : 'récit anonyme'; ?></div>
             </div>
           <?php endforeach; ?>
+          <div id="lfi-reussite-modal" style="display:none;position:fixed;inset:0;z-index:100003;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)lfiReussiteClose()">
+            <div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:86vh;overflow:auto;padding:0;box-shadow:0 16px 50px rgba(0,0,0,.4)">
+              <div style="position:sticky;top:0;background:#186a3b;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <strong id="lfi-reussite-modal-titre" style="font-size:1.02em;line-height:1.3">Récit</strong>
+                <button type="button" onclick="lfiReussiteClose()" style="background:#fff;color:#186a3b;border:none;border-radius:50%;width:34px;height:34px;font-size:1.1em;font-weight:800;cursor:pointer;flex:0 0 auto">✕</button>
+              </div>
+              <div id="lfi-reussite-modal-body" style="padding:16px"></div>
+              <div style="padding:0 16px 16px;color:#888;font-size:.82em">🔒 Récit anonyme — aucune identité n'est jamais divulguée.</div>
+            </div>
+          </div>
+          <script>
+          function lfiReussiteOpen(el){var m=document.getElementById('lfi-reussite-modal');if(!m)return;document.getElementById('lfi-reussite-modal-titre').textContent=el.getAttribute('data-titre')||'Récit';document.getElementById('lfi-reussite-modal-body').innerHTML=el.getAttribute('data-recit')||'';m.style.display='flex';document.body.style.overflow='hidden';}
+          function lfiReussiteClose(){var m=document.getElementById('lfi-reussite-modal');if(m){m.style.display='none';}document.body.style.overflow='';}
+          document.addEventListener('keydown',function(e){if(e.key==='Escape')lfiReussiteClose();});
+          </script>
         </div>
       <?php endif; ?>
 
