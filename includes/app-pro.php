@@ -525,8 +525,10 @@ function lfi_nct_dossier_render_chrono($u) {
         echo '<form id="lfi-chrono-bulk" method="post" onsubmit="return confirm(\'Supprimer les lignes cochées ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_bulk_del" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;border-color:#c8102e;color:#c8102e">🗑 Supprimer la sélection</button></form>';
         echo '<form method="post" onsubmit="return confirm(\'Tout effacer la chronologie ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_reset" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#c8102e">🧹 Tout effacer</button></form>';
         echo '<form method="post" title="Rattache chaque pièce à l\'événement de même date" style="margin:0">' . wp_nonce_field('lfi_app_pieces_autolink', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_pieces_autolink" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#186a3b;border-color:#a9d5b6">🔗 Rattacher les pièces par date</button></form>';
+        echo '<form method="post" title="Retire les doublons (chronologie + pièces)" style="margin:0">' . wp_nonce_field('lfi_app_dossier_dedupe', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_dedupe" value="1"><button type="submit" class="btn-ghost" style="font-size:.8em;color:#8a6d1f;border-color:#e6d29a">🧹 Nettoyer les doublons</button></form>';
         echo '</div>';
         if (isset($_GET['autolinked'])) echo '<div style="font-size:.82em;color:#186a3b;margin-top:4px">🔗 ' . (int) $_GET['autolinked'] . ' pièce(s) rattachée(s) à leur événement.</div>';
+        if (isset($_GET['deduped_c']) || isset($_GET['deduped_p'])) echo '<div style="font-size:.82em;color:#8a6d1f;margin-top:4px">🧹 ' . (int) ($_GET['deduped_c'] ?? 0) . ' doublon(s) de chronologie et ' . (int) ($_GET['deduped_p'] ?? 0) . ' pièce(s) en double retiré(s).</div>';
     }
     echo '<details style="margin-top:8px"><summary style="cursor:pointer;color:#0b3d91;font-weight:700;font-size:.9em">➕ Ajouter une date</summary>';
     echo '<form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false);
@@ -671,6 +673,32 @@ function lfi_nct_dossier_import_zip($zip_path, $uid) {
     return $n;
 }
 
+/** Retire les DOUBLONS de chronologie (même jour + même début de phrase). */
+function lfi_nct_chrono_dedupe($uid) {
+    $list = lfi_nct_chrono_get($uid); $seen = []; $out = []; $removed = 0;
+    foreach ($list as $e) {
+        $key = mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', (string) ($e['d'] ?? '') . mb_substr((string) ($e['txt'] ?? ''), 0, 45)));
+        if ($key !== '' && isset($seen[$key])) { $removed++; continue; }
+        $seen[$key] = 1; $out[] = $e;
+    }
+    if ($removed) lfi_nct_chrono_save($uid, $out);
+    return $removed;
+}
+
+/** Retire les PIÈCES en double (même nom de fichier + même taille). */
+function lfi_nct_pieces_dedupe($uid) {
+    $atts = get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 400, 'orderby' => 'date', 'order' => 'ASC', 'fields' => 'ids',
+        'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $uid]]]);
+    $seen = []; $removed = 0;
+    foreach ((array) $atts as $aid) {
+        $f = get_attached_file($aid); $sz = ($f && file_exists($f)) ? (int) filesize($f) : 0;
+        $key = strtolower(basename((string) $f)) . '|' . $sz;
+        if (isset($seen[$key])) { if (wp_delete_attachment((int) $aid, true)) $removed++; continue; }
+        $seen[$key] = 1;
+    }
+    return $removed;
+}
+
 /** Supprime TOUTES les pièces (attachments) d'un locataire. Renvoie le nombre. */
 function lfi_nct_dossier_purge_pieces($uid) {
     $uid = (int) $uid; if (!$uid) return 0;
@@ -730,6 +758,7 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<label>… ou colle le texte du dossier ici<textarea name="md_paste" rows="5" placeholder="# Dossier…\n17/07/2025 : …\n20/08/2025 : …"></textarea></label>';
     echo '<label>📎 Photos / PDF à joindre (plusieurs possibles)<input type="file" name="pieces[]" accept="image/*,application/pdf" multiple></label>';
     echo '<label>🗜️ …ou une archive ZIP (photos + PDF en vrac) — le robot en sort tout et range<input type="file" name="zipfile" accept=".zip,application/zip,application/x-zip-compressed"></label>';
+    echo '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" name="md_append" value="1"> <span>Ajouter à la chronologie existante (par défaut : <strong>on remplace</strong> — évite les doublons)</span></label>';
     echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🤖 Importer et classer</button></form>';
 
     echo '<form method="post" onsubmit="return confirm(\'Supprimer TOUTES les pièces de ce dossier ? (photos, PDF, documents importés)\');" style="margin-top:8px">' . wp_nonce_field('lfi_app_pieces_purge', '_wpnonce', true, false);
@@ -1020,6 +1049,13 @@ function lfi_nct_app_view_dossier() {
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'pieces_purged' => $n]) . '#import-md'); exit;
     }
 
+    /* 🧹 NETTOYER LES DOUBLONS (chronologie + pièces) — un seul bouton. */
+    if (!empty($_POST['lfi_app_dossier_dedupe']) && check_admin_referer('lfi_app_dossier_dedupe')) {
+        $dc = lfi_nct_chrono_dedupe($u->ID);
+        $dp = lfi_nct_pieces_dedupe($u->ID);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'deduped_c' => $dc, 'deduped_p' => $dp]) . '#dossier-chrono'); exit;
+    }
+
     /* 🗑 VIDER TOUT le dossier (pièces + chronologie + emails + notes). */
     if (!empty($_POST['lfi_app_dossier_wipe']) && check_admin_referer('lfi_app_dossier_wipe')) {
         $rep = lfi_nct_dossier_wipe_all($u->ID);
@@ -1043,6 +1079,9 @@ function lfi_nct_app_view_dossier() {
         $md_text = wp_check_invalid_utf8($md_text, true);
 
         if (trim($md_text) !== '' && function_exists('lfi_nct_md_extract_chrono')) {
+            /* REMPLACER (par défaut) : on vide la chronologie avant d'importer →
+               jamais de doublon empilé. Décocher pour ajouter à l'existant. */
+            if (empty($_POST['md_append'])) lfi_nct_chrono_save($u->ID, []);
             foreach (lfi_nct_md_extract_chrono($md_text) as $e) {
                 $lab = trim((string) ($e['date'] ?? ''));
                 $ev  = trim((string) ($e['event'] ?? ''));
