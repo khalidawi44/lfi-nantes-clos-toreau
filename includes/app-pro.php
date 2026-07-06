@@ -310,6 +310,23 @@ function lfi_nct_app_view_dossiers() {
     if (function_exists('lfi_nct_users_ga_query')) $tenant_args = lfi_nct_users_ga_query($tenant_args);
     $tenants = get_users($tenant_args);
 
+    /* + TOUTE personne ayant un DOSSIER dans le périmètre, même si son rôle
+       principal n'est pas « locataire » (multi-casquette : un membre du GA qui
+       est AUSSI locataire, comme Fabrice Doucet, doit apparaître ici). */
+    $by_id = [];
+    foreach ($tenants as $u) $by_id[(int) $u->ID] = $u;
+    $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $drows = $wpdb->get_results("SELECT DISTINCT tenant_user_id FROM $td WHERE tenant_user_id > 0") ?: [];
+    foreach ($drows as $r) {
+        $duid = (int) $r->tenant_user_id;
+        if (!$duid || isset($by_id[$duid])) continue;
+        if (function_exists('lfi_nct_uid_in_scope') && !lfi_nct_uid_in_scope($duid)) continue; /* cloisonnement */
+        $uu = get_userdata($duid);
+        if ($uu) $by_id[$duid] = $uu;
+    }
+    $tenants = array_values($by_id);
+    usort($tenants, function ($a, $b) { return strcasecmp((string) $a->display_name, (string) $b->display_name); });
+
     lfi_nct_app_screen_open('🗂 Dossiers locataires', count($tenants) . ' locataire(s) suivi(s)');
 
     if (empty($tenants)) {

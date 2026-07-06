@@ -290,6 +290,30 @@ function lfi_nct_emails_full_reset() {
 }
 
 /**
+ * Nettoie les LOGOS/ICÔNES de signature déjà importés par erreur comme pièces
+ * (Nantes Métropole Habitat, LinkedIn, Twitter…). On ne supprime QUE des images
+ * minuscules (taille d'une icône) ou au nom évocateur. Renvoie le nombre supprimé.
+ */
+function lfi_nct_cleanup_email_logos() {
+    $atts = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids',
+        'meta_query' => [['key' => '_lfi_tenant_piece', 'value' => 'Pièce jointe email']],
+    ]);
+    $n = 0;
+    foreach ((array) $atts as $aid) {
+        $aid = (int) $aid;
+        $mime = (string) get_post_mime_type($aid);
+        if (strpos($mime, 'image/') !== 0) continue; /* on ne touche pas aux PDF */
+        $file = get_attached_file($aid);
+        $name = mb_strtolower((string) ($file ? basename($file) : get_the_title($aid)));
+        $junk = preg_match('/(logo|icone?|icon|banni|bandeau|signature|footer|ent.te|header|twitter|linkedin|instagram|facebook|youtube|social|spacer|pixel|puce|smiley|image0\d|_sm|-sm\b)/u', $name);
+        $size = ($file && file_exists($file)) ? (int) filesize($file) : 0;
+        if ($junk || ($size > 0 && $size < 25000)) { if (wp_delete_attachment($aid, true)) $n++; }
+    }
+    return $n;
+}
+
+/**
  * Importe les PIÈCES JOINTES (images / PDF) d'un email. Si $tenant_uid > 0, la
  * pièce est rangée dans le dossier du locataire (meta _lfi_tenant_user_id +
  * étape auto). Si $tenant_uid = 0 (email « à rattacher », locataire pas encore
@@ -325,6 +349,22 @@ function lfi_nct_mailcheck_import_attachments($mbox, $uid, $tenant_uid) {
             if ($enc === 3) $raw = base64_decode($raw);
             elseif ($enc === 4) $raw = quoted_printable_decode($raw);
             if ($raw === '' || strlen($raw) > 15 * 1024 * 1024) continue;
+            /* 🧠 TRI : on ne veut PAS des logos/icônes de SIGNATURE d'email
+               (Nantes Métropole Habitat, LinkedIn, Twitter, Instagram…), qui
+               sont des images « inline » minuscules. On ne garde que de vraies
+               pièces : photos jointes de taille réelle et PDF. */
+            $is_image = strpos((string) ($ft_pre = wp_check_filetype($filename)['type'] ?? ''), 'image/') === 0
+                     || in_array($ext, ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif'], true);
+            if ($is_image) {
+                $nl = mb_strtolower($filename);
+                $disp = strtolower((string) ($part->disposition ?? ''));
+                $junk = preg_match('/(logo|icone?|icon|banni|bandeau|signature|footer|ent.te|header|twitter|linkedin|instagram|facebook|youtube|social|spacer|pixel|puce|smiley|image0\d|_sm|-sm\b)/u', $nl);
+                $sz = strlen($raw);
+                /* logo/icône = petite image, souvent « inline » → on écarte. */
+                if ($junk) continue;
+                if ($disp === 'inline' && $sz < 45000) continue;
+                if ($sz < 9000) continue; /* toute image de la taille d'une icône */
+            }
             $up = wp_upload_dir();
             if (!empty($up['error'])) continue;
             $safe = wp_unique_filename($up['path'], sanitize_file_name($filename) ?: ('piece-' . $partno . '.' . $ext));
