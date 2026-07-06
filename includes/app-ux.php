@@ -263,5 +263,77 @@ function lfi_nct_app_render_ux_boost() {
       }, true);
     })();
     </script>
+
+    <!-- ⚡ RÉACTIVITÉ — le tap doit BOUGER en < 100 ms, surtout vieux Android -->
+    <style>
+    /* Supprime le délai de 300 ms au tap (double-tap zoom) sur vieux Chrome/Android. */
+    a,button,input,select,textarea,label,summary,[role=button],[onclick],.lfi-app-card,.meta-chip,.btn-primary,.btn-ghost{touch-action:manipulation}
+    html{-webkit-tap-highlight-color:rgba(200,16,46,.10)}
+    /* Retour visuel INSTANTANÉ à l'appui (avant même que le serveur réponde). */
+    a:active,button:active,.btn-primary:active,.btn-ghost:active,.lfi-app-card:active,.meta-chip:active,[role=button]:active,summary:active{
+      opacity:.55;transform:scale(.975);transition:opacity .04s ease,transform .04s ease}
+    .lfi-busy{opacity:.6 !important;pointer-events:none !important}
+    /* Barre de progression en haut : apparaît dès le tap d'un lien/soumission. */
+    #lfiTopbar{position:fixed;top:0;left:0;height:3px;width:0;z-index:100050;
+      background:linear-gradient(90deg,#c8102e,#ff5a76);box-shadow:0 0 8px rgba(200,16,46,.5);
+      opacity:0;transition:width .2s ease,opacity .2s ease;pointer-events:none}
+    #lfiTopbar.on{opacity:1}
+    </style>
+    <script>
+    (function(){
+      if (window.__lfiPerf) return; window.__lfiPerf = true;
+
+      /* --- Barre de progression : feedback immédiat sur toute navigation --- */
+      var bar = document.createElement('div'); bar.id='lfiTopbar'; document.documentElement.appendChild(bar);
+      var timer=null;
+      function startBar(){
+        bar.classList.add('on'); bar.style.width='8%';
+        var w=8;
+        clearInterval(timer);
+        timer=setInterval(function(){ w += (90-w)*0.18; bar.style.width=w.toFixed(1)+'%'; if(w>=89){clearInterval(timer);} },120);
+      }
+      function stopBar(){ clearInterval(timer); bar.style.width='100%'; setTimeout(function(){bar.classList.remove('on');bar.style.width='0';},220); }
+      window.addEventListener('pageshow', stopBar);
+      window.addEventListener('beforeunload', startBar);
+
+      /* --- Un lien interne cliqué : barre + état occupé tout de suite --- */
+      function sameApp(href){ try{ var u=new URL(href, location.href); return u.origin===location.origin; }catch(e){ return false; } }
+      document.addEventListener('click', function(e){
+        var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        var href=a.getAttribute('href')||'';
+        if (a.target==='_blank' || href.charAt(0)==='#' || /^(tel:|mailto:|sms:|javascript:)/i.test(href)) return;
+        if (!sameApp(a.href)) return;
+        if (e.defaultPrevented) return;              /* lightbox / visionneuse ont déjà géré */
+        /* Pop-up de vote : on referme tout de suite (optimiste) → sensation instantanée. */
+        var ov = a.closest('#lfi-vote-ov'); if (ov){ ov.style.transition='opacity .12s'; ov.style.opacity='0'; }
+        a.classList.add('lfi-busy'); startBar();
+      }, false);
+
+      /* --- Soumission de formulaire : barre + anti double-envoi --- */
+      document.addEventListener('submit', function(e){
+        if (e.defaultPrevented) return;              /* confirm() annulé / validation échouée */
+        var f=e.target; if(!f||f.__lfiSent){ return; }
+        f.__lfiSent=true; startBar();
+        var b=f.querySelector('button[type=submit],button:not([type]),input[type=submit]');
+        if(b){ b.classList.add('lfi-busy'); }
+        /* filet : si rien ne se passe (validation), on réarme après 4 s */
+        setTimeout(function(){ f.__lfiSent=false; if(b) b.classList.remove('lfi-busy'); }, 4000);
+      }, false);
+
+      /* --- Préchargement au TOUCHER (démarre la nav ~150 ms plus tôt) --- */
+      var pref={}; var slow = (navigator.connection && (navigator.connection.saveData || /2g/.test(navigator.connection.effectiveType||'')));
+      function prefetch(href){
+        if (slow || pref[href]) return; pref[href]=1;
+        var l=document.createElement('link'); l.rel='prefetch'; l.href=href; document.head.appendChild(l);
+      }
+      document.addEventListener('pointerdown', function(e){
+        var a=e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if(!a) return; var href=a.getAttribute('href')||'';
+        if (a.target==='_blank' || href.charAt(0)==='#' || /^(tel:|mailto:|sms:|javascript:)/i.test(href)) return;
+        if (sameApp(a.href) && a.href.indexOf('admin-post.php')===-1) prefetch(a.href);
+      }, {passive:true});
+    })();
+    </script>
     <?php
 }
