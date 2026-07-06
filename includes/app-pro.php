@@ -1530,6 +1530,7 @@ function lfi_nct_app_view_dossier() {
                   . "Comme convenu, voici votre espace personnel pour suivre votre logement (gratuit, confidentiel). "
                   . "Connexion directe (rien à taper) : " . $share_link
                   . " — vous choisirez votre mot de passe, puis vous serez guidé·e pas à pas pour compléter votre profil, votre dossier et envoyer vos photos. On prend rendez-vous pour venir vous voir. On est là pour vous accompagner.";
+        if ($tel && function_exists('lfi_nct_sms_stop_line')) $intro .= lfi_nct_sms_stop_line($tel);
         echo '<div class="lfi-app-help" style="margin-top:8px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Envoie-le. <strong>Ne régénère pas</strong> après l\'envoi (ça l\'invalide).</small></div>';
         echo '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">';
         if ($tel) echo '<a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($intro) . '">📲 Envoyer par SMS</a>';

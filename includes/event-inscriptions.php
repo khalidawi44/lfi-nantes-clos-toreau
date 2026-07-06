@@ -227,6 +227,7 @@ function lfi_nct_app_view_event_sms() {
     echo '<ul class="lfi-app-list">';
     foreach ($recips as $tel_clean => $r) {
         $body = str_replace('{prenom}', $r['prenom'] ?: '', $msg);
+        if (function_exists('lfi_nct_sms_stop_line')) $body .= lfi_nct_sms_stop_line($r['tel'] ?? $tel_clean);
         $sms  = 'sms:' . $tel_clean . '?body=' . rawurlencode($body);
         echo '<li class="lfi-app-card" style="border-left:5px solid ' . $accent . '">';
         echo '<div class="head"><div class="who">' . esc_html(trim($r['prenom'] . ' ' . $r['nom']) ?: $r['tel']) . '</div>';
