@@ -55,6 +55,20 @@ function lfi_nct_auto_deploy() {
         }
     }
 
+    /* 1-emails-dedup) Nettoyer les DOUBLONS d'emails (file + dossiers) et de
+       PHOTOS (mêmes fichiers importés plusieurs fois). Une fois. */
+    if (get_option('lfi_nct_emails_photos_dedup_v1') !== '1') {
+        if (function_exists('lfi_nct_inbox_dedup_existing')) { try { lfi_nct_inbox_dedup_existing(); } catch (\Throwable $e) {} }
+        if (function_exists('lfi_nct_pieces_dedupe')) {
+            $role_t = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+            /* tous les détenteurs de pièces (via meta), pas seulement rôle tenant. */
+            global $wpdb;
+            $uids = $wpdb->get_col("SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_lfi_tenant_user_id' AND meta_value > 0");
+            foreach ((array) $uids as $uu) { try { lfi_nct_pieces_dedupe((int) $uu); } catch (\Throwable $e) {} }
+        }
+        update_option('lfi_nct_emails_photos_dedup_v1', '1', false);
+    }
+
     /* 1-national-dedup) Retirer les DOUBLONS de l'organigramme national (une fois). */
     if (get_option('lfi_nct_carto_people_dedup_v1') !== '1' && function_exists('lfi_nct_carto_people_dedupe')) {
         try { lfi_nct_carto_people_dedupe(); } catch (\Throwable $e) {}
