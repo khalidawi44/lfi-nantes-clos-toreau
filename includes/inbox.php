@@ -477,7 +477,7 @@ function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $mess
         $q[] = [
             'id' => (int) round(microtime(true) * 1000),
             'from' => $from, 'to' => $to, 'cc' => $cc, 'objet' => $subject,
-            'body' => mb_substr((string) $body, 0, 12000),
+            'body' => mb_substr((string) $body, 0, 20000),
             'message_id' => $message_id,
             'dedup' => $dk,
             'date' => $date ?: current_time('mysql'),
@@ -787,8 +787,19 @@ function lfi_nct_app_view_inbox_import() {
             }
             if ($ib_extr !== '') echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($ib_extr) . '…</div>';
             if ($ib_body !== '') echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3;font-weight:600">📄 Voir le mail complet</summary><div style="white-space:pre-wrap;font-size:.82em;color:#444;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px;max-height:320px;overflow:auto">' . esc_html($ib_body) . '</div></details>';
+            /* 🤖 SUGGESTION : le robot re-cherche le locataire sur le corps
+               DÉCODÉ (nom cité, ex. « Monsieur DOUCET ») → pré-sélectionne. */
+            $guess_uid = 0;
+            if (function_exists('lfi_nct_inbox_find_tenant')) {
+                $addrs = array_merge(lfi_nct_inbox_emails($e['from'] ?? ''), lfi_nct_inbox_emails($e['to'] ?? ''), lfi_nct_inbox_emails($e['cc'] ?? ''));
+                $g = (int) lfi_nct_inbox_find_tenant($addrs, ($e['objet'] ?? '') . ' ' . $ib_body);
+                if ($g && isset($people[$g])) $guess_uid = $g;
+            }
+            $opts_item = '<option value="">— rattacher à un locataire —</option>';
+            foreach ($people as $puid => $pnm) $opts_item .= '<option value="' . (int) $puid . '"' . ($puid == $guess_uid ? ' selected' : '') . '>' . esc_html($pnm) . '</option>';
+            if ($guess_uid) echo '<div style="font-size:.82em;color:#186a3b;font-weight:700;margin-top:6px">🤖 Le robot pense : <strong>' . esc_html($people[$guess_uid]) . '</strong> — vérifie et clique « Ranger ».</div>';
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
-            echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_html . '</select>';
+            echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_item . '</select>';
             echo '<button type="submit" name="do_assign" value="' . $qid . '" class="btn-primary" style="background:#186a3b">✅ Ranger</button>';
             echo '<button type="submit" name="do_member" value="' . $qid . '" formtarget="_blank" class="btn-ghost" style="font-size:.83em;color:#4b2e83;border-color:#c9bdf0">➕ Créer un membre</button>';
             echo '<button type="submit" name="do_del" value="' . $qid . '" class="btn-ghost" style="font-size:.82em" title="Supprimer cet email (sans liste noire)" onclick="return confirm(\'Retirer cet email de la file (sans bannir l\\\'expéditeur) ?\')">🗑</button>';
@@ -831,31 +842,39 @@ var LFI_LABEL = "lfi-importe";
 
 function lfiImportEmails() {
   var label = GmailApp.getUserLabelByName(LFI_LABEL) || GmailApp.createLabel(LFI_LABEL);
-  // emails récents non encore importés
+  // conversations récentes non encore importées
   var threads = GmailApp.search('newer_than:60d -label:' + LFI_LABEL, 0, 100);
   for (var i = 0; i < threads.length; i++) {
     var msgs = threads[i].getMessages();
+    if (!msgs.length) { threads[i].addLabel(label); continue; }
+    // On envoie TOUTE LA CONVERSATION (du plus ancien au plus récent) en un
+    // seul envoi par fil → contexte complet pour retrouver le locataire, et
+    // aucun doublon (une entrée par conversation, clé = id du fil).
+    var conv = "", froms = {}, tos = {}, last = msgs[msgs.length - 1];
     for (var j = 0; j < msgs.length; j++) {
       var m = msgs[j];
-      try {
-        var payload = {
-          key: LFI_KEY,
-          from: m.getFrom(),
-          to: m.getTo(),
-          cc: m.getCc(),
-          subject: m.getSubject(),
-          body: m.getPlainBody().substring(0, 12000),
-          date: Utilities.formatDate(m.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
-          message_id: m.getId()
-        };
-        UrlFetchApp.fetch(LFI_ENDPOINT, {
-          method: "post",
-          contentType: "application/json",
-          payload: JSON.stringify(payload),
-          muteHttpExceptions: true
-        });
-      } catch (e) {}
+      froms[m.getFrom()] = 1; tos[m.getTo()] = 1;
+      conv += "----- " + Utilities.formatDate(m.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm")
+            + " | De : " + m.getFrom() + " | A : " + m.getTo() + " -----\n"
+            + m.getPlainBody() + "\n\n";
     }
+    try {
+      UrlFetchApp.fetch(LFI_ENDPOINT, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({
+          key: LFI_KEY,
+          from: Object.keys(froms).join(", "),
+          to: Object.keys(tos).join(", "),
+          cc: last.getCc(),
+          subject: last.getSubject(),
+          body: conv.substring(0, 20000),
+          date: Utilities.formatDate(last.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm"),
+          message_id: threads[i].getId()
+        }),
+        muteHttpExceptions: true
+      });
+    } catch (e) {}
     threads[i].addLabel(label);
   }
 }
