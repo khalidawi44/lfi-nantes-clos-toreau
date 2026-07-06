@@ -276,6 +276,42 @@ function lfi_nct_user_role_tenant() {
     $u = wp_get_current_user();
     return in_array(LFI_NCT_ROLE_TENANT, (array) $u->roles, true);
 }
+/** Est-on MULTI-CASQUETTE (membre/admin de GA ET locataire) ? */
+function lfi_nct_is_multi_casquette() {
+    if (!is_user_logged_in()) return false;
+    $has_tenant = lfi_nct_user_role_tenant();
+    $has_mili   = lfi_nct_user_role_ga() || current_user_can('manage_options');
+    return $has_tenant && $has_mili;
+}
+/** Casquette affichée pour un·e multi-casquette : 'militant' (défaut) ou
+ *  'locataire'. '' si la personne n'est PAS multi-casquette. */
+function lfi_nct_casquette() {
+    if (!lfi_nct_is_multi_casquette()) return '';
+    $m = (string) get_user_meta(get_current_user_id(), 'lfi_nct_casquette', true);
+    return ($m === 'locataire') ? 'locataire' : 'militant';
+}
+/** Bascule de casquette : ?casquette=locataire|militant → mémorise et revient. */
+add_action('template_redirect', 'lfi_nct_casquette_switch', 0);
+function lfi_nct_casquette_switch() {
+    if (empty($_GET['casquette']) || !is_user_logged_in()) return;
+    $c = ($_GET['casquette'] === 'locataire') ? 'locataire' : 'militant';
+    update_user_meta(get_current_user_id(), 'lfi_nct_casquette', $c);
+    wp_safe_redirect(function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/'));
+    exit;
+}
+/** Bouton « changer de casquette » (rendu sur les deux accueils). */
+function lfi_nct_casquette_button_html() {
+    if (!lfi_nct_is_multi_casquette()) return '';
+    $base = function_exists('lfi_nct_app_page_url') ? lfi_nct_app_page_url() : home_url('/app/');
+    if (lfi_nct_casquette() === 'locataire') {
+        $url = add_query_arg('casquette', 'militant', $base);
+        $lbl = '✊ Passer à mon espace militant';
+    } else {
+        $url = add_query_arg('casquette', 'locataire', $base);
+        $lbl = '🏠 Passer à mon espace locataire';
+    }
+    return '<a href="' . esc_url($url) . '" style="display:block;text-align:center;background:#4b2e83;color:#fff;font-weight:800;border-radius:12px;padding:11px 14px;text-decoration:none;margin:0 0 12px;box-shadow:0 3px 10px rgba(75,46,131,.3)">' . esc_html($lbl) . '</a>';
+}
 function lfi_nct_user_tenant_response_id($user_id = 0) {
     if (!$user_id) $user_id = get_current_user_id();
     return (int) get_user_meta($user_id, 'lfi_nct_response_id', true);
@@ -634,7 +670,10 @@ function lfi_nct_app_role_dispatch(&$handled) {
         if (function_exists('lfi_nct_avocat_dispatch') && lfi_nct_avocat_dispatch()) { $handled = true; return; }
     }
 
-    if (lfi_nct_user_role_tenant()) {
+    /* MULTI-CASQUETTE : une personne membre/admin ET locataire (ex. Fabrice,
+       Gwen) choisit quel espace afficher. Sans ça, la priorité « tenant » la
+       bloquait dans l'espace locataire, sans retour vers l'espace militant. */
+    if (lfi_nct_user_role_tenant() && lfi_nct_casquette() !== 'militant') {
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
             case 'lettre':       lfi_nct_app_view_tenant_lettre();   break;
@@ -1272,6 +1311,8 @@ function lfi_nct_app_view_tenant_dashboard() {
                 <div class="lfi-app-sub2">Suivi par le GA LFI · espace personnel</div>
             </div>
         </div>
+
+        <?php if (function_exists('lfi_nct_casquette_button_html')) echo lfi_nct_casquette_button_html(); ?>
 
         <?php if ($tip_html) echo $tip_html; ?>
 
@@ -1932,7 +1973,10 @@ function lfi_nct_make_login_token($uid) {
     if (!$uid) return '';
     $token = wp_generate_password(32, false, false); // alphanumérique, sans caractères ambigus
     update_user_meta($uid, 'lfi_nct_login_token', hash('sha256', $token));
-    update_user_meta($uid, 'lfi_nct_login_token_exp', time() + 14 * DAY_IN_SECONDS);
+    /* Lien valable 90 jours (au lieu de 14) — les locataires ne restent pas
+       bloqués « lien expiré ». Il reste RÉUTILISABLE tant qu'aucun mot de passe
+       n'est choisi (invalidé automatiquement à ce moment-là). */
+    update_user_meta($uid, 'lfi_nct_login_token_exp', time() + 90 * DAY_IN_SECONDS);
     return $token;
 }
 
@@ -1997,8 +2041,9 @@ function lfi_nct_maybe_token_login() {
     }
     $uid   = lfi_nct_find_user_by_login_token($token);
     if ($uid) {
-        delete_user_meta($uid, 'lfi_nct_login_token');      // usage unique
-        delete_user_meta($uid, 'lfi_nct_login_token_exp');
+        /* RÉUTILISABLE : on ne brûle PLUS le jeton à la 1re ouverture (sinon la
+           personne qui reclique le même lien se retrouve « expiré »). Il reste
+           valable 90 j et sera invalidé quand elle choisira son mot de passe. */
         wp_set_current_user($uid);
         wp_set_auth_cookie($uid, true);                     // « rester connecté »
     }

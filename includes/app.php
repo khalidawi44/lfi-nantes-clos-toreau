@@ -1264,6 +1264,8 @@ function lfi_nct_app_render_dashboard() {
         <?php if (function_exists('lfi_nct_mobi_admin_notice')) lfi_nct_mobi_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_architecte_render_panel')) lfi_nct_architecte_render_panel(); ?>
 
+        <?php if (function_exists('lfi_nct_casquette_button_html')) echo lfi_nct_casquette_button_html(); ?>
+
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
         $essentiel = [
             ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_app_url('enquete')],
