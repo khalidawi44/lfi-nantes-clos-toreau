@@ -161,7 +161,12 @@ function lfi_nct_can_admin_ga() {
 function lfi_nct_uid_in_scope($uid) {
     $slug = lfi_nct_scope_ga_slug();
     if ($slug === '') return true; // vue « tout » : tout est permis
-    return (string) get_user_meta((int) $uid, 'lfi_nct_ga', true) === $slug;
+    $g = (string) get_user_meta((int) $uid, 'lfi_nct_ga', true);
+    /* HOME (Clos Toreau) = tag vide OU 'clos-toreau' — les deux sont équivalents
+       (comme pour les enquêtes/événements). Sans ça, un·e locataire du Clos
+       Toreau au tag vide DISPARAISSAIT de « Mon espace ». */
+    if ($slug === 'clos-toreau') return ($g === '' || $g === 'clos-toreau');
+    return $g === $slug;
 }
 
 /** GA effectivement « en vigueur » ('' = tout, pour le super-admin sans bascule). */
@@ -302,7 +307,9 @@ function lfi_nct_events_ga_meta_query() {
 function lfi_nct_users_ga_query($args = []) {
     $slug = lfi_nct_scope_ga_slug();
     $mq   = (isset($args['meta_query']) && is_array($args['meta_query'])) ? $args['meta_query'] : [];
-    if ($slug !== '') {
+    /* HOME (Clos Toreau) = tag vide, absent OU 'clos-toreau' — équivalents. Sinon
+       les locataires du Clos Toreau au tag vide disparaissent de « Mon espace ». */
+    if ($slug !== '' && $slug !== 'clos-toreau') {
         $mq[] = ['key' => 'lfi_nct_ga', 'value' => $slug];
     } else {
         $mq[] = [
