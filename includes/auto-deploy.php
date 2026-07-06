@@ -31,6 +31,71 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ Événement « Diffusion de tracts » (jeu. 9 juillet 2026, 17h30–19h00,
+       Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes). À ajouter au
+       calendrier du GA REZÉ + au calendrier & VOTE du GA CLOS TOREAU, avec
+       carte + point de rendez-vous. Idempotent : garde par option + anti-doublon
+       (titre + date + GA). Coordonnées géocodées (75 Bd Joliot-Curie). */
+    if (get_option('lfi_nct_seed_evt_tracts_20260709_v1') !== '1' && function_exists('wp_insert_post')) {
+        $cpt = post_type_exists('ag_evenement') ? 'ag_evenement' : (post_type_exists('lfi_evenement') ? 'lfi_evenement' : 'post');
+        $evt_title = 'Diffusion de tracts';
+        $evt_date  = '2026-07-09';
+        $evt_time  = '17h30 – 19h00';
+        $evt_place = 'Super U Saint-Jacques';
+        $evt_city  = '75 Bd Joliot Curie, 44200 Nantes';
+        $evt_lat   = '47.1938031';
+        $evt_lng   = '-1.5307383';
+        $evt_desc  = 'Diffusion de tracts. Rendez-vous devant le Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes.';
+
+        $make_evt = function ($ga) use ($cpt, $evt_title, $evt_date, $evt_time, $evt_place, $evt_city, $evt_lat, $evt_lng, $evt_desc) {
+            /* Anti-doublon : même titre + même date + même GA → on ne recrée pas. */
+            $all = get_posts(['post_type' => $cpt, 'post_status' => 'any', 'posts_per_page' => 300, 'fields' => 'ids']);
+            foreach ($all as $pid) {
+                if (get_the_title($pid) !== $evt_title) continue;
+                if ((string) get_post_meta($pid, '_ag_event_date', true) !== $evt_date) continue;
+                if ((string) get_post_meta($pid, '_lfi_evt_ga', true) !== $ga) continue;
+                return (int) $pid;
+            }
+            $pid = wp_insert_post(['post_type' => $cpt, 'post_status' => 'publish', 'post_title' => $evt_title, 'post_content' => $evt_desc], true);
+            if (is_wp_error($pid) || !$pid) return 0;
+            update_post_meta($pid, '_ag_event_date',  $evt_date);
+            update_post_meta($pid, '_ag_event_time',  $evt_time);
+            update_post_meta($pid, '_ag_event_place', $evt_place);
+            update_post_meta($pid, '_ag_event_city',  $evt_city);
+            update_post_meta($pid, '_lfi_evt_lat',    $evt_lat);
+            update_post_meta($pid, '_lfi_evt_lng',    $evt_lng);
+            update_post_meta($pid, '_lfi_evt_ga',     $ga);
+            update_post_meta($pid, '_lfi_evt_internal', 1);
+            return (int) $pid;
+        };
+
+        $reze_id = $make_evt('reze');          /* Calendrier GA Rezé */
+        $ct_id   = $make_evt('clos-toreau');   /* Calendrier GA Clos Toreau */
+
+        /* VOTE Clos Toreau : un créneau de mobilisation (tractage) lié à
+           l'événement → surface comme décision à voter pour les membres CT. */
+        if ($ct_id) {
+            global $wpdb;
+            $tm = $wpdb->prefix . 'lfi_nct_mobilisation';
+            $exists = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $tm WHERE event_id = %d AND date_creneau = %s", $ct_id, $evt_date));
+            if (!$exists) {
+                $wpdb->insert($tm, [
+                    'event_id'     => $ct_id,
+                    'theme'        => '',
+                    'ga'           => 'clos-toreau',
+                    'created_by'   => 0,
+                    'date_creneau' => $evt_date,
+                    'creneau'      => 'soiree',
+                    'type'         => 'tractage',
+                    'lieu'         => $evt_place . ', ' . $evt_city,
+                    'note'         => $evt_time,
+                    'participants' => wp_json_encode([]),
+                ]);
+            }
+        }
+        if ($reze_id || $ct_id) update_option('lfi_nct_seed_evt_tracts_20260709_v1', '1', false);
+    }
+
     /* 1-reset) REMISE À ZÉRO du pipeline d'import des emails, demandée avant une
        relance de pêche propre (« tout remettre à zéro »). Vide la boîte de
        collecte + la mémoire anti-doublon + les emails/pièces IMPORTÉS de tous
