@@ -934,6 +934,17 @@ function lfi_nct_app_view_dossier() {
         } elseif ($act === 'reopen' && $eid) {
             lfi_nct_episode_set_clos_urgence($u->ID, $eid, false);
             wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'grp_sep' && $eid) {
+            /* Séparer : cet incident devient son PROPRE dossier juridique. */
+            lfi_nct_episode_set_groupe($u->ID, $eid, $eid);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
+        } elseif ($act === 'grp_link' && $eid) {
+            /* Rattacher au même dossier juridique qu'un autre incident. */
+            $to = (int) ($_POST['ep_group_to'] ?? 0);
+            $grp = 0;
+            if ($to) foreach (lfi_nct_episodes_get($u->ID) as $ge) if ((int) ($ge['id'] ?? 0) === $to) $grp = lfi_nct_episode_groupe($ge);
+            if ($grp) lfi_nct_episode_set_groupe($u->ID, $eid, $grp);
+            wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
         } elseif ($act === 'delete' && $eid) {
             lfi_nct_episode_delete($u->ID, $eid);
             wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#parcours'); exit;
@@ -1331,6 +1342,10 @@ function lfi_nct_app_view_dossier() {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             $bidx = (int) ($_POST['besoin_idx'] ?? -1);
             if (isset($steps[$idx]['besoins'][$bidx])) { array_splice($steps[$idx]['besoins'], $bidx, 1); }
+        } elseif ($action === 'explain') {
+            /* Explication pédagogique sur-mesure (sinon texte auto côté locataire). */
+            $idx = (int) ($_POST['step_idx'] ?? -1);
+            if (isset($steps[$idx])) $steps[$idx]['explain'] = sanitize_textarea_field(wp_unslash($_POST['step_explain'] ?? ''));
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
@@ -2322,7 +2337,33 @@ function lfi_nct_dossier_render_episodes_bar($u) {
         echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="delete"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
         echo '<button type="submit" class="btn-ghost" style="font-size:.75em;color:#c8102e">🗑 Supprimer le dossier</button></form>';
         echo '</div>';
-        if ($clos) echo '<div style="font-size:.78em;color:#186a3b;margin-top:5px">✅ Urgence close le ' . esc_html(wp_date('j M Y', strtotime($cur['clos_date'] ?: current_time('Y-m-d')))) . ' — le préjudice reste compté dans le juridique global.</div>';
+        if ($clos) echo '<div style="font-size:.78em;color:#186a3b;margin-top:5px">✅ Urgence close le ' . esc_html(wp_date('j M Y', strtotime($cur['clos_date'] ?: current_time('Y-m-d')))) . ' — le préjudice reste compté dans le dossier juridique.</div>';
+
+        /* ⚖️ DOSSIER JURIDIQUE (lignée du trouble). Les incidents de MÊME nature
+           sont regroupés (préjudice cumulé = indemnité globale) ; un trouble
+           DIFFÉRENT se sépare. */
+        $grp = function_exists('lfi_nct_episode_groupe') ? lfi_nct_episode_groupe($cur) : (int) $active;
+        $glabel = function_exists('lfi_nct_episode_group_label') ? lfi_nct_episode_group_label($uid, $grp) : '';
+        $gcount = function_exists('lfi_nct_episode_group_count') ? lfi_nct_episode_group_count($uid, $grp) : 1;
+        echo '<div style="margin-top:8px;border-top:1px dashed #dfe6f0;padding-top:8px">';
+        echo '<div style="font-size:.8em;font-weight:800;color:#6b3fa0">⚖️ Dossier juridique : ' . esc_html($glabel) . ($gcount > 1 ? ' <span style="background:#efe6fb;color:#6b3fa0;padding:0 6px;border-radius:8px">' . (int) $gcount . ' incidents cumulés</span>' : ' <span style="color:#999;font-weight:600">(seul)</span>') . '</div>';
+        echo '<div style="font-size:.75em;color:#888;margin:2px 0 5px">Même trouble qui revient = même dossier juridique (préjudice cumulé). Trouble différent = à séparer.</div>';
+        echo '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+        /* Rattacher au juridique d'un autre incident. */
+        $autres = array_values(array_filter($episodes, function ($e) use ($active) { return (int) ($e['id'] ?? 0) !== $active; }));
+        if ($autres) {
+            echo '<form method="post" style="display:flex;gap:4px;align-items:center;margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="grp_link"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+            echo '<select name="ep_group_to" style="font-size:.76em;max-width:150px">';
+            foreach ($autres as $ae) echo '<option value="' . (int) ($ae['id'] ?? 0) . '">' . esc_html($ae['titre'] ?? 'Dossier') . '</option>';
+            echo '</select><button type="submit" class="btn-ghost" style="font-size:.76em">🔗 Même juridique</button></form>';
+        }
+        if ($gcount > 1) {
+            echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="grp_sep"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
+            echo '<button type="submit" class="btn-ghost" style="font-size:.76em;color:#c8102e">✂️ Séparer (juridique distinct)</button></form>';
+        }
+        echo '</div></div>';
     }
 
     /* Nouvel incident. */
@@ -2457,6 +2498,18 @@ function lfi_nct_dossier_render_parcours($u) {
             echo '<input type="file" name="piece" accept="image/*,application/pdf" capture="environment" required style="font-size:.8em;max-width:190px">';
             echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
             echo '</form>';
+            /* 📖 Explication pédagogique montrée au locataire (règle : on explique
+               toujours ce qu'il doit faire). Vide = texte automatique. */
+            $auto_ped = function_exists('lfi_nct_step_pedagogie') ? lfi_nct_step_pedagogie($s) : '';
+            echo '<div style="margin-top:9px;border-top:1px dashed #e0e0e0;padding-top:8px">';
+            echo '<div style="font-size:.8em;font-weight:800;color:#0b3d91">📖 Explication montrée au locataire</div>';
+            echo '<form method="post" style="margin:4px 0 0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="explain"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
+            echo '<textarea name="step_explain" rows="2" placeholder="' . esc_attr($auto_ped) . '" style="width:100%;font-size:.82em;border:1px solid #ddd;border-radius:8px;padding:6px">' . esc_textarea((string) ($s['explain'] ?? '')) . '</textarea>';
+            echo '<div style="font-size:.72em;color:#888;margin-top:2px">Laisse vide → le locataire voit le texte automatique ci-dessus. Écris pour personnaliser.</div>';
+            echo '<button type="submit" class="btn-ghost" style="font-size:.78em;margin-top:3px">💾 Enregistrer l\'explication</button></form>';
+            echo '</div>';
+
             /* 📌 Ce qu'on ATTEND DU LOCATAIRE pour cette étape. Le locataire le
                verra dans « Mon suivi » et pourra fournir chaque élément. */
             $besoins = (isset($s['besoins']) && is_array($s['besoins'])) ? $s['besoins'] : [];

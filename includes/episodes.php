@@ -74,6 +74,7 @@ function lfi_nct_episodes_ensure($uid) {
     $list = [[
         'id' => $id, 'titre' => 'Dossier principal', 'type' => '', 'piece' => '',
         'ouvert' => current_time('Y-m-d'), 'clos_urgence' => false, 'clos_date' => '',
+        'groupe' => $id, /* dossier juridique : lignée du trouble */
         'steps' => $steps, 'prejudice' => [],
     ]];
     lfi_nct_episodes_save($uid, $list);
@@ -117,8 +118,14 @@ function lfi_nct_episode_switch($uid, $to) {
     return true;
 }
 
-/** Crée un nouvel épisode (dossier d'incident séparé) et le rend ACTIF. */
-function lfi_nct_episode_create($uid, $titre, $type = '', $piece = '') {
+/** Crée un nouvel épisode (dossier d'incident séparé) et le rend ACTIF.
+ *  DOSSIER JURIDIQUE (groupe) : si $groupe est fourni, on l'utilise ; sinon,
+ *  RÈGLE — un incident de MÊME NATURE (même type) qu'un incident déjà ouvert
+ *  est une RÉCURRENCE du même trouble → il REJOINT le même dossier juridique
+ *  (préjudice cumulé). Un trouble de nature DIFFÉRENTE → dossier juridique
+ *  SÉPARÉ (nouveau groupe). Ex. punaises 2020 → punaises 2022 = même juridique ;
+ *  punaises vs lattes cassées = juridiques distincts. */
+function lfi_nct_episode_create($uid, $titre, $type = '', $piece = '', $groupe = null) {
     $uid = (int) $uid;
     $list = lfi_nct_episodes_ensure($uid);
     /* Enregistrer l'épisode actif avant de basculer. */
@@ -128,15 +135,61 @@ function lfi_nct_episode_create($uid, $titre, $type = '', $piece = '') {
     foreach ($list as $i => $e) { if ((int) ($e['id'] ?? 0) === $active) $list[$i]['steps'] = $cur; }
     $steps = lfi_nct_episode_seed_steps();
     $id = lfi_nct_episode_new_id();
+    /* Déduction du dossier juridique (groupe) par nature du trouble. */
+    $grp = (int) $groupe;
+    if (!$grp) {
+        if ($type !== '') {
+            foreach ($list as $e) {
+                if ((string) ($e['type'] ?? '') === $type) { $grp = (int) ($e['groupe'] ?? $e['id'] ?? 0); break; }
+            }
+        }
+        if (!$grp) $grp = $id; /* nouveau trouble → nouveau dossier juridique */
+    }
     $list[] = [
         'id' => $id, 'titre' => ($titre !== '' ? $titre : 'Nouvel incident'), 'type' => $type, 'piece' => $piece,
         'ouvert' => current_time('Y-m-d'), 'clos_urgence' => false, 'clos_date' => '',
+        'groupe' => $grp,
         'steps' => $steps, 'prejudice' => [],
     ];
     lfi_nct_episodes_save($uid, $list);
     update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
     update_user_meta($uid, 'lfi_nct_active_ep', $id);
     return $id;
+}
+
+/** Le groupe juridique d'un épisode (fallback = son propre id). */
+function lfi_nct_episode_groupe($e) {
+    $g = (int) ($e['groupe'] ?? 0);
+    return $g ?: (int) ($e['id'] ?? 0);
+}
+/** Rattache un épisode à un dossier juridique donné (ou le sépare si $groupe
+ *  vaut 0/son propre id → il devient son propre dossier juridique). */
+function lfi_nct_episode_set_groupe($uid, $id, $groupe) {
+    $list = lfi_nct_episodes_get($uid);
+    foreach ($list as $i => $e) {
+        if ((int) ($e['id'] ?? 0) === (int) $id) {
+            $list[$i]['groupe'] = (int) $groupe ?: (int) $id;
+            lfi_nct_episodes_save($uid, $list); return true;
+        }
+    }
+    return false;
+}
+/** Libellé lisible d'un dossier juridique : titre de l'épisode « souche »
+ *  (le plus ancien du groupe). */
+function lfi_nct_episode_group_label($uid, $groupe) {
+    $groupe = (int) $groupe;
+    $souche = null;
+    foreach (lfi_nct_episodes_get($uid) as $e) {
+        if (lfi_nct_episode_groupe($e) !== $groupe) continue;
+        if ($souche === null || strcmp((string) ($e['ouvert'] ?? ''), (string) ($souche['ouvert'] ?? '')) < 0) $souche = $e;
+    }
+    return $souche ? (string) ($souche['titre'] ?? 'Dossier juridique') : 'Dossier juridique';
+}
+/** Nombre d'épisodes partageant le dossier juridique d'un épisode donné. */
+function lfi_nct_episode_group_count($uid, $groupe) {
+    $groupe = (int) $groupe; $n = 0;
+    foreach (lfi_nct_episodes_get($uid) as $e) if (lfi_nct_episode_groupe($e) === $groupe) $n++;
+    return $n;
 }
 
 /** Renomme / retype un épisode. */

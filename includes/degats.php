@@ -247,6 +247,33 @@ function lfi_nct_suivi_besoin_types() {
         'info'     => ['✍️', 'Une information',          'text'],
     ];
 }
+/** PÉDAGOGIE (règle) : explique au locataire, en clair, ce que veut dire
+ *  l'étape et ce qu'il/elle doit faire. Un texte sur-mesure saisi par le
+ *  gestionnaire (champ « explain ») a la priorité ; sinon on déduit un message
+ *  pédagogique du libellé de l'étape et de qui en a la charge (who). */
+function lfi_nct_step_pedagogie($step) {
+    if (!empty($step['explain'])) return (string) $step['explain'];
+    $txt = mb_strtolower((string) ($step['text'] ?? ''));
+    $who = (string) ($step['who'] ?? 'admin');
+    $map = [
+        ['s\'empare|fiche, objectif|profil|s empare',           "Complétez votre fiche : votre objectif (ce que vous voulez obtenir), vos coordonnées, et ajoutez vos premières photos. C'est la base de votre dossier."],
+        ['visit|constat|passer chez',                            "Le Groupe d'Action va venir chez vous constater et photographier le problème. Vous n'avez qu'à convenir d'un créneau et être présent·e."],
+        ['adh|mandat|accord d\'accompagnement',                  "Signez le mandat : il autorise l'association à parler et agir en votre nom auprès du bailleur. Sans lui, on ne peut pas écrire officiellement pour vous."],
+        ['chiffrer le préjudice|préjudice subi|préjudice',       "Rassemblez vos preuves du préjudice : dates du trouble, factures et dépenses, certificats médicaux, nuits gâchées… Chaque élément augmente l'indemnité qu'on pourra réclamer. Déposez-les ci-dessous."],
+        ['mise en demeure|écrire à nmh|demande d\'indemnisation',"Le Groupe d'Action rédige et envoie le courrier officiel au bailleur (NMH). On peut vous demander une ou deux pièces pour l'appuyer."],
+        ['relanc',                                               "On relance le bailleur s'il ne répond pas. Rien à faire de votre côté — sauf si on vous sollicite pour une pièce."],
+        ['amiable|négoci|negoci',                                "On cherche un accord à l'amiable (travaux, relogement, indemnisation). Dites-nous ce qui compte le plus pour vous."],
+        ['schs|ars|insalub|conciliation|hygi',                   "On saisit les autorités compétentes (hygiène, ARS) ou la commission. C'est une démarche qu'on mène pour vous."],
+        ['assignation|tribunal|judiciaire',                      "Si rien n'aboutit à l'amiable, on prépare l'action en justice. On vous explique chaque étape avant de la lancer."],
+        ['clore|urgence',                                        "Le danger immédiat est réglé : ce volet d'urgence se referme. La réparation du préjudice (volet juridique) continue, elle, jusqu'au bout."],
+    ];
+    foreach ($map as $m) {
+        if (preg_match('/' . $m[0] . '/u', $txt)) return $m[1];
+    }
+    if ($who === 'tenant') return "Cette étape dépend de vous : apportez ci-dessous ce qu'on vous demande (photos, dates, informations).";
+    return "Cette étape est menée par le Groupe d'Action pour vous. Vous n'avez rien à faire — sauf si une pièce vous est demandée ci-dessous.";
+}
+
 /** Nombre de besoins encore EN ATTENTE (non fournis) sur une étape. */
 function lfi_nct_suivi_besoins_pending($step) {
     if (empty($step['besoins']) || !is_array($step['besoins'])) return 0;
@@ -409,6 +436,12 @@ function lfi_nct_app_view_tenant_suivi() {
         lfi_nct_app_screen_open('📋 ' . $stxt, 'Ce que vous pouvez apporter pour cette étape');
         if (!empty($_GET['contrib_ok'])) lfi_nct_app_flash('✅ Merci ! Vos éléments sont enregistrés et horodatés. La personne qui suit votre dossier est prévenue.');
         echo '<div style="margin-bottom:10px"><a href="' . esc_url(lfi_nct_app_url('mon-suivi', ['ep' => $ep_req])) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">← Retour au dossier</a></div>';
+
+        /* 📖 PÉDAGOGIE (règle) : on explique toujours ce que veut dire l'étape. */
+        echo '<div style="background:#eef4ff;border:1px solid #b9d0f5;border-radius:12px;padding:12px 14px;margin-bottom:12px">';
+        echo '<div style="font-weight:900;color:#0b3d91">📖 Ce qu\'il faut savoir</div>';
+        echo '<div style="font-size:.95em;line-height:1.5;color:#26374f;margin-top:4px">' . esc_html(lfi_nct_step_pedagogie($step)) . '</div>';
+        echo '</div>';
 
         if (!empty($step['echeance'])) echo '<div class="lfi-app-help" style="margin-bottom:8px">📅 Échéance : <strong>' . esc_html(wp_date('j M Y', strtotime($step['echeance']))) . '</strong></div>';
 
