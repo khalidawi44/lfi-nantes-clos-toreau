@@ -411,6 +411,11 @@ function lfi_nct_render_vote_popup() {
        prévisualisée mais vérifié pour l'admin réel → « le lien a expiré » en
        boucle. (Même piège que la popup mot de passe.) */
     if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) return;
+    /* JAMAIS par-dessus l'ONBOARDING (choisir le mot de passe) : ce pop-up a un
+       z-index supérieur et intercepterait les taps → « Enregistrer » / « Plus
+       tard » ne réagiraient pas. L'onboarding passe d'abord. */
+    if (function_exists('lfi_nct_member_onb_needed') && lfi_nct_member_onb_needed()) return;
+    if (function_exists('lfi_nct_onboarding_needed') && lfi_nct_onboarding_needed()) return;
     $r = lfi_nct_mobi_pending_vote_for_user();
     if (!$r) return;
     $types = lfi_nct_mobi_types(); $creneaux = lfi_nct_mobi_creneaux();
