@@ -3332,31 +3332,31 @@ function lfi_nct_tenant_sms_templates() {
     return [
         'rdv' => [
             'nom'  => '📞 Convenir d\'un rendez-vous',
-            'body' => "Bonjour {{prenom}},\n\nLe Groupe d'Action LFI Nantes Sud Clos Toreau souhaiterait vous rencontrer pour faire le point sur votre situation logement. Quel jour vous arrangerait dans les prochaines semaines ?\n\nVous pouvez nous répondre directement par SMS.\n\nCordialement.",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e du quartier (Groupe d'Action LFI Clos Toreau) qui suis votre dossier logement. J'aimerais qu'on se voie pour faire le point sur votre situation. Quel jour vous arrangerait dans les prochaines semaines ?\n\nVous pouvez me répondre directement par SMS.\n\nÀ bientôt,\n{{moi}}",
         ],
         'invitation_reunion' => [
             'nom'  => '📣 Inviter à une réunion publique',
-            'body' => "Bonjour {{prenom}},\n\nLe GA LFI Clos Toreau organise une réunion publique : {{event_titre}} — {{event_jour}} {{event_date}} à {{event_heure}}, à {{event_lieu}}.\n\nVotre présence serait précieuse. Toutes les infos : {{event_url_short}}",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e du GA LFI Clos Toreau. On organise une réunion publique : {{event_titre}} — {{event_jour}} {{event_date}} à {{event_heure}}, à {{event_lieu}}.\n\nVotre présence serait précieuse. Infos : {{event_url_short}}\n\n{{moi}}",
         ],
         'invitation_evenement' => [
             'nom'  => '📅 Inviter à un événement',
-            'body' => "Bonjour {{prenom}},\n\nNous organisons {{event_titre}} le {{event_date}} à {{event_lieu}}. Vous y êtes le·la bienvenu·e.\n\nDétails et inscription : {{event_url_short}}\n\nÀ très vite !",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e du quartier. On organise {{event_titre}} le {{event_date}} à {{event_lieu}}. Vous y êtes le·la bienvenu·e.\n\nDétails : {{event_url_short}}\n\nÀ très vite !\n{{moi}}",
         ],
         'suivi_lettre' => [
             'nom'  => '✉️ Suivi d\'une démarche / lettre',
-            'body' => "Bonjour {{prenom}},\n\nSuite à notre échange concernant votre logement, vous trouverez dans l'app du GA un modèle de lettre pré-rempli à envoyer à votre bailleur.\n\nLien direct : https://lfi-nantes-clostoreau.fr/app/?vue=lettre\n\nN'hésitez pas à nous solliciter en cas de besoin.",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e qui suis votre dossier. Suite à notre échange sur votre logement, vous trouverez dans l'app un modèle de lettre pré-rempli à envoyer à votre bailleur.\n\nLien : https://lfi-nantes-clostoreau.fr/app/?vue=lettre\n\nN'hésitez pas à me solliciter.\n{{moi}}",
         ],
         'rappel_droits' => [
             'nom'  => '⚖️ Rappel sur vos droits',
-            'body' => "Bonjour {{prenom}},\n\nPetit rappel : les problèmes de logement que vous nous avez signalés relèvent d'obligations légales du bailleur (loi du 6 juillet 1989, décret 2002-120).\n\nConsultez la fiche complète de vos droits dans l'app : https://lfi-nantes-clostoreau.fr/app/?vue=droits",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e du GA. Petit rappel : les problèmes que vous nous avez signalés relèvent d'obligations légales du bailleur (loi du 6 juillet 1989, décret 2002-120).\n\nLa fiche complète de vos droits : https://lfi-nantes-clostoreau.fr/app/?vue=droits\n\n{{moi}}",
         ],
         'photo_request' => [
             'nom'  => '📷 Demander des photos du logement',
-            'body' => "Bonjour {{prenom}},\n\nPour faire avancer votre dossier, pourriez-vous nous envoyer quelques photos des dégradations (moisissures, fuites, etc.) ?\n\nVous pouvez les déposer directement dans l'app, elles resteront privées : https://lfi-nantes-clostoreau.fr/app/?vue=envoyer-photo\n\nMerci.",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e qui suis votre dossier. Pour le faire avancer, pourriez-vous m'envoyer quelques photos des dégradations (moisissures, fuites, etc.) ?\n\nVous pouvez les déposer dans l'app, elles restent privées : https://lfi-nantes-clostoreau.fr/app/?vue=envoyer-photo\n\nMerci !\n{{moi}}",
         ],
         'libre' => [
             'nom'  => '✍️ Texte libre',
-            'body' => "Bonjour {{prenom}},\n\n",
+            'body' => "Bonjour {{prenom}},\n\nC'est {{moi}}, votre voisin·e du quartier, pour votre logement. ",
         ],
     ];
 }
@@ -3419,6 +3419,10 @@ function lfi_nct_app_view_sms_locataires() {
     $templates = lfi_nct_tenant_sms_templates();
     $template  = $templates[$mode] ?? $templates['libre'];
     $body = $template['body'];
+    /* {{moi}} = prénom du MEMBRE qui envoie (le référent) → « c'est [prénom],
+       votre voisin·e ». Chaque membre personnalise avec SON prénom. */
+    $me_u = wp_get_current_user();
+    $moi  = $me_u ? ($me_u->first_name ?: $me_u->display_name) : '';
     if ($user && function_exists('lfi_nct_sms_render')) {
         $fake_membre = (object) [
             'id'     => $user->ID,
@@ -3427,7 +3431,7 @@ function lfi_nct_app_view_sms_locataires() {
             'pseudo' => '',
             'tel'    => $user_tel,
         ];
-        $body = lfi_nct_sms_render($body, $fake_membre, $event_vars);
+        $body = lfi_nct_sms_render($body, $fake_membre, array_merge($event_vars, ['moi' => $moi, 'voisin' => $moi]));
     }
 
     lfi_nct_app_screen_open('📱 SMS aux locataires', count($tenants_with_tel) . ' locataire(s) avec téléphone');
