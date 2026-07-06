@@ -20,6 +20,7 @@ function lfi_nct_onboarding_is_ga_admin() {
 /** Faut-il montrer l'accueil ? (admin de GA + jamais fait). */
 function lfi_nct_onboarding_needed() {
     if (!lfi_nct_onboarding_is_ga_admin()) return false;
+    if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) return false;
     return get_user_meta(get_current_user_id(), 'lfi_nct_ga_onboarded', true) === '';
 }
 
@@ -367,6 +368,11 @@ function lfi_nct_member_onb_is_member() {
 /** Faut-il montrer l'accueil membre ? (jamais fait). */
 function lfi_nct_member_onb_needed() {
     if (!lfi_nct_member_onb_is_member()) return false;
+    /* MODE APERÇU (admin qui « voit comme » quelqu'un) : JAMAIS cette popup — ses
+       boutons « Enregistrer » / « Plus tard » agiraient sur le compte ADMIN réel
+       (pas sur la personne prévisualisée), ce qui bloque en boucle et pourrait
+       changer le mot de passe de l'admin. */
+    if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) return false;
     return get_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', true) === '';
 }
 
