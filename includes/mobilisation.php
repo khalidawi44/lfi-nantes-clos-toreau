@@ -436,6 +436,13 @@ function lfi_nct_render_vote_popup() {
         </div>
       </div>
     </div>
+    <script>
+    /* Nudge UNE fois par session pour ce créneau : ensuite on ne renvoie plus
+       le pop-up en boucle (le bandeau persistant reste, lui, comme rappel). */
+    (function(){ var k='lfiVote<?php echo (int) $r->id; ?>';
+      try{ if(sessionStorage.getItem(k)){ var o=document.getElementById('lfi-vote-ov'); if(o) o.style.display='none'; }
+           else { sessionStorage.setItem(k,'1'); } }catch(e){} })();
+    </script>
     <?php
 }
 
