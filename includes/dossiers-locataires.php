@@ -1343,7 +1343,18 @@ function lfi_nct_app_dossier_juridique_form($row) {
                         : '➡️ Vous avez envoyé à ' . esc_html($qui_env))
                    . '</div>';
                 if (!empty($e['objet'])) echo '<div class="com"><strong>Objet :</strong> ' . esc_html($e['objet']) . '</div>';
-                if (!empty($e['corps'])) echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($e['corps'], 0, 600)) . (mb_strlen($e['corps']) > 600 ? '…' : '') . '</div>';
+                if (!empty($e['corps'])) {
+                    $corps = (string) $e['corps'];
+                    if (mb_strlen($corps) > 320) {
+                        /* Accordéon : aperçu court + « Lire tout l'email » pour le
+                           dérouler EN ENTIER (plus de texte coupé à 600). */
+                        echo '<div class="com" style="white-space:pre-wrap">' . esc_html(mb_substr($corps, 0, 300)) . '…</div>';
+                        echo '<details style="margin-top:4px"><summary style="cursor:pointer;color:#0066a3;font-weight:600;font-size:.9em">📖 Lire tout l\'email</summary>'
+                           . '<div class="com" style="white-space:pre-wrap;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px">' . esc_html($corps) . '</div></details>';
+                    } else {
+                        echo '<div class="com" style="white-space:pre-wrap">' . esc_html($corps) . '</div>';
+                    }
+                }
                 echo '</li>';
             }
             echo '</ul>';

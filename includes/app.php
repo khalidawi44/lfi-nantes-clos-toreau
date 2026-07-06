@@ -693,6 +693,7 @@ function lfi_nct_app_shortcode() {
         lfi_nct_app_render_register_sw();
         if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
         lfi_nct_app_render_assistant_button();
+        if (function_exists('lfi_nct_app_render_ux_boost')) lfi_nct_app_render_ux_boost();
         if (function_exists('lfi_nct_app_render_feedback_button')) lfi_nct_app_render_feedback_button();
         return ob_get_clean();
     }
@@ -969,6 +970,7 @@ function lfi_nct_app_shortcode() {
     try {
         lfi_nct_app_render_styles();
         lfi_nct_app_render_register_sw();
+        if (function_exists('lfi_nct_app_render_ux_boost')) lfi_nct_app_render_ux_boost();
         if (!$is_focus) {
             if (is_user_logged_in()) lfi_nct_app_render_emergency_button();
             lfi_nct_app_render_assistant_button();
