@@ -306,11 +306,16 @@ function lfi_nct_md_extract_entities($md) {
     $system =
         "Tu lis un dossier logement (Markdown). Tu repères les ENTITÉS utiles pour monter le dossier juridique. "
         . "Tu réponds UNIQUEMENT par un objet JSON, sans texte autour :\n"
-        . '{"avocat":{"nom":"","email":"","tel":"","barreau":""},"aide_juridictionnelle":""}' . "\n"
+        . '{"avocat":{"nom":"","email":"","tel":"","barreau":""},'
+        . '"bailleur":{"nom":"","contact":"","tel":"","email":"","dossier":""},'
+        . '"hygiene":{"service":"","contact":"","tel":"","email":"","ref":""},'
+        . '"aide_juridictionnelle":""}' . "\n"
         . "N'INVENTE RIEN : si une info n'est pas écrite, laisse la chaîne vide. "
         . "avocat.nom = un vrai nom de personne (ex. « Me Julie Supiot »), JAMAIS une institution ou le bailleur. "
+        . "bailleur = l'organisme HLM (ex. « Nantes Métropole Habitat ») + son contact/dossier si écrits. "
+        . "hygiene = le service d'hygiène/santé de la mairie (SCHS) + contact/référence de PV si écrits. "
         . "aide_juridictionnelle = la référence/numéro du BAJ si présent.";
-    $out = lfi_nct_ai_call($system, $md, 600);
+    $out = lfi_nct_ai_call($system, $md, 800);
     if ($out === null) return [];
     if (preg_match('/\{.*\}/s', $out, $m)) { $j = json_decode($m[0], true); if (is_array($j)) return $j; }
     return [];
