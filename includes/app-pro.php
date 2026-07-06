@@ -529,8 +529,9 @@ function lfi_nct_dossier_purge_pieces($uid) {
 /** Section « 📄 Importer un dossier (.md) » + « 🗑 Vider les pièces ». */
 function lfi_nct_dossier_render_import_md($u) {
     $ai = function_exists('lfi_nct_ai_enabled') && lfi_nct_ai_enabled();
-    echo '<div class="lfi-app-card" style="border:2px solid #4b2e83;background:#faf8ff;margin-bottom:12px" id="import-md">';
-    echo '<div class="head"><div class="who">📄 Importer un dossier (.md) — le robot classe tout</div></div>';
+    $md_open = (isset($_GET['md_chrono']) || isset($_GET['md_pieces']) || isset($_GET['pieces_purged'])) ? ' open' : '';
+    echo '<details class="lfi-app-card" style="border:2px solid #4b2e83;background:#faf8ff;margin-bottom:12px" id="import-md"' . $md_open . '>';
+    echo '<summary style="cursor:pointer;font-weight:800;color:#4b2e83">📄 Importer un dossier (.md) — le robot classe tout</summary>';
 
     if (isset($_GET['md_chrono']) || isset($_GET['md_pieces'])) {
         echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:9px 11px;margin:6px 0"><strong style="color:#186a3b">✅ Import terminé</strong> — ' . (int) ($_GET['md_chrono'] ?? 0) . ' événement(s) ajouté(s) à la chronologie · ' . (int) ($_GET['md_pieces'] ?? 0) . ' pièce(s) rangée(s).</div>';
@@ -551,7 +552,38 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<form method="post" onsubmit="return confirm(\'Supprimer TOUTES les pièces de ce dossier ? (photos, PDF, documents importés)\');" style="margin-top:8px">' . wp_nonce_field('lfi_app_pieces_purge', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_app_pieces_purge" value="1">';
     echo '<button type="submit" class="btn-ghost" style="font-size:.82em;color:#c8102e;border-color:#f0b6c1">🗑 Supprimer toutes les pièces de ce dossier</button></form>';
+
+    /* 📎 TOUTES les pièces du dossier, chacune SUPPRIMABLE (règle : tout ce qui
+       entre doit pouvoir être supprimé depuis l'app — même sans étape). */
+    $all_pieces = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 200,
+        'orderby' => 'date', 'order' => 'DESC',
+        'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $u->ID]],
+    ]);
+    echo '<div style="margin-top:12px;border-top:1px solid #e2d7f5;padding-top:8px">';
+    echo '<div style="font-weight:800;color:#4b2e83;margin-bottom:6px">📎 Toutes les pièces (' . count($all_pieces) . ') — chacune supprimable</div>';
+    if (empty($all_pieces)) {
+        echo '<div class="lfi-app-empty" style="font-size:.9em">Aucune pièce dans ce dossier.</div>';
+    } else {
+        echo '<div style="display:flex;flex-wrap:wrap;gap:10px">';
+        foreach ($all_pieces as $p) {
+            $mime = (string) get_post_mime_type($p->ID);
+            $cat  = (string) get_post_meta($p->ID, '_lfi_piece_cat', true);
+            $thumb = (strpos($mime, 'image/') === 0)
+                ? wp_get_attachment_image($p->ID, [92, 92], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
+                : '<div style="width:80px;height:80px;border-radius:8px;background:#efeaf7;display:flex;align-items:center;justify-content:center;font-size:1.8em">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
+            echo '<div style="width:88px;text-align:center">';
+            echo $thumb;
+            echo '<div style="font-size:.62em;color:#666;margin:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' . esc_html($cat ?: basename((string) get_attached_file($p->ID))) . '</div>';
+            echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\');" style="margin:0">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false)
+               . '<input type="hidden" name="lfi_app_step_piece_del" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
+               . '<button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 8px;color:#c8102e;border-color:#f0b6c1">🗑 Suppr.</button></form>';
+            echo '</div>';
+        }
+        echo '</div>';
+    }
     echo '</div>';
+    echo '</details>';
 }
 
 function lfi_nct_app_view_dossier() {
