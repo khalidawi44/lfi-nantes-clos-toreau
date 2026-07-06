@@ -388,7 +388,7 @@ add_action('admin_post_lfi_nct_member_onb_skip',   'lfi_nct_member_onb_handle_sk
 add_action('admin_post_lfi_nct_member_onb_finish', 'lfi_nct_member_onb_handle_finish');
 
 function lfi_nct_member_onb_handle_pwd() {
-    if (!lfi_nct_member_onb_is_member()) wp_safe_redirect(home_url('/app/'));
+    if (!lfi_nct_member_onb_is_member()) { wp_safe_redirect(home_url('/app/')); exit; }
     check_admin_referer('lfi_nct_member_onb');
     $uid = get_current_user_id();
     $pwd = (string) ($_POST['new_pwd'] ?? '');
@@ -396,27 +396,40 @@ function lfi_nct_member_onb_handle_pwd() {
     if (strlen($pwd) < 8) {
         wp_safe_redirect(add_query_arg('onb_err', 'court', $app)); exit;
     }
-    /* wp_set_password déconnecte : on ré-authentifie tout de suite. */
+    /* wp_set_password INVALIDE la session courante : on ré-authentifie
+       proprement dans la foulée (clear puis set), sinon la personne se retrouve
+       déconnectée au rechargement et l'onboarding « revient ». */
     wp_set_password($pwd, $uid);
+    wp_clear_auth_cookie();
     wp_set_current_user($uid);
     wp_set_auth_cookie($uid, true);
     update_user_meta($uid, 'lfi_nct_member_pwd_set', '1');
-    /* Le mot de passe est choisi → le lien magique n'a plus lieu d'être. */
-    delete_user_meta($uid, 'lfi_nct_login_token');
-    delete_user_meta($uid, 'lfi_nct_login_token_exp');
+    /* IMPORTANT : on NE supprime PAS le lien magique ici. C'est le filet de
+       sécurité si le cookie d'auth ne « prend » pas sur l'appareil (sinon :
+       déconnecté + jeton supprimé = coincé). Il sera nettoyé à la fin de
+       l'onboarding (finish/skip). */
     wp_safe_redirect(add_query_arg('onb', 'install', $app)); exit;
+}
+/** Onboarding terminé : on pose le drapeau ET on nettoie le lien magique
+ *  (le mot de passe existe désormais). */
+function lfi_nct_member_onb_complete($uid) {
+    update_user_meta($uid, 'lfi_nct_member_onboarded', current_time('mysql'));
+    if (get_user_meta($uid, 'lfi_nct_member_pwd_set', true) === '1') {
+        delete_user_meta($uid, 'lfi_nct_login_token');
+        delete_user_meta($uid, 'lfi_nct_login_token_exp');
+    }
 }
 function lfi_nct_member_onb_handle_skip() {
     if (lfi_nct_member_onb_is_member()) {
         check_admin_referer('lfi_nct_member_onb');
-        update_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', current_time('mysql'));
+        lfi_nct_member_onb_complete(get_current_user_id());
     }
     wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
 }
 function lfi_nct_member_onb_handle_finish() {
     if (lfi_nct_member_onb_is_member()) {
         check_admin_referer('lfi_nct_member_onb');
-        update_user_meta(get_current_user_id(), 'lfi_nct_member_onboarded', current_time('mysql'));
+        lfi_nct_member_onb_complete(get_current_user_id());
     }
     wp_safe_redirect(add_query_arg('bienvenue', 1, function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/'))); exit;
 }
