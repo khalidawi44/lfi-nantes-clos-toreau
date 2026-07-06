@@ -43,6 +43,31 @@ function lfi_nct_avocat_list() {
     return get_users(['role' => LFI_NCT_ROLE_AVOCAT, 'orderby' => 'display_name']);
 }
 
+/**
+ * Trouve un·e avocat·e par nom (ou email), sinon le/la CRÉE. Renvoie l'uid.
+ * Sert à l'import auto d'un dossier .md : « je trouve Me X → je la crée et je la
+ * rattache au dossier ».
+ */
+function lfi_nct_avocat_ensure($nom, $email = '', $tel = '', $spec = '') {
+    $nom = trim((string) $nom); if ($nom === '') return 0;
+    if (function_exists('lfi_nct_avocat_ensure_role')) lfi_nct_avocat_ensure_role();
+    /* Déjà présent·e (même nom, insensible à la casse) ? */
+    foreach (lfi_nct_avocat_list() as $av) {
+        if (mb_strtolower(trim((string) $av->display_name)) === mb_strtolower($nom)) return (int) $av->ID;
+    }
+    $email = trim((string) $email);
+    if ($email !== '' && is_email($email)) { $u = get_user_by('email', $email); if ($u) return (int) $u->ID; }
+    /* Création (même logique que le formulaire avocats). */
+    $base = 'me.' . sanitize_title($nom); $login = $base; $n = 1;
+    while (username_exists($login)) { $login = $base . '.' . (++$n); }
+    if ($email === '' || !is_email($email) || email_exists($email)) $email = $login . '@avocat.example';
+    $uid = wp_insert_user(['user_login' => $login, 'user_email' => $email, 'user_pass' => wp_generate_password(16), 'display_name' => $nom, 'role' => LFI_NCT_ROLE_AVOCAT]);
+    if (is_wp_error($uid)) return 0;
+    if (trim((string) $tel) !== '')  update_user_meta($uid, 'lfi_nct_tel', sanitize_text_field($tel));
+    if (trim((string) $spec) !== '') update_user_meta($uid, 'lfi_nct_avocat_specialites', sanitize_text_field($spec));
+    return (int) $uid;
+}
+
 /* -------------------------------------------------------------- *
  *  Assignation : quel·le avocat·e sur quel dossier                *
  *  (stockée en meta du compte locataire).                         *
