@@ -229,13 +229,16 @@ function lfi_nct_app_serve_endpoints() {
         header('Content-Type: application/manifest+json; charset=utf-8');
         $v = LFI_NCT_VERSION;
         echo wp_json_encode([
+            'id'               => home_url('/' . LFI_NCT_APP_SLUG . '/'),
             'name'             => 'GA LFI Nantes Sud Clos Toreau',
             'short_name'       => 'GA LFI',
-            'description'      => 'Console mobile du Groupe d\'Action.',
+            'description'      => 'Console mobile du Groupe d\'Action LFI Nantes Sud — Clos Toreau : suivi des dossiers logement, coordination des actions, événements.',
             'start_url'        => home_url('/' . LFI_NCT_APP_SLUG . '/'),
             'scope'            => home_url('/'),
             'display'          => 'standalone',
             'orientation'      => 'portrait',
+            'dir'              => 'ltr',
+            'categories'       => ['social', 'productivity'],
             'background_color' => '#c8102e',
             'theme_color'      => '#c8102e',
             'lang'             => 'fr',
