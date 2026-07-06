@@ -678,15 +678,46 @@ function lfi_nct_dossier_import_zip($zip_path, $uid) {
     return $n;
 }
 
-/** Retire les DOUBLONS de chronologie (même jour + même début de phrase). */
+/** Normalise un texte de chronologie (minuscules, sans accents/ponctuation). */
+function lfi_nct_chrono_norm_txt($t) {
+    $t = mb_strtolower(trim((string) $t));
+    if (function_exists('remove_accents')) $t = remove_accents($t);
+    return preg_replace('/[^a-z0-9]/', '', $t);
+}
+
+/**
+ * Retire les DOUBLONS de chronologie — y compris le MÊME événement écrit
+ * différemment (ex. « Expertise M » tronqué vs « Expertise entomologique de
+ * M. Meurgey »). On garde la version la PLUS COMPLÈTE.
+ * Règle : même jour ET (texte identique OU l'un contenu dans l'autre OU même
+ * début sur 12 caractères). Sans date, on dédUplique le texte exact seulement.
+ */
 function lfi_nct_chrono_dedupe($uid) {
-    $list = lfi_nct_chrono_get($uid); $seen = []; $out = []; $removed = 0;
+    $list = lfi_nct_chrono_get($uid);
+    /* On traite d'abord les entrées les plus LONGUES (pour garder la complète). */
+    usort($list, function ($a, $b) {
+        $c = strcmp((string) ($a['d'] ?? ''), (string) ($b['d'] ?? ''));
+        return $c !== 0 ? $c : (mb_strlen((string) ($b['txt'] ?? '')) - mb_strlen((string) ($a['txt'] ?? '')));
+    });
+    $kept = []; $removed = 0;
     foreach ($list as $e) {
-        $key = mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', (string) ($e['d'] ?? '') . mb_substr((string) ($e['txt'] ?? ''), 0, 45)));
-        if ($key !== '' && isset($seen[$key])) { $removed++; continue; }
-        $seen[$key] = 1; $out[] = $e;
+        $d = (string) ($e['d'] ?? '');
+        $t = lfi_nct_chrono_norm_txt($e['txt'] ?? '');
+        if ($t === '') { $kept[] = $e; continue; }
+        $dup = false;
+        foreach ($kept as $k) {
+            $kt = lfi_nct_chrono_norm_txt($k['txt'] ?? '');
+            $kd = (string) ($k['d'] ?? '');
+            if ($kt === $t) { $dup = true; break; } /* texte identique (toute date) */
+            /* Même jour connu → variantes du même événement. */
+            if ($d !== '' && $d === $kd && substr($d, 5) !== '00-00') {
+                if (strpos($kt, $t) !== false || strpos($t, $kt) !== false || mb_substr($kt, 0, 12) === mb_substr($t, 0, 12)) { $dup = true; break; }
+            }
+        }
+        if ($dup) { $removed++; continue; }
+        $kept[] = $e;
     }
-    if ($removed) lfi_nct_chrono_save($uid, $out);
+    if ($removed) lfi_nct_chrono_save($uid, $kept);
     return $removed;
 }
 
