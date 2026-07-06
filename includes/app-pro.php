@@ -537,6 +537,53 @@ function lfi_nct_dossier_wipe_all($uid) {
     return $rep;
 }
 
+/**
+ * Extrait une ARCHIVE ZIP dans le dossier d'un locataire : chaque image / PDF de
+ * l'archive devient une pièce (rangée, catégorisée, étape auto). Renvoie le
+ * nombre de pièces créées. Gère les zips avec sous-dossiers.
+ */
+function lfi_nct_dossier_import_zip($zip_path, $uid) {
+    $uid = (int) $uid; if (!$uid || !$zip_path || !file_exists($zip_path)) return 0;
+    if (!class_exists('ZipArchive')) return 0; /* extension zip absente */
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+    $za = new ZipArchive();
+    if ($za->open($zip_path) !== true) return 0;
+    $up = wp_upload_dir(); if (!empty($up['error'])) { $za->close(); return 0; }
+    $ok_ext = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif', 'pdf'];
+    $n = 0;
+    for ($i = 0; $i < $za->numFiles; $i++) {
+        $name = (string) $za->getNameIndex($i);
+        if ($name === '' || substr($name, -1) === '/') continue;         /* dossier */
+        $base = basename($name);
+        if ($base === '' || $base[0] === '.' || strpos($name, '__MACOSX') !== false) continue; /* fichiers cachés / macOS */
+        $ext = strtolower(pathinfo($base, PATHINFO_EXTENSION));
+        if (!in_array($ext, $ok_ext, true)) continue;
+        $data = $za->getFromIndex($i);
+        if ($data === false || $data === '' || strlen($data) > 20 * 1024 * 1024) continue;
+        $safe = wp_unique_filename($up['path'], sanitize_file_name($base) ?: ('piece.' . $ext));
+        $path = trailingslashit($up['path']) . $safe;
+        if (@file_put_contents($path, $data) === false) continue;
+        $ft  = wp_check_filetype($safe);
+        $att = wp_insert_attachment(['post_mime_type' => $ft['type'] ?: 'application/octet-stream', 'post_title' => 'Pièce (zip) — ' . $base, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $path);
+        if (is_wp_error($att) || !$att) { @unlink($path); continue; }
+        wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $path));
+        update_post_meta($att, '_lfi_tenant_user_id', $uid);
+        update_post_meta($att, '_lfi_tenant_piece', 'Pièce importée (zip)');
+        if (function_exists('lfi_nct_piece_categorize')) {
+            $cat = lfi_nct_piece_categorize($base, (string) ($ft['type'] ?? ''));
+            update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
+            if (function_exists('lfi_nct_piece_autostep')) {
+                $sk = lfi_nct_piece_autostep($uid, $cat['cat']);
+                if ($sk !== '') update_post_meta($att, '_lfi_step', $sk);
+            }
+        }
+        if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $path);
+        $n++;
+    }
+    $za->close();
+    return $n;
+}
+
 /** Supprime TOUTES les pièces (attachments) d'un locataire. Renvoie le nombre. */
 function lfi_nct_dossier_purge_pieces($uid) {
     $uid = (int) $uid; if (!$uid) return 0;
@@ -570,6 +617,7 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<label>📄 Fichier du dossier (.md ou .txt)<input type="file" name="mdfile" accept=".md,.markdown,.txt,text/markdown,text/plain"></label>';
     echo '<label>… ou colle le texte du dossier ici<textarea name="md_paste" rows="5" placeholder="# Dossier…\n17/07/2025 : …\n20/08/2025 : …"></textarea></label>';
     echo '<label>📎 Photos / PDF à joindre (plusieurs possibles)<input type="file" name="pieces[]" accept="image/*,application/pdf" multiple></label>';
+    echo '<label>🗜️ …ou une archive ZIP (photos + PDF en vrac) — le robot en sort tout et range<input type="file" name="zipfile" accept=".zip,application/zip,application/x-zip-compressed"></label>';
     echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🤖 Importer et classer</button></form>';
 
     echo '<form method="post" onsubmit="return confirm(\'Supprimer TOUTES les pièces de ce dossier ? (photos, PDF, documents importés)\');" style="margin-top:8px">' . wp_nonce_field('lfi_app_pieces_purge', '_wpnonce', true, false);
@@ -850,6 +898,13 @@ function lfi_nct_app_view_dossier() {
                 $added_pieces++;
             }
         }
+
+        /* 3) ARCHIVE ZIP : on en SORT toutes les photos/PDF → rangées comme
+           pièces dans CE dossier (catégorisées + étape auto). */
+        if (!empty($_FILES['zipfile']['tmp_name']) && (int) $_FILES['zipfile']['size'] <= 80 * 1024 * 1024) {
+            $added_pieces += lfi_nct_dossier_import_zip($_FILES['zipfile']['tmp_name'], (int) $u->ID);
+        }
+
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'md_chrono' => $added_chrono, 'md_pieces' => $added_pieces]) . '#import-md'); exit;
     }
 
