@@ -387,6 +387,39 @@ add_action('admin_post_lfi_nct_member_onb_pwd',    'lfi_nct_member_onb_handle_pw
 add_action('admin_post_lfi_nct_member_onb_skip',   'lfi_nct_member_onb_handle_skip');
 add_action('admin_post_lfi_nct_member_onb_finish', 'lfi_nct_member_onb_handle_finish');
 
+/* HANDLER EN-APP (fiable) : les formulaires d'onboarding postent sur la PAGE
+ *  DE L'APP (pas /wp-admin/admin-post.php). Là, l'authentification est GARANTIE
+ *  — puisque le pop-up ne s'affiche que si la personne est connectée et membre.
+ *  C'est la parade au « mot de passe qui ne s'enregistre pas » (auth incertaine
+ *  sur admin-post.php via lien magique / cookies /wp-admin). Priorité 1 =
+ *  AVANT le rendu de la coquille (template_redirect 99) → le redirect marche. */
+add_action('template_redirect', 'lfi_nct_member_onb_handle_inapp', 1);
+function lfi_nct_member_onb_handle_inapp() {
+    if (empty($_POST['lfi_monb_action'])) return;
+    if (!is_user_logged_in() || !lfi_nct_member_onb_is_member()) return;
+    /* Nonce en priorité, mais on n'échoue jamais bêtement : la personne EST
+       connectée en tant qu'elle-même (action sur son propre compte). */
+    $uid = get_current_user_id();
+    $act = sanitize_key(wp_unslash($_POST['lfi_monb_action']));
+    $app = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    if ($act === 'pwd') {
+        $pwd = (string) ($_POST['new_pwd'] ?? '');
+        if (strlen($pwd) < 8) { wp_safe_redirect(add_query_arg('onb_err', 'court', $app)); exit; }
+        wp_set_password($pwd, $uid);          /* remplace l'ancien mot de passe */
+        wp_clear_auth_cookie();
+        wp_set_current_user($uid);
+        wp_set_auth_cookie($uid, true);       /* on reste connecté·e */
+        update_user_meta($uid, 'lfi_nct_member_pwd_set', '1');
+        wp_safe_redirect(add_query_arg('onb', 'install', $app)); exit;
+    } elseif ($act === 'skip') {
+        lfi_nct_member_onb_complete($uid);
+        wp_safe_redirect($app); exit;
+    } elseif ($act === 'finish') {
+        lfi_nct_member_onb_complete($uid);
+        wp_safe_redirect(add_query_arg('bienvenue', 1, $app)); exit;
+    }
+}
+
 function lfi_nct_member_onb_handle_pwd() {
     if (!lfi_nct_member_onb_is_member()) { wp_safe_redirect(home_url('/app/')); exit; }
     check_admin_referer('lfi_nct_member_onb');
@@ -443,7 +476,9 @@ function lfi_nct_member_onb_render() {
     $u = wp_get_current_user();
     $login = $u->user_login;
     $step  = lfi_nct_member_onb_step();
-    $ap    = admin_url('admin-post.php');
+    /* Les formulaires postent sur la PAGE DE L'APP (auth garantie), pas sur
+       /wp-admin/admin-post.php (auth incertaine via lien magique). */
+    $self  = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
     $nonce = wp_create_nonce('lfi_nct_member_onb');
     $ios   = (bool) preg_match('/iPhone|iPad|iPod/i', (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
     $err   = isset($_GET['onb_err']) ? sanitize_text_field(wp_unslash($_GET['onb_err'])) : '';
@@ -461,8 +496,8 @@ function lfi_nct_member_onb_render() {
             <h3>🔐 Choisis TON mot de passe</h3>
             <p>Tu es connecté·e automatiquement par ton lien — bravo ! Pour la prochaine fois, choisis un mot de passe <strong>à toi</strong>. Ton téléphone te proposera de l'enregistrer : accepte, tu n'auras plus jamais à le retaper.</p>
             <?php if ($err === 'court'): ?><div class="lfi-monb-err">Le mot de passe doit faire au moins 8 caractères.</div><?php endif; ?>
-            <form method="post" action="<?php echo esc_url($ap); ?>" autocomplete="on">
-              <input type="hidden" name="action" value="lfi_nct_member_onb_pwd">
+            <form method="post" action="<?php echo esc_url($self); ?>" autocomplete="on">
+              <input type="hidden" name="lfi_monb_action" value="pwd">
               <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
               <input type="text" name="username" value="<?php echo esc_attr($login); ?>" autocomplete="username" readonly hidden>
               <label>Nouveau mot de passe
@@ -471,8 +506,8 @@ function lfi_nct_member_onb_render() {
               <label class="lfi-monb-show"><input type="checkbox" id="lfi-monb-see"> Afficher le mot de passe</label>
               <button type="submit" class="lfi-monb-go">Enregistrer mon mot de passe →</button>
             </form>
-            <form method="post" action="<?php echo esc_url($ap); ?>" style="text-align:center;margin-top:6px">
-              <input type="hidden" name="action" value="lfi_nct_member_onb_skip">
+            <form method="post" action="<?php echo esc_url($self); ?>" style="text-align:center;margin-top:6px">
+              <input type="hidden" name="lfi_monb_action" value="skip">
               <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
               <button type="submit" class="lfi-monb-skip" onclick="var o=document.getElementById('lfi-monb');if(o)o.style.display='none';">Plus tard</button>
             </form>
@@ -495,8 +530,8 @@ function lfi_nct_member_onb_render() {
               </ol>
             <?php endif; ?>
             <div class="lfi-monb-hint">Tu pourras toujours refaire ça depuis « 📲 Installer l'app ».</div>
-            <form method="post" action="<?php echo esc_url($ap); ?>">
-              <input type="hidden" name="action" value="lfi_nct_member_onb_finish">
+            <form method="post" action="<?php echo esc_url($self); ?>">
+              <input type="hidden" name="lfi_monb_action" value="finish">
               <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($nonce); ?>">
               <button type="submit" class="lfi-monb-go">✅ C'est bon, je commence</button>
             </form>
