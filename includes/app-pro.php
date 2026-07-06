@@ -1159,7 +1159,9 @@ function lfi_nct_app_view_dossier() {
             if (empty($up['error'])) {
                 $fname = wp_unique_filename($up['path'], 'dossier-' . $u->ID . '-' . wp_date('Ymd-His') . '.md');
                 $fpath = trailingslashit($up['path']) . $fname;
-                if (@file_put_contents($fpath, $md_text) !== false) {
+                /* BOM UTF-8 → les visionneuses affichent les accents correctement
+                   (plus de « Ã© » / « â€" »). */
+                if (@file_put_contents($fpath, "\xEF\xBB\xBF" . $md_text) !== false) {
                     $att = wp_insert_attachment(['post_mime_type' => 'text/markdown', 'post_title' => 'Dossier importé (.md) — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $fpath);
                     if (!is_wp_error($att) && $att) {
                         update_post_meta($att, '_lfi_tenant_user_id', $u->ID);

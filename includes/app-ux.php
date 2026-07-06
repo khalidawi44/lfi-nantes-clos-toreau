@@ -74,6 +74,25 @@ function lfi_nct_app_render_ux_boost() {
       <a class="lfiLbOpen" href="#" target="_blank" rel="noopener">⤢ Plein écran</a>
     </div>
 
+    <div id="lfiDocView" role="dialog" aria-modal="true" aria-label="Document">
+      <div class="lfiDocBar">
+        <span class="lfiDocName">Document</span>
+        <a class="lfiDocOpen" href="#" target="_blank" rel="noopener">⤢ Onglet</a>
+        <button type="button" class="lfiDocClose" aria-label="Fermer le document">✕ Fermer</button>
+      </div>
+      <iframe class="lfiDocFrame" src="about:blank" title="Document"></iframe>
+    </div>
+    <style>
+    #lfiDocView{position:fixed;inset:0;z-index:100001;background:#fff;display:none;flex-direction:column}
+    #lfiDocView.open{display:flex}
+    #lfiDocView .lfiDocBar{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 8px;
+      background:#c8102e;color:#fff}
+    #lfiDocView .lfiDocName{flex:1;font-weight:800;font-size:.92em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #lfiDocView .lfiDocOpen{color:#fff;text-decoration:none;font-weight:700;font-size:.82em;background:rgba(255,255,255,.2);padding:6px 10px;border-radius:999px}
+    #lfiDocView .lfiDocClose{background:#fff;color:#c8102e;border:none;border-radius:999px;padding:7px 14px;font-weight:800;font-size:.9em;cursor:pointer}
+    #lfiDocView .lfiDocFrame{flex:1;border:0;width:100%;background:#f4f4f6}
+    </style>
+
     <script>
     (function(){
       if (window.__lfiUxBoot) return; window.__lfiUxBoot = 1;
@@ -201,13 +220,41 @@ function lfi_nct_app_render_ux_boost() {
         lastTap = now;
       }, {passive:true});
 
-      /* Un clic sur une image (ou un lien-image) DANS l'app → galerie. */
+      /* ============ 5) VISIONNEUSE DOCUMENT (PDF / .md / …) avec ✕ ============ */
+      var dv = document.getElementById('lfiDocView');
+      var dFrame = dv.querySelector('.lfiDocFrame');
+      var dOpen = dv.querySelector('.lfiDocOpen');
+      var dName = dv.querySelector('.lfiDocName');
+      function openDoc(url, name){
+        dName.textContent = name || 'Document';
+        dOpen.href = url; dFrame.src = url;
+        dv.classList.add('open'); document.body.style.overflow = 'hidden';
+      }
+      function closeDoc(){ dv.classList.remove('open'); dFrame.src = 'about:blank'; document.body.style.overflow = ''; }
+      dv.querySelector('.lfiDocClose').addEventListener('click', closeDoc);
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && dv.classList.contains('open')) closeDoc(); });
+      /* Un fichier NON-image (PDF, .md, .txt, doc…) OU tout fichier des uploads. */
+      function isDocUrl(u){ return /\.(pdf|md|markdown|txt|csv|docx?|xlsx?|pptx?|odt|rtf)(\?|#|$)/i.test(u||''); }
+      function isUploadUrl(u){ return /\/wp-content\/uploads\//i.test(u||''); }
+
+      /* Un clic sur une image / un lien-fichier DANS l'app → galerie ou visionneuse. */
       document.addEventListener('click', function(e){
         var a = e.target.closest && e.target.closest('a');
-        if (a && (isImgUrl(a.getAttribute('href')) || a.querySelector('img'))){
-          var img = a.querySelector('img');
-          var full = isImgUrl(a.getAttribute('href')) ? a.href : (img ? img.src : '');
-          if (full){ e.preventDefault(); openLb(full); return; }
+        if (a){
+          var href = a.getAttribute('href') || '';
+          var inApp = a.closest('.lfi-app-card, .lfi-app-list, #lfiRobotMsgs, .lfi-app-main, .lfi-piece');
+          /* image → galerie */
+          if (isImgUrl(href) || a.querySelector('img')){
+            var img = a.querySelector('img');
+            var full = isImgUrl(href) ? a.href : (img ? img.src : '');
+            if (full){ e.preventDefault(); openLb(full); return; }
+          }
+          /* document (pdf/md/…) ou fichier des uploads, dans l'app → visionneuse ✕ */
+          if (inApp && (isDocUrl(href) || (isUploadUrl(href) && !isImgUrl(href)))){
+            e.preventDefault();
+            var nm = (a.textContent || '').trim() || href.split('/').pop();
+            openDoc(a.href, nm); return;
+          }
         }
         var t = e.target;
         if (t && t.tagName === 'IMG' && t.closest('.lfi-app-card, .lfi-app-list, #lfiRobotMsgs, .lfi-app-main, .lfi-piece')){
