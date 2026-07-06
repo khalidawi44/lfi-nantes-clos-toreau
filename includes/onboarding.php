@@ -395,6 +395,9 @@ function lfi_nct_member_onb_handle_pwd() {
     wp_set_current_user($uid);
     wp_set_auth_cookie($uid, true);
     update_user_meta($uid, 'lfi_nct_member_pwd_set', '1');
+    /* Le mot de passe est choisi → le lien magique n'a plus lieu d'être. */
+    delete_user_meta($uid, 'lfi_nct_login_token');
+    delete_user_meta($uid, 'lfi_nct_login_token_exp');
     wp_safe_redirect(add_query_arg('onb', 'install', $app)); exit;
 }
 function lfi_nct_member_onb_handle_skip() {
