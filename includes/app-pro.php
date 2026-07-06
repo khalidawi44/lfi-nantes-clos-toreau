@@ -425,11 +425,23 @@ function lfi_nct_dossier_render_chrono($u) {
         echo '<div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">';
         foreach ($list as $e) {
             $lab = (string) ($e['label'] ?? '');
-            echo '<div style="display:flex;gap:8px;align-items:flex-start;border-left:3px solid ' . (!empty($e['auto']) ? '#0066a3' : '#0b3d91') . ';background:#f6f8fc;border-radius:6px;padding:6px 9px">';
-            echo '<input type="checkbox" form="lfi-chrono-bulk" name="chrono_sel[]" value="' . (int) ($e['id'] ?? 0) . '" title="Sélectionner" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto">';
+            $eid = (int) ($e['id'] ?? 0);
+            $etxt = (string) ($e['txt'] ?? '');
+            echo '<div style="border-left:3px solid ' . (!empty($e['auto']) ? '#0066a3' : '#0b3d91') . ';background:#f6f8fc;border-radius:6px;padding:6px 9px">';
+            echo '<div style="display:flex;gap:8px;align-items:flex-start">';
+            echo '<input type="checkbox" form="lfi-chrono-bulk" name="chrono_sel[]" value="' . $eid . '" title="Sélectionner" style="margin-top:2px;width:16px;height:16px;flex:0 0 auto">';
             echo '<div style="font-weight:800;color:#0b3d91;font-size:.82em;white-space:nowrap;min-width:78px">' . esc_html($lab ?: '—') . '</div>';
-            echo '<div style="flex:1;font-size:.88em;color:#333">' . esc_html((string) ($e['txt'] ?? '')) . (!empty($e['auto']) ? ' <span style="color:#0066a3;font-size:.85em">· auto</span>' : '') . '</div>';
-            echo '<form method="post" onsubmit="return confirm(\'Retirer cette ligne ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_del" value="' . (int) ($e['id'] ?? 0) . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
+            echo '<div style="flex:1;font-size:.88em;color:#333">' . esc_html($etxt) . (!empty($e['auto']) ? ' <span style="color:#0066a3;font-size:.85em">· auto</span>' : '') . '</div>';
+            echo '<form method="post" onsubmit="return confirm(\'Retirer cette ligne ?\')" style="margin:0">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false) . '<input type="hidden" name="lfi_chrono_del" value="' . $eid . '"><button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 6px">🗑</button></form>';
+            echo '</div>';
+            /* ✏️ Modifier (date + texte), y compris pour une ligne importée. */
+            echo '<details style="margin-top:4px"><summary style="cursor:pointer;color:#0b3d91;font-size:.78em;font-weight:600">✏️ Modifier</summary>';
+            echo '<form method="post" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' . wp_nonce_field('lfi_chrono', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_chrono_edit" value="' . $eid . '">';
+            echo '<input type="text" name="chrono_date" value="' . esc_attr($lab) . '" placeholder="date" style="width:130px;padding:6px;border:1px solid #ccc;border-radius:6px;font-size:.85em">';
+            echo '<input type="text" name="chrono_txt" value="' . esc_attr($etxt) . '" style="flex:1;min-width:160px;padding:6px;border:1px solid #ccc;border-radius:6px;font-size:.85em">';
+            echo '<button type="submit" class="btn-primary" style="background:#0b3d91;font-size:.82em">💾 Enregistrer</button>';
+            echo '</form></details>';
             echo '</div>';
         }
         echo '</div>';
@@ -639,26 +651,51 @@ function lfi_nct_dossier_render_import_md($u) {
         'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $u->ID]],
     ]);
     echo '<div style="margin-top:12px;border-top:1px solid #e2d7f5;padding-top:8px">';
-    echo '<div style="font-weight:800;color:#4b2e83;margin-bottom:6px">📎 Toutes les pièces (' . count($all_pieces) . ') — chacune supprimable</div>';
+    echo '<div style="font-weight:800;color:#4b2e83;margin-bottom:6px">📎 Toutes les pièces (' . count($all_pieces) . ') — triées par compartiment, chacune supprimable</div>';
     if (empty($all_pieces)) {
         echo '<div class="lfi-app-empty" style="font-size:.9em">Aucune pièce dans ce dossier.</div>';
     } else {
-        echo '<div style="display:flex;flex-wrap:wrap;gap:10px">';
+        /* COMPARTIMENTS : on ne mélange rien. Chaque pièce va dans SA catégorie. */
+        $compart = [
+            'photo'     => ['📷 Photos de preuve', '#186a3b'],
+            'pv'        => ['📋 PV / constats (Hygiène)', '#0066a3'],
+            'expertise' => ['🔬 Expertises', '#6a1b9a'],
+            'courrier'  => ['✉️ Courriers', '#8a6d1f'],
+            'medical'   => ['🩺 Certificats médicaux', '#c8102e'],
+            'facture'   => ['💶 Factures / devis', '#0b3d91'],
+            'doc'       => ['📄 Documents', '#555'],
+            'document'  => ['📄 Documents', '#555'],
+            'autre'     => ['📎 Autres pièces', '#777'],
+        ];
+        $buckets = [];
         foreach ($all_pieces as $p) {
-            $mime = (string) get_post_mime_type($p->ID);
-            $cat  = (string) get_post_meta($p->ID, '_lfi_piece_cat', true);
-            $thumb = (strpos($mime, 'image/') === 0)
-                ? wp_get_attachment_image($p->ID, [92, 92], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
-                : '<div style="width:80px;height:80px;border-radius:8px;background:#efeaf7;display:flex;align-items:center;justify-content:center;font-size:1.8em">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
-            echo '<div style="width:88px;text-align:center">';
-            echo $thumb;
-            echo '<div style="font-size:.62em;color:#666;margin:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' . esc_html($cat ?: basename((string) get_attached_file($p->ID))) . '</div>';
-            echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\');" style="margin:0">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false)
-               . '<input type="hidden" name="lfi_app_step_piece_del" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
-               . '<button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 8px;color:#c8102e;border-color:#f0b6c1">🗑 Suppr.</button></form>';
-            echo '</div>';
+            $cat = (string) get_post_meta($p->ID, '_lfi_piece_cat', true);
+            if (!isset($compart[$cat])) $cat = 'autre';
+            $buckets[$cat][] = $p;
         }
-        echo '</div>';
+        /* Ordre d'affichage = ordre de $compart ; « document » fusionné dans « doc ». */
+        $order = ['photo', 'pv', 'expertise', 'courrier', 'medical', 'facture', 'doc', 'autre'];
+        foreach ($order as $cat) {
+            $items = $buckets[$cat] ?? [];
+            if ($cat === 'doc' && !empty($buckets['document'])) $items = array_merge($items, $buckets['document']);
+            if (empty($items)) continue;
+            list($lbl, $col) = $compart[$cat];
+            echo '<div style="margin-top:10px"><div style="font-weight:700;color:' . $col . ';font-size:.9em;margin-bottom:4px;border-left:3px solid ' . $col . ';padding-left:6px">' . esc_html($lbl) . ' (' . count($items) . ')</div>';
+            echo '<div style="display:flex;flex-wrap:wrap;gap:10px">';
+            foreach ($items as $p) {
+                $mime = (string) get_post_mime_type($p->ID);
+                $thumb = (strpos($mime, 'image/') === 0)
+                    ? wp_get_attachment_image($p->ID, [92, 92], true, ['style' => 'width:80px;height:80px;object-fit:cover;border-radius:8px;display:block'])
+                    : '<div style="width:80px;height:80px;border-radius:8px;background:#efeaf7;display:flex;align-items:center;justify-content:center;font-size:1.8em">' . (strpos($mime, 'pdf') !== false ? '📄' : '📎') . '</div>';
+                echo '<div style="width:88px;text-align:center">';
+                echo $thumb;
+                echo '<form method="post" onsubmit="return confirm(\'Supprimer cette pièce ?\');" style="margin:2px 0 0">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false)
+                   . '<input type="hidden" name="lfi_app_step_piece_del" value="1"><input type="hidden" name="att_id" value="' . (int) $p->ID . '">'
+                   . '<button type="submit" class="btn-ghost" style="font-size:.72em;padding:2px 8px;color:#c8102e;border-color:#f0b6c1">🗑 Suppr.</button></form>';
+                echo '</div>';
+            }
+            echo '</div></div>';
+        }
     }
     echo '</div>';
     echo '</details>';
@@ -813,6 +850,23 @@ function lfi_nct_app_view_dossier() {
     }
     if (!empty($_POST['lfi_chrono_reset']) && check_admin_referer('lfi_chrono')) {
         lfi_nct_chrono_save($u->ID, []);
+        wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
+    }
+    /* ✏️ MODIFIER une ligne de chronologie (y compris importée). */
+    if (!empty($_POST['lfi_chrono_edit']) && check_admin_referer('lfi_chrono')) {
+        $cid = (int) $_POST['lfi_chrono_edit'];
+        $nd  = sanitize_text_field(wp_unslash($_POST['chrono_date'] ?? ''));
+        $nt  = sanitize_text_field(wp_unslash($_POST['chrono_txt'] ?? ''));
+        $list = lfi_nct_chrono_get($u->ID);
+        foreach ($list as $i => $e) {
+            if ((int) ($e['id'] ?? 0) === $cid) {
+                $list[$i]['label'] = $nd;
+                $list[$i]['d'] = lfi_nct_chrono_norm_date($nd);
+                if ($nt !== '') $list[$i]['txt'] = $nt;
+                break;
+            }
+        }
+        lfi_nct_chrono_save($u->ID, $list);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID]) . '#dossier-chrono'); exit;
     }
 
