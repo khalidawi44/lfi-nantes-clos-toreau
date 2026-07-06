@@ -423,8 +423,9 @@ function lfi_nct_render_vote_popup() {
     $yes = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote&cid=' . (int) $r->id), 'lfi_nct_vote_' . (int) $r->id);
     $no  = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote_skip&cid=' . (int) $r->id), 'lfi_nct_vote_skip_' . (int) $r->id);
     ?>
-    <div id="lfi-vote-ov" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px">
-      <div style="background:#fff;color:#1a1a1a;border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 50px rgba(0,0,0,.35);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center">
+    <div id="lfi-vote-ov" onclick="if(event.target===this)this.style.display='none'" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="position:relative;background:#fff;color:#1a1a1a;border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 50px rgba(0,0,0,.35);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center">
+        <button type="button" aria-label="Fermer" onclick="document.getElementById('lfi-vote-ov').style.display='none'" style="position:absolute;top:10px;right:10px;width:34px;height:34px;border:none;border-radius:50%;background:#f0f0f0;color:#555;font-size:1.1em;font-weight:800;cursor:pointer;line-height:1">✕</button>
         <div style="font-size:42px">🗳</div>
         <div style="font-weight:900;font-size:1.2em;color:#c8102e;margin-top:4px">On attend ta décision !</div>
         <div style="margin-top:10px;font-size:1.05em"><strong><?php echo esc_html($tmeta[0] . ' ' . $tmeta[1]); ?></strong><br><?php echo esc_html($when . ' · ' . $moment); ?><?php echo $lieu ? '<br>📍 ' . esc_html($lieu) : ''; ?></div>
