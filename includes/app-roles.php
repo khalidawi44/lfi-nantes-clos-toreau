@@ -1112,7 +1112,10 @@ function lfi_nct_backfill_recontact() {
             "SELECT id FROM {$wpdb->prefix}lfi_nct_dossiers_locataires WHERE tenant_user_id = %d LIMIT 1", $tenant_uid));
         if (!$exists_d) {
             $souhaits = ''; $d = json_decode((string) $row->data, true);
-            if (is_array($d) && !empty($d['objectif'])) $souhaits = 'Objectif : ' . $d['objectif'];
+            if (is_array($d)) {
+                $o = !empty($d['objectifs']) && is_array($d['objectifs']) ? $d['objectifs'] : (!empty($d['objectif']) ? [(string) $d['objectif']] : []);
+                if ($o) $souhaits = 'Objectif : ' . implode(', ', $o);
+            }
             lfi_nct_ep_create_dossier($row, $tenant_uid, '', $souhaits, $owner);
             $dos++;
         }
@@ -1477,9 +1480,14 @@ function lfi_nct_app_view_tenant_objectif() {
         'a_voir'        => '🤝 J\'en parle d\'abord avec le GA',
     ];
     if (!empty($_POST['lfi_tenant_objectif']) && check_admin_referer('lfi_tenant_objectif') && $row) {
-        $obj = sanitize_key($_POST['objectif'] ?? '');
-        if (!isset($choix[$obj])) $obj = 'a_voir';
-        $data['objectif'] = $obj;
+        /* CHOIX MULTIPLE : on peut vouloir plusieurs choses (travaux ET
+           indemnisation…). On garde aussi 'objectif' (1re valeur) pour la
+           compatibilité avec le reste de l'app. */
+        $sel = array_map('sanitize_key', (array) ($_POST['objectifs'] ?? []));
+        $objs = array_values(array_intersect(array_keys($choix), $sel));
+        if (empty($objs)) $objs = ['a_voir'];
+        $data['objectifs'] = $objs;
+        $data['objectif']  = $objs[0];
         /* Situation privée (enfants…) : reste au dossier, JAMAIS partagée. */
         $data['situation_privee'] = sanitize_textarea_field(wp_unslash($_POST['situation'] ?? ''));
         $wpdb->update("{$wpdb->prefix}lfi_nct_responses", ['data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE)], ['id' => $rid]);
@@ -1488,13 +1496,16 @@ function lfi_nct_app_view_tenant_objectif() {
 
     lfi_nct_app_screen_open('🎯 Ce que je veux', 'Étape 2 — votre objectif, on décide ensemble');
     if (!$row) { echo '<div class="lfi-app-empty">Votre dossier n\'est pas encore lié. Contactez le GA.</div>'; lfi_nct_app_screen_close(); return; }
-    echo '<div class="lfi-app-help">Il n\'y a pas de mauvaise réponse. Choisissez ce qui vous parle — on l\'affinera avec vous.</div>';
+    echo '<div class="lfi-app-help">Il n\'y a pas de mauvaise réponse. Cochez <strong>tout ce qui vous parle</strong> (vous pouvez en choisir plusieurs) — on l\'affinera avec vous.</div>';
     echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_tenant_objectif', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_tenant_objectif" value="1">';
-    $cur = (string) ($data['objectif'] ?? '');
+    /* Valeurs cochées : le tableau 'objectifs' si présent, sinon l'ancienne
+       valeur unique 'objectif' (rétro-compatibilité). */
+    $cur = isset($data['objectifs']) && is_array($data['objectifs']) ? $data['objectifs'] : ((string) ($data['objectif'] ?? '') !== '' ? [(string) $data['objectif']] : []);
     echo '<div style="display:flex;flex-direction:column;gap:8px;margin:6px 0">';
     foreach ($choix as $k => $lab) {
-        echo '<label class="lfi-app-checkbox-row" style="border:1px solid ' . ($cur === $k ? '#186a3b' : '#ddd') . ';border-radius:10px;padding:11px"><input type="radio" name="objectif" value="' . esc_attr($k) . '" ' . checked($cur, $k, false) . '> ' . esc_html($lab) . '</label>';
+        $on = in_array($k, $cur, true);
+        echo '<label class="lfi-app-checkbox-row" style="border:1px solid ' . ($on ? '#186a3b' : '#ddd') . ';border-radius:10px;padding:11px"><input type="checkbox" name="objectifs[]" value="' . esc_attr($k) . '" ' . checked($on, true, false) . '> ' . esc_html($lab) . '</label>';
     }
     echo '</div>';
     echo '<label>🔒 Ma situation, mes enfants (facultatif — <strong>reste confidentiel, jamais partagé sauf avocat si nécessaire</strong>)<textarea name="situation" rows="4" placeholder="Ex : 2 enfants en bas âge, un problème de santé…">' . esc_textarea($data['situation_privee'] ?? '') . '</textarea></label>';
