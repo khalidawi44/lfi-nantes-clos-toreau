@@ -1278,6 +1278,22 @@ function lfi_nct_app_view_dossier() {
             /* Coche/décoche PLUSIEURS étapes d'un coup (cases cochées = faites). */
             $checked = array_map('intval', (array) ($_POST['step_done'] ?? []));
             foreach ($steps as $i => $s) { $steps[$i]['done'] = in_array($i, $checked, true); }
+        } elseif ($action === 'besoin_add') {
+            /* Déclare ce qu'on attend du LOCATAIRE pour cette étape (pièce/info). */
+            $idx = (int) ($_POST['step_idx'] ?? -1);
+            $btype = sanitize_key($_POST['besoin_type'] ?? 'info');
+            $blabel = sanitize_text_field(wp_unslash($_POST['besoin_label'] ?? ''));
+            $types = function_exists('lfi_nct_suivi_besoin_types') ? lfi_nct_suivi_besoin_types() : [];
+            if (!isset($types[$btype])) $btype = 'info';
+            if ($blabel === '' && isset($types[$btype])) $blabel = $types[$btype][1];
+            if (isset($steps[$idx]) && $blabel !== '') {
+                if (empty($steps[$idx]['besoins']) || !is_array($steps[$idx]['besoins'])) $steps[$idx]['besoins'] = [];
+                $steps[$idx]['besoins'][] = ['type' => $btype, 'label' => $blabel, 'done' => false];
+            }
+        } elseif ($action === 'besoin_del') {
+            $idx = (int) ($_POST['step_idx'] ?? -1);
+            $bidx = (int) ($_POST['besoin_idx'] ?? -1);
+            if (isset($steps[$idx]['besoins'][$bidx])) { array_splice($steps[$idx]['besoins'], $bidx, 1); }
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
@@ -2324,6 +2340,35 @@ function lfi_nct_dossier_render_parcours($u) {
             echo '<input type="file" name="piece" accept="image/*,application/pdf" capture="environment" required style="font-size:.8em;max-width:190px">';
             echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
             echo '</form>';
+            /* 📌 Ce qu'on ATTEND DU LOCATAIRE pour cette étape. Le locataire le
+               verra dans « Mon suivi » et pourra fournir chaque élément. */
+            $besoins = (isset($s['besoins']) && is_array($s['besoins'])) ? $s['besoins'] : [];
+            $btypes  = function_exists('lfi_nct_suivi_besoin_types') ? lfi_nct_suivi_besoin_types() : [];
+            $pend_b  = function_exists('lfi_nct_suivi_besoins_pending') ? lfi_nct_suivi_besoins_pending($s) : 0;
+            echo '<div style="margin-top:9px;border-top:1px dashed #e0e0e0;padding-top:8px">';
+            echo '<div style="font-size:.8em;font-weight:800;color:#8a6d1f">📌 À demander au locataire' . ($pend_b ? ' <span style="background:#d39e00;color:#fff;padding:0 6px;border-radius:8px;font-size:.85em">' . (int) $pend_b . ' en attente</span>' : '') . '</div>';
+            if ($besoins) {
+                echo '<div style="display:flex;flex-direction:column;gap:3px;margin:5px 0">';
+                foreach ($besoins as $bi => $b) {
+                    $bt = (string) ($b['type'] ?? 'info'); $ti = $btypes[$bt] ?? ['•', ''];
+                    $bdone = !empty($b['done']);
+                    echo '<div style="display:flex;align-items:center;gap:6px;font-size:.82em;background:' . ($bdone ? '#f0f8f1' : '#fffaf0') . ';border-radius:6px;padding:3px 7px">';
+                    echo '<span style="flex:1;color:' . ($bdone ? '#186a3b' : '#7a5f10') . '">' . $ti[0] . ' ' . esc_html($b['label'] ?? '') . ($bdone ? ' ✓' . (!empty($b['value']) ? ' — <strong>' . esc_html($b['value']) . '</strong>' : ' fourni') : '') . '</span>';
+                    echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="besoin_del"><input type="hidden" name="step_idx" value="' . (int) $idx . '"><input type="hidden" name="besoin_idx" value="' . (int) $bi . '"><button type="submit" class="btn-ghost" style="font-size:.7em;padding:0 5px;color:#c8102e">✕</button></form>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
+            echo '<form method="post" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:4px">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false);
+            echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="besoin_add"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
+            echo '<select name="besoin_type" style="font-size:.78em;max-width:130px">';
+            foreach ($btypes as $tk => $tv) echo '<option value="' . esc_attr($tk) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+            echo '</select>';
+            echo '<input type="text" name="besoin_label" placeholder="Précision (ex : photos des punaises)" style="font-size:.78em;flex:1;min-width:120px">';
+            echo '<button type="submit" class="btn-ghost" style="font-size:.78em">+ Demander</button>';
+            echo '</form>';
+            echo '</div>';
+
             /* Contrôle manuel : rouvrir / marquer faite + supprimer l'étape. */
             echo '<div style="display:flex;gap:6px;margin-top:7px">';
             echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_dossier_step', '_wpnonce', true, false) . '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="toggle"><input type="hidden" name="step_idx" value="' . (int) $idx . '"><button type="submit" class="btn-ghost" style="font-size:.78em">' . ($done ? '↩ Rouvrir' : '✅ Marquer faite') . '</button></form>';
