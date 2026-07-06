@@ -683,6 +683,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'mon-profil-loc': lfi_nct_app_view_tenant_profil(); break;
             case 'mon-objectif':   lfi_nct_app_view_tenant_objectif(); break;
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
+            case 'signaler-degat': lfi_nct_app_view_tenant_signaler_degat(); break;
+            case 'mon-suivi':    lfi_nct_app_view_tenant_suivi();    break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             case 'installer':    lfi_nct_app_view_installer();       break;
             case 'mes-rdv':      lfi_nct_app_view_mes_rdv();         break;
@@ -1294,6 +1296,8 @@ function lfi_nct_app_view_tenant_dashboard() {
     }
 
     $tiles = [
+        ['🚨', 'Signaler un dégât', 'Nouveau problème ? Dites-le',    lfi_nct_app_url('signaler-degat')],
+        ['📋', 'Où en est mon dossier', 'Les étapes + les dates',     lfi_nct_app_url('mon-suivi')],
         ['🤖', 'Aide & contact',    'Un problème ? On vous accompagne', lfi_nct_app_url('aide')],
         ['📲', 'Installer l\'app',  'iPhone / Android · permissions', lfi_nct_app_url('installer')],
         ['📅', 'Mes rendez-vous',   'Agenda avec le GA',              lfi_nct_app_url('mes-rdv')],

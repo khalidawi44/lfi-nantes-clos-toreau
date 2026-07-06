@@ -1256,6 +1256,7 @@ function lfi_nct_app_render_dashboard() {
         <?php /* ===== Ensuite : interpellations / coordination / alertes ===== */ ?>
         <?php if (function_exists('lfi_nct_render_home_vote_banner')) lfi_nct_render_home_vote_banner(); ?>
         <?php if (function_exists('lfi_nct_partner_admin_notice')) lfi_nct_partner_admin_notice(); ?>
+        <?php if (function_exists('lfi_nct_render_degat_admin_notice')) lfi_nct_render_degat_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_avocat_admin_notice')) lfi_nct_avocat_admin_notice(); ?>
         <?php if (function_exists('lfi_nct_enq_todo_notice')) lfi_nct_enq_todo_notice(); ?>
         <?php if (function_exists('lfi_nct_render_home_alerts')) lfi_nct_render_home_alerts(); ?>
