@@ -374,7 +374,39 @@ function lfi_nct_mobi_pending_vote_for_user() {
     }
     return null;
 }
-/** Handler : « je participe » depuis le pop-up. */
+/** HANDLER EN-APP (fiable) : « je participe » / « pas cette fois » depuis le
+ *  pop-up de vote. Comme pour le mot de passe, on traite sur la PAGE DE L'APP
+ *  (auth garantie) et non sur /wp-admin/admin-post.php (auth incertaine via
+ *  lien magique) → c'est ce qui faisait que le vote n'était PAS compté.
+ *  Priorité 1 = avant le rendu de la coquille (redirect propre). */
+add_action('template_redirect', 'lfi_nct_mobi_vote_inapp', 1);
+function lfi_nct_mobi_vote_inapp() {
+    if (empty($_GET['lfi_vote'])) return;
+    $app = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    if (!is_user_logged_in()) { wp_safe_redirect($app); exit; }
+    $cid = isset($_GET['cid']) ? (int) $_GET['cid'] : 0;
+    $act = sanitize_key(wp_unslash($_GET['lfi_vote']));
+    $uid = get_current_user_id();
+    $nonce = (string) ($_GET['_wpnonce'] ?? '');
+    if ($cid && $act === 'participe' && wp_verify_nonce($nonce, 'lfi_nct_vote_' . $cid)) {
+        global $wpdb; $t = $wpdb->prefix . 'lfi_nct_mobilisation';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
+        if ($row) {
+            $list = lfi_nct_mobi_parts($row);
+            if (!in_array($uid, $list, true)) {
+                $list[] = $uid;
+                $wpdb->update($t, ['participants' => wp_json_encode(array_values(array_unique($list)))], ['id' => $cid]);
+            }
+        }
+    } elseif ($cid && $act === 'skip' && wp_verify_nonce($nonce, 'lfi_nct_vote_skip_' . $cid)) {
+        $d = array_map('intval', (array) get_user_meta($uid, 'lfi_nct_vote_dismissed', true));
+        $d[] = $cid;
+        update_user_meta($uid, 'lfi_nct_vote_dismissed', array_values(array_unique($d)));
+    }
+    wp_safe_redirect($app); exit;
+}
+
+/** Handler (legacy, conservé en secours) : « je participe » depuis le pop-up. */
 add_action('admin_post_lfi_nct_vote', 'lfi_nct_mobi_vote_handler');
 function lfi_nct_mobi_vote_handler() {
     $home = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
@@ -425,8 +457,10 @@ function lfi_nct_render_vote_popup() {
     $lieu  = trim((string) $r->lieu);
     $seuil = lfi_nct_mobi_vote_threshold();
     $nb    = count(lfi_nct_mobi_parts($r));
-    $yes = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote&cid=' . (int) $r->id), 'lfi_nct_vote_' . (int) $r->id);
-    $no  = wp_nonce_url(admin_url('admin-post.php?action=lfi_nct_vote_skip&cid=' . (int) $r->id), 'lfi_nct_vote_skip_' . (int) $r->id);
+    /* On poste sur la PAGE DE L'APP (auth garantie) → le vote est bien compté. */
+    $app = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    $yes = wp_nonce_url(add_query_arg(['lfi_vote' => 'participe', 'cid' => (int) $r->id], $app), 'lfi_nct_vote_' . (int) $r->id);
+    $no  = wp_nonce_url(add_query_arg(['lfi_vote' => 'skip',      'cid' => (int) $r->id], $app), 'lfi_nct_vote_skip_' . (int) $r->id);
     ?>
     <div id="lfi-vote-ov" onclick="if(event.target===this)this.style.display='none'" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px">
       <div style="position:relative;background:#fff;color:#1a1a1a;border-radius:18px;max-width:420px;width:100%;padding:22px 20px;box-shadow:0 16px 50px rgba(0,0,0,.35);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center">

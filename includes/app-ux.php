@@ -331,7 +331,10 @@ function lfi_nct_app_render_ux_boost() {
         var a=e.target && e.target.closest ? e.target.closest('a[href]') : null;
         if(!a) return; var href=a.getAttribute('href')||'';
         if (a.target==='_blank' || href.charAt(0)==='#' || /^(tel:|mailto:|sms:|javascript:)/i.test(href)) return;
-        if (sameApp(a.href) && a.href.indexOf('admin-post.php')===-1) prefetch(a.href);
+        /* Ne JAMAIS précharger un lien qui MODIFIE l'état (nonce, vote, action) :
+           un prefetch le déclencherait au simple toucher. */
+        if (a.href.indexOf('_wpnonce')!==-1 || a.href.indexOf('lfi_vote')!==-1 || a.href.indexOf('admin-post.php')!==-1) return;
+        if (sameApp(a.href)) prefetch(a.href);
       }, {passive:true});
     })();
     </script>
