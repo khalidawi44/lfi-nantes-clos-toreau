@@ -2900,14 +2900,14 @@ function lfi_nct_app_view_evenements() {
         return;
     }
     $events = get_posts(['post_type' => $cpts, 'post_status' => 'publish', 'posts_per_page' => 100, 'orderby' => 'meta_value', 'meta_key' => '_ag_event_date', 'order' => 'ASC']);
-    /* Cloisonnement par GA : chaque GA ne voit QUE ses événements (filtre simple
-       et sûr sur le rattachement _lfi_evt_ga, sans toucher au tri). */
+    /* Cloisonnement par GA : chaque GA voit SES événements + ceux où il est
+       INVITÉ (co-organisation inter-GA). */
     if (function_exists('lfi_nct_scope_ga_slug')) {
         $ev_slug = lfi_nct_scope_ga_slug();
-        $ev_home = ($ev_slug === '' || $ev_slug === 'clos-toreau');
-        $events = array_values(array_filter($events, function ($p) use ($ev_slug, $ev_home) {
-            $g = (string) get_post_meta($p->ID, '_lfi_evt_ga', true);
-            return $ev_home ? ($g === '' || $g === 'clos-toreau') : ($g === $ev_slug);
+        $events = array_values(array_filter($events, function ($p) use ($ev_slug) {
+            return function_exists('lfi_nct_event_visible_scope')
+                ? lfi_nct_event_visible_scope($p, $ev_slug)
+                : true;
         }));
     }
     $total = count($events);
@@ -2956,6 +2956,14 @@ function lfi_nct_app_view_evenements() {
             echo '<div class="meta">';
             if ($date)  echo '<span class="meta-chip">🗓 ' . esc_html($date) . ($time ? ' · ' . esc_html($time) : '') . '</span>';
             if ($place) echo '<span class="meta-chip">📍 ' . esc_html($place) . ($city ? ', ' . esc_html($city) : '') . '</span>';
+            /* 🤝 Co-organisation inter-GA. */
+            $ecur = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+            $eowner_g = (string) get_post_meta($p->ID, '_lfi_evt_ga', true);
+            $ehome = ($ecur === '' || $ecur === 'clos-toreau');
+            $is_owner = $ehome ? ($eowner_g === '' || $eowner_g === 'clos-toreau') : ($eowner_g === $ecur);
+            $eshared = function_exists('lfi_nct_event_shared_gas') ? lfi_nct_event_shared_gas($p->ID) : [];
+            if (!$is_owner) echo '<span class="meta-chip" style="background:#efe6fb;color:#6b3fa0">🤝 Invité·e</span>';
+            elseif ($eshared) echo '<span class="meta-chip" style="background:#efe6fb;color:#6b3fa0">🤝 Partagé · ' . count($eshared) . ' GA</span>';
             echo '</div>';
             /* 🗺 Carte + point de rendez-vous (si coordonnées connues). */
             $elat = (float) get_post_meta($p->ID, '_lfi_evt_lat', true);
@@ -3078,6 +3086,26 @@ function lfi_nct_event_in_scope($p) {
     return $home ? ($g === '' || $g === 'clos-toreau') : ($g === $slug);
 }
 
+/** GA invités sur un événement (co-organisation) : liste de slugs. */
+function lfi_nct_event_shared_gas($id) {
+    $v = get_post_meta((int) $id, '_lfi_evt_shared_gas', true);
+    return is_array($v) ? array_values(array_filter(array_map('strval', $v))) : [];
+}
+/** VISIBLE pour le GA courant : propriétaire OU invité. Sert au calendrier et à
+ *  la diffusion (chaque GA invite SES membres). L'ÉDITION reste au propriétaire
+ *  (lfi_nct_event_in_scope). */
+function lfi_nct_event_visible_scope($p, $slug = null) {
+    if (!$p) return false;
+    if ($slug === null) $slug = function_exists('lfi_nct_scope_ga_slug') ? lfi_nct_scope_ga_slug() : '';
+    $home = ($slug === '' || $slug === 'clos-toreau');
+    $g = (string) get_post_meta($p->ID, '_lfi_evt_ga', true);
+    $owner = $home ? ($g === '' || $g === 'clos-toreau') : ($g === $slug);
+    if ($owner) return true;
+    $shared = lfi_nct_event_shared_gas($p->ID);
+    if ($home) return in_array('', $shared, true) || in_array('clos-toreau', $shared, true);
+    return in_array($slug, $shared, true);
+}
+
 /* ---------- ✏️ Éditer un événement (admins) — dans l'app, pas dans wp-admin ---------- */
 function lfi_nct_app_view_evenement_edit() {
     $ev_ok = (function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options')) || (function_exists('lfi_nct_role_can') && lfi_nct_role_can('evenements'));
@@ -3124,6 +3152,13 @@ function lfi_nct_app_view_evenement_edit() {
                 if ($g) { $lat = $g['lat']; $lng = $g['lng']; }
             }
             if ($lat && $lng) { update_post_meta($id, '_lfi_evt_lat', $lat); update_post_meta($id, '_lfi_evt_lng', $lng); }
+            /* 🤝 GA invités (co-organisation) : l'événement s'importe dans leur
+               calendrier, et leurs admins invitent leurs propres membres. */
+            $inv = array_values(array_filter(array_map('sanitize_key', (array) ($_POST['shared_gas'] ?? []))));
+            $own = (string) get_post_meta($id, '_lfi_evt_ga', true);
+            $inv = array_values(array_diff($inv, [$own, ($own === '' ? 'clos-toreau' : '')]));
+            if ($inv) update_post_meta($id, '_lfi_evt_shared_gas', $inv);
+            else      delete_post_meta($id, '_lfi_evt_shared_gas');
             wp_safe_redirect(lfi_nct_app_url('evenements', ['evt_upd' => 1]));
             exit;
         }
@@ -3155,6 +3190,31 @@ function lfi_nct_app_view_evenement_edit() {
     echo '<label style="margin:0">Longitude (option)<input type="text" name="lng" value="' . esc_attr($v_lng) . '" placeholder="-1.5307" inputmode="decimal"></label>';
     echo '</div>';
     echo '<label>Lien Action Populaire (inscription)<input type="url" name="ap_url" value="' . esc_attr($v_ap) . '" placeholder="https://actionpopulaire.fr/evenements/…" inputmode="url" autocapitalize="none"></label>';
+    /* 🤝 Inviter d'autres groupes d'action : l'événement apparaît dans LEUR
+       calendrier et leurs admins invitent leurs propres membres. */
+    if (function_exists('lfi_nct_groupes')) {
+        $own_ga = (string) get_post_meta($id, '_lfi_evt_ga', true);
+        $shared = function_exists('lfi_nct_event_shared_gas') ? lfi_nct_event_shared_gas($id) : [];
+        $groupes = lfi_nct_groupes();
+        $others = array_values(array_filter($groupes, function ($g) use ($own_ga) {
+            $s = (string) ($g['slug'] ?? '');
+            if ($s === '') return false;
+            if ($s === $own_ga) return false;
+            if ($own_ga === '' && $s === 'clos-toreau') return false;
+            return true;
+        }));
+        if ($others) {
+            echo '<div style="background:#f6f8fb;border:1px solid #dfe6f0;border-radius:10px;padding:11px 12px;margin-top:4px">';
+            echo '<div style="font-weight:800;color:#0b3d91;font-size:.92em">🤝 Inviter d\'autres groupes d\'action</div>';
+            echo '<div style="font-size:.8em;color:#666;margin:2px 0 6px">L\'événement s\'ajoutera à leur calendrier. Chaque GA invité pourra convier ses propres membres.</div>';
+            foreach ($others as $g) {
+                $s = (string) $g['slug'];
+                $ck = in_array($s, $shared, true) ? ' checked' : '';
+                echo '<label class="lfi-app-checkbox-row" style="display:flex;align-items:center;gap:8px;font-size:.9em;padding:3px 0"><input type="checkbox" name="shared_gas[]" value="' . esc_attr($s) . '"' . $ck . '> ' . esc_html($g['nom'] ?? $s) . '</label>';
+            }
+            echo '</div>';
+        }
+    }
     echo '<label>Description<textarea name="description" rows="4" placeholder="Programme, infos pratiques…">' . esc_textarea($v_desc) . '</textarea></label>';
     echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
     echo '</form>';
