@@ -186,10 +186,13 @@ function lfi_nct_app_rewrites() {
     add_rewrite_rule('^lfi-app-manifest\.json$',     'index.php?lfi_app=manifest', 'top');
     add_rewrite_rule('^lfi-app-sw\.js$',             'index.php?lfi_app=sw',       'top');
     add_rewrite_rule('^lfi-app-icon-([0-9]+)\.png$', 'index.php?lfi_app=icon&size=$matches[1]', 'top');
+    /* Digital Asset Links — pour l'appli Play Store (TWA) : ouvre l'app sans
+       barre de navigateur. Sert /.well-known/assetlinks.json. */
+    add_rewrite_rule('^\.well-known/assetlinks\.json$', 'index.php?lfi_app=assetlinks', 'top');
 
-    if (get_option('lfi_nct_app_rewrites_flushed') !== '2') {
+    if (get_option('lfi_nct_app_rewrites_flushed') !== '3') {
         flush_rewrite_rules(false);
-        update_option('lfi_nct_app_rewrites_flushed', '2', false);
+        update_option('lfi_nct_app_rewrites_flushed', '3', false);
     }
 }
 add_filter('query_vars', function ($v) { $v[] = 'lfi_app'; $v[] = 'size'; $v[] = 'mask'; return $v; });
@@ -230,6 +233,28 @@ function lfi_nct_app_serve_endpoints() {
                 ['name' => 'Envoyer SMS',       'url' => admin_url('admin.php?page=lfi-nct-sms')],
             ],
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($ep === 'assetlinks') {
+        /* Vérifie la propriété du domaine pour l'appli Android (TWA). Le
+           package + l'empreinte SHA-256 se collent dans les réglages une fois
+           l'app générée (PWABuilder / Play Console). Sans empreinte : tableau
+           vide (valide, mais l'app affichera la barre d'URL tant que non rempli). */
+        header('Content-Type: application/json; charset=utf-8');
+        header('Access-Control-Allow-Origin: *');
+        $pkg = trim((string) get_option('lfi_nct_twa_package', ''));
+        $fps = get_option('lfi_nct_twa_fingerprints', []);
+        if (is_string($fps)) $fps = array_filter(array_map('trim', preg_split('/[\s,]+/', $fps)));
+        $fps = array_values(array_filter((array) $fps));
+        $out = [];
+        if ($pkg !== '' && !empty($fps)) {
+            $out[] = [
+                'relation' => ['delegate_permission/common.handle_all_urls'],
+                'target'   => ['namespace' => 'android_app', 'package_name' => $pkg, 'sha256_cert_fingerprints' => $fps],
+            ];
+        }
+        echo wp_json_encode($out, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         exit;
     }
 
@@ -883,6 +908,7 @@ function lfi_nct_app_shortcode() {
                     case 'ga-params':             lfi_nct_app_view_ga_params();              break;
                     case 'evenement-add':         lfi_nct_app_view_evenement_add();          break;
                     case 'evenement-edit':        lfi_nct_app_view_evenement_edit();         break;
+                    case 'playstore':             lfi_nct_app_view_playstore();              break;
                     case 'integration-key':       lfi_nct_app_view_integration_key();        break;
                     case 'dossier-piece-dl':      lfi_nct_ingest_download();                 break;
                     case 'journal':               lfi_nct_app_view_journal();                break;
@@ -3136,6 +3162,58 @@ function lfi_nct_app_view_evenement_edit() {
     echo '<a class="btn-ghost" href="' . esc_url(get_permalink($p)) . '" target="_blank" rel="noopener">🔗 Voir la page publique</a>';
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('evenements')) . '">← Retour</a>';
     echo '</div>';
+    lfi_nct_app_screen_close();
+}
+
+/* ---------- 📲 Publier l'app sur le Play Store (TWA) — guide + assetlinks ---------- */
+function lfi_nct_app_view_playstore() {
+    if (!current_user_can('manage_options')) {
+        lfi_nct_app_screen_open('📲 App Play Store');
+        echo '<div class="lfi-app-empty">Réservé à l\'administrateur.</div>';
+        lfi_nct_app_screen_close(); return;
+    }
+    if (!empty($_POST['lfi_twa_save']) && check_admin_referer('lfi_twa_save')) {
+        update_option('lfi_nct_twa_package', sanitize_text_field(wp_unslash($_POST['twa_package'] ?? '')), false);
+        $fp = (string) wp_unslash($_POST['twa_fingerprints'] ?? '');
+        $fp = array_values(array_filter(array_map('trim', preg_split('/[\s,]+/', $fp))));
+        update_option('lfi_nct_twa_fingerprints', $fp, false);
+        wp_safe_redirect(lfi_nct_app_url('playstore', ['saved' => 1])); exit;
+    }
+    $pkg = (string) get_option('lfi_nct_twa_package', '');
+    $fps = (array) get_option('lfi_nct_twa_fingerprints', []);
+    $manifest_url  = home_url('/lfi-app-manifest.json');
+    $assetlinks_url = home_url('/.well-known/assetlinks.json');
+    $ready = ($pkg !== '' && !empty($fps));
+
+    lfi_nct_app_screen_open('📲 Publier l\'app sur le Play Store', 'Gratuit — via une app « TWA »');
+    if (!empty($_GET['saved'])) lfi_nct_app_flash('✅ Enregistré. Le fichier de vérification est servi automatiquement.');
+    echo '<div class="lfi-app-help">Ton app est déjà une vraie <strong>PWA</strong> (installable, plein écran, icône). Pour la mettre sur le Play Store, on l\'emballe en <strong>app Android « TWA »</strong> — même app, dans le store. 3 étapes.</div>';
+
+    echo '<div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px">';
+    echo '<div style="font-weight:900;color:#0b3d91;margin-bottom:6px">1️⃣ Générer l\'app Android</div>';
+    echo '<div style="font-size:.9em;color:#444">Va sur <strong>pwabuilder.com</strong>, colle l\'adresse de ton app :</div>';
+    echo '<div style="background:#f6f8fb;border-radius:8px;padding:8px;margin:6px 0;word-break:break-all;font-family:monospace;font-size:.82em">' . esc_html($manifest_url) . '</div>';
+    echo '<div style="font-size:.9em;color:#444">Clique <em>Package for stores → Android</em>, télécharge le <strong>.aab</strong> (signé). Note le <strong>package name</strong> (ex. <code>fr.clostoreau.ga</code>) et l\'<strong>empreinte SHA-256</strong> fournie.</div>';
+    echo '</div>';
+
+    echo '<div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px">';
+    echo '<div style="font-weight:900;color:#0b3d91;margin-bottom:6px">2️⃣ Coller ici (vérification du domaine)</div>';
+    echo '<div class="lfi-app-help" style="margin:0 0 8px"><small>Je publie automatiquement le fichier de preuve à cette adresse — rien d\'autre à faire :</small></div>';
+    echo '<div style="background:#f6f8fb;border-radius:8px;padding:8px;margin:0 0 8px;word-break:break-all;font-family:monospace;font-size:.8em"><a href="' . esc_url($assetlinks_url) . '" target="_blank" rel="noopener">' . esc_html($assetlinks_url) . '</a> ' . ($ready ? '✅' : '⏳ à compléter') . '</div>';
+    echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_twa_save', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_twa_save" value="1">';
+    echo '<label>Package name<input type="text" name="twa_package" value="' . esc_attr($pkg) . '" placeholder="fr.clostoreau.ga" autocapitalize="none"></label>';
+    echo '<label>Empreinte(s) SHA-256 <small style="font-weight:400;color:#888">(une par ligne ; celle de PWABuilder + celle « App signing » de Play Console)</small><textarea name="twa_fingerprints" rows="4" placeholder="AB:CD:EF:… " style="font-family:monospace;font-size:.8em">' . esc_textarea(implode("\n", $fps)) . '</textarea></label>';
+    echo '<button type="submit" class="btn-primary">💾 Enregistrer la vérification</button></form>';
+    echo '</div>';
+
+    echo '<div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:14px;margin-bottom:12px">';
+    echo '<div style="font-weight:900;color:#0b3d91;margin-bottom:6px">3️⃣ Déposer sur le Play Store</div>';
+    echo '<div style="font-size:.9em;color:#444">Sur <strong>play.google.com/console</strong> : crée l\'app, envoie le <strong>.aab</strong>, remplis la fiche (nom, icône, captures, description) et soumets.</div>';
+    echo '<div style="background:#fff7e6;border:1px solid #e6c98a;border-radius:8px;padding:9px;margin-top:8px;font-size:.86em;color:#7a5f10">⚠️ À prévoir côté Google : <strong>compte développeur (25 $ une fois)</strong> avec vérification d\'identité. Pour un <strong>nouveau compte personnel</strong>, Google impose un test fermé avec <strong>12 testeurs pendant 14 jours</strong> avant la mise en ligne publique. Un compte « organisation » évite parfois cette règle.</div>';
+    echo '</div>';
+
+    echo '<div class="lfi-app-help"><small>💡 En attendant le store, l\'app s\'installe déjà en 1 geste : ouvre le site dans Chrome → menu → « Installer l\'application ». C\'est la même app.</small></div>';
     lfi_nct_app_screen_close();
 }
 
