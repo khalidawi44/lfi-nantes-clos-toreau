@@ -1266,6 +1266,10 @@ function lfi_nct_app_render_dashboard() {
 
         <?php if (function_exists('lfi_nct_casquette_button_html')) echo lfi_nct_casquette_button_html(); ?>
 
+        <?php if (current_user_can('manage_options')): ?>
+        <a href="<?php echo esc_url(lfi_nct_app_url('preview')); ?>" style="display:block;text-align:center;background:#111827;color:#fff;font-weight:800;border-radius:12px;padding:11px 14px;text-decoration:none;margin:0 0 12px">👁 Voir en tant que… <span style="font-weight:600;opacity:.85">(national · élus · admins GA · membres · locataires)</span></a>
+        <?php endif; ?>
+
         <?php /* ============ L'ESSENTIEL : ce dont tu te sers tous les jours ============ */
         $essentiel = [
             ['📋', 'Faire passer une enquête', 'Porte-à-porte',        lfi_nct_app_url('enquete')],
