@@ -708,14 +708,18 @@ function lfi_nct_app_shortcode() {
         return ob_get_clean();
     }
 
-    /* Picker du mode aperçu (admin seulement, sans cookie posé) */
-    if ($vue_public === 'preview' && function_exists('lfi_nct_app_view_preview_picker')) {
-        if (current_user_can('manage_options') && !lfi_nct_app_preview_uid_from_cookie()) {
-            lfi_nct_app_view_preview_picker();
-            lfi_nct_app_render_styles();
-            lfi_nct_app_render_register_sw();
-            return ob_get_clean();
+    /* Picker du mode aperçu (admin réel). Demander le sélecteur SORT de tout
+       aperçu en cours (sinon un cookie resté posé le bloquait → « bouton bugué »). */
+    if ($vue_public === 'preview' && function_exists('lfi_nct_app_view_preview_picker') && current_user_can('manage_options')) {
+        if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) {
+            $secure = function_exists('is_ssl') ? is_ssl() : false;
+            setcookie('lfi_app_preview_uid', '', time() - 3600, COOKIEPATH ?: '/', COOKIE_DOMAIN, $secure, true);
+            unset($_COOKIE['lfi_app_preview_uid']);
         }
+        lfi_nct_app_view_preview_picker();
+        lfi_nct_app_render_styles();
+        lfi_nct_app_render_register_sw();
+        return ob_get_clean();
     }
 
     /* Si le cookie de preview est posé et l'admin réel existe, on bascule */
