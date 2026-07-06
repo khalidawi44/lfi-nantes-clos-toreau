@@ -3675,9 +3675,13 @@ function lfi_nct_app_preview_apply() {
     $u = get_userdata($puid);
     if (!$u) return null;
     $roles = (array) $u->roles;
-    if (!in_array(LFI_NCT_ROLE_TENANT, $roles, true) && !in_array(LFI_NCT_ROLE_GA, $roles, true)) {
-        return null;
-    }
+    /* On peut prévisualiser un·e locataire, un membre/admin de GA, MAIS AUSSI un·e
+       ÉLU·E partenaire (Bompard, William Aucant…) et un·e avocat·e — sinon
+       « Voir en tant que Bompard » renvoyait l'admin sur son propre écran. */
+    $allow = [LFI_NCT_ROLE_TENANT, LFI_NCT_ROLE_GA];
+    if (defined('LFI_NCT_ROLE_PARTNER')) $allow[] = LFI_NCT_ROLE_PARTNER;
+    if (defined('LFI_NCT_ROLE_AVOCAT'))  $allow[] = LFI_NCT_ROLE_AVOCAT;
+    if (!array_intersect($allow, $roles)) return null;
     wp_set_current_user($puid);
     return $u;
 }
