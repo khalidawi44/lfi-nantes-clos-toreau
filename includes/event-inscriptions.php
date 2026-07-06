@@ -140,9 +140,12 @@ function lfi_nct_app_view_event_sms() {
     global $wpdb;
     $event_id = isset($_GET['event']) ? (int) $_GET['event'] : 0;
     $post = $event_id ? get_post($event_id) : null;
-    if (!$post || !function_exists('lfi_nct_event_data')) {
+    /* Cloisonnement : accessible au GA propriétaire OU à un GA INVITÉ (chacun
+       diffuse à SES membres). Un GA non concerné ne peut pas diffuser. */
+    $visible = $post && (!function_exists('lfi_nct_event_visible_scope') || lfi_nct_event_visible_scope($post));
+    if (!$post || !$visible || !function_exists('lfi_nct_event_data')) {
         lfi_nct_app_screen_open('📱 Diffuser par SMS');
-        echo '<div class="lfi-app-empty">Événement introuvable.</div>';
+        echo '<div class="lfi-app-empty">Événement introuvable dans ton groupe d\'action.</div>';
         lfi_nct_app_screen_close();
         return;
     }
