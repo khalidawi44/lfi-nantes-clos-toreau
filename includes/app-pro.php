@@ -690,6 +690,11 @@ function lfi_nct_dossier_render_synthese($u) {
     echo '<details class="lfi-app-card" style="border:2px solid #0b3d91;background:#f4f8ff;margin-bottom:12px" id="synthese"' . $open . '>';
     echo '<summary style="cursor:pointer;font-weight:800;color:#0b3d91">📊 Synthèse & chiffrage du préjudice</summary>';
     if (!empty($_GET['syn_saved'])) echo '<div style="background:#eef7ee;border-left:4px solid #186a3b;border-radius:8px;padding:8px 10px;margin:6px 0;color:#186a3b;font-weight:700">✅ Synthèse enregistrée.</div>';
+    /* 📇 Interlocuteurs & références (bailleur, hygiène, aide jurid., avocate). */
+    $inter = (string) get_user_meta($u->ID, 'lfi_nct_dossier_interlocuteurs', true);
+    if ($inter !== '') {
+        echo '<div style="background:#fff;border:1px solid #d6e2f0;border-radius:8px;padding:9px 11px;margin:6px 0"><div style="font-weight:700;color:#0b3d91;font-size:.9em;margin-bottom:3px">📇 Interlocuteurs & références</div><div style="white-space:pre-wrap;font-size:.88em;color:#333">' . esc_html($inter) . '</div></div>';
+    }
     echo '<div class="com" style="font-size:.86em;color:#555">Le robot en sort le <strong>chiffrage du préjudice</strong> (postes, montants, justification) et le contexte à partir du <code>.md</code>. Tu peux corriger ici.</div>';
     if ($syn !== '') {
         echo '<div style="background:#fff;border:1px solid #d6e2f0;border-radius:8px;padding:10px;margin:8px 0;white-space:pre-wrap;font-size:.9em">' . esc_html($syn) . '</div>';
@@ -1049,7 +1054,7 @@ function lfi_nct_app_view_dossier() {
                 $syn = lfi_nct_md_extract_synthese($md_text);
                 if ($syn !== '') update_user_meta($u->ID, 'lfi_nct_dossier_synthese', wp_kses_post($syn));
             }
-            /* ENTITÉS : si le .md nomme l'avocat·e → on la CRÉE et on la RATTACHE. */
+            /* ENTITÉS : avocat·e (créée + rattachée), bailleur, hygiène, aide jurid. */
             if (function_exists('lfi_nct_md_extract_entities')) {
                 $ent = lfi_nct_md_extract_entities($md_text);
                 $av  = is_array($ent) ? ($ent['avocat'] ?? null) : null;
@@ -1058,6 +1063,21 @@ function lfi_nct_app_view_dossier() {
                     $aid = lfi_nct_avocat_ensure($anom, (string) ($av['email'] ?? ''), (string) ($av['tel'] ?? ''), (string) ($av['barreau'] ?? ''));
                     if ($aid) { lfi_nct_avocat_assign_tenant($u->ID, $aid); $md_avocat = $anom; }
                 }
+                /* Bailleur / Hygiène / Aide juridictionnelle → bloc « Interlocuteurs
+                   & références » du dossier (informatif, éditable). */
+                $lines = [];
+                $bl = is_array($ent) ? ($ent['bailleur'] ?? null) : null;
+                if (is_array($bl) && trim((string) ($bl['nom'] ?? '')) !== '') {
+                    $lines[] = '🏢 Bailleur : ' . trim(implode(' · ', array_filter([$bl['nom'] ?? '', $bl['contact'] ?? '', $bl['tel'] ?? '', $bl['email'] ?? '', ($bl['dossier'] ?? '') ? 'dossier ' . $bl['dossier'] : ''])));
+                }
+                $hy = is_array($ent) ? ($ent['hygiene'] ?? null) : null;
+                if (is_array($hy) && trim((string) ($hy['service'] ?? '')) !== '') {
+                    $lines[] = '🩺 Hygiène (SCHS) : ' . trim(implode(' · ', array_filter([$hy['service'] ?? '', $hy['contact'] ?? '', $hy['tel'] ?? '', $hy['email'] ?? '', ($hy['ref'] ?? '') ? 'réf. ' . $hy['ref'] : ''])));
+                }
+                $aj = is_array($ent) ? trim((string) ($ent['aide_juridictionnelle'] ?? '')) : '';
+                if ($aj !== '') $lines[] = '⚖️ Aide juridictionnelle : ' . $aj;
+                if ($anom !== '') $lines[] = '👩‍⚖️ Avocate : ' . $anom;
+                if ($lines) update_user_meta($u->ID, 'lfi_nct_dossier_interlocuteurs', wp_kses_post(implode("\n", $lines)));
             }
             /* On garde le .md source comme pièce « document » (traçabilité). */
             $up = wp_upload_dir();
