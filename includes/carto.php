@@ -42,6 +42,25 @@ function lfi_nct_carto_people_all() {
 function lfi_nct_carto_people_save($list) {
     update_option(LFI_NCT_CARTO_PEOPLE_OPT, array_values($list), false);
 }
+/** Retire les DOUBLONS de l'organigramme national (même nom) — garde la fiche
+ *  la plus complète (email + fonction + lien). Renvoie le nombre supprimé. */
+function lfi_nct_carto_people_dedupe() {
+    $list = lfi_nct_carto_people_all();
+    $pos = []; $out = []; $removed = 0;
+    $score = function ($e) { return (int) !empty($e['email']) + (int) !empty($e['fonction']) + (int) !empty($e['ap_url']) + (int) !empty($e['ga_nom']); };
+    foreach ($list as $e) {
+        $nm = mb_strtolower(trim((string) ($e['nom'] ?? '')));
+        if ($nm === '') { $out[] = $e; continue; }
+        if (isset($pos[$nm])) {
+            $i = $pos[$nm];
+            if ($score($e) > $score($out[$i])) { $e['id'] = $out[$i]['id'] ?? ($e['id'] ?? 0); $out[$i] = $e; }
+            $removed++; continue;
+        }
+        $pos[$nm] = count($out); $out[] = $e;
+    }
+    if ($removed) lfi_nct_carto_people_save($out);
+    return $removed;
+}
 /** Niveaux de la pyramide, du HAUT (Mélenchon) vers le BAS (terrain). */
 function lfi_nct_carto_niveaux() {
     return [

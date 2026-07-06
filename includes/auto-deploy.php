@@ -55,6 +55,12 @@ function lfi_nct_auto_deploy() {
         }
     }
 
+    /* 1-national-dedup) Retirer les DOUBLONS de l'organigramme national (une fois). */
+    if (get_option('lfi_nct_carto_people_dedup_v1') !== '1' && function_exists('lfi_nct_carto_people_dedupe')) {
+        try { lfi_nct_carto_people_dedupe(); } catch (\Throwable $e) {}
+        update_option('lfi_nct_carto_people_dedup_v1', '1', false);
+    }
+
     /* 1-fabrice-wipe) Vider TOTALEMENT le dossier de Fabrice Doucet (pièces +
        chronologie + emails + notes), demandé pour repartir de zéro. Une fois. */
     if (get_option('lfi_nct_fabrice_wipe_v1') !== '1' && function_exists('lfi_nct_dossier_wipe_all')) {
