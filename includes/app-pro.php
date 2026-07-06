@@ -1289,10 +1289,15 @@ function lfi_nct_render_home_locataire_news() {
 
     if (empty($events) && $unmatched === 0) return; /* le bandeau + le bouton ci-dessus restent affichés */
 
-    echo '<div class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-bottom:14px">';
-    echo '<div class="head"><div class="who">🆕 Quoi de neuf côté locataires</div>';
-    if ($new_count) echo '<div class="badge" style="background:#c8102e;color:#fff">' . (int) $new_count . ' nouveau' . ($new_count > 1 ? 'x' : '') . '</div>';
-    echo '</div>';
+    $open = ($new_count > 0 || $unmatched > 0) ? ' open' : '';
+    echo '<details class="lfi-app-card" style="border:2px solid #0066a3;background:#f2f8fd;margin-bottom:14px"' . $open . '>';
+    echo '<summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;color:#0b3d91">';
+    echo '<span>🆕 Quoi de neuf côté locataires</span>';
+    $sumbadge = [];
+    if ($new_count)  $sumbadge[] = (int) $new_count . ' nouveau' . ($new_count > 1 ? 'x' : '');
+    if ($unmatched)  $sumbadge[] = (int) $unmatched . ' à rattacher';
+    echo '<span class="badge" style="background:' . ($sumbadge ? '#c8102e' : '#8aa') . ';color:#fff">' . esc_html($sumbadge ? implode(' · ', $sumbadge) : 'à jour') . '</span>';
+    echo '</summary>';
 
     if ($unmatched > 0) {
         echo '<a href="' . esc_url(lfi_nct_app_url('inbox-import')) . '" style="text-decoration:none;color:inherit;display:block;margin:6px 0"><div style="background:#fff3cd;border-radius:8px;padding:9px 11px;font-weight:700;color:#8a6d1f">🧩 ' . (int) $unmatched . ' email(s) à rattacher — dis au robot de qui il s\'agit →</div></a>';
@@ -1329,7 +1334,7 @@ function lfi_nct_render_home_locataire_news() {
         . '<input type="hidden" name="action" value="lfi_nct_emails_reset">'
         . '<button type="submit" style="background:none;border:none;color:#c8102e;font-size:.82em;font-weight:700;cursor:pointer;padding:0">🧹 Purger tous les emails</button></form>';
     echo '</div></div>';
-    echo '</div>';
+    echo '</details>';
 
     /* Marquer vu si demandé. */
     if (!empty($_GET['locnews_seen'])) update_user_meta(get_current_user_id(), 'lfi_nct_locnews_seen', current_time('timestamp'));
