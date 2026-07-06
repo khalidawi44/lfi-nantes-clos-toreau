@@ -236,33 +236,43 @@ function lfi_nct_md_extract_chrono($md) {
     if ($md === '') return [];
     $md = mb_substr($md, 0, 40000); /* borne de coût */
 
+    /* On combine DEUX sources et on fusionne, pour ne RIEN rater :
+       - l'IA Claude (comprend les phrases datées, les traitements, etc.) ;
+       - le repli regex (attrape toute ligne datée, même si l'IA en oublie). */
+    $ai = [];
     if (lfi_nct_ai_enabled()) {
         $system =
-            "Tu extrais la CHRONOLOGIE d'un dossier de défense d'un locataire, rédigé en Markdown. "
+            "Tu extrais la CHRONOLOGIE COMPLÈTE d'un dossier de défense d'un locataire, rédigé en Markdown. "
             . "Tu réponds UNIQUEMENT par un tableau JSON valide, sans texte autour :\n"
             . '[{"date":"jj/mm/aaaa","event":"une phrase factuelle"}, ...]' . "\n"
-            . "RÈGLES : n'extrais QUE des événements réellement datés et écrits dans le texte (jamais inventés). "
-            . "date = telle qu'écrite (jj/mm/aaaa si possible ; sinon l'année seule). "
-            . "event = une phrase courte et factuelle décrivant ce qui s'est passé ce jour-là. "
-            . "Classe du plus ancien au plus récent. Ignore les passages non datés.";
-        $out = lfi_nct_ai_call($system, $md, 4000);
+            . "RÈGLES : extrais TOUS les événements datés écrits dans le texte, SANS EN OUBLIER — y compris les "
+            . "TRAITEMENTS / interventions / désinsectisations, les courriers, les rendez-vous, les constats, "
+            . "les dates de 2020, 2021, 2022, 2023, 2024, 2025, 2026. N'invente RIEN (uniquement ce qui est écrit). "
+            . "date = telle qu'écrite (jj/mm/aaaa si possible ; sinon mois/année ou l'année seule). "
+            . "event = une phrase courte et factuelle. Classe du plus ancien au plus récent. Ignore les passages non datés.";
+        $out = lfi_nct_ai_call($system, $md, 8000);
         if ($out !== null && preg_match('/\[.*\]/s', $out, $m)) {
             $j = json_decode($m[0], true);
             if (is_array($j)) {
-                $res = [];
                 foreach ($j as $e) {
                     if (!is_array($e)) continue;
-                    $d = trim((string) ($e['date'] ?? ''));
                     $ev = trim((string) ($e['event'] ?? ''));
-                    if ($ev !== '') $res[] = ['date' => $d, 'event' => $ev];
+                    if ($ev !== '') $ai[] = ['date' => trim((string) ($e['date'] ?? '')), 'event' => $ev];
                 }
-                if ($res) return $res;
             }
         }
-        /* si l'IA échoue → on tombe sur le repli regex ci-dessous */
     }
+    $regex = lfi_nct_md_extract_chrono_regex($md);
 
-    return lfi_nct_md_extract_chrono_regex($md);
+    /* Fusion : on garde tout, dédupliqué sur un mot-clé (date + début de phrase). */
+    $merged = []; $seen = [];
+    foreach (array_merge($ai, $regex) as $e) {
+        $ev = trim((string) ($e['event'] ?? '')); if ($ev === '') continue;
+        $key = mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', ($e['date'] ?? '') . mb_substr($ev, 0, 40)));
+        if (isset($seen[$key])) continue; $seen[$key] = 1;
+        $merged[] = ['date' => (string) ($e['date'] ?? ''), 'event' => $ev];
+    }
+    return $merged;
 }
 
 /** Repli sans IA : repère les lignes commençant par une date. */
@@ -278,6 +288,8 @@ function lfi_nct_md_extract_chrono_regex($md) {
         elseif (preg_match('#^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)$#u', $ln, $m)) { $date = $m[1]; $rest = $m[2]; }
         elseif (preg_match('#^(\d{1,2}\s+(?:' . $mois . ')\s+\d{4})\s*[:\-–—]?\s*(.*)$#iu', $ln, $m)) { $date = $m[1]; $rest = $m[2]; }
         elseif (preg_match('#^((?:' . $mois . ')\s+\d{4})\s*[:\-–—]?\s*(.*)$#iu', $ln, $m)) { $date = $m[1]; $rest = $m[2]; }
+        /* Année seule en tête (ex. « 2022 : traitement anti-cafards »). */
+        elseif (preg_match('#^(20\d{2})\s*[:\-–—]\s*(.+)$#u', $ln, $m)) { $date = $m[1]; $rest = $m[2]; }
         else continue;
         $rest = trim($rest);
         if ($rest !== '') $res[] = ['date' => $date, 'event' => $rest];

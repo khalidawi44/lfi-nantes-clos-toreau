@@ -186,7 +186,7 @@ function lfi_nct_app_render_ux_boost() {
       lbImg.addEventListener('touchmove', function(e){
         if (e.touches.length === 2 && pinchStart){
           var d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-          scale = Math.max(1, Math.min(4, pinchScale * (d / pinchStart))); applyTransform();
+          scale = Math.max(1, Math.min(6, pinchScale * (d / pinchStart))); applyTransform();
         } else if (panning && e.touches.length === 1){
           tx = e.touches[0].clientX - panX; ty = e.touches[0].clientY - panY; applyTransform();
         }
