@@ -247,9 +247,19 @@ function lfi_nct_email_tracking_handlers() {
         /* On coupe les EMAILS **et** on inscrit en liste noire SMS : « ne plus me
            contacter » = plus rien du tout. */
         $m = $wpdb->get_row($wpdb->prepare("SELECT prenom, nom, tel FROM $mem_table WHERE unsubscribe_token = %s", $token));
-        $wpdb->update($mem_table, ['abonne_emails' => 0], ['unsubscribe_token' => $token]);
-        if ($m && !empty($m->tel) && function_exists('lfi_nct_sms_block_add')) {
-            lfi_nct_sms_block_add($m->tel, trim(($m->prenom ?? '') . ' ' . ($m->nom ?? '')), 'désinscription (lien email)');
+        if ($m) {
+            $wpdb->update($mem_table, ['abonne_emails' => 0], ['unsubscribe_token' => $token]);
+            if (!empty($m->tel) && function_exists('lfi_nct_sms_block_add')) {
+                lfi_nct_sms_block_add($m->tel, trim(($m->prenom ?? '') . ' ' . ($m->nom ?? '')), 'désinscription (lien email)');
+            }
+        } else {
+            /* Pas un jeton membre → jeton STOP signé par NUMÉRO (venu d'un SMS). */
+            $tel = function_exists('lfi_nct_stop_token_decode') ? lfi_nct_stop_token_decode($token) : '';
+            if ($tel !== '' && function_exists('lfi_nct_sms_block_add')) {
+                lfi_nct_sms_block_add($tel, '', 'désinscription (lien SMS)');
+                /* Coupe aussi les emails du membre qui aurait ce numéro. */
+                $wpdb->query($wpdb->prepare("UPDATE $mem_table SET abonne_emails = 0 WHERE REPLACE(REPLACE(REPLACE(tel,' ',''),'.',''),'-','') LIKE %s", '%' . $wpdb->esc_like(preg_replace('/[^\d]/', '', $tel)) . '%'));
+            }
         }
         wp_die(
             '<div style="font-family:Arial;padding:40px;text-align:center;max-width:500px;margin:80px auto;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.08)">

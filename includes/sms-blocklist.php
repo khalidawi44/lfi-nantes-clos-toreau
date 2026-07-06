@@ -48,6 +48,38 @@ function lfi_nct_sms_block_add($tel, $name = '', $by = '') {
     return true;
 }
 
+/* -------------------------------------------------------------- *
+ *  Lien STOP par NUMÉRO (signé) : à mettre au bout des SMS pour    *
+ *  que n'importe qui puisse se désinscrire depuis un SMS.         *
+ * -------------------------------------------------------------- */
+/** Jeton STOP signé encodant le numéro (récupérable côté handler). */
+function lfi_nct_stop_token($tel) {
+    $tel = preg_replace('/[^\d+]/', '', (string) $tel);
+    if ($tel === '') return '';
+    $sig = substr(hash_hmac('sha256', $tel, wp_salt('nonce')), 0, 12);
+    return rtrim(strtr(base64_encode($tel), '+/', '-_'), '=') . '.' . $sig;
+}
+/** Décode un jeton STOP → numéro, ou '' si signature invalide. */
+function lfi_nct_stop_token_decode($token) {
+    $token = (string) $token;
+    if (strpos($token, '.') === false) return '';
+    list($b, $sig) = explode('.', $token, 2);
+    $tel = base64_decode(strtr($b, '-_', '+/'));
+    if ($tel === false || $tel === '') return '';
+    if (!hash_equals(substr(hash_hmac('sha256', $tel, wp_salt('nonce')), 0, 12), (string) $sig)) return '';
+    return $tel;
+}
+/** Lien court « ne plus me contacter » pour un numéro : …/stop/<jeton>. */
+function lfi_nct_stop_link($tel) {
+    $tk = lfi_nct_stop_token($tel);
+    return $tk === '' ? '' : home_url('/stop/' . $tk);
+}
+/** Ligne à ajouter au bout d'un SMS (vide si pas de numéro). */
+function lfi_nct_sms_stop_line($tel) {
+    $l = lfi_nct_stop_link($tel);
+    return $l === '' ? '' : "\nSTOP (ne plus me contacter) : " . $l;
+}
+
 /** Retire un numéro de la liste noire. */
 function lfi_nct_sms_block_remove($tel) {
     $k = lfi_nct_tel_key($tel);

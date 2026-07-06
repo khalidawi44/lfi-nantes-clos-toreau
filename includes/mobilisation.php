@@ -622,6 +622,7 @@ function lfi_nct_app_view_mobilisation_sms($cid, $ev = 0, $theme = '') {
             $mlien = (function_exists('lfi_nct_login_link') && !empty($m['uid']))
                    ? lfi_nct_login_link((int) $m['uid'], $lien) : $lien;
             $body = str_replace('%LIEN%', $mlien, $body_tpl);
+            if (function_exists('lfi_nct_sms_stop_line')) $body .= lfi_nct_sms_stop_line($m['tel']);
             echo '<a href="' . esc_attr(lfi_nct_mobi_sms_link($body, [$m['tel']])) . '" class="btn-primary" style="padding:7px 12px;font-size:.85em;background:#0066a3">📲 Envoyer le SMS</a>';
             echo '<form method="post" style="display:inline">' . wp_nonce_field('lfi_mobi_sms_toggle', '_wpnonce', true, false)
                . '<input type="hidden" name="lfi_mobi_sms_toggle" value="' . (int) $m['uid'] . '">'
