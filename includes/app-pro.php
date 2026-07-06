@@ -416,9 +416,14 @@ function lfi_nct_chrono_add($uid, $label, $txt, $auto = false) {
     lfi_nct_chrono_save($uid, $list);
     return true;
 }
-/** Entrée auto « email » — appelée quand un email est classé dans le dossier. */
+/** Entrée auto « email » dans la chronologie.
+ *  SOURCE UNIQUE : par défaut DÉSACTIVÉ — la chronologie vient du .md, pas du
+ *  robot email (c'est ce qui créait les doublons). L'email reste archivé dans le
+ *  dossier (email_recu), il n'écrit simplement plus dans la timeline. Réactivable
+ *  via l'option lfi_nct_chrono_from_email = '1'. */
 function lfi_nct_chrono_add_email($uid, $sens, $qui, $objet, $date = '') {
     if (!$uid) return;
+    if (get_option('lfi_nct_chrono_from_email', '0') !== '1') return; /* débranché */
     $who = function_exists('lfi_nct_interlocuteur') ? lfi_nct_interlocuteur($qui) : ['ico' => '✉️', 'label' => ''];
     $lab = $date ?: wp_date('Y-m-d');
     $ico = ($sens === 'recu') ? '📥 Email reçu de' : '📤 Email envoyé à';
