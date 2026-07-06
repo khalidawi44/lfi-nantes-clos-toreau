@@ -117,6 +117,51 @@ function lfi_nct_app_view_activite() {
 
     lfi_nct_app_screen_open('📡 Activité & connexions', 'Qui utilise l\'app, quand et où — ' . $days . ' derniers jours');
 
+    /* ============ DÉTAIL PAR PERSONNE (ex. « tout sur Bompard ») ============ */
+    $uq = isset($_GET['u']) ? (int) $_GET['u'] : 0;
+    $namefind = isset($_GET['who']) ? sanitize_text_field(wp_unslash($_GET['who'])) : '';
+    if (!$uq && $namefind !== '') {
+        $found = get_users(['search' => '*' . $namefind . '*', 'search_columns' => ['display_name', 'user_login', 'user_email'], 'number' => 1, 'fields' => 'ID']);
+        if ($found) $uq = (int) (is_object($found[0]) ? $found[0]->ID : $found[0]);
+    }
+    if ($uq) {
+        $pu = get_userdata($uq);
+        $pname = $pu ? ($pu->display_name ?: $pu->user_login) : ('#' . $uq);
+        echo '<a href="' . esc_url(lfi_nct_app_url('activite')) . '" style="font-size:.85em;color:#0066a3">← Retour au journal</a>';
+        echo '<h3 style="margin:8px 0 6px">👤 ' . esc_html($pname) . ' — tout ce qui est tracké</h3>';
+        $arows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $t WHERE user_id = %d ORDER BY created_at DESC LIMIT 500", $uq)) ?: [];
+        $nlog = 0; $napp = 0; $ips = []; $uas = [];
+        foreach ($arows as $r) { if ($r->event === 'login') $nlog++; else $napp++; if ($r->ip) $ips[$r->ip] = 1; if ($r->ua) $uas[$r->ua] = 1; }
+        $first = $arows ? end($arows)->created_at : ''; $lastc = $arows ? $arows[0]->created_at : '';
+        echo '<ul class="lfi-app-list"><li class="lfi-app-card"><div class="meta">';
+        echo '<span class="meta-chip">🔑 ' . $nlog . ' connexion(s)</span><span class="meta-chip">📱 ' . $napp . ' jour(s) d\'usage</span>';
+        echo '<span class="meta-chip">🕒 1re : ' . ($first ? esc_html(wp_date('j M Y H:i', strtotime($first))) : '—') . '</span>';
+        echo '<span class="meta-chip">🕒 dernière : ' . ($lastc ? esc_html(wp_date('j M Y H:i', strtotime($lastc))) : '—') . '</span>';
+        echo '<span class="meta-chip">🌐 ' . count($ips) . ' IP · ' . count($uas) . ' appareil(s)</span>';
+        echo '</div></li></ul>';
+        if (empty($arows)) {
+            echo '<div class="lfi-app-empty">Aucune activité enregistrée pour cette personne (elle ne s\'est peut-être jamais connectée à l\'app, ou avant la mise en place du journal).</div>';
+        } else {
+            echo '<ul class="lfi-app-list">';
+            foreach ($arows as $r) {
+                $ville = lfi_nct_activity_geo($r->ip);
+                echo '<li class="lfi-app-card" style="padding:8px 12px"><div class="head"><div class="who">' . ($r->event === 'login' ? '🔑 Connexion' : '📱 Usage de l\'app') . '</div><div class="when">' . esc_html(wp_date('j M Y · H:i', strtotime($r->created_at))) . '</div></div><div class="meta">';
+                if ($ville) echo '<span class="meta-chip">📍 ' . esc_html($ville) . '</span>';
+                if ($r->ip) echo '<span class="meta-chip" style="color:#888">' . esc_html($r->ip) . '</span>';
+                if ($r->ua) echo '<span class="meta-chip" style="color:#888;max-width:100%;overflow:hidden;text-overflow:ellipsis">' . esc_html(mb_substr($r->ua, 0, 60)) . '</span>';
+                echo '</div></li>';
+            }
+            echo '</ul>';
+        }
+        echo '<div class="lfi-app-help"><small>ℹ️ L\'app enregistre les <strong>connexions</strong> et l\'<strong>usage quotidien</strong> (date, heure, IP, ville, appareil). Elle ne trace <strong>pas</strong> le détail des pages visitées ni le temps passé — cette donnée n\'existe pas.</small></div>';
+        lfi_nct_app_screen_close();
+        return;
+    }
+
+    /* Recherche d'une personne (JS → URL de l'app, robuste quel que soit le routage). */
+    $act_base = esc_js(lfi_nct_app_url('activite'));
+    echo '<div style="display:flex;gap:6px;margin-bottom:8px"><input type="text" id="lfiActWho" placeholder="🔎 Tout sur une personne (nom)…" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:8px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'lfiActGo\').click();}"><button type="button" id="lfiActGo" class="btn-primary" onclick="var v=document.getElementById(\'lfiActWho\').value.trim();if(v)location.href=\'' . $act_base . '\'+(\'' . $act_base . '\'.indexOf(\'?\')>=0?\'&\':\'?\')+\'who=\'+encodeURIComponent(v);">Voir</button></div>';
+
     /* Sélecteur de période. */
     echo '<div class="lfi-app-filter-chips">';
     foreach ([7 => '7 j', 30 => '30 j', 90 => '90 j', 365 => '1 an'] as $k => $lab) {
@@ -182,7 +227,7 @@ function lfi_nct_app_view_activite() {
         }
         $ville = lfi_nct_activity_geo($r->ip);
         echo '<li class="lfi-app-card" style="padding:9px 12px">';
-        echo '<div class="head"><div class="who">' . esc_html($name) . '</div><div class="when">' . esc_html(wp_date('j M · H:i', strtotime($r->created_at))) . '</div></div>';
+        echo '<div class="head"><div class="who"><a href="' . esc_url(lfi_nct_app_url('activite', ['u' => (int) $r->user_id])) . '" style="color:#0b3d91;text-decoration:none">' . esc_html($name) . ' →</a></div><div class="when">' . esc_html(wp_date('j M · H:i', strtotime($r->created_at))) . '</div></div>';
         echo '<div class="meta">';
         echo '<span class="meta-chip">🏳️ ' . esc_html($ga_nom) . '</span>';
         echo '<span class="meta-chip">' . ($r->event === 'login' ? '🔑 connexion' : '📱 usage') . '</span>';
