@@ -15,6 +15,42 @@
  */
 if (!defined('ABSPATH')) exit;
 
+/** Un texte ressemble-t-il à du base64 (corps d'email non décodé) ? */
+function lfi_nct_email_looks_base64($s) {
+    $c = preg_replace('/\s+/', '', (string) $s);
+    if (strlen($c) < 24) return false;
+    if (!preg_match('~^[A-Za-z0-9+/]+={0,2}$~', $c)) return false;
+    /* Le texte français normal contient des espaces/accents → pas ce motif. */
+    return true;
+}
+/** Décode un corps d'email encodé (base64 ou quoted-printable) pour l'afficher
+ *  en clair. Heuristique sûre : on ne décode que si le résultat est du texte
+ *  lisible (UTF-8 / Latin-1) — sinon on renvoie l'original. */
+function lfi_nct_email_decode_body($raw) {
+    $raw = (string) $raw;
+    if ($raw === '') return $raw;
+    $t = trim($raw);
+    /* 1) Base64 pur. */
+    if (lfi_nct_email_looks_base64($t)) {
+        $dec = base64_decode(preg_replace('/\s+/', '', $t), true);
+        if ($dec !== false && $dec !== '') {
+            $txt = mb_check_encoding($dec, 'UTF-8') ? $dec : @mb_convert_encoding($dec, 'UTF-8', 'ISO-8859-1,Windows-1252');
+            if (is_string($txt) && $txt !== '') {
+                $ctrl = preg_match_all('/[\x00-\x08\x0E-\x1F]/', $txt);
+                if ($ctrl < strlen($txt) * 0.02) return $txt; /* peu de caractères de contrôle → OK */
+            }
+        }
+    }
+    /* 2) Quoted-printable. */
+    if (preg_match('/=[0-9A-Fa-f]{2}/', $t) || preg_match('/=\r?\n/', $t)) {
+        $dec = quoted_printable_decode($t);
+        if ($dec !== '' && $dec !== $t) {
+            return mb_check_encoding($dec, 'UTF-8') ? $dec : (string) @mb_convert_encoding($dec, 'UTF-8', 'ISO-8859-1,Windows-1252');
+        }
+    }
+    return $raw;
+}
+
 /** Adresse de la boîte collectrice (configurable). */
 function lfi_nct_inbox_collector() {
     return (string) get_option('lfi_nct_inbox_collector', 'nantessudclostoreau@gmail.com');
@@ -399,6 +435,9 @@ function lfi_nct_inbox_create_member_from_queue($qid) {
  */
 function lfi_nct_inbox_route($from, $to, $cc, $subject, $body, $date = '', $message_id = '') {
     global $wpdb;
+    /* Corps encodé (base64 / quoted-printable) → on le décode dès l'entrée pour
+       stocker et afficher du texte lisible partout (file + dossier). */
+    $body = lfi_nct_email_decode_body((string) $body);
     $from_a = lfi_nct_inbox_emails($from);
     $to_a   = lfi_nct_inbox_emails($to);
     $cc_a   = lfi_nct_inbox_emails($cc);
@@ -740,8 +779,14 @@ function lfi_nct_app_view_inbox_import() {
             $nph = count((array) ($e['att_ids'] ?? []));
             if ($nph > 0) echo '<span class="meta-chip" style="background:#eef7ee;color:#186a3b;font-weight:700">📎 ' . (int) $nph . ' photo(s)/PDF — suivront le rangement</span>';
             echo '</div>';
-            if (!empty($e['extrait'])) echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($e['extrait']) . '…</div>';
-            if (!empty($e['body'])) echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3;font-weight:600">📄 Voir le mail complet</summary><div style="white-space:pre-wrap;font-size:.82em;color:#444;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px;max-height:320px;overflow:auto">' . esc_html($e['body']) . '</div></details>';
+            $ib_body = function_exists('lfi_nct_email_decode_body') ? lfi_nct_email_decode_body((string) ($e['body'] ?? '')) : (string) ($e['body'] ?? '');
+            $ib_extr = trim((string) ($e['extrait'] ?? ''));
+            /* Si l'extrait est du base64 (ou vide), on le reconstruit depuis le corps décodé. */
+            if ($ib_extr === '' || (function_exists('lfi_nct_email_looks_base64') && lfi_nct_email_looks_base64($ib_extr))) {
+                $ib_extr = mb_substr(trim(preg_replace('/\s+/', ' ', $ib_body)), 0, 160);
+            }
+            if ($ib_extr !== '') echo '<div class="com" style="color:#666;font-size:.85em">' . esc_html($ib_extr) . '…</div>';
+            if ($ib_body !== '') echo '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82em;color:#0066a3;font-weight:600">📄 Voir le mail complet</summary><div style="white-space:pre-wrap;font-size:.82em;color:#444;background:#f7f7f9;border-radius:8px;padding:10px;margin-top:6px;max-height:320px;overflow:auto">' . esc_html($ib_body) . '</div></details>';
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
             echo '<select name="tenant_' . $qid . '" style="flex:1;min-width:150px">' . $opts_html . '</select>';
             echo '<button type="submit" name="do_assign" value="' . $qid . '" class="btn-primary" style="background:#186a3b">✅ Ranger</button>';
