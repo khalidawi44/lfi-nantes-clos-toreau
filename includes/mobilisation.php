@@ -377,9 +377,12 @@ function lfi_nct_mobi_pending_vote_for_user() {
 /** Handler : « je participe » depuis le pop-up. */
 add_action('admin_post_lfi_nct_vote', 'lfi_nct_mobi_vote_handler');
 function lfi_nct_mobi_vote_handler() {
-    if (!is_user_logged_in()) wp_die('non');
+    $home = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    /* JAMAIS de page « lien expiré » : si non connecté ou nonce périmé, on
+       renvoie simplement à l'accueil (pas de wp_die, pas de cul-de-sac). */
+    if (!is_user_logged_in()) { wp_safe_redirect($home); exit; }
     $cid = isset($_GET['cid']) ? (int) $_GET['cid'] : 0;
-    if ($cid && check_admin_referer('lfi_nct_vote_' . $cid)) {
+    if ($cid && wp_verify_nonce((string) ($_GET['_wpnonce'] ?? ''), 'lfi_nct_vote_' . $cid)) {
         global $wpdb; $t = $wpdb->prefix . 'lfi_nct_mobilisation';
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $t WHERE id = %d", $cid));
         if ($row) {
@@ -387,22 +390,27 @@ function lfi_nct_mobi_vote_handler() {
             if (!in_array($uid, $list, true)) { $list[] = $uid; $wpdb->update($t, ['participants' => wp_json_encode(array_values(array_unique($list)))], ['id' => $cid]); }
         }
     }
-    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
+    wp_safe_redirect($home); exit;
 }
 /** Handler : « pas cette fois » (écarte le pop-up pour ce créneau). */
 add_action('admin_post_lfi_nct_vote_skip', 'lfi_nct_mobi_vote_skip_handler');
 function lfi_nct_mobi_vote_skip_handler() {
-    if (!is_user_logged_in()) wp_die('non');
+    $home = function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/');
+    if (!is_user_logged_in()) { wp_safe_redirect($home); exit; }
     $cid = isset($_GET['cid']) ? (int) $_GET['cid'] : 0;
-    if ($cid && check_admin_referer('lfi_nct_vote_skip_' . $cid)) {
+    if ($cid && wp_verify_nonce((string) ($_GET['_wpnonce'] ?? ''), 'lfi_nct_vote_skip_' . $cid)) {
         $uid = get_current_user_id();
         $d = array_map('intval', (array) get_user_meta($uid, 'lfi_nct_vote_dismissed', true));
         $d[] = $cid; update_user_meta($uid, 'lfi_nct_vote_dismissed', array_values(array_unique($d)));
     }
-    wp_safe_redirect(function_exists('lfi_nct_app_url') ? lfi_nct_app_url() : home_url('/app/')); exit;
+    wp_safe_redirect($home); exit;
 }
 /** Pop-up de vote — à appeler sur l'accueil (membre & admin). */
 function lfi_nct_render_vote_popup() {
+    /* MODE APERÇU : jamais ce pop-up — son nonce est créé pour la personne
+       prévisualisée mais vérifié pour l'admin réel → « le lien a expiré » en
+       boucle. (Même piège que la popup mot de passe.) */
+    if (function_exists('lfi_nct_app_preview_uid_from_cookie') && lfi_nct_app_preview_uid_from_cookie()) return;
     $r = lfi_nct_mobi_pending_vote_for_user();
     if (!$r) return;
     $types = lfi_nct_mobi_types(); $creneaux = lfi_nct_mobi_creneaux();
