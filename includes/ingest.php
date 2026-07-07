@@ -694,6 +694,20 @@ function lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc = '') {
     return $url;
 }
 
+/** Boutons « envoyer par email » : d'abord GMAIL (web → ouvre Gmail, jamais la
+ *  boîte Apple sur iPhone), avec un petit repli « autre messagerie » (mailto)
+ *  pour ceux qui préfèrent leur appli par défaut. */
+function lfi_nct_email_buttons_html($to, $subject, $body, $label = '✉️ Envoyer via Gmail', $primary_style = 'background:#186a3b', $cc = '') {
+    $out = '';
+    if (function_exists('lfi_nct_gmail_compose_url_web')) {
+        $web = lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc);
+        $out .= '<a class="btn-primary" style="' . esc_attr($primary_style) . '" href="' . esc_url($web) . '" target="_blank" rel="noopener">' . esc_html($label) . '</a>';
+    }
+    $mt = 'mailto:' . rawurlencode($to) . '?subject=' . rawurlencode($subject) . '&body=' . rawurlencode($body) . ($cc !== '' ? '&cc=' . rawurlencode($cc) : '');
+    $out .= '<a class="btn-ghost" style="font-size:.8em" href="' . esc_attr($mt) . '">✉️ Autre messagerie</a>';
+    return $out;
+}
+
 /* ============================================================== *
  *  ÉCRAN SIMPLE « À envoyer » : toutes les réponses prêtes,       *
  *  tous dossiers confondus, en un seul endroit.                   *

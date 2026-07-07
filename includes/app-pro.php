@@ -1536,7 +1536,7 @@ function lfi_nct_app_view_dossier() {
         if ($tel) echo '<a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($intro) . '">📲 Envoyer par SMS</a>';
         if ($has_mail) {
             $subj = 'Votre espace personnel LFI — suivi de votre logement';
-            echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($mail_t) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($intro) . '">✉️ Envoyer par email</a>';
+            echo lfi_nct_email_buttons_html($mail_t, $subj, $intro, '✉️ Envoyer via Gmail');
         }
         echo '</div>';
         echo '<textarea readonly onclick="this.select()" style="width:100%;height:90px;margin-top:6px;font-size:.8em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';

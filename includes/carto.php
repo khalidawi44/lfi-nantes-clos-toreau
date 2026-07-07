@@ -308,7 +308,7 @@ function lfi_nct_app_view_carto() {
             $msg = lfi_nct_carto_invite_message($e);
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
             if (function_exists('lfi_nct_copy_button')) echo lfi_nct_copy_button($msg, '📋 Copier l\'invitation');
-            if (!empty($e['email'])) echo '<a class="btn-ghost" style="font-size:.82em" href="mailto:' . esc_attr($e['email']) . '?subject=' . rawurlencode('Un outil pour défendre les locataires') . '&body=' . rawurlencode($msg) . '">✉️ Ouvrir l\'email</a>';
+            if (!empty($e['email'])) echo lfi_nct_email_buttons_html($e['email'], 'Un outil pour défendre les locataires', $msg, '✉️ Ouvrir dans Gmail', 'font-size:.82em');
             if (!empty($e['tel'])) echo '<a class="btn-ghost" style="font-size:.82em" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $e['tel'])) . '?body=' . rawurlencode($msg) . '">📱 SMS</a>';
             echo '</div>';
             echo '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">';
