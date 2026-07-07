@@ -694,17 +694,27 @@ function lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc = '') {
     return $url;
 }
 
-/** Boutons « envoyer par email » : d'abord GMAIL (web → ouvre Gmail, jamais la
- *  boîte Apple sur iPhone), avec un petit repli « autre messagerie » (mailto)
- *  pour ceux qui préfèrent leur appli par défaut. */
+/** Boutons « envoyer par email » : ouvre l'APPLI GMAIL installée (schéma
+ *  googlegmail://) avec le message DÉJÀ PRÉ-REMPLI. Si l'appli n'est pas
+ *  installée, repli automatique (JS) vers Gmail web ; petit lien « autre
+ *  messagerie » (mailto) en dernier recours. */
 function lfi_nct_email_buttons_html($to, $subject, $body, $label = '✉️ Envoyer via Gmail', $primary_style = 'background:#186a3b', $cc = '') {
+    $app = function_exists('lfi_nct_gmail_compose_url')     ? lfi_nct_gmail_compose_url($to, $subject, $body, $cc)     : '';
+    $web = function_exists('lfi_nct_gmail_compose_url_web') ? lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc) : '';
     $out = '';
-    if (function_exists('lfi_nct_gmail_compose_url_web')) {
-        $web = lfi_nct_gmail_compose_url_web($to, $subject, $body, $cc);
+    if ($app !== '') {
+        /* href = appli Gmail (esc_attr, PAS esc_url qui retirerait le schéma).
+           Repli JS : si l'appli ne s'ouvre pas (~pas installée), on part sur
+           Gmail web. Si l'appli s'ouvre, pagehide annule le repli. */
+        $out .= '<a class="btn-primary" style="' . esc_attr($primary_style) . '" href="' . esc_attr($app) . '"'
+              . ' data-web="' . esc_attr($web) . '"'
+              . ' onclick="(function(a){var w=a.getAttribute(\'data-web\');if(!w)return;var t=setTimeout(function(){location.href=w;},900);window.addEventListener(\'pagehide\',function(){clearTimeout(t);},{once:true});})(this)"'
+              . '>' . esc_html($label) . '</a>';
+    } elseif ($web !== '') {
         $out .= '<a class="btn-primary" style="' . esc_attr($primary_style) . '" href="' . esc_url($web) . '" target="_blank" rel="noopener">' . esc_html($label) . '</a>';
     }
     $mt = 'mailto:' . rawurlencode($to) . '?subject=' . rawurlencode($subject) . '&body=' . rawurlencode($body) . ($cc !== '' ? '&cc=' . rawurlencode($cc) : '');
-    $out .= '<a class="btn-ghost" style="font-size:.8em" href="' . esc_attr($mt) . '">✉️ Autre messagerie</a>';
+    $out .= '<a class="btn-ghost" style="font-size:.78em" href="' . esc_attr($mt) . '">✉️ Autre messagerie</a>';
     return $out;
 }
 
