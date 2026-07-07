@@ -2153,6 +2153,109 @@ function lfi_nct_app_render_credentials_card($created, $screen_label = 'Compte c
  *  (wp_safe_redirect ne marche pas depuis le shortcode car les     *
  *  headers sont déjà envoyés — on appelle directement la vue)      *
  * ============================================================== */
+/* Clé de nom normalisée (sans accents, minuscule, jetons triés) pour un
+ *  rapprochement tolérant (ordre prénom/nom, accents, casse). */
+function lfi_nct_name_tokens($s) {
+    $s = function_exists('remove_accents') ? remove_accents((string) $s) : (string) $s;
+    $s = mb_strtolower($s);
+    $s = preg_replace('/[^a-z0-9 ]+/', ' ', $s);
+    $toks = array_values(array_filter(preg_split('/\s+/', trim($s)), function ($t) { return mb_strlen($t) >= 2; }));
+    sort($toks);
+    return $toks;
+}
+
+/** 🔎 « Colle une liste de noms → l'app ressort les emails / téléphones ».
+ *  Cherche dans les MEMBRES (table) + comptes WordPress du périmètre (GA).
+ *  Cloisonné : on ne montre que les gens de SON GA. Admin uniquement. */
+function lfi_nct_app_view_chercher_contacts() {
+    if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) {
+        lfi_nct_app_screen_open('🔎 Retrouver des contacts'); echo '<div class="lfi-app-empty">Réservé aux administrateurs du GA.</div>'; lfi_nct_app_screen_close(); return;
+    }
+    global $wpdb;
+
+    /* --- Index des personnes du périmètre (membres + comptes WP). --- */
+    $cands = [];
+    $mt = $wpdb->prefix . 'lfi_nct_membres';
+    if ($wpdb->get_var("SHOW TABLES LIKE '$mt'") === $mt) {
+        $clause = function_exists('lfi_nct_membres_ga_clause') ? lfi_nct_membres_ga_clause('ga') : '';
+        $rows = $wpdb->get_results("SELECT prenom, nom, email, tel FROM $mt WHERE 1=1" . $clause . " LIMIT 3000") ?: [];
+        foreach ($rows as $r) {
+            $nom = trim($r->prenom . ' ' . $r->nom);
+            if ($nom === '') continue;
+            $cands[] = ['name' => $nom, 'email' => (string) $r->email, 'tel' => (string) $r->tel, 'src' => 'membre', 'toks' => lfi_nct_name_tokens($nom)];
+        }
+    }
+    /* Comptes WordPress du périmètre (membres GA + locataires). */
+    $uargs = ['number' => 3000, 'fields' => ['ID', 'display_name', 'user_email']];
+    if (function_exists('lfi_nct_users_ga_query')) $uargs = lfi_nct_users_ga_query($uargs);
+    foreach (get_users($uargs) as $u) {
+        $nom = trim((string) $u->display_name);
+        if ($nom === '') continue;
+        $mail = (string) $u->user_email;
+        if (stripos($mail, '@tenant.') !== false || stripos($mail, '@partenaire.') !== false || stripos($mail, '@avocat.') !== false) $mail = '';
+        $tel = (string) get_user_meta($u->ID, 'lfi_nct_tel', true);
+        $cands[] = ['name' => $nom, 'email' => $mail, 'tel' => $tel, 'src' => 'compte', 'toks' => lfi_nct_name_tokens($nom)];
+    }
+
+    $results = null;
+    if (!empty($_POST['lfi_find_contacts']) && check_admin_referer('lfi_find_contacts')) {
+        $raw = (string) wp_unslash($_POST['names'] ?? '');
+        $lines = array_values(array_filter(array_map('trim', preg_split('/[\r\n]+/', $raw))));
+        $results = [];
+        foreach ($lines as $line) {
+            $qt = lfi_nct_name_tokens($line);
+            if (empty($qt)) continue;
+            $best = []; $bestscore = 0;
+            foreach ($cands as $c) {
+                $shared = count(array_intersect($qt, $c['toks']));
+                if ($shared === 0) continue;
+                /* Il faut soit ≥2 jetons communs, soit inclusion totale d'un côté. */
+                $ok = ($shared >= 2) || ($shared === count($qt)) || ($shared === count($c['toks']));
+                if (!$ok) continue;
+                if ($shared > $bestscore) { $bestscore = $shared; $best = [$c]; }
+                elseif ($shared === $bestscore) { $best[] = $c; }
+            }
+            /* Dédoublonne les correspondances (même email/nom). */
+            $seen = []; $uniq = [];
+            foreach ($best as $b) { $k = mb_strtolower($b['name']) . '|' . mb_strtolower($b['email']); if (isset($seen[$k])) continue; $seen[$k] = 1; $uniq[] = $b; }
+            $results[] = ['q' => $line, 'matches' => $uniq];
+        }
+    }
+
+    lfi_nct_app_screen_open('🔎 Retrouver des contacts', 'Colle une liste de noms → emails & téléphones');
+    echo '<div class="lfi-app-help">Colle les noms (un par ligne). L\'app cherche dans <strong>ton périmètre</strong> (membres + comptes de ton GA) et te ressort <strong>email + téléphone</strong>. Rien n\'est inventé : si un nom n\'est pas trouvé, c\'est écrit.</div>';
+    echo '<form method="post" class="lfi-app-form">' . wp_nonce_field('lfi_find_contacts', '_wpnonce', true, false);
+    echo '<input type="hidden" name="lfi_find_contacts" value="1">';
+    echo '<label>Noms (un par ligne)<textarea name="names" rows="7" placeholder="Enzo Arismendy&#10;Marc Bohy&#10;…">' . esc_textarea((string) wp_unslash($_POST['names'] ?? '')) . '</textarea></label>';
+    echo '<button type="submit" class="btn-primary">🔎 Chercher</button></form>';
+
+    if (is_array($results)) {
+        $found = 0; $csv = "nom;email;telephone\n";
+        echo '<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">';
+        foreach ($results as $row) {
+            if (empty($row['matches'])) {
+                echo '<div style="background:#fff3cd;border:1px solid #e6c98a;border-radius:10px;padding:9px 12px"><strong>' . esc_html($row['q']) . '</strong> — <span style="color:#8a6d1f">non trouvé dans ton périmètre</span></div>';
+                continue;
+            }
+            foreach ($row['matches'] as $m) {
+                $found++;
+                $csv .= str_replace(';', ',', $m['name']) . ';' . str_replace(';', ',', $m['email']) . ';' . str_replace(';', ',', $m['tel']) . "\n";
+                echo '<div style="background:#eef7ee;border:1px solid #a6d3a6;border-radius:10px;padding:9px 12px">';
+                echo '<div style="font-weight:700">' . esc_html($m['name']) . (count($row['matches']) > 1 ? ' <span style="font-size:.75em;color:#888">(pour « ' . esc_html($row['q']) . ' »)</span>' : '') . ' <span style="font-size:.72em;color:#888;font-weight:400">· ' . esc_html($m['src']) . '</span></div>';
+                echo '<div style="font-size:.9em;margin-top:2px">' . ($m['email'] !== '' ? '✉️ <a href="mailto:' . esc_attr($m['email']) . '">' . esc_html($m['email']) . '</a>' : '<span style="color:#999">pas d\'email</span>');
+                echo ' &nbsp; ' . ($m['tel'] !== '' ? '📞 <a href="tel:' . esc_attr(preg_replace('/[^\d+]/', '', $m['tel'])) . '">' . esc_html($m['tel']) . '</a>' : '<span style="color:#999">pas de tél.</span>') . '</div>';
+                echo '</div>';
+            }
+        }
+        echo '</div>';
+        echo '<div style="margin-top:10px"><div style="font-size:.85em;color:#555;margin-bottom:4px">📋 À copier (CSV — ' . (int) $found . ' trouvé' . ($found > 1 ? 's' : '') . ') :</div>';
+        echo '<textarea readonly onclick="this.select()" style="width:100%;height:120px;font-family:monospace;font-size:.8em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($csv) . '</textarea></div>';
+    }
+
+    echo '<div class="lfi-app-help" style="margin-top:12px"><small>🔒 Usage interne, cloisonné par GA. On ne mélange jamais les groupes d\'action.</small></div>';
+    lfi_nct_app_screen_close();
+}
+
 function lfi_nct_app_view_comptes() {
     if (!(function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'))) return;
     /* Par défaut on ouvre les Locataires (le plus utilisé) ;

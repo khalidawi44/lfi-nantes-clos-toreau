@@ -835,6 +835,7 @@ function lfi_nct_app_shortcode() {
                     case 'comptes':            lfi_nct_app_view_comptes();              break;
                     case 'comptes-ga':         lfi_nct_app_view_comptes_ga();           break;
                     case 'comptes-locataires': lfi_nct_app_view_comptes_locataires();   break;
+                    case 'chercher-contacts':  lfi_nct_app_view_chercher_contacts();    break;
                     case 'temoignage-add':     wp_safe_redirect(lfi_nct_app_url('enquete')); exit; /* retiré : un seul formulaire (Faire passer une enquête) */
                     case 'enquete-photos':     lfi_nct_app_view_enquete_photos();       break;
                     case 'dossiers':        lfi_nct_app_view_dossiers();        break;
