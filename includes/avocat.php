@@ -464,7 +464,7 @@ function lfi_nct_app_view_avocats() {
             $subj  = 'Votre espace de travail — défense des locataires (LFI Nantes Sud – Clos Toreau)';
             echo '<div class="lfi-app-help" style="margin-top:6px;background:#eef7ee;border-left:4px solid #186a3b"><small>✅ Lien généré (usage unique). Le message complet est <strong>déjà pré-rempli</strong> — clique « Envoyer par email », tu n\'as rien à écrire. Ne régénère pas après l\'envoi.</small></div>';
             echo '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">';
-            if ($has_mail) echo '<a class="btn-primary" style="background:#186a3b" href="mailto:' . esc_attr($av->user_email) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($intro) . '">✉️ Envoyer par email (pré-rempli)</a>';
+            if ($has_mail) echo lfi_nct_email_buttons_html($av->user_email, $subj, $intro, '✉️ Envoyer via Gmail (pré-rempli)');
             echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('avocat-invite-pdf', ['uid' => (int) $av->ID, 'link' => rawurlencode($magic['link'])])) . '" target="_blank">📄 Version imprimable (PDF)</a>';
             echo '</div>';
             echo '<textarea readonly onclick="this.select()" style="width:100%;height:220px;margin-top:6px;font-size:.8em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($intro) . '</textarea>';
@@ -636,7 +636,7 @@ function lfi_nct_app_view_avocat_invites() {
             echo '<a class="btn-primary" style="background:#186a3b" href="' . esc_url($send) . '" onclick="return confirm(\'Envoyer l\\\'email mis en forme (logos + rôle + forces) à ' . esc_js($mail) . ' ?\')">📧 Envoyer l\'email (logos + mise en forme)</a>';
         }
         echo '<a class="btn-ghost" style="background:#6a1b9a;color:#fff" href="' . esc_url(lfi_nct_app_url('avocat-invite-pdf', ['uid' => (int) $av->ID, 'link' => rawurlencode($link)])) . '" target="_blank">📄 Aperçu / PDF</a>';
-        if ($has_mail) echo '<a class="btn-ghost" href="mailto:' . esc_attr($mail) . '?subject=' . rawurlencode($subj) . '&body=' . rawurlencode($txt) . '">✉️ Version texte (mon Gmail)</a>';
+        if ($has_mail) echo lfi_nct_email_buttons_html($mail, $subj, $txt, '✉️ Envoyer via Gmail');
         echo '</div>';
         echo '<div class="lfi-app-help" style="margin:2px 0"><small>🔗 Lien de connexion direct (copie-le pour SMS / Telegram) :</small></div>';
         echo '<textarea readonly onclick="this.select()" style="width:100%;height:44px;font-size:.78em;padding:6px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($link) . '</textarea>';

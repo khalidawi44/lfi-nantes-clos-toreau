@@ -257,7 +257,7 @@ function lfi_nct_app_view_pieces() {
         $has_mail = ($mail !== '' && is_email($mail) && stripos($mail, '@tenant.') === false);
         echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">';
         if ($tel) echo '<a class="btn-primary" style="background:#186a3b" href="sms:' . esc_attr(preg_replace('/[^\d+]/', '', $tel)) . '?body=' . rawurlencode($invite) . '">📲 Envoyer par SMS</a>';
-        if ($has_mail) echo '<a class="btn-primary" style="background:#0066a3" href="mailto:' . esc_attr($mail) . '?subject=' . rawurlencode('Vos pièces pour le dossier logement') . '&body=' . rawurlencode($invite) . '">✉️ Par email</a>';
+        if ($has_mail) echo lfi_nct_email_buttons_html($mail, 'Vos pièces pour le dossier logement', $invite, '✉️ Par Gmail', 'background:#0066a3');
         echo '</div>';
         echo '<textarea readonly onclick="this.select()" style="width:100%;height:150px;font-size:.82em;padding:8px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($invite) . '</textarea>';
     }
