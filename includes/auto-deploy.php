@@ -31,6 +31,67 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ PURGE TOTALE des DOSSIERS locataires (tous), demandée pour repartir de
+       zéro. CADENAS sur les ENQUÊTES (table responses) + les COMPTES + le lien
+       enquête↔locataire (meta lfi_nct_response_id) : jamais touchés. On SAUVEGARDE
+       tout (structuré) avant de vider → récupérable (sauf fichiers photos, que
+       l'on supprime comme demandé). Idempotent (une seule fois). */
+    if (get_option('lfi_nct_dossier_full_wipe_v1') !== '1') {
+        global $wpdb;
+        $td = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $tr = $wpdb->prefix . 'lfi_nct_responses';
+
+        /* 1) Protéger les PHOTOS D'ENQUÊTE (référencées dans responses.data). */
+        $protected = [];
+        foreach ((array) $wpdb->get_col("SELECT data FROM $tr WHERE data IS NOT NULL AND data <> ''") as $d) {
+            $j = json_decode((string) $d, true);
+            if (is_array($j) && !empty($j['photos']) && is_array($j['photos'])) {
+                foreach ($j['photos'] as $ph) { $pid = (int) ($ph['id'] ?? 0); if ($pid) $protected[$pid] = 1; }
+            }
+        }
+
+        /* 2) Sauvegarde (hors fichiers). */
+        $backup = [
+            'when'          => current_time('mysql'),
+            'meta'          => [],
+            'dossiers'      => $wpdb->get_results("SELECT * FROM $td", ARRAY_A) ?: [],
+            'victoires'     => get_option('lfi_nct_victoires', null),
+            'reussites'     => get_option('lfi_nct_reussites', null),
+            'degat_signals' => get_option('lfi_nct_degat_signals', null),
+        ];
+
+        /* 3) Locataires = rôle tenant + tout tenant_user_id ayant un dossier. */
+        $uids = [];
+        $role = defined('LFI_NCT_ROLE_TENANT') ? LFI_NCT_ROLE_TENANT : 'lfi_nct_tenant';
+        foreach (get_users(['role' => $role, 'fields' => ['ID'], 'number' => 5000]) as $tu) $uids[(int) $tu->ID] = 1;
+        foreach ((array) $wpdb->get_col("SELECT DISTINCT tenant_user_id FROM $td WHERE tenant_user_id > 0") as $duid) $uids[(int) $duid] = 1;
+
+        /* Métas VIDÉES (contenu du dossier). On NE touche PAS : lfi_nct_response_id
+           (lien enquête), tel, ga, casquette, jetons, onboarding, objectif. */
+        $meta_keys = ['lfi_nct_suivi_steps', 'lfi_nct_episodes', 'lfi_nct_active_ep', 'lfi_nct_dossier_synthese', 'lfi_nct_dossier_interlocuteurs', 'lfi_nct_admin_notes', 'lfi_nct_home_actions_hidden', 'lfi_nct_chrono'];
+        foreach (array_keys($uids) as $uid) {
+            $uid = (int) $uid; if (!$uid) continue;
+            $bm = [];
+            foreach ($meta_keys as $mk) { $v = get_user_meta($uid, $mk, true); if ($v !== '' && $v !== []) $bm[$mk] = $v; }
+            if ($bm) $backup['meta'][$uid] = $bm;
+            foreach ($meta_keys as $mk) delete_user_meta($uid, $mk);
+            /* Pièces du dossier — sauf les photos d'enquête protégées. */
+            $atts = get_posts(['post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids', 'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => $uid]]]);
+            foreach ((array) $atts as $aid) { $aid = (int) $aid; if (isset($protected[$aid])) continue; wp_delete_attachment($aid, true); }
+        }
+
+        /* 4) Dossiers juridiques : suppression totale (sauvegardés ci-dessus). */
+        $wpdb->query("DELETE FROM $td");
+
+        /* 5) Victoires / réussites / signalements → zéro. */
+        update_option('lfi_nct_victoires', [], false);
+        update_option('lfi_nct_reussites', [], false);
+        update_option('lfi_nct_degat_signals', [], false);
+
+        update_option('lfi_nct_dossier_wipe_backup_v1', $backup, false);
+        update_option('lfi_nct_dossier_full_wipe_v1', '1', false);
+    }
+
     /* ─ Événement « Diffusion de tracts » (jeu. 9 juillet 2026, 17h30–19h00,
        Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes). À ajouter au
        calendrier du GA REZÉ + au calendrier & VOTE du GA CLOS TOREAU, avec
