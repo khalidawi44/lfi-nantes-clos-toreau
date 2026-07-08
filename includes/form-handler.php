@@ -118,6 +118,35 @@ function lfi_nct_handle_submission() {
 
     global $wpdb;
     $table = $wpdb->prefix . 'lfi_nct_responses';
+
+    /* ─ MODE ÉDITION : même formulaire (complet) qu'à la saisie, mais on MET À
+       JOUR l'enquête existante au lieu d'en créer une nouvelle — et SURTOUT on
+       ne relance PAS la création de compte/dossier juridique (pas de doublon).
+       Le chemin d'insertion ci-dessous reste intact pour la saisie normale. */
+    $edit_id = isset($_POST['lfi_nct_edit_id']) ? (int) $_POST['lfi_nct_edit_id'] : 0;
+    if ($edit_id) {
+        $sc = function_exists('lfi_nct_responses_scope_clause') ? lfi_nct_responses_scope_clause() : '';
+        $old_raw = $wpdb->get_var($wpdb->prepare("SELECT data FROM $table WHERE id = %d AND deleted_at IS NULL" . $sc, $edit_id));
+        if ($old_raw === null) return "Enquête introuvable dans ce groupe d'action.";
+        $old = json_decode((string) $old_raw, true);
+        if (is_array($old)) $data = array_merge($old, $data); /* garde photos, adhésion, etc. */
+        $ok = $wpdb->update($table, [
+            'adresse'           => $adresse,
+            'etage'             => $etage,
+            'data'              => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
+            'contact_recontact' => $contact_recontact,
+            'contact_prenom'    => $contact_prenom,
+            'contact_nom'       => $contact_nom,
+            'contact_tel'       => $contact_tel,
+            'contact_email'     => $contact_email,
+        ], ['id' => $edit_id]);
+        delete_transient('lfi_nct_known_addresses');
+        if (function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission($edit_id);
+        $GLOBALS['lfi_nct_last_submission_id'] = $edit_id;
+        $GLOBALS['lfi_nct_was_edit'] = true;
+        return ($ok === false) ? ('Erreur DB : ' . esc_html($wpdb->last_error)) : '';
+    }
+
     $insert = $wpdb->insert($table, [
         'militant_user_id'  => $militant_user_id,
         'militant_login'    => $militant_login,
