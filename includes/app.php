@@ -3888,121 +3888,65 @@ function lfi_nct_app_view_enquete_edit() {
         return;
     }
 
-    if (!empty($_POST['lfi_enq_edit_save']) && check_admin_referer('lfi_enq_edit_' . $id)) {
-        $adresse = sanitize_text_field(wp_unslash($_POST['adresse'] ?? ''));
-        if (function_exists('lfi_nct_normalize_address')) $adresse = lfi_nct_normalize_address($adresse);
-        $etage = sanitize_text_field(wp_unslash($_POST['etage'] ?? ''));
-        $ville = sanitize_text_field(wp_unslash($_POST['ville'] ?? ''));
-        $enfants = sanitize_text_field(wp_unslash($_POST['enfants'] ?? ''));
-        $cp = sanitize_text_field(wp_unslash($_POST['contact_prenom'] ?? ''));
-        $cn = sanitize_text_field(wp_unslash($_POST['contact_nom'] ?? ''));
-        $ct = sanitize_text_field(wp_unslash($_POST['contact_tel'] ?? ''));
-        $ce = sanitize_email(wp_unslash($_POST['contact_email'] ?? ''));
-        $recontact = !empty($_POST['contact_recontact']) ? 1 : 0;
-
-        $data = json_decode((string) $row->data, true);
-        if (!is_array($data)) $data = [];
-        $data_old_ville = (string) ($data['ville'] ?? '');
-        $presence = (isset($_POST['problemes_presence']) && in_array($_POST['problemes_presence'], ['oui', 'non'], true))
-            ? $_POST['problemes_presence'] : ($data['problemes_presence'] ?? 'oui');
-        $data['problemes_presence'] = $presence;
-        $data['problemes_types']    = array_values(array_intersect(
-            array_keys(lfi_nct_enq_problem_types()),
-            array_map('sanitize_key', (array) ($_POST['problemes_types'] ?? []))
-        ));
-        $data['problemes_gravite']  = max(0, min(10, (int) ($_POST['problemes_gravite'] ?? 0)));
-        $rec = sanitize_key($_POST['problemes_recurrent'] ?? '');
-        if (in_array($rec, ['permanent', 'parfois', 'ponctuel', ''], true)) $data['problemes_recurrent'] = $rec;
-        /* Ville (pour le bon rattachement GA) + nombre d'enfants (composition du foyer). */
-        $data['ville'] = $ville;
-        $data['enfants'] = $enfants;
-
-        $addr_changed = (trim($adresse) !== trim((string) $row->adresse)) || (trim($ville) !== trim((string) ($data_old_ville ?? '')));
-        $upd = [
-            'adresse' => $adresse, 'etage' => $etage,
-            'contact_prenom' => $cp, 'contact_nom' => $cn,
-            'contact_tel' => $ct, 'contact_email' => $ce,
-            'contact_recontact' => $recontact,
-            'data' => wp_json_encode($data, JSON_UNESCAPED_UNICODE),
-        ];
-        /* Adresse/ville changée → on efface les coordonnées pour un nouveau géocodage. */
-        if ($addr_changed) { $upd['lat'] = null; $upd['lng'] = null; }
-        $wpdb->update($table, $upd, ['id' => $id]);
-        delete_transient('lfi_nct_known_addresses');
-        /* Re-route immédiat : avec la ville, l'enquête se rattache au bon GA. */
-        if ($addr_changed && function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission($id);
-        /* Note « à compléter » (ex. adhésion à faire signer). Vide = fiche OK. */
-        if (function_exists('lfi_nct_enq_todo_set')) {
-            $todo = sanitize_text_field(wp_unslash($_POST['acompleter_note'] ?? ''));
-            lfi_nct_enq_todo_set($id, $todo, get_current_user_id());
-            if (function_exists('lfi_nct_enq_ok_remove')) { if ($todo === '') { /* note effacée : on ne force rien */ } else lfi_nct_enq_ok_remove($id); }
-        }
-        wp_safe_redirect(lfi_nct_app_url('enquetes', ['edited' => 1]));
-        exit;
+    /* Enregistrement : on réutilise le HANDLER de la saisie (formulaire COMPLET),
+       en MODE ÉDITION → met à jour cette enquête, sans recréer de compte/dossier
+       (pas de doublon). Une seule source de vérité = le même formulaire. */
+    $edit_error = '';
+    if (isset($_POST['lfi_nct_nonce']) && function_exists('lfi_nct_handle_submission')) {
+        $err = lfi_nct_handle_submission();
+        if ($err === '' || $err === null) { wp_safe_redirect(lfi_nct_app_url('enquetes', ['edited' => 1])); exit; }
+        $edit_error = (string) $err;
     }
 
     $data = json_decode((string) $row->data, true);
     if (!is_array($data)) $data = [];
-    $cur_types    = (array) ($data['problemes_types'] ?? []);
-    $cur_presence = (string) ($data['problemes_presence'] ?? 'oui');
-    $cur_grav     = (int) ($data['problemes_gravite'] ?? 0);
-    $cur_rec      = (string) ($data['problemes_recurrent'] ?? '');
     $ref = function_exists('lfi_nct_response_ref') ? lfi_nct_response_ref($row->id, function_exists('lfi_nct_response_ga_of') ? lfi_nct_response_ga_of($row) : '') : '';
 
     lfi_nct_app_screen_open('✏️ Éditer' . ($ref ? ' — ' . $ref : ''), 'Corrige les informations de cette enquête');
-    if (!empty($_GET['recreated'])) lfi_nct_app_flash('♻️ Enquête #' . (int) $id . ' recréée (nuisibles : cafards, punaises). Complète ici les dates, la gravité et l\'adresse — je n\'invente rien.');
+    if ($edit_error !== '') lfi_nct_app_flash('⚠️ ' . $edit_error, 'error');
+    if (!empty($_GET['recreated'])) lfi_nct_app_flash('♻️ Enquête #' . (int) $id . ' recréée. Complète ici — je n\'invente rien.');
+    echo '<div class="lfi-app-help">C\'est <strong>exactement le même formulaire</strong> que « Faire passer une enquête », <strong>pré-rempli</strong>. Corrige ce que tu veux, puis enregistre.</div>';
 
-    echo '<form method="post" class="lfi-app-form">';
-    wp_nonce_field('lfi_enq_edit_' . $id);
-    echo '<input type="hidden" name="lfi_enq_edit_save" value="1">';
+    /* Le formulaire COMPLET (source unique) — avec l'id d'édition caché. */
+    echo lfi_nct_render_form((int) $id);
 
-    echo '<h3 style="margin:8px 0 4px">📍 Logement</h3>';
-    echo '<label>Adresse<input type="text" name="adresse" value="' . esc_attr($row->adresse) . '" required></label>';
-    echo '<label>Ville / commune <span style="color:#c8102e">*</span><input type="text" name="ville" value="' . esc_attr($data['ville'] ?? '') . '" placeholder="Ex : Nantes" required></label>';
-    echo '<div class="lfi-app-help" style="margin:2px 0 0"><small>⚠️ Indispensable pour rattacher la fiche au bon groupe d\'action (sans ville, une rue homonyme part dans une autre commune).</small></div>';
-    echo '<label>Étage<input type="text" name="etage" value="' . esc_attr($row->etage) . '"></label>';
-
-    echo '<h3 style="margin:14px 0 4px">👨‍👩‍👧 Foyer</h3>';
-    echo '<label>Nombre d\'enfants au foyer<input type="number" name="enfants" min="0" value="' . esc_attr($data['enfants'] ?? '') . '" placeholder="ex : 3"></label>';
-
-    echo '<h3 style="margin:14px 0 4px">👤 Contact</h3>';
-    echo '<label>Prénom<input type="text" name="contact_prenom" value="' . esc_attr($row->contact_prenom) . '"></label>';
-    echo '<label>Nom<input type="text" name="contact_nom" value="' . esc_attr($row->contact_nom) . '"></label>';
-    echo '<label>Téléphone<input type="tel" name="contact_tel" value="' . esc_attr($row->contact_tel) . '"></label>';
-    echo '<label>Email<input type="email" name="contact_email" value="' . esc_attr($row->contact_email) . '"></label>';
-    echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="contact_recontact" value="1" ' . checked($row->contact_recontact, 1, false) . '> Accepte d\'être recontacté·e</label>';
-
-    echo '<h3 style="margin:14px 0 4px">⚠️ Problèmes</h3>';
-    echo '<label>Présence de problèmes<select name="problemes_presence">';
-    echo '<option value="oui" ' . selected($cur_presence, 'oui', false) . '>Oui</option>';
-    echo '<option value="non" ' . selected($cur_presence, 'non', false) . '>Non</option>';
-    echo '</select></label>';
-    echo '<div class="lfi-app-help" style="margin:6px 0"><small>Types de problème :</small></div>';
-    echo '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
-    foreach (lfi_nct_enq_problem_types() as $slug => $lab) {
-        echo '<label class="lfi-app-checkbox-row"><input type="checkbox" name="problemes_types[]" value="' . esc_attr($slug) . '" ' . checked(in_array($slug, $cur_types, true), true, false) . '> ' . $lab[0] . ' ' . esc_html($lab[1]) . '</label>';
-    }
-    echo '</div>';
-    echo '<label>Gravité (0 à 10)<input type="number" name="problemes_gravite" min="0" max="10" value="' . (int) $cur_grav . '"></label>';
-    echo '<label>Récurrence<select name="problemes_recurrent">';
-    foreach (['' => '—', 'permanent' => 'En permanence', 'parfois' => 'Régulièrement', 'ponctuel' => 'Ponctuel'] as $k => $lab) {
-        echo '<option value="' . esc_attr($k) . '" ' . selected($cur_rec, $k, false) . '>' . esc_html($lab) . '</option>';
-    }
-    echo '</select></label>';
-
-    /* 🔖 À compléter : rappel pour revenir finir la fiche (ex. adhésion à signer). */
-    if (function_exists('lfi_nct_enq_todo_note')) {
-        $todo = lfi_nct_enq_todo_note($id);
-        echo '<h3 style="margin:14px 0 4px">🔖 À compléter (rappel)</h3>';
-        echo '<label>Ce qu\'il reste à faire chez cette personne<input type="text" name="acompleter_note" value="' . esc_attr($todo) . '" placeholder="ex : adhésion à faire signer, photos à prendre…"></label>';
-        echo '<div class="lfi-app-help" style="margin:2px 0 0"><small>Rempli = la fiche apparaît dans « 📝 Fiches à compléter » sur l\'accueil. Laisse vide quand tout est fait.</small></div>';
-    }
-
-    echo '<div class="row-actions" style="margin-top:14px;display:flex;gap:8px">';
-    echo '<button type="submit" class="btn-primary">💾 Enregistrer</button>';
-    echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('enquetes')) . '">Annuler</a>';
-    echo '</div>';
-    echo '</form>';
+    /* Données de pré-remplissage : colonnes + data JSON (hors images). */
+    $prefill = $data;
+    $prefill['adresse']        = (string) $row->adresse;
+    $prefill['etage']          = (string) $row->etage;
+    $prefill['contact_prenom'] = (string) $row->contact_prenom;
+    $prefill['contact_nom']    = (string) $row->contact_nom;
+    $prefill['contact_tel']    = (string) $row->contact_tel;
+    $prefill['contact_email']  = (string) $row->contact_email;
+    $prefill['revenir_ok']     = ((int) $row->contact_recontact === 1) ? 'oui' : 'non';
+    unset($prefill['adhesion'], $prefill['photos'], $prefill['adhesion_signature']);
+    ?>
+    <script>
+    (function(){
+      var P = <?php echo wp_json_encode($prefill, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+      var form = document.getElementById('lfi-nct-form'); if(!form) return;
+      function fire(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); el.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){} }
+      function setByName(name, val){
+        var els = form.querySelectorAll('[name="'+name+'"]'); if(!els.length) return;
+        var t = els[0].type;
+        if(t==='radio'||t==='checkbox'){ for(var i=0;i<els.length;i++){ if(String(els[i].value)===String(val)){ els[i].checked=true; fire(els[i]); } } }
+        else { els[0].value = (val==null?'':val); fire(els[0]); }
+      }
+      function checkVal(name, val){ var els=form.querySelectorAll('[name="'+name+'"]'); for(var i=0;i<els.length;i++){ if(String(els[i].value)===String(val)){ els[i].checked=true; fire(els[i]); } } }
+      function walk(obj){
+        for(var k in obj){ var v=obj[k]; if(v===null||v===undefined) continue;
+          if(Array.isArray(v)){ v.forEach(function(it){ if(it&&typeof it==='object') return; checkVal(k+'[]', it); }); }
+          else if(typeof v==='object'){ for(var kk in v){ var vv=v[kk]; if(vv!==null&&typeof vv!=='object') setByName(k+'['+kk+']', vv); } }
+          else { setByName(k, v); }
+        }
+      }
+      if(P.problemes_presence) setByName('problemes_presence', P.problemes_presence);
+      walk(P);
+      /* re-déclenche l'ouverture des sous-blocs des problèmes cochés */
+      form.querySelectorAll('.lfi-prob-cb, input[name="problemes_types[]"]').forEach(function(cb){ fire(cb); });
+    })();
+    </script>
+    <?php
 
     lfi_nct_app_screen_close();
 }
