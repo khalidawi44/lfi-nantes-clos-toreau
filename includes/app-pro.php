@@ -827,7 +827,7 @@ function lfi_nct_dossier_render_import_md($u) {
     echo '<input type="hidden" name="lfi_app_md_import" value="1">';
     echo '<label>📄 Fichier du dossier (.md ou .txt)<input type="file" name="mdfile" accept=".md,.markdown,.txt,text/markdown,text/plain"></label>';
     echo '<label>… ou colle le texte du dossier ici<textarea name="md_paste" rows="5" placeholder="# Dossier…\n17/07/2025 : …\n20/08/2025 : …"></textarea></label>';
-    echo '<label>📎 Photos / PDF à joindre (plusieurs possibles)<input type="file" name="pieces[]" accept="image/*,application/pdf" multiple></label>';
+    echo '<label>📎 Pièces à joindre — <strong>tous fichiers</strong> (photos, captures, PDF, Word, scans… plusieurs à la fois)<input type="file" name="pieces[]" accept="image/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.csv,.ppt,.pptx,.heic,.heif" multiple></label>';
     echo '<label>🗜️ …ou une archive ZIP (photos + PDF en vrac) — le robot en sort tout et range<input type="file" name="zipfile" accept=".zip,application/zip,application/x-zip-compressed"></label>';
     echo '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" name="md_append" value="1"> <span>Ajouter à la chronologie existante (par défaut : <strong>on remplace</strong> — évite les doublons)</span></label>';
     echo '<button type="submit" class="btn-primary" style="background:#4b2e83">🤖 Importer et classer</button></form>';
@@ -2621,7 +2621,7 @@ function lfi_nct_dossier_render_parcours($u) {
             /* Dépôt d'une pièce → coche auto. */
             echo '<form method="post" enctype="multipart/form-data" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false);
             echo '<input type="hidden" name="lfi_app_step_piece" value="1"><input type="hidden" name="step_key" value="' . esc_attr($skey) . '"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
-            echo '<input type="file" name="piece[]" accept="image/*,application/pdf" multiple required style="font-size:.8em;max-width:220px">';
+            echo '<input type="file" name="piece[]" accept="image/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.csv,.ppt,.pptx,.heic,.heif" multiple required style="font-size:.8em;max-width:220px">';
             echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
             echo '<div style="flex-basis:100%;font-size:.72em;color:#888;margin-top:2px">📷 Appareil photo <strong>ou</strong> photothèque/fichiers · plusieurs photos d\'un coup.</div>';
             echo '</form>';
