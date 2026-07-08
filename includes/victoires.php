@@ -258,16 +258,19 @@ function lfi_nct_render_speed_championship() {
     echo '<ol style="list-style:none;padding:0;margin:0">';
     $medals = ['🥇', '🥈', '🥉'];
     foreach ($rows as $i => $v) {
-        $u = get_userdata((int) ($v['tenant_uid'] ?? 0));
-        $name = $u ? $u->display_name : ('Dossier #' . (int) ($v['tenant_uid'] ?? 0));
+        $uid  = (int) ($v['tenant_uid'] ?? 0);
         $days = (int) $v['days'];
         $medal = $medals[$i] ?? (($i + 1) . '.');
         $bg = $i < 3 ? '#eef7ee' : '#fafafa';
+        /* RÈGLE ABSOLUE : JAMAIS de nom, même ici (interne). On affiche un
+           libellé anonyme ; l'admin clique « ouvrir » pour voir le dossier. */
+        $dossier_url = lfi_nct_app_url('dossier', ['uid' => $uid]);
         echo '<li style="display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;margin-bottom:5px;background:' . $bg . ';border-left:3px solid #186a3b">';
         echo '<span style="font-size:1.3em;width:30px;text-align:center">' . $medal . '</span>';
-        echo '<span style="flex:1;font-weight:700">' . esc_html($name) . '</span>';
+        echo '<span style="flex:1;font-weight:700;color:#333">Famille accompagnée</span>';
         echo '<span style="font-weight:800;color:#186a3b">' . $days . ' j</span>';
         if (isset($v['won_at_step'])) echo '<span style="font-size:.78em;color:#999;margin-left:6px">étape ' . (int) $v['won_at_step'] . '</span>';
+        if ($uid) echo '<a href="' . esc_url($dossier_url) . '" style="font-size:.76em;color:#0066a3;margin-left:6px;text-decoration:none;white-space:nowrap">📂 ouvrir</a>';
         echo '</li>';
     }
     echo '</ol>';
