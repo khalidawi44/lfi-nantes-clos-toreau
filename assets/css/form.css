@@ -1,0 +1,257 @@
+.lfi-survey {
+    max-width: 720px;
+    margin: 2em auto;
+    padding: 1em;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #222;
+    font-size: 16px;
+}
+.lfi-survey h2 {
+    color: #c8102e;
+    border-bottom: 2px solid #c8102e;
+    padding-bottom: 0.4em;
+    margin-bottom: 0.8em;
+    font-size: 1.4em;
+}
+.lfi-section-desc { color: #555; font-size: 0.95em; margin-bottom: 1.5em; line-height: 1.5; }
+.lfi-field { display: block; margin-bottom: 1.6em; padding: 0; border: none; }
+.lfi-label { display: block; font-weight: 600; margin-bottom: 0.4em; font-size: 1em; }
+.lfi-help { display: block; font-size: 0.85em; color: #666; margin-bottom: 0.6em; line-height: 1.4; }
+.req { color: #c8102e; }
+
+.lfi-survey input[type=text],
+.lfi-survey input[type=number],
+.lfi-survey input[type=tel],
+.lfi-survey input[type=email],
+.lfi-survey textarea {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+.lfi-survey input:focus, .lfi-survey textarea:focus { border-color: #c8102e; outline: none; }
+.lfi-other-input {
+    display: block;
+    width: 100%;
+    margin: 0.4em 0 0.8em;
+    padding: 12px;
+    font-size: 16px;
+    border: 2px dashed #c8102e;
+    border-radius: 6px;
+    background: #fff;
+    box-sizing: border-box;
+}
+.lfi-other-input::placeholder { color: #888; font-style: italic; }
+
+/* Radios et checkboxes en blocs cliquables */
+.lfi-radio, .lfi-check {
+    display: block;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+.lfi-radio:hover, .lfi-check:hover { background: #f0f0f0; border-color: #c8102e; }
+.lfi-radio input, .lfi-check input { margin-right: 8px; }
+.lfi-radio:has(input:checked), .lfi-check:has(input:checked) {
+    background: #c8102e;
+    color: white;
+    border-color: #c8102e;
+    font-weight: 600;
+}
+
+/* Échelle 1-5 horizontale */
+.lfi-scale { display: flex; gap: 6px; margin-top: 0.5em; }
+.lfi-radio-btn {
+    flex: 1;
+    text-align: center;
+    padding: 14px 0;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.lfi-radio-btn:hover { background: #f0f0f0; border-color: #c8102e; }
+.lfi-radio-btn input { display: none; }
+.lfi-radio-btn:has(input:checked) {
+    background: #c8102e;
+    color: white;
+    border-color: #c8102e;
+}
+
+.lfi-info-box { background: #f5f5f5; border-left: 3px solid #c8102e; padding: 12px; margin: 1em 0; font-size: 0.95em; }
+.lfi-step { display: none; }
+.lfi-step.active { display: block; }
+.lfi-nav { display: flex; justify-content: space-between; margin-top: 2em; gap: 1em; }
+.lfi-nav button { flex: 1; padding: 14px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+.lfi-prev { background: #ccc; color: #333; }
+.lfi-next, .lfi-submit { background: #c8102e; color: white; }
+.lfi-prev:disabled { opacity: 0.5; cursor: not-allowed; }
+.lfi-progress { height: 6px; background: #eee; border-radius: 3px; margin-bottom: 2em; }
+.lfi-progress-bar { height: 100%; background: #c8102e; border-radius: 3px; transition: width 0.3s; }
+.lfi-warn, .lfi-error { background: #fee; border-left: 3px solid #c8102e; padding: 1em; margin: 1em 0; }
+.lfi-success { background: #efe; border-left: 3px solid #3a7d3a; padding: 1em; margin: 1em 0; }
+
+/* Bouton imprimer / photocopier */
+.lfi-print-bar { text-align: right; margin: 0 0 1em; }
+.lfi-btn-print {
+    background: #f5f5f5; color: #333; border: 1px solid #ccc; border-radius: 4px;
+    padding: 0.5em 1em; font-size: 0.9em; cursor: pointer; font-family: inherit;
+}
+.lfi-btn-print:hover { background: #eaeaea; border-color: #999; }
+
+/* Rendu papier : toutes les sections visibles, navigation cachée */
+@media print {
+    /* Cache explicitement le chrome du thème pour qu'il ne s'imprime pas
+       (logo, en-tête, pied, navigation, sidebar, etc.) */
+    header, footer, nav, aside,
+    .site-header, .site-footer, .site-navigation, .sidebar, .menu, .header, .footer,
+    #masthead, #colophon, #wpadminbar, #wp-toolbar,
+    .wp-block-template-part, .wp-block-navigation, .nav-menu, .menu-toggle,
+    .ag-header, .ag-footer, .ag-nav,
+    [class*="site-header"], [class*="site-footer"] { display: none !important; }
+
+    /* Puis : tout cacher visuellement et n'afficher que le formulaire */
+    body * { visibility: hidden; }
+    .lfi-survey, .lfi-survey * { visibility: visible; }
+    .lfi-survey { position: static !important; max-width: none !important; padding: 0 !important; margin: 0 !important; color: #000 !important; }
+    .lfi-step { display: block !important; page-break-inside: avoid; margin-bottom: 1em; }
+    .lfi-nav, .lfi-print-bar, .lfi-progress, .lfi-info-box { display: none !important; }
+    .lfi-radio, .lfi-check { background: #fff !important; color: #000 !important; border: 1px solid #999 !important; padding: 4px 8px; }
+    .lfi-radio:has(input:checked), .lfi-check:has(input:checked) { background: #fff !important; color: #000 !important; font-weight: 700; }
+    .lfi-radio-btn { background: #fff !important; color: #000 !important; border: 1px solid #999 !important; }
+    .lfi-survey h2 { border-bottom: 1px solid #000; color: #000; page-break-after: avoid; }
+    input, textarea, select { border: 1px solid #999 !important; background: #fff !important; }
+    /* Annule le marquage HTML5 « invalide » sur les champs vides à l'impression */
+    input:invalid, select:invalid, textarea:invalid { box-shadow: none !important; outline: none !important; }
+    a[href]:after { content: ""; } /* pas d'URL collée après les liens */
+}
+
+/* Espace adhérent / connexion */
+.lfi-compte {
+    max-width: 480px;
+    margin: 2em auto;
+    padding: 1.5em;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #222;
+    font-size: 16px;
+}
+.lfi-compte h2 { color: #c8102e; margin-bottom: 0.8em; }
+.lfi-compte h3 { margin: 0 0 0.4em; }
+.lfi-compte-email { color: #666; margin-top: -0.4em; }
+.lfi-login-form { display: flex; flex-direction: column; gap: 0.9em; }
+.lfi-login-form .lfi-field { display: flex; flex-direction: column; }
+.lfi-login-form .lfi-label { font-weight: 600; margin-bottom: 0.3em; }
+.lfi-login-form input[type="text"],
+.lfi-login-form input[type="password"] {
+    padding: 0.6em; font-size: 1em; border: 1px solid #ccc; border-radius: 4px;
+}
+.lfi-remember { display: flex; align-items: center; gap: 0.4em; font-size: 0.95em; }
+.lfi-btn {
+    display: inline-block; background: #c8102e; color: #fff; border: none;
+    padding: 0.7em 1.4em; font-size: 1em; border-radius: 4px; cursor: pointer;
+    text-decoration: none; text-align: center;
+}
+.lfi-btn:hover { background: #a50d26; color: #fff; }
+.lfi-btn-ap { background: #571845; }
+.lfi-btn-ap:hover { background: #3f1132; }
+.lfi-btn-tg { background: #229ed9; }
+.lfi-btn-tg:hover { background: #1b87bb; }
+.lfi-btn-tel { background: #1a7f37; }
+.lfi-btn-tel:hover { background: #15672d; }
+
+/* Rendez-vous : cartes */
+.lfi-rdv-card {
+    max-width: 680px;
+    margin: 1.5em auto;
+    padding: 1.8em 2em;
+    background: #fff;
+    border: 1px solid #ececec;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #222;
+    font-size: 16px;
+}
+.lfi-rdv-title { color: #c8102e; margin: 0 0 0.6em; font-size: 1.4em; }
+.lfi-rdv-why {
+    background: #fdf0f2;
+    border-left: 4px solid #c8102e;
+    border-radius: 0 6px 6px 0;
+    padding: 0.9em 1.1em;
+    margin: 0 0 1em;
+    line-height: 1.55;
+}
+.lfi-rdv-sub { color: #555; margin: 0 0 1em; }
+.lfi-rdv-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 0.8em; }
+.lfi-rdv-actions .lfi-btn { flex: 1 1 auto; }
+.lfi-rdv-fields { display: flex; flex-direction: column; gap: 1.1em; }
+.lfi-rdv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+.lfi-rdv-card .lfi-field { display: flex; flex-direction: column; margin: 0; }
+.lfi-rdv-card .lfi-label { font-weight: 600; margin-bottom: 0.35em; }
+.lfi-rdv-card input,
+.lfi-rdv-card select,
+.lfi-rdv-card textarea {
+    padding: 0.65em; font-size: 1em; border: 1px solid #ccc; border-radius: 6px;
+    width: 100%; box-sizing: border-box; font-family: inherit;
+}
+.lfi-rdv-card input:focus,
+.lfi-rdv-card select:focus,
+.lfi-rdv-card textarea:focus { border-color: #c8102e; outline: none; }
+.lfi-btn-lg { padding: 0.9em 1.6em; font-size: 1.05em; font-weight: 600; align-self: flex-start; }
+
+/* Courrier CRA (Arpège) — style « lettre administrative » */
+.lfi-arpege-letter {
+    max-width: 720px;
+    margin: 2em auto;
+    padding: 2.5em 3em;
+    background: #fff;
+    border: 1px solid #ddd;
+    color: #000;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    line-height: 1.6;
+}
+.lfi-arpege-letter p { margin: 0 0 1em; }
+.lfi-arpege-letter ol { margin: 0 0 1em 1.6em; }
+.lfi-letter-meta { text-align: right; margin-bottom: 2em !important; }
+
+/* Impression du courrier CRA seul (sans la carte verte ni les boutons) */
+@media print {
+    /* Cache le thème (logo, en-tête, etc.) pour avoir une lettre propre */
+    header, footer, nav, aside,
+    .site-header, .site-footer, .site-navigation, .sidebar, .menu, .header, .footer,
+    #masthead, #colophon, #wpadminbar, #wp-toolbar,
+    .wp-block-template-part, .wp-block-navigation, .nav-menu, .menu-toggle,
+    .ag-header, .ag-footer, .ag-nav,
+    [class*="site-header"], [class*="site-footer"] { display: none !important; }
+
+    body * { visibility: hidden; }
+    .lfi-arpege-letter, .lfi-arpege-letter * { visibility: visible; }
+    .lfi-arpege-card { display: none !important; }
+    .lfi-arpege-letter { position: static !important; border: none !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+}
+
+.lfi-inscription {
+    margin-top: 2em; padding-top: 1.5em; border-top: 1px solid #ddd;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+    .lfi-survey { margin: 0; padding: 0.8em; }
+    .lfi-survey h2 { font-size: 1.2em; }
+    .lfi-scale { flex-wrap: wrap; }
+    .lfi-radio-btn { min-width: 18%; }
+    .lfi-compte { margin: 0; padding: 1em; }
+    .lfi-rdv-card { padding: 1.2em; margin: 1em 0; }
+    .lfi-rdv-row { grid-template-columns: 1fr; gap: 1.1em; }
+    .lfi-rdv-actions .lfi-btn { flex-basis: 100%; }
+    .lfi-btn-lg { align-self: stretch; }
+}
