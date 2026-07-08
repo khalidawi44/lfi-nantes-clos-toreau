@@ -137,7 +137,10 @@ function lfi_nct_app_view_victoires() {
     if (function_exists('lfi_nct_reussites')) {
         $vict = count(array_filter(lfi_nct_reussites(), function ($r) { return !empty($r['publie']); }));
     }
-    if (function_exists('lfi_nct_victoires_stats')) { $vs = lfi_nct_victoires_stats(); $familles = (int) ($vs['familles'] ?? 0); }
+    /* « Familles aidées » = nombre de réussites PUBLIÉES (une par famille),
+       cohérent avec la tuile partenaire et avec le compteur « Victoires »
+       ci-dessus (avant : distinct tenant des seules coupes → 1 au lieu de 2). */
+    $familles = function_exists('lfi_nct_reussites_count_published') ? lfi_nct_reussites_count_published() : $vict;
     if ($vict > 0) {
         echo '<div class="lfi-app-stats-grid" style="margin:8px 0 14px">';
         echo '<div class="stat"><div class="ico">🏆</div><div class="n">' . (int) $vict . '</div><div class="l">Victoire' . ($vict > 1 ? 's' : '') . '</div></div>';
