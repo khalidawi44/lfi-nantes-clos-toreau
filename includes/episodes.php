@@ -22,16 +22,23 @@
  */
 if (!defined('ABSPATH')) exit;
 
-/* Types d'incident proposés (icône + libellé). */
+/* Types d'incident proposés (icône + libellé). La NATURE PRÉCISE compte : le
+ *  regroupement juridique se fait par type EXACT → deux infestations de PUNAISES
+ *  se cumulent, mais punaises ≠ blattes ≠ rongeurs (dossiers juridiques
+ *  distincts, car ce n'est pas le même trouble). */
 function lfi_nct_episode_types() {
     return [
-        'infestation' => ['🐛', 'Infestation (punaises, cafards, nuisibles…)'],
+        'punaises'    => ['🛏️', 'Punaises de lit'],
+        'blattes'     => ['🪳', 'Blattes / cafards'],
+        'rongeurs'    => ['🐀', 'Rongeurs (souris, rats)'],
+        'nuisibles'   => ['🐛', 'Autres nuisibles'],
         'fuite'       => ['💧', 'Fuite / dégât des eaux'],
         'moisissure'  => ['🦠', 'Moisissures / humidité'],
         'chauffage'   => ['🔥', 'Chauffage / eau chaude'],
         'electricite' => ['⚡', 'Électricité / sécurité'],
         'menuiserie'  => ['🚪', 'Fenêtres / portes / menuiseries'],
         'parties'     => ['🏢', 'Parties communes / ascenseur'],
+        'infestation' => ['🐛', 'Infestation (ancien — à préciser)'],
         'autre'       => ['🏠', 'Autre trouble'],
     ];
 }
@@ -250,11 +257,25 @@ function lfi_nct_episode_update($uid, $id, $fields) {
     $list = lfi_nct_episodes_get($uid);
     foreach ($list as $i => $e) {
         if ((int) ($e['id'] ?? 0) === (int) $id) {
-            foreach (['titre', 'type', 'piece'] as $k) if (isset($fields[$k])) $list[$i][$k] = $fields[$k];
+            /* 'ouvert' = date du trouble (modifiable → tri chronologique). */
+            foreach (['titre', 'type', 'piece', 'ouvert'] as $k) if (isset($fields[$k])) $list[$i][$k] = $fields[$k];
             lfi_nct_episodes_save($uid, $list); return true;
         }
     }
     return false;
+}
+
+/** Épisodes TRIÉS par date du trouble (chronologique : le plus ancien d'abord →
+ *  la frise se lit 2020 → 2025). Les indices d'origine sont perdus, on ne s'en
+ *  sert que pour l'AFFICHAGE. */
+function lfi_nct_episodes_sorted($uid) {
+    $list = lfi_nct_episodes_get($uid);
+    usort($list, function ($a, $b) {
+        $da = (string) ($a['ouvert'] ?? ''); $db = (string) ($b['ouvert'] ?? '');
+        if ($da === $db) return (int) ($a['id'] ?? 0) <=> (int) ($b['id'] ?? 0);
+        return strcmp($da, $db);
+    });
+    return $list;
 }
 
 /** Clôt / rouvre le volet URGENCE d'un épisode (le juridique reste global). */

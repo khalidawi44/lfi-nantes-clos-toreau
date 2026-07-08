@@ -964,7 +964,10 @@ function lfi_nct_app_view_dossier() {
             lfi_nct_episode_switch($u->ID, $eid);
             wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
         } elseif ($act === 'rename' && $eid) {
-            lfi_nct_episode_update($u->ID, $eid, ['titre' => $titre, 'type' => $type]);
+            $fields = ['titre' => $titre, 'type' => $type];
+            $od = sanitize_text_field(wp_unslash($_POST['ep_ouvert'] ?? ''));
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $od)) $fields['ouvert'] = $od;
+            lfi_nct_episode_update($u->ID, $eid, $fields);
             wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $eid]) . '#parcours'); exit;
         } elseif ($act === 'close' && $eid) {
             lfi_nct_episode_set_clos_urgence($u->ID, $eid, true);
@@ -2374,7 +2377,8 @@ function lfi_nct_piece_autostep($uid, $cat) {
 function lfi_nct_dossier_render_episodes_bar($u) {
     if (!function_exists('lfi_nct_episodes_get')) return;
     $uid = (int) $u->ID;
-    $episodes = lfi_nct_episodes_get($uid);
+    /* Triés par DATE du trouble (frise chronologique 2020 → 2025). */
+    $episodes = function_exists('lfi_nct_episodes_sorted') ? lfi_nct_episodes_sorted($uid) : lfi_nct_episodes_get($uid);
     if (empty($episodes)) return;
     $active = function_exists('lfi_nct_episode_active_id') ? lfi_nct_episode_active_id($uid) : 0;
     $types  = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
@@ -2397,7 +2401,8 @@ function lfi_nct_dossier_render_episodes_bar($u) {
         echo '<form method="post" style="margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
         echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="switch"><input type="hidden" name="ep_id" value="' . $eid . '">';
         echo '<button type="submit" style="cursor:pointer;border-radius:20px;padding:6px 12px;font-size:.82em;font-weight:700;border:2px solid ' . ($is_active ? '#0b3d91' : '#dfe6f0') . ';background:' . ($is_active ? '#0b3d91' : '#fff') . ';color:' . ($is_active ? '#fff' : '#333') . '">';
-        echo $ic . ' ' . esc_html($e['titre'] ?? 'Dossier') . ' <span style="opacity:.75">' . (int) $prog['done'] . '/' . (int) $prog['total'] . '</span>';
+        $eyear = (!empty($e['ouvert']) && strtotime((string) $e['ouvert'])) ? wp_date('Y', strtotime((string) $e['ouvert'])) : '';
+        echo $ic . ' ' . esc_html($e['titre'] ?? 'Dossier') . ($eyear ? ' <span style="opacity:.85">· ' . esc_html($eyear) . '</span>' : '') . ' <span style="opacity:.75">' . (int) $prog['done'] . '/' . (int) $prog['total'] . '</span>';
         if ($clos) echo ' ✅';
         if ($pend) echo ' <span style="color:' . ($is_active ? '#ffd' : '#c8102e') . '">⚠' . (int) $pend . '</span>';
         echo '</button></form>';
@@ -2416,6 +2421,7 @@ function lfi_nct_dossier_render_episodes_bar($u) {
         echo '<select name="ep_type" style="font-size:.8em">';
         foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '"' . (($cur['type'] ?? '') === $tk ? ' selected' : '') . '>' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
         echo '</select>';
+        echo '<label style="font-size:.72em;color:#666;display:flex;align-items:center;gap:3px">📅<input type="date" name="ep_ouvert" value="' . esc_attr($cur['ouvert'] ?? '') . '" style="font-size:.78em"></label>';
         echo '<button type="submit" class="btn-ghost" style="font-size:.8em">💾</button></form>';
         echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">';
         /* Clore / rouvrir le volet urgence. */

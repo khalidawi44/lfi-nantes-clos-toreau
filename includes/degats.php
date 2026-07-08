@@ -385,7 +385,7 @@ function lfi_nct_app_view_tenant_suivi() {
      *  SANS ?ep : LISTE DES DOSSIERS D'INCIDENT (épisodes).       *
      * =========================================================== */
     if (!$ep_req && function_exists('lfi_nct_episodes_get')) {
-        $episodes = lfi_nct_episodes_get($uid);
+        $episodes = function_exists('lfi_nct_episodes_sorted') ? lfi_nct_episodes_sorted($uid) : lfi_nct_episodes_get($uid);
         $etypes = function_exists('lfi_nct_episode_types') ? lfi_nct_episode_types() : [];
         lfi_nct_app_screen_open('📋 Mes dossiers', 'Chaque problème = un dossier séparé et suivi');
         if (!empty($_GET['contrib_ok'])) lfi_nct_app_flash('✅ Merci ! Vos éléments sont bien enregistrés.');
@@ -403,7 +403,8 @@ function lfi_nct_app_view_tenant_suivi() {
                 $url = lfi_nct_app_url('mon-suivi', ['ep' => $eid]);
                 echo '<a href="' . esc_url($url) . '" style="text-decoration:none;color:inherit;display:block;background:#fff;border:2px solid ' . ($pend ? '#d39e00' : ($clos ? '#a6d3a6' : '#dfe6f0')) . ';border-radius:14px;padding:13px 15px">';
                 echo '<div style="display:flex;align-items:center;gap:10px"><div style="font-size:1.5em">' . $ic . '</div>';
-                echo '<div style="flex:1"><div style="font-weight:900;color:#0b3d91">' . esc_html($e['titre'] ?? 'Dossier') . ($clos ? ' <span style="font-size:.7em;background:#e8f5ea;color:#186a3b;padding:1px 7px;border-radius:9px;vertical-align:middle">urgence réglée</span>' : '') . '</div>';
+                $eyear = (!empty($e['ouvert']) && strtotime((string) $e['ouvert'])) ? wp_date('Y', strtotime((string) $e['ouvert'])) : '';
+                echo '<div style="flex:1"><div style="font-weight:900;color:#0b3d91">' . esc_html($e['titre'] ?? 'Dossier') . ($eyear ? ' <span style="font-weight:600;color:#888">· ' . esc_html($eyear) . '</span>' : '') . ($clos ? ' <span style="font-size:.7em;background:#e8f5ea;color:#186a3b;padding:1px 7px;border-radius:9px;vertical-align:middle">urgence réglée</span>' : '') . '</div>';
                 echo '<div style="font-size:.85em;color:#666;margin-top:2px">Avancement : ' . (int) $prog['done'] . '/' . (int) $prog['total'] . ' étapes</div></div>';
                 echo '<div style="font-weight:800;color:#999">›</div></div>';
                 echo '<div style="background:#eee;border-radius:8px;height:8px;margin-top:8px;overflow:hidden"><div style="width:' . (int) $prog['pct'] . '%;height:100%;background:#186a3b"></div></div>';
