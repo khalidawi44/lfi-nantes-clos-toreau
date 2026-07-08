@@ -5,10 +5,12 @@
  */
 if (!defined('ABSPATH')) exit;
 
-function lfi_nct_render_form() {
+function lfi_nct_render_form($edit_id = 0) {
+    $edit_id = (int) $edit_id;
     ob_start(); ?>
     <form method="POST" id="lfi-nct-form" class="lfi-survey lfi-survey-simple" enctype="multipart/form-data">
         <?php wp_nonce_field('lfi_nct_submit_nonce', 'lfi_nct_nonce'); ?>
+        <?php if ($edit_id): ?><input type="hidden" name="lfi_nct_edit_id" value="<?php echo $edit_id; ?>"><?php endif; ?>
 
         <div class="lfi-print-bar">
             <button type="button" class="lfi-btn-print" onclick="window.print()">🖨️ Imprimer / Photocopier (version papier)</button>
