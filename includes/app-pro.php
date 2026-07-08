@@ -1286,20 +1286,31 @@ function lfi_nct_app_view_dossier() {
         $skey = sanitize_text_field(wp_unslash($_POST['step_key'] ?? ''));
         $sidx = (int) ($_POST['step_idx'] ?? -1);
         $ok = false;
-        if (!empty($_FILES['piece']['tmp_name']) && $skey !== '' && (int) $_FILES['piece']['size'] <= 12 * 1024 * 1024) {
-            $upload = wp_handle_upload($_FILES['piece'], ['test_form' => false]);
-            if (empty($upload['error'])) {
-                $att = wp_insert_attachment(['post_mime_type' => $upload['type'], 'post_title' => 'Pièce dossier — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $upload['file']);
-                if (!is_wp_error($att) && $att) {
-                    update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
-                    update_post_meta($att, '_lfi_step', $skey);
-                    $cat = lfi_nct_piece_categorize((string) ($_FILES['piece']['name'] ?? ''), (string) $upload['type']);
-                    update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
-                    wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $upload['file']));
-                    if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $upload['file']);
-                    $ok = true;
-                }
+        /* PLUSIEURS fichiers à la fois (photothèque, fichiers, ou photo) :
+           name="piece[]". Compat aussi avec l'ancien envoi unique. */
+        $files = [];
+        if (!empty($_FILES['piece']['name']) && is_array($_FILES['piece']['name'])) {
+            $cnt = count($_FILES['piece']['name']);
+            for ($i = 0; $i < $cnt; $i++) {
+                if (empty($_FILES['piece']['tmp_name'][$i]) || (int) $_FILES['piece']['error'][$i] !== 0) continue;
+                $files[] = ['name' => $_FILES['piece']['name'][$i], 'type' => $_FILES['piece']['type'][$i], 'tmp_name' => $_FILES['piece']['tmp_name'][$i], 'error' => $_FILES['piece']['error'][$i], 'size' => $_FILES['piece']['size'][$i]];
             }
+        } elseif (!empty($_FILES['piece']['tmp_name'])) {
+            $files[] = $_FILES['piece'];
+        }
+        foreach ($files as $f) {
+            if ($skey === '' || (int) $f['size'] > 15 * 1024 * 1024) continue;
+            $upload = wp_handle_upload($f, ['test_form' => false]);
+            if (!empty($upload['error'])) continue;
+            $att = wp_insert_attachment(['post_mime_type' => $upload['type'], 'post_title' => 'Pièce dossier — ' . $u->display_name, 'post_status' => 'private', 'post_author' => (int) get_current_user_id()], $upload['file']);
+            if (is_wp_error($att) || !$att) continue;
+            update_post_meta($att, '_lfi_tenant_user_id', $u->ID);
+            update_post_meta($att, '_lfi_step', $skey);
+            $cat = lfi_nct_piece_categorize((string) ($f['name'] ?? ''), (string) $upload['type']);
+            update_post_meta($att, '_lfi_piece_cat', $cat['cat']);
+            wp_update_attachment_metadata($att, wp_generate_attachment_metadata($att, $upload['file']));
+            if (function_exists('lfi_nct_store_capture_ts')) lfi_nct_store_capture_ts($att, $upload['file']);
+            $ok = true;
         }
         if ($ok && $sidx >= 0) { /* le robot coche et clôt l'étape */
             $st = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
@@ -2572,8 +2583,9 @@ function lfi_nct_dossier_render_parcours($u) {
             /* Dépôt d'une pièce → coche auto. */
             echo '<form method="post" enctype="multipart/form-data" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false);
             echo '<input type="hidden" name="lfi_app_step_piece" value="1"><input type="hidden" name="step_key" value="' . esc_attr($skey) . '"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
-            echo '<input type="file" name="piece" accept="image/*,application/pdf" capture="environment" required style="font-size:.8em;max-width:190px">';
+            echo '<input type="file" name="piece[]" accept="image/*,application/pdf" multiple required style="font-size:.8em;max-width:220px">';
             echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
+            echo '<div style="flex-basis:100%;font-size:.72em;color:#888;margin-top:2px">📷 Appareil photo <strong>ou</strong> photothèque/fichiers · plusieurs photos d\'un coup.</div>';
             echo '</form>';
             /* 📖 Explication pédagogique montrée au locataire (règle : on explique
                toujours ce qu'il doit faire). Vide = texte automatique. */

@@ -322,7 +322,7 @@ function lfi_nct_app_view_outil_photo_preuve() {
     echo '<div class="lfi-app-help">Prends une photo, l\'app y ajoute date + heure + GPS en bandeau pour qu\'elle serve de preuve.</div>';
     ?>
     <div class="lfi-tool-card">
-        <label>Choisir une photo (caméra ou galerie)<input type="file" accept="image/*" capture="environment" id="photo-input"></label>
+        <label>Choisir une photo (caméra ou galerie)<input type="file" accept="image/*" id="photo-input"></label>
         <canvas id="photo-canvas" style="display:none;max-width:100%;border-radius:10px;margin-top:14px"></canvas>
         <a id="photo-dl" class="btn-primary big" style="display:none;margin-top:8px" download="preuve.jpg">⬇ Télécharger la photo horodatée</a>
     </div>
