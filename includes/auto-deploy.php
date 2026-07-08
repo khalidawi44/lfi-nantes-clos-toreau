@@ -92,6 +92,14 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_dossier_full_wipe_v1', '1', false);
     }
 
+    /* ─ Remise à ZÉRO des compteurs de victoires/réussites (après la purge, il
+       ne doit plus y en avoir). Idempotent, séparé du wipe pour être sûr. */
+    if (get_option('lfi_nct_victoires_zero_v1') !== '1') {
+        update_option('lfi_nct_victoires', [], false);
+        update_option('lfi_nct_reussites', [], false);
+        update_option('lfi_nct_victoires_zero_v1', '1', false);
+    }
+
     /* ─ Événement « Diffusion de tracts » (jeu. 9 juillet 2026, 17h30–19h00,
        Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes). À ajouter au
        calendrier du GA REZÉ + au calendrier & VOTE du GA CLOS TOREAU, avec
