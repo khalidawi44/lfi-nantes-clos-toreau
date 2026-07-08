@@ -296,7 +296,8 @@ function lfi_nct_suivi_attach_files($files, $uid, $skey, $piece_label, $desc, $o
         $is_img = (strpos((string) $mime, 'image/') === 0);
         $is_pdf = (strpos((string) $mime, 'application/pdf') === 0);
         if ($only_images && !$is_img) continue;
-        if (!$only_images && !$is_img && !$is_pdf) continue;
+        /* Sinon (document) : on accepte TOUS les fichiers autorisés par WordPress
+           (PDF, Word, scans, tableurs…) — c'est wp_handle_upload qui filtre. */
         $up = wp_handle_upload($f, ['test_form' => false]);
         if (!empty($up['error'])) continue;
         $att = wp_insert_attachment(['post_mime_type' => $up['type'], 'post_title' => $piece_label . ' — ' . ($u ? $u->display_name : ''), 'post_content' => (string) $desc, 'post_status' => 'private', 'post_author' => $uid], $up['file']);
@@ -470,7 +471,7 @@ function lfi_nct_app_view_tenant_suivi() {
             if (!empty($b['value'])) echo '<div style="font-size:.85em;color:#555;margin-top:2px">Votre réponse : <strong>' . esc_html($b['value']) . '</strong></div>';
             if (!$bdone) {
                 if ($type === 'photo') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*" multiple style="margin-top:6px">';
-                elseif ($type === 'document') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*,application/pdf" multiple style="margin-top:6px">';
+                elseif ($type === 'document') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.csv,.heic,.heif" multiple style="margin-top:6px">';
                 elseif ($type === 'date') echo '<input type="date" name="besoin_val_' . (int) $bi . '" style="margin-top:6px">';
                 elseif ($type === 'montant') echo '<input type="number" step="0.01" min="0" name="besoin_val_' . (int) $bi . '" placeholder="Ex : 350" style="margin-top:6px">';
                 else echo '<textarea name="besoin_val_' . (int) $bi . '" rows="2" placeholder="Votre réponse…" style="margin-top:6px"></textarea>';
