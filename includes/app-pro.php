@@ -112,6 +112,44 @@ function lfi_nct_email_wrap_html($prenom, $body_html, $event_html = '', $signatu
 /** Détermine et mémorise la DATE DE PRISE DE VUE d'une photo (EXIF), pour le
  *  classement chronologique. Ordre de fiabilité : EXIF « created_timestamp » →
  *  date de fichier → date d'upload. Renvoie le timestamp unix. */
+/* ============================================================== *
+ *  PHOTOS iPhone (HEIC) — cause n°1 des « photos qui ne s'importent
+ *  pas » : WordPress REFUSE le HEIC par défaut. On l'autorise, et on
+ *  le CONVERTIT en JPEG à l'upload (JPEG = affichable + EXIF lisible
+ *  → le tri par date de prise de vue remarche). S'applique à TOUS les
+ *  dépôts de photos (dossier, étapes, signalements, locataire).
+ * ============================================================== */
+add_filter('upload_mimes', function ($mimes) {
+    $mimes['heic'] = 'image/heic';
+    $mimes['heif'] = 'image/heif';
+    return $mimes;
+});
+add_filter('wp_check_filetype_and_ext', function ($data, $file, $filename, $mimes) {
+    if (empty($data['ext']) && preg_match('/\.(heic|heif)$/i', (string) $filename)) {
+        $data['ext'] = 'heic'; $data['type'] = 'image/heic';
+    }
+    return $data;
+}, 10, 4);
+add_filter('wp_handle_upload_prefilter', 'lfi_nct_heic_prefilter');
+function lfi_nct_heic_prefilter($file) {
+    $name = strtolower((string) ($file['name'] ?? ''));
+    $type = strtolower((string) ($file['type'] ?? ''));
+    $is_heic = (strpos($type, 'heic') !== false || strpos($type, 'heif') !== false || preg_match('/\.(heic|heif)$/', $name));
+    if (!$is_heic || empty($file['tmp_name']) || !class_exists('Imagick')) return $file;
+    try {
+        $im = new Imagick();
+        $im->readImage($file['tmp_name']);
+        if (method_exists($im, 'autoOrient')) { try { $im->autoOrient(); } catch (\Throwable $e) {} }
+        $im->setImageFormat('jpeg');
+        $im->setImageCompressionQuality(88);
+        $im->writeImage($file['tmp_name']); /* on écrase le fichier temporaire par le JPEG */
+        $im->clear(); $im->destroy();
+        $file['type'] = 'image/jpeg';
+        $file['name'] = preg_replace('/\.(heic|heif)$/i', '.jpg', $file['name']);
+    } catch (\Throwable $e) { /* Imagick sans support HEIC → on laisse le HEIC (au moins il s'importe). */ }
+    return $file;
+}
+
 function lfi_nct_store_capture_ts($att_id, $file = '') {
     $att_id = (int) $att_id; $ts = 0;
     $meta = wp_get_attachment_metadata($att_id);
