@@ -410,8 +410,9 @@ function lfi_nct_app_view_dossiers_juridiques() {
     if (!lfi_nct_dossier_sees_all()) {
         $ref_clause = $wpdb->prepare(' AND referent_user_id = %d', get_current_user_id());
     }
+    /* Ordre CROISSANT par numéro de dossier (#3, #27, #33, #40…). */
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $t WHERE owner_user_id = %d" . $ref_clause . " ORDER BY updated_at DESC LIMIT 200", $owner
+        "SELECT * FROM $t WHERE owner_user_id = %d" . $ref_clause . " ORDER BY id ASC LIMIT 200", $owner
     )) ?: [];
 
     lfi_nct_app_screen_open('📁 Dossiers juridiques locataires', count($rows) . ' dossier(s)' . (lfi_nct_dossier_sees_all() ? '' : ' · qui me sont confiés'));
