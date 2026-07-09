@@ -31,6 +31,50 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
+       le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
+       « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est
+       réaligné : on relie au bon compte s'il existe (nom identique), sinon on
+       DÉLIE (tenant_user_id = 0) — le dossier garde son nom, mais ne s'affiche
+       plus sous la mauvaise personne. Sauvegarde avant modif. Idempotent. */
+    if (get_option('lfi_nct_dossier_link_repair_v1') !== '1'
+        && function_exists('lfi_nct_dossier_owner_id') && function_exists('lfi_nct_names_agree')) {
+        global $wpdb;
+        $owner = (int) lfi_nct_dossier_owner_id();
+        $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT id, tenant_user_id, tenant_prenom, tenant_nom FROM $t WHERE owner_user_id = %d", $owner)) ?: [];
+        /* Index des comptes locataires par jeu de tokens de nom (pour relier). */
+        $tenants = (defined('LFI_NCT_ROLE_TENANT')) ? get_users(['role' => LFI_NCT_ROLE_TENANT, 'number' => 1000, 'fields' => ['ID', 'display_name', 'first_name', 'last_name']]) : [];
+        $by_name = [];
+        foreach ($tenants as $tu) {
+            $full = trim((string) $tu->last_name . ' ' . (string) $tu->first_name);
+            if ($full === '') $full = (string) $tu->display_name;
+            $toks = lfi_nct_name_norm_tokens($full); sort($toks);
+            $key = implode(' ', $toks);
+            if ($key === '') continue;
+            $by_name[$key][] = (int) $tu->ID;
+        }
+        $backup = [];
+        foreach ($rows as $r) {
+            $link = (int) $r->tenant_user_id;
+            if (!$link) continue;
+            $lu = get_userdata($link);
+            $row_name = trim((string) $r->tenant_prenom . ' ' . (string) $r->tenant_nom);
+            if ($row_name === '' || !$lu) continue;
+            $link_name = trim((string) $lu->last_name . ' ' . (string) $lu->first_name);
+            if ($link_name === '') $link_name = (string) $lu->display_name;
+            if (lfi_nct_names_agree($link_name, $row_name)) continue; /* lien cohérent → on ne touche pas */
+            /* Contradiction : on tente de relier au compte du BON nom (unique). */
+            $toks = lfi_nct_name_norm_tokens($row_name); sort($toks);
+            $key = implode(' ', $toks);
+            $new = (isset($by_name[$key]) && count($by_name[$key]) === 1) ? (int) $by_name[$key][0] : 0;
+            $backup[] = ['id' => (int) $r->id, 'old' => $link, 'new' => $new, 'row_name' => $row_name, 'link_name' => $link_name];
+            $wpdb->update($t, ['tenant_user_id' => $new ?: null], ['id' => (int) $r->id]);
+        }
+        if ($backup) update_option('lfi_nct_dossier_link_repair_backup_v1', $backup, false);
+        update_option('lfi_nct_dossier_link_repair_v1', '1', false);
+    }
+
     /* ─ ANNUAIRE PRESSE : catégorisation + contacts vérifiés (validés par
        l'utilisateur). On (1) range les contacts existants par catégorie, on
        (2) corrige « Marie Vitou » → « Marie Vitoux », puis on (3) ajoute les
