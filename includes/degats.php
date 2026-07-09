@@ -472,7 +472,7 @@ function lfi_nct_app_view_tenant_suivi() {
             if (!empty($b['value'])) echo '<div style="font-size:.85em;color:#555;margin-top:2px">Votre réponse : <strong>' . esc_html($b['value']) . '</strong></div>';
             if (!$bdone) {
                 if ($type === 'photo') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*" multiple style="margin-top:6px">';
-                elseif ($type === 'document') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.csv,.heic,.heif" multiple style="margin-top:6px">';
+                elseif ($type === 'document') echo '<input type="file" name="besoin_file_' . (int) $bi . '[]" accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.md,.markdown,.xls,.xlsx,.csv,.mp4,.mov,.webm,.3gp,.mp3,.m4a,.wav,.ogg,.aac,.amr,.heic,.heif" multiple style="margin-top:6px">';
                 elseif ($type === 'date') echo '<input type="date" name="besoin_val_' . (int) $bi . '" style="margin-top:6px">';
                 elseif ($type === 'montant') echo '<input type="number" step="0.01" min="0" name="besoin_val_' . (int) $bi . '" placeholder="Ex : 350" style="margin-top:6px">';
                 else echo '<textarea name="besoin_val_' . (int) $bi . '" rows="2" placeholder="Votre réponse…" style="margin-top:6px"></textarea>';

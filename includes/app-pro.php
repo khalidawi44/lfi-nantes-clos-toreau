@@ -122,6 +122,21 @@ function lfi_nct_email_wrap_html($prenom, $body_html, $event_html = '', $signatu
 add_filter('upload_mimes', function ($mimes) {
     $mimes['heic'] = 'image/heic';
     $mimes['heif'] = 'image/heif';
+    /* Toutes sortes de pièces acceptées sur les étapes : vidéos, audios,
+       markdown… (photos/PDF/Word/scans le sont déjà par défaut). */
+    $mimes['md'] = 'text/markdown';
+    $mimes['markdown'] = 'text/markdown';
+    $mimes['mp4'] = 'video/mp4';
+    $mimes['m4v'] = 'video/mp4';
+    $mimes['mov'] = 'video/quicktime';
+    $mimes['webm'] = 'video/webm';
+    $mimes['3gp'] = 'video/3gpp';
+    $mimes['mp3'] = 'audio/mpeg';
+    $mimes['m4a'] = 'audio/mp4';
+    $mimes['wav'] = 'audio/wav';
+    $mimes['ogg'] = 'audio/ogg';
+    $mimes['aac'] = 'audio/aac';
+    $mimes['amr'] = 'audio/amr';
     return $mimes;
 });
 add_filter('wp_check_filetype_and_ext', function ($data, $file, $filename, $mimes) {
@@ -2625,7 +2640,7 @@ function lfi_nct_dossier_render_parcours($u) {
 
     echo '<details open id="parcours" style="margin:16px 0;background:#fff;border-radius:12px;border:1px solid #eee;overflow:hidden;scroll-margin-top:70px">';
     echo '<summary style="cursor:pointer;padding:14px 16px;font-weight:800;color:#c8102e;list-style:none;display:flex;justify-content:space-between;align-items:center">';
-    echo '<span>🧭 Parcours de suivi';
+    echo '<span>🤝 Volet amiable — étapes à faire';
     $todo = count(array_filter($steps, function ($s) { return empty($s['done']) && empty($s['skipped']); }));
     if ($todo) echo ' <span style="background:#c8102e;color:#fff;font-size:.7em;padding:2px 7px;border-radius:10px;vertical-align:middle">' . $todo . ' à faire</span>';
     echo '</span><span style="font-size:1.2em">▾</span>';
@@ -2646,7 +2661,7 @@ function lfi_nct_dossier_render_parcours($u) {
     if (empty($steps)) {
         echo '<div class="lfi-app-help" style="margin:6px 0">Aucune étape pour l\'instant. Clique « ✨ Générer le parcours automatique » ci-dessus, ou ajoute une action à la main.</div>';
     } else {
-        echo '<div class="lfi-app-help" style="margin:4px 0"><small>Ouvre une étape → <strong>dépose tes preuves</strong> (photos punaises, PV, courriers…). Dès qu\'une pièce est versée, l\'étape se <strong>coche automatiquement</strong>. Tu peux rouvrir, retirer une pièce, ré-en déposer.</small></div>';
+        echo '<div class="lfi-app-help" style="margin:4px 0"><small>Ouvre une étape → <strong>dépose tes preuves</strong> : <strong>photos, vidéos, audios, PDF, Word, .md…</strong> (plusieurs à la fois). Dès qu\'une pièce est versée, l\'étape se <strong>coche automatiquement</strong>. Tu peux <strong>rouvrir, retirer une pièce, ajouter/supprimer une étape</strong>. Le locataire invité voit les mêmes étapes, expliquées pas à pas.</small></div>';
         foreach ($steps as $idx => $s) {
             if (!empty($s['skipped'])) {
                 echo '<div style="padding:8px 10px;border-radius:8px;margin-bottom:5px;background:#f4f4f4;border-left:3px solid #bbb"><span style="text-decoration:line-through;color:#999">⏭️ ' . esc_html($s['text'] ?? '') . '</span> <span style="font-size:.78em;color:#aaa">— inutile (urgence gagnée avant)</span></div>';
@@ -2697,7 +2712,7 @@ function lfi_nct_dossier_render_parcours($u) {
             /* Dépôt d'une pièce → coche auto. */
             echo '<form method="post" enctype="multipart/form-data" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' . wp_nonce_field('lfi_app_step_piece', '_wpnonce', true, false);
             echo '<input type="hidden" name="lfi_app_step_piece" value="1"><input type="hidden" name="step_key" value="' . esc_attr($skey) . '"><input type="hidden" name="step_idx" value="' . (int) $idx . '">';
-            echo '<input type="file" name="piece[]" accept="image/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.csv,.ppt,.pptx,.heic,.heif" multiple required style="font-size:.8em;max-width:220px">';
+            echo '<input type="file" name="piece[]" accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.odt,.rtf,.txt,.md,.markdown,.xls,.xlsx,.csv,.ppt,.pptx,.heic,.heif,.mp4,.mov,.webm,.3gp,.mp3,.m4a,.wav,.ogg,.aac,.amr" multiple required style="font-size:.8em;max-width:220px">';
             echo '<button type="submit" class="btn-primary" style="background:#0066a3;font-size:.8em">📎 Déposer' . ($done ? '' : ' + clore') . '</button>';
             echo '<div style="flex-basis:100%;font-size:.72em;color:#888;margin-top:2px">📷 Appareil photo <strong>ou</strong> photothèque/fichiers · plusieurs photos d\'un coup.</div>';
             echo '</form>';
