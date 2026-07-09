@@ -31,6 +31,53 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ ANNUAIRE PRESSE : catégorisation + contacts vérifiés (validés par
+       l'utilisateur). On (1) range les contacts existants par catégorie, on
+       (2) corrige « Marie Vitou » → « Marie Vitoux », puis on (3) ajoute les
+       contacts officiels VÉRIFIÉS (sources publiques). Anti-doublon par nom.
+       RÈGLE : uniquement des comptes officiels vérifiés ; les handles non
+       confirmés restent vides (« à compléter »). Idempotent. */
+    if (get_option('lfi_nct_presse_contacts_cat_v1') !== '1'
+        && function_exists('lfi_nct_presse_contacts_get') && function_exists('lfi_nct_presse_contacts_save')) {
+        $list = lfi_nct_presse_contacts_get();
+        /* (1)(2) migration : cat par défaut + responsables + correction de nom. */
+        foreach ($list as $i => $c) {
+            $nom = mb_strtolower((string) ($c['nom'] ?? ''));
+            if (empty($c['cat'])) {
+                if (strpos($nom, 'vitou') !== false || strpos($nom, 'bassal') !== false) $list[$i]['cat'] = 'responsable';
+                else $list[$i]['cat'] = 'media';
+            }
+            if (strpos($nom, 'marie vitou') !== false && stripos((string) $c['nom'], 'vitoux') === false) {
+                $list[$i]['nom'] = 'Marie Vitoux';
+                if (empty($c['fonction']) || stripos((string) $c['fonction'], 'à vérifier') !== false) $list[$i]['fonction'] = 'Adjointe quartier Nantes Sud (à vérifier)';
+            }
+            if (strpos($nom, 'bassal') !== false && (empty($c['fonction']) || stripos((string) $c['fonction'], 'à vérifier') !== false)) {
+                $list[$i]['fonction'] = 'Présidente du CA de NMH (à vérifier)';
+            }
+        }
+        /* (3) ajouts vérifiés (avec sources) — que si le nom n'existe pas déjà. */
+        $has = function ($list, $needle) {
+            foreach ($list as $c) { if (stripos((string) ($c['nom'] ?? ''), $needle) !== false) return true; }
+            return false;
+        };
+        $add = [];
+        $mk = function ($nom, $fonction, $cat, $fields) {
+            return array_merge(['id' => (abs(crc32($nom . 'seedv1')) % 900000000) + 100000000,
+                'nom' => $nom, 'fonction' => $fonction, 'cat' => $cat, 'site' => '', 'email' => '',
+                'twitter' => '', 'instagram' => '', 'facebook' => '', 'tel' => '', 'note' => ''], $fields);
+        };
+        if (!$has($list, 'johanna rolland')) $add[] = $mk('Johanna Rolland', 'Maire de Nantes · prés. Nantes Métropole', 'responsable', ['instagram' => 'https://www.instagram.com/johanna_rolland/', 'twitter' => 'https://twitter.com/Johanna_Rolland', 'facebook' => 'https://www.facebook.com/p/Johanna-Rolland-100044598602061/', 'note' => 'Comptes officiels vérifiés']);
+        if (!$has($list, 'mairie de nantes')) $add[] = $mk('Mairie de Nantes', 'Contact institutionnel', 'responsable', ['email' => 'contact@mairie-nantes.fr', 'tel' => '02 40 41 90 00', 'site' => 'https://metropole.nantes.fr', 'note' => '29 rue de Strasbourg, 44000 Nantes']);
+        if (!$has($list, 'kerbrat')) $add[] = $mk('Andy Kerbrat', 'Député LFI Loire-Atlantique (2e circo)', 'soutien', ['twitter' => 'https://x.com/andykerbrat', 'instagram' => 'https://www.instagram.com/andy.kerbrat/', 'facebook' => 'https://www.facebook.com/AndyKerbrat2024/', 'note' => 'A liké le communiqué — soutien']);
+        if (!$has($list, 'aucant')) $add[] = $mk('William Aucant', 'Cons. régional · tête de liste LFI Nantes 2026', 'soutien', ['site' => 'https://www.paysdelaloire.fr/mon-conseil-regional/linstitution/les-elus/william-aucant', 'note' => 'A liké le communiqué — handles perso à confirmer']);
+        if (!$has($list, 'rezé insoumise') && !$has($list, 'reze insoumise')) $add[] = $mk('Rezé insoumise', 'GA LFI Rezé (a partagé)', 'soutien', ['twitter' => 'https://x.com/RezeInsoumise', 'site' => 'https://linktr.ee/rezeinsoumise', 'note' => 'Linktree : Insta / FB / TikTok']);
+        if (!$has($list, 'nantes insoumise') && !$has($list, 'france insoumise nantes')) $add[] = $mk('Nantes insoumise (LFI 44)', 'Groupes LFI de Nantes (a partagé)', 'soutien', ['site' => 'https://www.nantesinsoumise.fr/', 'note' => 'Réseaux à compléter']);
+        if (!$has($list, 'saint-sébastien') && !$has($list, 'saint-sebastien')) $add[] = $mk('LFI Saint-Sébastien', 'GA LFI Saint-Sébastien (a partagé)', 'soutien', ['note' => 'Réseaux à compléter']);
+        if ($add) $list = array_merge($list, $add);
+        lfi_nct_presse_contacts_save($list);
+        update_option('lfi_nct_presse_contacts_cat_v1', '1', false);
+    }
+
     /* ─ COMMUNIQUÉ DE PRESSE officiel (Clos Toreau) — importé en BROUILLON,
        transcrit fidèlement depuis la photo transmise (page 1). La suite de la
        liste des demandes + la signature/contact n'étaient PAS lisibles sur la
