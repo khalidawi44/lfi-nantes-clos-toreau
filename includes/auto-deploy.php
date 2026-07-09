@@ -92,12 +92,42 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_dossier_full_wipe_v1', '1', false);
     }
 
-    /* ─ Remise à ZÉRO des compteurs de victoires/réussites (après la purge, il
-       ne doit plus y en avoir). Idempotent, séparé du wipe pour être sûr. */
-    if (get_option('lfi_nct_victoires_zero_v1') !== '1') {
+    /* ─ Remise à ZÉRO des victoires/réussites + on COUPE la ré-injection des
+       réussites intégrées (sinon le compteur revenait tout seul à 2). */
+    if (get_option('lfi_nct_victoires_zero_v2') !== '1') {
+        update_option('lfi_nct_reussites_seed_off', '1', false); /* stop le seed */
         update_option('lfi_nct_victoires', [], false);
         update_option('lfi_nct_reussites', [], false);
-        update_option('lfi_nct_victoires_zero_v1', '1', false);
+        update_option('lfi_nct_victoires_zero_v2', '1', false);
+    }
+
+    /* ─ RATTRAPAGE enquête → dossier : toute enquête « je veux être recontacté·e »
+       doit avoir un COMPTE + un DOSSIER (amiable + juridique) LIÉS. Après la
+       purge, on les recrée depuis les enquêtes (idempotent, anti-doublon). */
+    if (get_option('lfi_nct_recontact_backfill_v1') !== '1'
+        && function_exists('lfi_nct_ep_ensure_tenant') && function_exists('lfi_nct_ep_create_dossier')) {
+        global $wpdb;
+        $tr = $wpdb->prefix . 'lfi_nct_responses';
+        $tdl = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $rows = $wpdb->get_results("SELECT * FROM $tr WHERE deleted_at IS NULL AND contact_recontact = 1 AND (contact_prenom <> '' OR contact_nom <> '') LIMIT 1000") ?: [];
+        foreach ($rows as $row) {
+            $ex = get_users(['meta_key' => 'lfi_nct_response_id', 'meta_value' => (int) $row->id, 'number' => 1, 'fields' => ['ID']]);
+            $tuid = !empty($ex) ? (int) (is_object($ex[0]) ? $ex[0]->ID : $ex[0]) : 0;
+            if (!$tuid) $tuid = (int) lfi_nct_ep_ensure_tenant($row);
+            if (!$tuid) continue;
+            if ((string) get_user_meta($tuid, 'lfi_nct_ga', true) === '' && trim((string) $row->ga) !== '') update_user_meta($tuid, 'lfi_nct_ga', (string) $row->ga);
+            $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM $tdl WHERE tenant_user_id = %d LIMIT 1", $tuid));
+            if (!$exists) {
+                $souhaits = ''; $d = json_decode((string) $row->data, true);
+                if (is_array($d)) {
+                    $o = !empty($d['objectifs']) && is_array($d['objectifs']) ? $d['objectifs'] : (!empty($d['objectif']) ? [(string) $d['objectif']] : []);
+                    if ($o) $souhaits = 'Objectif : ' . implode(', ', $o);
+                }
+                $owner = function_exists('lfi_nct_ga_owner_for_slug') ? lfi_nct_ga_owner_for_slug((string) $row->ga) : 0;
+                lfi_nct_ep_create_dossier($row, $tuid, '', $souhaits, $owner);
+            }
+        }
+        update_option('lfi_nct_recontact_backfill_v1', '1', false);
     }
 
     /* ─ Événement « Diffusion de tracts » (jeu. 9 juillet 2026, 17h30–19h00,
