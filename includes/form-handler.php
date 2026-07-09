@@ -142,6 +142,15 @@ function lfi_nct_handle_submission() {
         ], ['id' => $edit_id]);
         delete_transient('lfi_nct_known_addresses');
         if (function_exists('lfi_nct_geo_route_submission')) lfi_nct_geo_route_submission($edit_id);
+        /* Si l'enquête passe à « je veux être recontacté·e » → on s'assure qu'un
+           COMPTE + un DOSSIER liés existent (idempotent, anti-doublon). */
+        if ($contact_recontact && ($contact_prenom !== '' || $contact_nom !== '') && function_exists('lfi_nct_ep_ensure_tenant')) {
+            $erow = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %d", $edit_id));
+            if ($erow) {
+                $tuid = (int) lfi_nct_ep_ensure_tenant($erow);
+                if ($tuid && function_exists('lfi_nct_ep_create_dossier')) lfi_nct_ep_create_dossier($erow, $tuid, '', '');
+            }
+        }
         $GLOBALS['lfi_nct_last_submission_id'] = $edit_id;
         $GLOBALS['lfi_nct_was_edit'] = true;
         return ($ok === false) ? ('Erreur DB : ' . esc_html($wpdb->last_error)) : '';

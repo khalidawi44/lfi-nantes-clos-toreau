@@ -63,6 +63,9 @@ function lfi_nct_reussite_auto_from_dossier($dossier_id) {
  */
 add_action('init', 'lfi_nct_reussites_seed_builtin', 1400);
 function lfi_nct_reussites_seed_builtin() {
+    /* Interrupteur : après une remise à zéro demandée, on ne réinjecte plus les
+       réussites intégrées (sinon le compteur « revient » tout seul). */
+    if (get_option('lfi_nct_reussites_seed_off')) return;
     $seeds = [
         'punaises-urgence-2026-07' => [
             'titre'    => 'Punaises de lit : traitement d\'urgence obtenu — et refacturation illégale abandonnée',
