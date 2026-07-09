@@ -685,6 +685,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             case 'envoyer-photo':lfi_nct_app_view_envoyer_photo();   break;
             case 'signaler-degat': lfi_nct_app_view_tenant_signaler_degat(); break;
             case 'mon-suivi':    lfi_nct_app_view_tenant_suivi();    break;
+            case 'carte-rats':   lfi_nct_app_view_carte_rats();      break;
+            case 'carte-rats-export': lfi_nct_app_view_carte_rats_export(); break;
             case 'mon-profil':   lfi_nct_app_view_mon_profil();      break;
             case 'installer':    lfi_nct_app_view_installer();       break;
             case 'mes-rdv':      lfi_nct_app_view_mes_rdv();         break;
@@ -714,6 +716,8 @@ function lfi_nct_app_role_dispatch(&$handled) {
             /* Coordination : proposer une action, dire ses dispos, voir celles
                de l'équipe. Accessible à tout membre (aucune donnée locataire). */
             case 'mobilisation':     lfi_nct_app_view_mobilisation();     break;
+            case 'carte-rats':       lfi_nct_app_view_carte_rats();       break;
+            case 'carte-rats-export': lfi_nct_app_view_carte_rats_export(); break;
             case 'elus':             lfi_nct_app_view_elus_membre();      break;
             case 'suggerer-outil':   lfi_nct_app_view_suggerer_outil();   break;
             case 'propositions':     lfi_nct_app_view_propositions();     break;
@@ -1298,6 +1302,7 @@ function lfi_nct_app_view_tenant_dashboard() {
     $tiles = [
         ['🚨', 'Signaler un dégât', 'Nouveau problème ? Dites-le',    lfi_nct_app_url('signaler-degat')],
         ['📋', 'Où en est mon dossier', 'Les étapes + les dates',     lfi_nct_app_url('mon-suivi')],
+        ['🐀', 'Carte des rats',    'Signaler · voir les points chauds', lfi_nct_app_url('carte-rats')],
         ['🤖', 'Aide & contact',    'Un problème ? On vous accompagne', lfi_nct_app_url('aide')],
         ['📲', 'Installer l\'app',  'iPhone / Android · permissions', lfi_nct_app_url('installer')],
         ['📅', 'Mes rendez-vous',   'Agenda avec le GA',              lfi_nct_app_url('mes-rdv')],
