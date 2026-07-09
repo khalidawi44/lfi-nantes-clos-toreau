@@ -844,6 +844,8 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-avocat':    lfi_nct_app_view_dossier_avocat();    break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
                     case 'carte':           lfi_nct_app_view_carte();           break;
+                    case 'carte-rats':      lfi_nct_app_view_carte_rats();      break;
+                    case 'carte-rats-export': lfi_nct_app_view_carte_rats_export(); break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
                     case 'sms-blocklist':   lfi_nct_app_view_sms_blocklist();   break;
@@ -1083,6 +1085,7 @@ function lfi_nct_app_screen_close($more_tiles = true) {
                locataire (comptes, dossiers, SMS/email, stats, cache…). */
             $ml = [
                 ['🤝', 'Se coordonner',            lfi_nct_app_url('mobilisation')],
+                ['🐀', 'Carte des rats',           lfi_nct_app_url('carte-rats')],
                 ['💡', 'Idées d\'actions',         lfi_nct_app_url('propositions')],
                 ['📅', 'Événements',               lfi_nct_app_url('evenements')],
                 ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
@@ -2547,6 +2550,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏠', 'Réponses',              $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
             ['📊', 'Stats enquête',          'Problèmes · adresses · gravité',     lfi_nct_app_url('stats-enquete')],
             ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
+            ['🐀', 'Carte des rats',         'Points chauds + export preuve',      lfi_nct_app_url('carte-rats')],
             ['📋', 'Faire passer une enquête', 'Porte-à-porte · photos',            lfi_nct_app_url('enquete')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
