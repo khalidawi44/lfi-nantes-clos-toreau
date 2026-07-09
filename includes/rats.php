@@ -200,14 +200,26 @@ function lfi_nct_app_view_carte_rats() {
 
     echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">';
     echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
-    /* Style des épingles emoji (icône lisible, aucune image externe à charger). */
-    echo '<style>.rat-emo{font-size:22px;line-height:30px;text-align:center;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}.rat-pick{animation:ratBob .8s infinite alternate}@keyframes ratBob{to{transform:translateY(-4px)}}</style>';
+    /* Style des épingles : emoji NON sélectionnable (sinon le tap ouvre la barre
+       copier-coller du téléphone et « mange » le clic suivant). Point de pose =
+       vraie épingle bien visible. */
+    echo '<style>'
+        . '.rat-emo{font-size:26px;line-height:30px;text-align:center;'
+        . '-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none;'
+        . 'text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}'
+        . '.rat-static{pointer-events:none}'
+        . '.rat-pick{font-size:40px;line-height:44px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.55))}'
+        . '#rat-map,#rat-map *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}'
+        . '</style>';
     echo '<div id="rat-map" style="height:340px;border-radius:12px;overflow:hidden;margin-bottom:6px;border:1px solid #ddd;background:#eef"></div>';
-    echo '<div id="rat-pick-hint" style="text-align:center;font-size:.85em;color:#0b3d91;font-weight:700;margin-bottom:10px">👆 Touchez la carte pour poser votre point (zoomez avec deux doigts).</div>';
+    echo '<div id="rat-pick-hint" style="text-align:center;font-size:.85em;color:#0b3d91;font-weight:700;margin-bottom:10px">Choisissez ci-dessous, puis touchez la carte à l\'endroit exact (zoom à deux doigts).</div>';
     echo '<script>var LFI_RAT_MARKERS=' . wp_json_encode($markers) . ';</script>';
 
-    /* --- Bouton « Signaler » (ouvre le formulaire) --- */
-    echo '<button type="button" onclick="lfiRatToggle()" id="rat-open-btn" class="btn-primary big" style="background:#c8102e;width:100%;margin-bottom:10px">➕ Signaler ici</button>';
+    /* --- DEUX BOUTONS : choisir RAT ou TRAVAUX (chantier) --- */
+    echo '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    echo '<button type="button" onclick="lfiRatStart(\'rat\')" id="rat-btn-rat" class="btn-primary big" style="flex:1;background:#8a1300">🐀 Signaler un rat</button>';
+    echo '<button type="button" onclick="lfiRatStart(\'eau\')" id="rat-btn-eau" class="btn-primary big" style="flex:1;background:#0b3d91">🚧 Travaux / chantier</button>';
+    echo '</div>';
 
     /* --- Formulaire (lieu par la carte + type) --- */
     echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form" id="rat-form" style="display:none">' . wp_nonce_field('lfi_rat_signal', '_wpnonce', true, false);
@@ -228,7 +240,7 @@ function lfi_nct_app_view_carte_rats() {
         $fam = $tv[2] ?? 'rat';
         if ($fam !== $cur_fam) {
             if ($cur_fam !== '') echo '</optgroup>';
-            echo '<optgroup label="' . ($fam === 'eau' ? '💧 Eau / travaux (les rats suivent les fuites)' : '🐀 Rats') . '">';
+            echo '<optgroup data-fam="' . esc_attr($fam) . '" label="' . ($fam === 'eau' ? '🚧 Travaux / eau (les rats suivent les fuites)' : '🐀 Rats') . '">';
             $cur_fam = $fam;
         }
         echo '<option value="' . esc_attr($tk) . '" data-emo="' . esc_attr($tv[0]) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
@@ -239,7 +251,7 @@ function lfi_nct_app_view_carte_rats() {
     echo '<label>📅 Quand ?<input type="date" name="date" value="' . esc_attr(current_time('Y-m-d')) . '" max="' . esc_attr(current_time('Y-m-d')) . '"></label>';
     echo '<label>📷 Photo (facultatif)<input type="file" name="photo" accept="image/*"></label>';
     echo '<label>✍️ Précision (facultatif)<textarea name="desc" rows="2" placeholder="Ex : sort d\'un trou au pied de la haie, tous les soirs."></textarea></label>';
-    echo '<button type="submit" class="btn-primary big" style="background:#c8102e">🐀 Envoyer mon signalement</button>';
+    echo '<button type="submit" id="rat-submit" class="btn-primary big" style="background:#c8102e">🐀 Envoyer ce signalement</button>';
     echo '</form>';
 
     /* --- Export admin (preuve) --- */
@@ -274,27 +286,43 @@ function lfi_nct_app_view_carte_rats() {
     ?>
     <script>
     var LFI_RAT_MAP=null, LFI_RAT_PICK=null;
-    function lfiRatEmoIcon(emo,cls){ return L.divIcon({html:'<div class="rat-emo '+(cls||'')+'">'+emo+'</div>',className:'',iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-14]}); }
-    function lfiRatCurEmo(){ var s=document.getElementById('rat-type'); if(s&&s.options[s.selectedIndex]){var e=s.options[s.selectedIndex].getAttribute('data-emo');if(e)return e;} return '🐀'; }
+    /* Épingle de POSE : une vraie punaise 📍 bien visible + l'emoji du type. */
+    function lfiRatPickIcon(){
+        return L.divIcon({html:'<div class="rat-emo rat-pick">📍</div>',className:'',iconSize:[44,44],iconAnchor:[22,42],popupAnchor:[0,-40]});
+    }
+    function lfiRatStaticIcon(emo){
+        return L.divIcon({html:'<div class="rat-emo rat-static">'+emo+'</div>',className:'',iconSize:[30,30],iconAnchor:[15,15]});
+    }
     function lfiRatSet(lat,lng,label){
         document.getElementById('rat-lat').value=lat;
         document.getElementById('rat-lng').value=lng;
         if(LFI_RAT_MAP){
             if(!LFI_RAT_PICK){
-                LFI_RAT_PICK=L.marker([lat,lng],{icon:lfiRatEmoIcon(lfiRatCurEmo(),'rat-pick'),draggable:true,zIndexOffset:1000}).addTo(LFI_RAT_MAP);
-                LFI_RAT_PICK.on('dragend',function(e){var ll=e.target.getLatLng();lfiRatSet(ll.lat,ll.lng,'Point déplacé');});
+                LFI_RAT_PICK=L.marker([lat,lng],{icon:lfiRatPickIcon(),draggable:true,zIndexOffset:1000,autoPan:true}).addTo(LFI_RAT_MAP);
+                LFI_RAT_PICK.on('dragend',function(e){var ll=e.target.getLatLng();lfiRatSet(ll.lat,ll.lng,'Point ajusté');});
             } else { LFI_RAT_PICK.setLatLng([lat,lng]); }
         }
         var ls=document.getElementById('rat-loc-status');
-        if(ls){ls.style.color='#186a3b';ls.textContent='✅ '+(label||'Point placé')+' — vous pouvez envoyer. (Glissez l\'épingle pour ajuster.)';}
-        var h=document.getElementById('rat-pick-hint'); if(h){h.style.color='#186a3b';h.textContent='✅ Point placé. Glissez l\'épingle pour ajuster, puis remplissez le formulaire.';}
+        if(ls){ls.style.color='#186a3b';ls.textContent='✅ '+(label||'Point placé')+' — glissez 📍 pour ajuster, puis « Envoyer ».';}
+        var h=document.getElementById('rat-pick-hint'); if(h){h.style.color='#186a3b';h.textContent='✅ Point placé (📍). Glissez pour ajuster. Retouchez la carte pour le déplacer.';}
     }
-    function lfiRatTypeChange(){ if(LFI_RAT_PICK) LFI_RAT_PICK.setIcon(lfiRatEmoIcon(lfiRatCurEmo(),'rat-pick')); }
-    function lfiRatToggle(){
-        var f=document.getElementById('rat-form'), b=document.getElementById('rat-open-btn');
-        if(!f)return; var show=f.style.display==='none';
-        f.style.display=show?'block':'none'; if(b)b.style.display=show?'none':'block';
-        if(show){ try{ f.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }
+    function lfiRatTypeChange(){}
+    /* Choix RAT ou TRAVAUX : filtre le menu, ouvre le formulaire, arme la carte. */
+    function lfiRatStart(fam){
+        var sel=document.getElementById('rat-type');
+        if(sel){
+            var gs=sel.getElementsByTagName('optgroup'), firstIdx=-1, gi;
+            for(gi=0;gi<gs.length;gi++){ gs[gi].disabled = (gs[gi].getAttribute('data-fam')!==fam); }
+            for(var i=0;i<sel.options.length;i++){ var o=sel.options[i]; var pg=o.parentNode; if(pg&&pg.getAttribute('data-fam')===fam){ if(firstIdx<0)firstIdx=i; } }
+            if(firstIdx>=0) sel.selectedIndex=firstIdx;
+        }
+        var f=document.getElementById('rat-form'); if(f) f.style.display='block';
+        var rb=document.getElementById('rat-btn-rat'), eb=document.getElementById('rat-btn-eau');
+        if(rb) rb.style.opacity=(fam==='rat')?'1':'.5'; if(eb) eb.style.opacity=(fam==='eau')?'1':'.5';
+        var h=document.getElementById('rat-pick-hint');
+        if(h){h.style.color='#0b3d91';h.textContent=(fam==='eau'?'🚧 Travaux / chantier':'🐀 Rat')+' — touchez la carte à l\'endroit exact.';}
+        var sb=document.getElementById('rat-submit'); if(sb) sb.textContent=(fam==='eau'?'🚧 Envoyer ce signalement':'🐀 Envoyer ce signalement');
+        try{ document.getElementById('rat-map').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
     }
     function lfiRatGeo(){
         var st=document.getElementById('rat-loc-status');
@@ -309,27 +337,19 @@ function lfi_nct_app_view_carte_rats() {
     }
     (function initRatMap(){
         if (typeof L === 'undefined' || !document.getElementById('rat-map')) { return setTimeout(initRatMap, 200); }
-        var map = L.map('rat-map', {scrollWheelZoom:true, tap:true}).setView([47.1966, -1.5316], 15);
+        var map = L.map('rat-map', {scrollWheelZoom:true, tap:true, doubleClickZoom:false}).setView([47.1966, -1.5316], 15);
         LFI_RAT_MAP = map;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
-        /* Toucher/cliquer la carte = poser (ou déplacer) son point + ouvrir le formulaire. */
-        map.on('click', function(e){
-            lfiRatSet(e.latlng.lat, e.latlng.lng, 'Point placé sur la carte');
-            var f=document.getElementById('rat-form'); if(f && f.style.display==='none') lfiRatToggle();
-        });
-        var pts = [];
+        /* Corrige le rendu quand la carte est dans un écran scrollé. */
+        setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 300);
+        /* Toucher la carte = poser (ou déplacer) SON point. Les épingles déjà
+           posées sont NON cliquables (interactive:false) → le tap traverse
+           toujours jusqu'à la carte, on ne « perd » jamais le geste. */
+        map.on('click', function(e){ lfiRatSet(e.latlng.lat, e.latlng.lng, 'Point placé'); });
         (window.LFI_RAT_MARKERS||[]).forEach(function(m){
             if (!m.lat) return;
-            var nb = m.nb||1;
-            var mk = L.marker([m.lat, m.lng], {icon:lfiRatEmoIcon(m.emo)}).addTo(map);
-            var html='<div style="min-width:150px"><strong>'+m.emo+' '+m.lab+(nb>1?' ×'+nb:'')+'</strong>';
-            if(m.adr) html+='<br><span style="color:#0066a3">📍 '+m.adr+'</span>';
-            if(m.date) html+='<br><span style="color:#777">🗓 '+m.date+'</span>';
-            html+='</div>';
-            mk.bindPopup(html);
-            pts.push([m.lat, m.lng]);
+            L.marker([m.lat, m.lng], {icon:lfiRatStaticIcon(m.emo), interactive:false, keyboard:false}).addTo(map);
         });
-        if (pts.length) map.fitBounds(pts, {padding:[30,30], maxZoom:16});
     })();
     </script>
     <?php
