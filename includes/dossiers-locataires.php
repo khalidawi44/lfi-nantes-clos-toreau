@@ -241,6 +241,35 @@ function lfi_nct_dossier_ensure_for_tenant($uid) {
     return $wpdb->get_row($wpdb->prepare("SELECT * FROM $td WHERE id = %d", (int) $wpdb->insert_id));
 }
 
+/** Tokens normalisés d'un nom (minuscules, sans accents ni ponctuation, ≥2 car.). */
+function lfi_nct_name_norm_tokens($s) {
+    $s = function_exists('remove_accents') ? remove_accents((string) $s) : (string) $s;
+    $s = strtolower(preg_replace('/[^a-zA-Z0-9 ]/', ' ', $s));
+    $s = trim(preg_replace('/\s+/', ' ', $s));
+    if ($s === '') return [];
+    $toks = array_filter(explode(' ', $s), function ($t) { return strlen($t) >= 2; });
+    return array_values(array_unique($toks));
+}
+/** Deux noms « concordent » : jeux de tokens identiques, OU au moins un token
+ *  significatif partagé (≥4 car. — typiquement le nom de famille). Si l'un des
+ *  deux est vide, on ne peut pas contredire → concordance présumée. Sert à
+ *  empêcher qu'un dossier soit attribué à la MAUVAISE personne. */
+function lfi_nct_names_agree($a, $b) {
+    $ta = lfi_nct_name_norm_tokens($a);
+    $tb = lfi_nct_name_norm_tokens($b);
+    if (empty($ta) || empty($tb)) return true;
+    $sa = $ta; $sb = $tb; sort($sa); sort($sb);
+    if ($sa === $sb) return true;
+    foreach (array_intersect($ta, $tb) as $t) { if (strlen($t) >= 4) return true; }
+    return false;
+}
+/** Nom lisible d'un compte (nom + prénom, repli display_name). */
+function lfi_nct_user_full_name($u) {
+    if (!$u) return '';
+    $n = trim((string) $u->last_name . ' ' . (string) $u->first_name);
+    return $n !== '' ? $n : (string) $u->display_name;
+}
+
 function lfi_nct_dossier_find_for_tenant($uid) {
     global $wpdb;
     $uid = (int) $uid;
@@ -250,13 +279,22 @@ function lfi_nct_dossier_find_for_tenant($uid) {
 
     $owner = (int) lfi_nct_dossier_owner_id();
     $t = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+    $user_name = lfi_nct_user_full_name($u);
 
-    /* 1) Cas le plus simple et le plus fiable : lien direct par compte. */
+    /* 1) Lien direct par compte — MAIS on VÉRIFIE que le nom du dossier concorde
+       avec celui du compte. Un lien tenant_user_id corrompu (ex. dossier de
+       Marie Croyère pointant vers le compte de Fabrice Doucet) ne doit JAMAIS
+       faire afficher le mauvais dossier. En cas de contradiction nette, on
+       ignore ce lien et on tente une correspondance par nom/adresse. */
     $row = $wpdb->get_row($wpdb->prepare(
         "SELECT * FROM $t WHERE owner_user_id = %d AND tenant_user_id = %d ORDER BY updated_at DESC LIMIT 1",
         $owner, $uid
     ));
-    if ($row) return $row;
+    if ($row) {
+        $row_name = trim((string) $row->tenant_prenom . ' ' . (string) $row->tenant_nom);
+        if ($row_name === '' || lfi_nct_names_agree($user_name, $row_name)) return $row;
+        /* sinon : lien suspect → on ne le renvoie pas, on continue en fallback. */
+    }
 
     /* 2) Fallback : dossier saisi à la main (pas encore lié au compte).
           On matche par nom OU adresse canonique, comme le suivi. */
@@ -282,7 +320,10 @@ function lfi_nct_dossier_find_for_tenant($uid) {
             if (strlen($na) >= 4 && (strpos($nb, $na) !== false || strpos($na, $nb) !== false)) return $d;
         }
         if ($adr_key && function_exists('lfi_nct_address_canonical_key')) {
-            if (lfi_nct_address_canonical_key($d->tenant_adresse) === $adr_key) return $d;
+            /* Correspondance par adresse UNIQUEMENT si les noms ne se contredisent
+               pas (deux voisins ≠ même dossier ; réponse mal liée ≠ mauvais nom). */
+            if (lfi_nct_address_canonical_key($d->tenant_adresse) === $adr_key
+                && lfi_nct_names_agree($nom, $d_nom)) return $d;
         }
     }
     return null;
