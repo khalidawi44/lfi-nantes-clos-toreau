@@ -1550,7 +1550,12 @@ function lfi_nct_app_view_dossier() {
         echo '<div class="lfi-app-help" style="margin-top:6px"><small>⚠️ Relis la chronologie après coup — je n\'invente pas, mais vérifie chaque date dans ton vrai dossier.</small></div></details>';
     }
 
-    /* ===== LES DEUX BATAILLES + la demande du locataire (EN HAUT) ===== */
+    /* ===== PARCOURS DE SUIVI (timeline) — EN PREMIER, comme demandé =====
+       La checklist du suivi (dont l'étape « inviter sur l'appli » qui se coche
+       dès que le locataire se connecte) s'affiche tout en haut du dossier. */
+    lfi_nct_dossier_render_parcours($u);
+
+    /* ===== LES DEUX BATAILLES + la demande du locataire ===== */
     lfi_nct_dossier_render_batailles($u, $row);
 
     /* ===== CHRONOLOGIE (timeline structurée, auto-alimentée) ===== */
@@ -1683,8 +1688,8 @@ function lfi_nct_app_view_dossier() {
     echo '</div>';
     echo '</div>';
 
-    /* === PARCOURS DE SUIVI — checklist d'actions à mener === */
-    lfi_nct_dossier_render_parcours($u);
+    /* Le parcours de suivi est désormais rendu EN HAUT du dossier (voir plus
+       haut). Ici on garde le reste du suivi. */
 
     /* === SUIVI : dossiers juridiques + interventions + recouvrements === */
     lfi_nct_dossier_render_suivi($u, $row);
@@ -2031,7 +2036,7 @@ function lfi_nct_dossier_parcours_template() {
     /* who = 'admin' (à TOI de faire) ou 'tenant' (au LOCATAIRE de faire).
        auto = l'étape se coche toute seule quand le locataire a fait sa part. */
     return [
-        ['who' => 'admin',  'text' => "Envoyer le SMS d'invitation au locataire (lien de l'app)"],
+        ['who' => 'admin',  'text' => "Envoyer le SMS d'invitation au locataire (lien de l'app)", 'auto' => 1],
         ['who' => 'tenant', 'text' => "Le locataire s'empare de son dossier (fiche, objectif, photos)", 'auto' => 1],
         ['who' => 'admin',  'text' => "Prendre contact et visiter l'appartement (constat, photos)"],
         ['who' => 'admin',  'text' => "Faire signer l'adhésion à l'association (mandat)"],
@@ -2042,6 +2047,57 @@ function lfi_nct_dossier_parcours_template() {
         ['who' => 'admin',  'text' => "Si échec : saisir le SCHS (insalubrité) / l'ARS"],
         ['who' => 'admin',  'text' => "Préparer l'assignation au Tribunal Judiciaire"],
     ];
+}
+
+/** Le locataire s'est-il déjà connecté à son espace (au moins une fois) ? */
+function lfi_nct_tenant_has_connected($uid) {
+    return (bool) get_user_meta((int) $uid, 'lfi_nct_has_logged_in', true);
+}
+
+/** AUTO-VALIDATION : dès que le locataire se connecte à l'appli, l'étape
+ *  « Envoyer le SMS d'invitation … (lien de l'app) » se coche toute seule
+ *  (l'invitation a manifestement abouti). Le gestionnaire peut aussi la cocher
+ *  / décocher à la main quand il veut (case du parcours). Idempotent. */
+function lfi_nct_autovalidate_invite_step($uid) {
+    $uid = (int) $uid; if (!$uid) return;
+    if (!lfi_nct_tenant_has_connected($uid)) return;
+    $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
+    if (!is_array($steps) || empty($steps)) return;
+    $changed = false;
+    foreach ($steps as $i => $s) {
+        /* « invitation » n'apparaît que dans l'étape d'invitation → ciblage sûr. */
+        if (empty($s['done']) && mb_stripos((string) ($s['text'] ?? ''), 'invitation') !== false) {
+            $steps[$i]['done'] = true;
+            $steps[$i]['auto_done'] = true;
+            $changed = true;
+        }
+    }
+    if ($changed) {
+        update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+        if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($uid);
+    }
+}
+
+/* Trace la 1re connexion d'un locataire (via login classique) + auto-validation. */
+add_action('wp_login', 'lfi_nct_track_tenant_login', 10, 2);
+function lfi_nct_track_tenant_login($login, $user) {
+    if (!is_a($user, 'WP_User')) return;
+    $uid = (int) $user->ID;
+    if (!get_user_meta($uid, 'lfi_nct_has_logged_in', true)) update_user_meta($uid, 'lfi_nct_has_logged_in', current_time('mysql'));
+    lfi_nct_autovalidate_invite_step($uid);
+}
+
+/* Filet : la connexion des locataires passe souvent par lien magique (pas
+   toujours wp_login). Dès qu'un locataire connecté charge l'app, on note sa
+   connexion UNE fois puis on auto-valide l'étape d'invitation. */
+add_action('template_redirect', 'lfi_nct_mark_tenant_connected', 2);
+function lfi_nct_mark_tenant_connected() {
+    if (!is_user_logged_in()) return;
+    $uid = get_current_user_id();
+    if (get_user_meta($uid, 'lfi_nct_has_logged_in', true)) return;
+    if (!function_exists('lfi_nct_user_role_tenant') || !lfi_nct_user_role_tenant()) return;
+    update_user_meta($uid, 'lfi_nct_has_logged_in', current_time('mysql'));
+    lfi_nct_autovalidate_invite_step($uid);
 }
 
 /** Volet INDEMNISATION / juridique : la 2e bataille, lancée quand l'urgence est
@@ -2512,6 +2568,11 @@ function lfi_nct_dossier_render_episodes_bar($u) {
 }
 
 function lfi_nct_dossier_render_parcours($u) {
+    /* Le locataire s'est connecté → l'étape d'invitation se coche toute seule. */
+    if (function_exists('lfi_nct_autovalidate_invite_step')) lfi_nct_autovalidate_invite_step($u->ID);
+    /* Si l'urgence est déjà gagnée, on garantit le volet indemnisation greffé. */
+    if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
+
     /* Barre des dossiers d'incident (épisodes) : sélectionner / créer / clore. */
     if (function_exists('lfi_nct_dossier_render_episodes_bar')) lfi_nct_dossier_render_episodes_bar($u);
 
@@ -2603,6 +2664,15 @@ function lfi_nct_dossier_render_parcours($u) {
             echo '<input type="checkbox" form="lfi-step-bulk" name="step_sel[]" value="' . (int) $idx . '" onclick="event.stopPropagation()" title="Sélectionner pour suppression multiple" style="margin-right:7px;vertical-align:middle;width:17px;height:17px">';
             echo ($done ? '✅ ' : '📂 ') . esc_html($s['text']) . ' ' . $badge . ($np ? ' <span style="color:#0066a3;font-size:.8em;font-weight:700">· 📎 ' . $np . '</span>' : '') . '</summary>';
             echo '<div style="padding:2px 11px 11px">';
+            /* Étape « inviter sur l'appli » : explique l'auto-validation + le manuel. */
+            if (mb_stripos((string) ($s['text'] ?? ''), 'invitation') !== false) {
+                $conn = lfi_nct_tenant_has_connected($u->ID);
+                echo '<div style="font-size:.82em;border-radius:8px;padding:7px 9px;margin-bottom:7px;background:' . ($conn ? '#eef7ee' : '#f2f8fd') . ';border-left:3px solid ' . ($conn ? '#186a3b' : '#0066a3') . ';color:#333">'
+                    . ($conn
+                        ? '✅ Le locataire s\'est connecté à son espace → étape validée automatiquement.'
+                        : 'ℹ️ Cette étape se coche <strong>toute seule dès que le locataire se connecte</strong> à son espace. Tu peux aussi la cocher à la main (case ci-dessous) quand tu veux.')
+                    . '</div>';
+            }
             if (!empty($s['echeance'])) {
                 $late = (!$done && strtotime($s['echeance']) < strtotime(current_time('Y-m-d')));
                 echo '<div style="font-size:.82em;color:' . ($late ? '#c8102e' : '#888') . ';margin-bottom:6px">' . ($late ? '⚠ en retard — ' : '🗓 ') . 'échéance ' . esc_html(wp_date('j M Y', strtotime($s['echeance']))) . '</div>';
