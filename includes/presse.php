@@ -159,23 +159,34 @@ function lfi_nct_presse_contacts_get() {
 function lfi_nct_presse_contacts_save($list) {
     update_option('lfi_nct_presse_contacts', array_values($list), false);
 }
+/** Catégories de l'annuaire (emoji, libellé). On SÉPARE les médias (à qui on
+ *  envoie le communiqué), les responsables (à interpeller) et les soutiens
+ *  (à relayer / remercier). */
+function lfi_nct_presse_cats() {
+    return [
+        'media'       => ['📰', 'Médias — envoyer le communiqué'],
+        'responsable' => ['🏛️', 'Responsables — à interpeller'],
+        'soutien'     => ['✊', 'Soutiens — à relayer / remercier'],
+    ];
+}
+
 /** Amorce : NOMS des médias + sites officiels UNIQUEMENT (faits publics).
  *  Emails / réseaux volontairement VIDES → à vérifier puis compléter. */
 function lfi_nct_presse_contacts_seed() {
-    $mk = function ($nom, $fonction, $site) {
+    $mk = function ($nom, $fonction, $site, $cat = 'media') {
         return ['id' => (abs(crc32($nom . microtime(true))) % 900000000) + 100000000,
-            'nom' => $nom, 'fonction' => $fonction, 'site' => $site,
+            'nom' => $nom, 'fonction' => $fonction, 'site' => $site, 'cat' => $cat,
             'email' => '', 'twitter' => '', 'instagram' => '', 'facebook' => '', 'tel' => '', 'note' => 'À vérifier / compléter'];
     };
     return [
-        $mk('Ouest-France (Nantes)', 'Quotidien régional', 'https://www.ouest-france.fr/pays-de-la-loire/nantes-44000/'),
-        $mk('Presse Océan',          'Quotidien local',    'https://www.presseocean.fr/'),
-        $mk('Télénantes',            'Télévision locale',  'https://www.telenantes.com/'),
-        $mk('France Bleu Loire Océan','Radio locale',      'https://www.francebleu.fr/loire-ocean'),
-        $mk('Mediacités Nantes',     'Presse d\'enquête',  'https://www.mediacites.fr/nantes/'),
-        $mk('AFP (bureau Ouest)',    'Agence de presse',   'https://www.afp.com/fr'),
-        $mk('Marie Vitou',           'Référente quartier — Instagram (à vérifier)', ''),
-        $mk('Aïcha Bassal',          'Élue municipale (à vérifier)', ''),
+        $mk('Ouest-France (Nantes)', 'Quotidien régional', 'https://www.ouest-france.fr/pays-de-la-loire/nantes-44000/', 'media'),
+        $mk('Presse Océan',          'Quotidien local',    'https://www.presseocean.fr/', 'media'),
+        $mk('Télénantes',            'Télévision locale',  'https://www.telenantes.com/', 'media'),
+        $mk('France Bleu Loire Océan','Radio locale',      'https://www.francebleu.fr/loire-ocean', 'media'),
+        $mk('Mediacités Nantes',     'Presse d\'enquête',  'https://www.mediacites.fr/nantes/', 'media'),
+        $mk('AFP (bureau Ouest)',    'Agence de presse',   'https://www.afp.com/fr', 'media'),
+        $mk('Marie Vitoux',          'Adjointe quartier Nantes Sud (à vérifier)', '', 'responsable'),
+        $mk('Aïcha Bassal',          'Présidente du CA de NMH (à vérifier)', '', 'responsable'),
     ];
 }
 
@@ -334,24 +345,35 @@ function lfi_nct_app_view_presse_diffuser() {
     echo '<a href="' . esc_url($url) . '" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#186a3b;color:#fff;border-radius:10px;padding:11px;font-weight:800;text-decoration:none">🌐 Ouvrir la page</a></div>';
 
     $contacts = lfi_nct_presse_contacts_get();
-    echo '<div style="display:flex;flex-direction:column;gap:10px">';
-    foreach ($contacts as $c) {
-        echo '<div style="background:#fff;border:1px solid #e6e6e6;border-radius:12px;padding:12px 13px">';
-        echo '<div style="font-weight:800;color:#1a1a1a">' . esc_html($c['nom']) . '</div>';
-        if (!empty($c['fonction'])) echo '<div style="font-size:.85em;color:#666">' . esc_html($c['fonction']) . '</div>';
-        echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
-        if (!empty($c['email'])) {
-            echo lfi_nct_email_buttons_html($c['email'], $subject, $body, '✉️ Email');
-        } else {
-            echo '<span style="font-size:.8em;color:#c8102e;font-weight:700;align-self:center">✉️ email à compléter</span>';
+    $cats = lfi_nct_presse_cats();
+    $intro_cat = [
+        'media'       => 'Envoie-leur le communiqué (email + réseaux).',
+        'responsable' => 'Interpelle-les publiquement sur leurs publications (réseaux) ou par email.',
+        'soutien'     => 'Remercie-les et relaie / partage sous leurs publications.',
+    ];
+    foreach ($cats as $ck => $cv) {
+        $grp = array_values(array_filter($contacts, function ($c) use ($ck) { return (($c['cat'] ?? 'media')) === $ck; }));
+        if (empty($grp)) continue;
+        echo '<div style="font-weight:800;color:#444;margin:14px 0 4px">' . $cv[0] . ' ' . esc_html($cv[1]) . '</div>';
+        echo '<div style="font-size:.82em;color:#777;margin-bottom:6px">' . esc_html($intro_cat[$ck] ?? '') . '</div>';
+        echo '<div style="display:flex;flex-direction:column;gap:10px">';
+        foreach ($grp as $c) {
+            echo '<div style="background:#fff;border:1px solid #e6e6e6;border-radius:12px;padding:12px 13px">';
+            echo '<div style="font-weight:800;color:#1a1a1a">' . esc_html($c['nom']) . '</div>';
+            if (!empty($c['fonction'])) echo '<div style="font-size:.85em;color:#666">' . esc_html($c['fonction']) . '</div>';
+            echo '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+            if (!empty($c['email'])) {
+                echo lfi_nct_email_buttons_html($c['email'], $subject, $body, '✉️ Email');
+            }
+            foreach ([['twitter', '𝕏', '#111'], ['instagram', '📸 Insta', '#c13584'], ['facebook', 'f Facebook', '#1877f2'], ['site', '🌐 Site', '#0b3d91']] as $r) {
+                if (!empty($c[$r[0]])) echo '<a href="' . esc_url($c[$r[0]]) . '" target="_blank" rel="noopener" style="background:' . $r[2] . ';color:#fff;padding:6px 11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.82em">' . $r[1] . '</a>';
+            }
+            if (!empty($c['tel'])) echo '<a href="tel:' . esc_attr(preg_replace('/\s+/', '', $c['tel'])) . '" style="background:#555;color:#fff;padding:6px 11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.82em">📞 ' . esc_html($c['tel']) . '</a>';
+            if (empty($c['email']) && empty($c['twitter']) && empty($c['instagram']) && empty($c['facebook'])) echo '<span style="font-size:.8em;color:#c8102e;font-weight:700;align-self:center">à compléter dans l\'annuaire</span>';
+            echo '</div></div>';
         }
-        foreach ([['twitter', '𝕏', '#111'], ['instagram', '📸 Insta', '#c13584'], ['facebook', 'f Facebook', '#1877f2'], ['site', '🌐 Site', '#0b3d91']] as $r) {
-            if (!empty($c[$r[0]])) echo '<a href="' . esc_url($c[$r[0]]) . '" target="_blank" rel="noopener" style="background:' . $r[2] . ';color:#fff;padding:6px 11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.82em">' . $r[1] . '</a>';
-        }
-        if (!empty($c['tel'])) echo '<a href="tel:' . esc_attr(preg_replace('/\s+/', '', $c['tel'])) . '" style="background:#555;color:#fff;padding:6px 11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.82em">📞 ' . esc_html($c['tel']) . '</a>';
-        echo '</div></div>';
+        echo '</div>';
     }
-    echo '</div>';
     echo '<div style="margin-top:12px"><a href="' . esc_url(lfi_nct_app_url('presse-contacts')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">📇 Gérer / compléter l\'annuaire →</a></div>';
     echo '<script>function lfiPresseCopy(){var t=document.getElementById("lfi-presse-copytext");if(!t)return;t.style.left="0";t.select();try{document.execCommand("copy");}catch(e){}try{navigator.clipboard.writeText(t.value);}catch(e){}t.style.left="-9999px";alert("Titre + lien copiés ✔");}</script>';
     lfi_nct_app_screen_close();
@@ -372,6 +394,7 @@ function lfi_nct_app_view_presse_contacts() {
             'id'        => $cid ?: ((abs(crc32(microtime(true) . mt_rand())) % 900000000) + 100000000),
             'nom'       => sanitize_text_field(wp_unslash($_POST['nom'] ?? '')),
             'fonction'  => sanitize_text_field(wp_unslash($_POST['fonction'] ?? '')),
+            'cat'       => (function () { $c = sanitize_key($_POST['cat'] ?? 'media'); return isset(lfi_nct_presse_cats()[$c]) ? $c : 'media'; })(),
             'site'      => esc_url_raw(wp_unslash($_POST['site'] ?? '')),
             'email'     => sanitize_email(wp_unslash($_POST['email'] ?? '')),
             'twitter'   => esc_url_raw(wp_unslash($_POST['twitter'] ?? '')),
@@ -407,11 +430,15 @@ function lfi_nct_app_view_presse_contacts() {
     echo '<div class="lfi-app-help">⚠️ <strong>Rien n\'est pré-rempli automatiquement</strong> (règle : on ne devine pas). Les médias sont amorcés avec leur <strong>nom + site officiel</strong> seulement — <strong>vérifiez puis complétez</strong> les emails et réseaux avant toute diffusion.</div>';
 
     /* Formulaire ajout / édition. */
-    $f = $editing ?: ['id' => 0, 'nom' => '', 'fonction' => '', 'site' => '', 'email' => '', 'twitter' => '', 'instagram' => '', 'facebook' => '', 'tel' => '', 'note' => ''];
+    $f = $editing ?: ['id' => 0, 'nom' => '', 'fonction' => '', 'cat' => 'media', 'site' => '', 'email' => '', 'twitter' => '', 'instagram' => '', 'facebook' => '', 'tel' => '', 'note' => ''];
+    $cats = lfi_nct_presse_cats();
     echo '<form method="post" class="lfi-app-form" style="background:#f6f8fb;border:1px solid #dfe6f0;border-radius:12px;padding:12px">' . wp_nonce_field('lfi_presse_contact', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_presse_contact" value="1"><input type="hidden" name="cid" value="' . (int) $f['id'] . '">';
     echo '<div style="font-weight:800;color:#0b3d91;margin-bottom:6px">' . ($editing ? '✏️ Modifier un contact' : '➕ Ajouter un contact') . '</div>';
     echo '<label>Nom<input type="text" name="nom" value="' . esc_attr($f['nom']) . '" required></label>';
+    echo '<label>Catégorie<select name="cat">';
+    foreach ($cats as $ck => $cv) echo '<option value="' . esc_attr($ck) . '"' . selected(($f['cat'] ?? 'media'), $ck, false) . '>' . $cv[0] . ' ' . esc_html($cv[1]) . '</option>';
+    echo '</select></label>';
     echo '<label>Fonction / média<input type="text" name="fonction" value="' . esc_attr($f['fonction']) . '" placeholder="Ex : Journaliste — Ouest-France"></label>';
     echo '<label>Site web<input type="url" name="site" value="' . esc_attr($f['site']) . '" placeholder="https://…"></label>';
     echo '<label>Email<input type="email" name="email" value="' . esc_attr($f['email']) . '" placeholder="redaction@…"></label>';
@@ -425,28 +452,34 @@ function lfi_nct_app_view_presse_contacts() {
     echo '</form>';
 
     echo '<h3 style="margin:16px 0 8px;color:#0b3d91">Contacts (' . count($contacts) . ')</h3>';
-    echo '<div style="display:flex;flex-direction:column;gap:9px">';
-    foreach ($contacts as $c) {
-        $incomplete = empty($c['email']) && empty($c['twitter']) && empty($c['instagram']) && empty($c['facebook']);
-        echo '<div style="background:#fff;border:1px solid ' . ($incomplete ? '#e6c98a' : '#e6e6e6') . ';border-radius:11px;padding:11px 12px">';
-        echo '<div style="font-weight:800;color:#1a1a1a">' . esc_html($c['nom']);
-        if ($incomplete) echo ' <span style="font-size:.7em;font-weight:700;color:#8a6d1f;background:#fff3cd;padding:1px 7px;border-radius:9px">à compléter</span>';
+    /* Groupé par catégorie : médias, responsables à interpeller, soutiens. */
+    foreach ($cats as $ck => $cv) {
+        $grp = array_values(array_filter($contacts, function ($c) use ($ck) { return (($c['cat'] ?? 'media')) === $ck; }));
+        if (empty($grp)) continue;
+        echo '<div style="font-weight:800;color:#444;margin:14px 0 6px;padding-bottom:4px;border-bottom:2px solid #eee">' . $cv[0] . ' ' . esc_html($cv[1]) . ' <span style="color:#999;font-weight:600">(' . count($grp) . ')</span></div>';
+        echo '<div style="display:flex;flex-direction:column;gap:9px">';
+        foreach ($grp as $c) {
+            $incomplete = empty($c['email']) && empty($c['twitter']) && empty($c['instagram']) && empty($c['facebook']);
+            echo '<div style="background:#fff;border:1px solid ' . ($incomplete ? '#e6c98a' : '#e6e6e6') . ';border-radius:11px;padding:11px 12px">';
+            echo '<div style="font-weight:800;color:#1a1a1a">' . esc_html($c['nom']);
+            if ($incomplete) echo ' <span style="font-size:.7em;font-weight:700;color:#8a6d1f;background:#fff3cd;padding:1px 7px;border-radius:9px">à compléter</span>';
+            echo '</div>';
+            if (!empty($c['fonction'])) echo '<div style="font-size:.85em;color:#666">' . esc_html($c['fonction']) . '</div>';
+            $bits = [];
+            if (!empty($c['email'])) $bits[] = '✉️ ' . esc_html($c['email']);
+            if (!empty($c['site'])) $bits[] = '🌐 site';
+            if (!empty($c['twitter'])) $bits[] = '𝕏';
+            if (!empty($c['instagram'])) $bits[] = '📸';
+            if (!empty($c['facebook'])) $bits[] = 'f';
+            if (!empty($c['tel'])) $bits[] = '📞 ' . esc_html($c['tel']);
+            if ($bits) echo '<div style="font-size:.82em;color:#0066a3;margin-top:3px">' . implode(' · ', $bits) . '</div>';
+            echo '<div style="margin-top:7px;display:flex;gap:8px">';
+            echo '<a href="' . esc_url(lfi_nct_app_url('presse-contacts', ['edit' => (int) $c['id']])) . '" style="color:#0b3d91;font-weight:700;text-decoration:none;font-size:.85em">✏️ Modifier</a>';
+            echo '<form method="post" onsubmit="return confirm(\'Supprimer ce contact ?\')" style="margin:0">' . wp_nonce_field('lfi_presse_contact', '_wpnonce', true, false) . '<input type="hidden" name="lfi_presse_contact_del" value="1"><input type="hidden" name="cid" value="' . (int) $c['id'] . '"><button type="submit" class="btn-ghost" style="font-size:.85em;padding:0;color:#c8102e">🗑 Supprimer</button></form>';
+            echo '</div></div>';
+        }
         echo '</div>';
-        if (!empty($c['fonction'])) echo '<div style="font-size:.85em;color:#666">' . esc_html($c['fonction']) . '</div>';
-        $bits = [];
-        if (!empty($c['email'])) $bits[] = '✉️ ' . esc_html($c['email']);
-        if (!empty($c['site'])) $bits[] = '🌐 site';
-        if (!empty($c['twitter'])) $bits[] = '𝕏';
-        if (!empty($c['instagram'])) $bits[] = '📸';
-        if (!empty($c['facebook'])) $bits[] = 'f';
-        if (!empty($c['tel'])) $bits[] = '📞 ' . esc_html($c['tel']);
-        if ($bits) echo '<div style="font-size:.82em;color:#0066a3;margin-top:3px">' . implode(' · ', $bits) . '</div>';
-        echo '<div style="margin-top:7px;display:flex;gap:8px">';
-        echo '<a href="' . esc_url(lfi_nct_app_url('presse-contacts', ['edit' => (int) $c['id']])) . '" style="color:#0b3d91;font-weight:700;text-decoration:none;font-size:.85em">✏️ Modifier</a>';
-        echo '<form method="post" onsubmit="return confirm(\'Supprimer ce contact ?\')" style="margin:0">' . wp_nonce_field('lfi_presse_contact', '_wpnonce', true, false) . '<input type="hidden" name="lfi_presse_contact_del" value="1"><input type="hidden" name="cid" value="' . (int) $c['id'] . '"><button type="submit" class="btn-ghost" style="font-size:.85em;padding:0;color:#c8102e">🗑 Supprimer</button></form>';
-        echo '</div></div>';
     }
-    echo '</div>';
     lfi_nct_app_screen_close();
 }
 
