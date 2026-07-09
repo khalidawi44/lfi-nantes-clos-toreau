@@ -130,6 +130,41 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_recontact_backfill_v1', '1', false);
     }
 
+    /* ─ Fabrice Doucet : 3 dossiers d'incident « punaises de lit » (récidives =
+       MÊME affaire → même dossier juridique, préjudice cumulé). Ouverts (c'est
+       LUI qui clôt chaque urgence → coupe). Dates MODIFIABLES (il précisera).
+       On ne clôt rien et on n'invente aucune date (seule l'année 2020 est
+       connue pour le 1er). Idempotent. */
+    if (get_option('lfi_nct_fabrice_3ep_punaises_v1') !== '1' && function_exists('lfi_nct_episode_seed_steps')) {
+        $fuid = 0;
+        foreach (get_users(['search' => '*Doucet*', 'search_columns' => ['display_name', 'user_login', 'user_nicename'], 'number' => 20, 'fields' => ['ID', 'display_name']]) as $usr) {
+            $dn = mb_strtolower((string) $usr->display_name);
+            if (strpos($dn, 'doucet') !== false && strpos($dn, 'fabrice') !== false) { $fuid = (int) $usr->ID; break; }
+        }
+        if ($fuid) {
+            $grp = (int) (round(microtime(true) * 1000) % 1000000000);
+            $mk = function ($titre, $date) use ($grp) {
+                static $i = 0; $i++;
+                return [
+                    'id' => (int) (round(microtime(true) * 1000) % 1000000000) + $i,
+                    'titre' => $titre, 'type' => 'punaises', 'piece' => '',
+                    'ouvert' => $date, 'clos_urgence' => false, 'clos_date' => '',
+                    'groupe' => $grp,
+                    'steps' => lfi_nct_episode_seed_steps(), 'prejudice' => [],
+                ];
+            };
+            $eps = [
+                $mk('Infestation punaises de lit — 2020', '2020-01-01'),
+                $mk('Infestation punaises de lit — 2ᵉ (date à préciser)', ''),
+                $mk('Infestation punaises de lit — 3ᵉ / dernière (date à préciser)', ''),
+            ];
+            update_user_meta($fuid, 'lfi_nct_episodes', $eps);
+            update_user_meta($fuid, 'lfi_nct_active_ep', (int) $eps[0]['id']);
+            update_user_meta($fuid, 'lfi_nct_suivi_steps', array_values($eps[0]['steps']));
+            update_option('lfi_nct_fabrice_3ep_punaises_v1', '1', false);
+        }
+    }
+
     /* ─ Événement « Diffusion de tracts » (jeu. 9 juillet 2026, 17h30–19h00,
        Super U Saint-Jacques, 75 Bd Joliot Curie, 44200 Nantes). À ajouter au
        calendrier du GA REZÉ + au calendrier & VOTE du GA CLOS TOREAU, avec
