@@ -32,14 +32,19 @@ function lfi_nct_rat_signals_save($list) {
     update_option('lfi_nct_rat_signals', array_slice(array_values($list), -2000), false);
 }
 
-/** Types de signalement (emoji, libellé court). */
+/** Types de signalement (emoji, libellé court, famille : 'rat' ou 'eau').
+ *  La famille 'eau' regroupe les travaux / fuites / points d'eau, pour voir sur
+ *  la MÊME carte que les rats suivent les fuites (corrélation = preuve). */
 function lfi_nct_rat_types() {
     return [
-        'rat'     => ['🐀', 'Rat vu (vivant)'],
-        'terrier' => ['🕳️', 'Terrier / trou'],
-        'crottes' => ['💩', 'Crottes / traces'],
-        'nid'     => ['🪹', 'Nid / plusieurs rats'],
-        'mort'    => ['☠️', 'Rat mort'],
+        'rat'      => ['🐀', 'Rat vu (vivant)',        'rat'],
+        'nid'      => ['🪹', 'Nid de rats',            'rat'],
+        'terrier'  => ['🕳️', 'Terrier / trou',         'rat'],
+        'crottes'  => ['💩', 'Crottes / traces',       'rat'],
+        'frequent' => ['🔁', 'Présence fréquente',     'rat'],
+        'mort'     => ['☠️', 'Rat mort',               'rat'],
+        'travaux'  => ['🚧', 'Travaux / tranchée',     'eau'],
+        'eau'      => ['💧', 'Fuite / point d\'eau',    'eau'],
     ];
 }
 
@@ -170,6 +175,7 @@ function lfi_nct_app_view_carte_rats() {
             'lng'  => (float) $s['lng'],
             'emo'  => $t[0],
             'lab'  => $t[1],
+            'fam'  => $t[2] ?? 'rat',
             'nb'   => (int) ($s['nombre'] ?? 1),
             'date' => $s['date'] ? wp_date('j M Y', strtotime($s['date'])) : '',
             'adr'  => (string) ($s['adresse'] ?? ''),
@@ -181,39 +187,53 @@ function lfi_nct_app_view_carte_rats() {
     if (isset($_GET['ok']) && !$_GET['ok']) lfi_nct_app_flash('⚠️ Signalement non enregistré. Réessayez.', 'err');
     if (!empty($_GET['err'])) lfi_nct_app_flash('⚠️ Indiquez un lieu : activez « Utiliser ma position » ou tapez une adresse.', 'err');
 
-    echo '<div class="lfi-app-help">Un rat, un terrier, des crottes ? <strong>Signalez-le en 2 clics.</strong> Chaque signalement est <strong>daté et placé sur la carte</strong>. Ensemble, on construit une preuve chiffrée à présenter au bailleur (NMH) et au service d\'hygiène de la Ville (SCHS) pour exiger une dératisation.</div>';
+    echo '<div class="lfi-app-help">Un rat, un nid, un trou, un chantier ou une fuite d\'eau ? <strong>Touchez la carte à l\'endroit exact</strong> pour poser un point. Chaque signalement est <strong>daté et cartographié</strong>. On construit une preuve chiffrée pour le bailleur (NMH) et le service d\'hygiène de la Ville (SCHS) — et on voit que <strong>les rats suivent les fuites d\'eau</strong>.</div>';
 
-    /* --- Compteur + carte --- */
+    /* --- Compteurs --- */
     $nb = count($signals);
-    $nb_terr = count(array_filter($signals, function ($s) { return ($s['type'] ?? '') === 'terrier'; }));
+    $nb_rat = count(array_filter($signals, function ($s) use ($types) { return (($types[$s['type']][2] ?? 'rat')) === 'rat'; }));
+    $nb_eau = $nb - $nb_rat;
     echo '<div style="display:flex;gap:8px;margin-bottom:10px">';
-    echo '<div style="flex:1;background:#3a1f1f;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . (int) $nb . '</div><div style="font-size:.82em;opacity:.9">signalement' . ($nb > 1 ? 's' : '') . '</div></div>';
-    echo '<div style="flex:1;background:#5a2d0c;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . (int) $nb_terr . '</div><div style="font-size:.82em;opacity:.9">terrier' . ($nb_terr > 1 ? 's' : '') . '</div></div>';
+    echo '<div style="flex:1;background:#3a1f1f;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . (int) $nb_rat . '</div><div style="font-size:.82em;opacity:.9">🐀 rats</div></div>';
+    echo '<div style="flex:1;background:#0b3d91;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . (int) $nb_eau . '</div><div style="font-size:.82em;opacity:.9">💧 eau / travaux</div></div>';
     echo '</div>';
 
     echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">';
     echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
-    echo '<div id="rat-map" style="height:300px;border-radius:12px;overflow:hidden;margin-bottom:12px;border:1px solid #ddd;background:#eef"></div>';
+    /* Style des épingles emoji (icône lisible, aucune image externe à charger). */
+    echo '<style>.rat-emo{font-size:22px;line-height:30px;text-align:center;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}.rat-pick{animation:ratBob .8s infinite alternate}@keyframes ratBob{to{transform:translateY(-4px)}}</style>';
+    echo '<div id="rat-map" style="height:340px;border-radius:12px;overflow:hidden;margin-bottom:6px;border:1px solid #ddd;background:#eef"></div>';
+    echo '<div id="rat-pick-hint" style="text-align:center;font-size:.85em;color:#0b3d91;font-weight:700;margin-bottom:10px">👆 Touchez la carte pour poser votre point (zoomez avec deux doigts).</div>';
     echo '<script>var LFI_RAT_MARKERS=' . wp_json_encode($markers) . ';</script>';
 
     /* --- Bouton « Signaler » (ouvre le formulaire) --- */
-    echo '<button type="button" onclick="lfiRatToggle()" id="rat-open-btn" class="btn-primary big" style="background:#c8102e;width:100%;margin-bottom:10px">➕ Signaler un rat / un terrier</button>';
+    echo '<button type="button" onclick="lfiRatToggle()" id="rat-open-btn" class="btn-primary big" style="background:#c8102e;width:100%;margin-bottom:10px">➕ Signaler ici</button>';
 
-    /* --- Formulaire (2 clics : lieu + type) --- */
+    /* --- Formulaire (lieu par la carte + type) --- */
     echo '<form method="post" enctype="multipart/form-data" class="lfi-app-form" id="rat-form" style="display:none">' . wp_nonce_field('lfi_rat_signal', '_wpnonce', true, false);
     echo '<input type="hidden" name="lfi_rat_signal" value="1">';
     echo '<input type="hidden" name="lat" id="rat-lat" value=""><input type="hidden" name="lng" id="rat-lng" value="">';
 
     echo '<div style="background:#f6f8fb;border:1px solid #dfe6f0;border-radius:12px;padding:12px;margin-bottom:8px">';
     echo '<div style="font-weight:800;color:#0b3d91;margin-bottom:6px">📍 Où ?</div>';
-    echo '<button type="button" onclick="lfiRatGeo()" id="rat-geo-btn" style="width:100%;background:#0b3d91;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:1em">📡 Utiliser ma position</button>';
-    echo '<div id="rat-geo-status" style="font-size:.85em;color:#186a3b;margin-top:6px;text-align:center"></div>';
-    echo '<div style="text-align:center;color:#999;font-size:.85em;margin:6px 0">— ou —</div>';
+    echo '<div id="rat-loc-status" style="font-size:.9em;color:#8a6d1f;margin-bottom:8px;text-align:center;font-weight:700">👆 Touchez la carte ci-dessus pour placer le point.</div>';
+    echo '<button type="button" onclick="lfiRatGeo()" id="rat-geo-btn" style="width:100%;background:#0b3d91;color:#fff;border:0;border-radius:10px;padding:10px;font-weight:800;font-size:.95em">📡 Ou : utiliser ma position</button>';
+    echo '<div style="text-align:center;color:#999;font-size:.85em;margin:6px 0">— ou tapez une adresse —</div>';
     echo '<input type="text" name="adresse" id="rat-adr" placeholder="Adresse / repère (ex : 12 rue de … ou « près du 8 »)" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:10px">';
     echo '</div>';
 
-    echo '<label>Que voyez-vous ?<select name="type">';
-    foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+    echo '<label>Que signalez-vous ?<select name="type" id="rat-type" onchange="lfiRatTypeChange()">';
+    $cur_fam = '';
+    foreach ($types as $tk => $tv) {
+        $fam = $tv[2] ?? 'rat';
+        if ($fam !== $cur_fam) {
+            if ($cur_fam !== '') echo '</optgroup>';
+            echo '<optgroup label="' . ($fam === 'eau' ? '💧 Eau / travaux (les rats suivent les fuites)' : '🐀 Rats') . '">';
+            $cur_fam = $fam;
+        }
+        echo '<option value="' . esc_attr($tk) . '" data-emo="' . esc_attr($tv[0]) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+    }
+    if ($cur_fam !== '') echo '</optgroup>';
     echo '</select></label>';
     echo '<label>Combien environ ?<select name="nombre"><option value="1">1</option><option value="2">2 à 3</option><option value="5">4 à 10</option><option value="15">Plus de 10</option></select></label>';
     echo '<label>📅 Quand ?<input type="date" name="date" value="' . esc_attr(current_time('Y-m-d')) . '" max="' . esc_attr(current_time('Y-m-d')) . '"></label>';
@@ -253,6 +273,23 @@ function lfi_nct_app_view_carte_rats() {
 
     ?>
     <script>
+    var LFI_RAT_MAP=null, LFI_RAT_PICK=null;
+    function lfiRatEmoIcon(emo,cls){ return L.divIcon({html:'<div class="rat-emo '+(cls||'')+'">'+emo+'</div>',className:'',iconSize:[30,30],iconAnchor:[15,15],popupAnchor:[0,-14]}); }
+    function lfiRatCurEmo(){ var s=document.getElementById('rat-type'); if(s&&s.options[s.selectedIndex]){var e=s.options[s.selectedIndex].getAttribute('data-emo');if(e)return e;} return '🐀'; }
+    function lfiRatSet(lat,lng,label){
+        document.getElementById('rat-lat').value=lat;
+        document.getElementById('rat-lng').value=lng;
+        if(LFI_RAT_MAP){
+            if(!LFI_RAT_PICK){
+                LFI_RAT_PICK=L.marker([lat,lng],{icon:lfiRatEmoIcon(lfiRatCurEmo(),'rat-pick'),draggable:true,zIndexOffset:1000}).addTo(LFI_RAT_MAP);
+                LFI_RAT_PICK.on('dragend',function(e){var ll=e.target.getLatLng();lfiRatSet(ll.lat,ll.lng,'Point déplacé');});
+            } else { LFI_RAT_PICK.setLatLng([lat,lng]); }
+        }
+        var ls=document.getElementById('rat-loc-status');
+        if(ls){ls.style.color='#186a3b';ls.textContent='✅ '+(label||'Point placé')+' — vous pouvez envoyer. (Glissez l\'épingle pour ajuster.)';}
+        var h=document.getElementById('rat-pick-hint'); if(h){h.style.color='#186a3b';h.textContent='✅ Point placé. Glissez l\'épingle pour ajuster, puis remplissez le formulaire.';}
+    }
+    function lfiRatTypeChange(){ if(LFI_RAT_PICK) LFI_RAT_PICK.setIcon(lfiRatEmoIcon(lfiRatCurEmo(),'rat-pick')); }
     function lfiRatToggle(){
         var f=document.getElementById('rat-form'), b=document.getElementById('rat-open-btn');
         if(!f)return; var show=f.style.display==='none';
@@ -260,28 +297,31 @@ function lfi_nct_app_view_carte_rats() {
         if(show){ try{ f.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){} }
     }
     function lfiRatGeo(){
-        var st=document.getElementById('rat-geo-status');
-        if(!navigator.geolocation){ if(st){st.style.color='#c8102e';st.textContent='Géolocalisation indisponible — tapez une adresse.';} return; }
+        var st=document.getElementById('rat-loc-status');
+        if(!navigator.geolocation){ if(st){st.style.color='#c8102e';st.textContent='Géolocalisation indisponible — touchez la carte ou tapez une adresse.';} return; }
         if(st){st.style.color='#8a6d1f';st.textContent='📡 Localisation en cours…';}
         navigator.geolocation.getCurrentPosition(function(p){
-            document.getElementById('rat-lat').value=p.coords.latitude;
-            document.getElementById('rat-lng').value=p.coords.longitude;
-            if(st){st.style.color='#186a3b';st.textContent='✅ Position enregistrée. Vous pouvez envoyer.';}
-            var b=document.getElementById('rat-geo-btn'); if(b){b.style.background='#186a3b';b.textContent='✅ Position enregistrée';}
+            if(LFI_RAT_MAP) LFI_RAT_MAP.setView([p.coords.latitude,p.coords.longitude],17);
+            lfiRatSet(p.coords.latitude,p.coords.longitude,'Ma position');
         }, function(){
-            if(st){st.style.color='#c8102e';st.textContent='Position refusée — tapez une adresse ci-dessous.';}
+            if(st){st.style.color='#c8102e';st.textContent='Position refusée — touchez la carte ou tapez une adresse.';}
         }, {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
     }
     (function initRatMap(){
         if (typeof L === 'undefined' || !document.getElementById('rat-map')) { return setTimeout(initRatMap, 200); }
-        var map = L.map('rat-map', {scrollWheelZoom:false}).setView([47.19, -1.53], 13);
+        var map = L.map('rat-map', {scrollWheelZoom:true, tap:true}).setView([47.1966, -1.5316], 15);
+        LFI_RAT_MAP = map;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+        /* Toucher/cliquer la carte = poser (ou déplacer) son point + ouvrir le formulaire. */
+        map.on('click', function(e){
+            lfiRatSet(e.latlng.lat, e.latlng.lng, 'Point placé sur la carte');
+            var f=document.getElementById('rat-form'); if(f && f.style.display==='none') lfiRatToggle();
+        });
         var pts = [];
         (window.LFI_RAT_MARKERS||[]).forEach(function(m){
             if (!m.lat) return;
             var nb = m.nb||1;
-            var r = Math.min(22, 8 + nb*2);
-            var mk = L.circleMarker([m.lat, m.lng], {radius:r, color:'#fff', weight:2, fillColor:'#8a1300', fillOpacity:0.75}).addTo(map);
+            var mk = L.marker([m.lat, m.lng], {icon:lfiRatEmoIcon(m.emo)}).addTo(map);
             var html='<div style="min-width:150px"><strong>'+m.emo+' '+m.lab+(nb>1?' ×'+nb:'')+'</strong>';
             if(m.adr) html+='<br><span style="color:#0066a3">📍 '+m.adr+'</span>';
             if(m.date) html+='<br><span style="color:#777">🗓 '+m.date+'</span>';
