@@ -31,6 +31,38 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ COMMUNIQUÉ DE PRESSE officiel (Clos Toreau) — importé en BROUILLON,
+       transcrit fidèlement depuis la photo transmise (page 1). La suite de la
+       liste des demandes + la signature/contact n'étaient PAS lisibles sur la
+       photo → marquées « à compléter » (règle : ne rien inventer). Idempotent. */
+    if (get_option('lfi_nct_presse_seed_cp1_v1') !== '1'
+        && defined('LFI_NCT_PRESSE_CPT') && post_type_exists(LFI_NCT_PRESSE_CPT)
+        && function_exists('wp_insert_post')) {
+        $titre = "Communiqué de presse : au Clos Toreau des locataires dénoncent des logements indignes, La France insoumise interpelle Nantes Métropole Habitat";
+        /* Anti-doublon : on ne recrée pas s'il existe déjà un communiqué avec ce titre. */
+        $exists = get_posts(['post_type' => LFI_NCT_PRESSE_CPT, 'post_status' => 'any', 'numberposts' => 1, 'title' => $titre, 'fields' => 'ids']);
+        if (empty($exists)) {
+            $chapo = "Au Clos Toreau (Nantes Sud), les premières réponses à l'enquête menée par les militant·es insoumis·es révèlent des logements indignes : moisissures, rats, coupures d'eau chaude, punaises de lit. La France insoumise interpelle Nantes Métropole Habitat, la Ville et la Métropole.";
+            $corps  = "Moisissures, peintures qui se détachent du plafond, punaises de lit (pendant plusieurs années parfois), blattes, coupures d'eau chaude récurrentes, pannes d'ascenseur (jusqu'à une semaine), odeurs d'égout qui remontent jusqu'au 10ème étage, rats (des pièges à rats sont disposés tous les deux mètres au pied des immeubles)... Les premières réponses à l'enquête menée par les militant·es insoumis·es du Clos Toreau sont édifiantes. Elles témoignent de l'abandon de l'État qui ne donne pas les moyens d'investir dans la rénovation de ces bâtiments du début des années 1970. Les canalisations ne sont pas remplacées et le \"bricolage\" n'apporte aucune solution pérenne. Les murs en béton ne sont isolés ni à l'intérieur ni à l'extérieur : c'est l'humidité l'hiver et tout au long de l'année, et la chaleur l'été. Une mère s'inquiète pour sa fille de 3 ans qui souffre de problèmes respiratoires en raison de la présence de moisissures. Certificat médical à l'appui. Nous dénonçons la politique du logement désastreuse qui se poursuit encore : le ministre du logement Vincent Jeanbrun vient de repousser la rénovation énergétique de cinq ans et compte la financer par des hausses de loyer ! L'État étrangle financièrement le logement social. Mais Nantes Métropole Habitat, la Ville et la Métropole ne peuvent pas se réfugier derrière cette seule responsabilité nationale quand des familles vivent aujourd'hui avec des moisissures, des rats et des coupures d'eau chaude.\n\n";
+            $corps .= "Les locataires du Clos Toreau s'acquittent de leur loyer et paient des charges : ils sont floués. Les alertes à Nantes Métropole Habitat restent vaines. On leur demande de se débrouiller — quand on ne les rend pas responsables de la situation ! Les habitant·es du Clos Toreau sont traité·es comme des citoyen·nes de seconde zone.\n\n";
+            $corps .= "Nous demandons donc :\n";
+            $corps .= "• un diagnostic sanitaire et technique complet des immeubles concernés ;\n";
+            $corps .= "• un calendrier public de travaux, précis et opposable ;\n";
+            $corps .= "\n[⚠️ À COMPLÉTER : la suite de la liste des demandes et la signature / contact presse n'étaient pas lisibles sur la photo transmise. Colle le texte complet ici avant de publier — rien n'a été inventé.]";
+            $pid = wp_insert_post([
+                'post_type'    => LFI_NCT_PRESSE_CPT,
+                'post_title'   => $titre,
+                'post_excerpt' => $chapo,
+                'post_content' => $corps,
+                'post_status'  => 'draft', /* BROUILLON : à compléter + relire avant publication */
+            ]);
+            if ($pid && !is_wp_error($pid)) {
+                update_post_meta($pid, '_lfi_presse_emetteur', "Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau");
+            }
+        }
+        update_option('lfi_nct_presse_seed_cp1_v1', '1', false);
+    }
+
     /* ─ PURGE TOTALE des DOSSIERS locataires (tous), demandée pour repartir de
        zéro. CADENAS sur les ENQUÊTES (table responses) + les COMPTES + le lien
        enquête↔locataire (meta lfi_nct_response_id) : jamais touchés. On SAUVEGARDE
