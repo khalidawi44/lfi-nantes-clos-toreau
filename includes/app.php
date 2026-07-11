@@ -736,6 +736,7 @@ function lfi_nct_app_shortcode() {
         'victoires'              => 'lfi_nct_app_view_victoires',
         'communiques'            => 'lfi_nct_app_view_communiques',
         'rejoindre'              => 'lfi_nct_app_view_rejoindre',
+        'argumentaire-elue'      => 'lfi_nct_app_view_argumentaire_elue',
         'annuaire'               => 'lfi_nct_app_view_public_gas',
         'ga'                     => 'lfi_nct_app_view_public_ga',
     ];
@@ -855,6 +856,8 @@ function lfi_nct_app_shortcode() {
                     case 'presse-contacts': lfi_nct_app_view_presse_contacts(); break;
                     case 'communiques':     lfi_nct_app_view_communiques();     break;
                     case 'qr-enquete':      lfi_nct_app_view_qr_enquete();      break;
+                    case 'qr-elues':        lfi_nct_app_view_qr_elues();        break;
+                    case 'argumentaire-elue': lfi_nct_app_view_argumentaire_elue(); break;
                     case 'rejoindre':       lfi_nct_app_view_rejoindre();       break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
@@ -2556,6 +2559,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['📱', 'SMS aux membres actifs', 'Modèles + diffusion',                 lfi_nct_app_url('sms')],
             ['✉️', 'Email blast',            'En-tête LFI + signature',             lfi_nct_app_url('email')],
             ['📰', 'Espace presse',          'Communiqués SEO + annuaire médias',   lfi_nct_app_url('presse')],
+            ['🏛️', 'QR codes élues',         'Argumentaire Irina & Érika',          lfi_nct_app_url('qr-elues')],
             ['✍️', 'Signatures',             'Le Collectif, Fabrice…',              lfi_nct_app_url('signatures')],
         ],
         '📋 ENQUÊTE LOGEMENT (terrain)' => [
