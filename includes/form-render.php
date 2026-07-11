@@ -378,6 +378,7 @@ function lfi_nct_render_submission_summary($id) {
 
     $type_labels = [
         'degats_eaux'      => 'Dégâts des eaux / infiltrations',
+        'odeurs_egout'     => 'Odeurs d\'égout / remontées d\'eaux usées',
         'humidite'         => 'Humidité / moisissures',
         'insectes'         => 'Insectes / nuisibles',
         'chauffage'        => 'Chauffage insuffisant',

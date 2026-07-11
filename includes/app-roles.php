@@ -172,6 +172,7 @@ function lfi_nct_streets_datalist($id = 'lfi-nct-known-streets') {
 function lfi_nct_problem_types_base() {
     return [
         'degats_eaux'      => '💧 Dégâts des eaux / fuites',
+        'odeurs_egout'     => '🤢 Odeurs d\'égout / remontées d\'eaux usées (regards, sous-sol)',
         'humidite'         => '🌫 Humidité / moisissures',
         'insectes'         => '🐜 Nuisibles (cafards, rats, punaises)',
         'chauffage'        => '🥶 Chauffage défaillant',

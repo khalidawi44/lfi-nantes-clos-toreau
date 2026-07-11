@@ -127,7 +127,7 @@ function lfi_nct_compute_stats() {
         'gravite_count' => 0,
         'gravite_moyenne' => 0,
         'types_repartition' => [
-            'degats_eaux' => 0, 'humidite' => 0, 'insectes' => 0, 'chauffage' => 0,
+            'degats_eaux' => 0, 'odeurs_egout' => 0, 'humidite' => 0, 'insectes' => 0, 'chauffage' => 0,
             'electricite' => 0, 'ascenseur' => 0, 'parties_communes' => 0,
             'bruit' => 0, 'securite' => 0, 'autre' => 0,
         ],
@@ -318,7 +318,7 @@ function lfi_nct_render_stats_overview() {
     $url = function($filter) { return admin_url('admin.php?page=lfi-nct-stats&filter=' . urlencode($filter)); };
 
     $chart_types = lfi_nct_chart_data($stats['types_repartition'], [
-        'degats_eaux' => 'Dégâts des eaux', 'humidite' => 'Humidité', 'insectes' => 'Nuisibles',
+        'degats_eaux' => 'Dégâts des eaux', 'odeurs_egout' => 'Odeurs d\'égout', 'humidite' => 'Humidité', 'insectes' => 'Nuisibles',
         'chauffage' => 'Chauffage', 'electricite' => 'Électricité', 'ascenseur' => 'Ascenseur',
         'parties_communes' => 'Parties communes', 'bruit' => 'Bruit', 'securite' => 'Insécurité',
         'autre' => 'Autre',
