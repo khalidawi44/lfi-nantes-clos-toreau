@@ -10,6 +10,23 @@ if (!defined('ABSPATH')) exit;
 add_action('init', 'lfi_nct_auto_deploy', 22);
 function lfi_nct_auto_deploy() {
 
+    /* ─ ENTREPRISE DE DÉSINSECTISATION (blattes + punaises de lit) : Sapiens,
+       contact Adrien 02 28 01 12 16 (responsable). Consignée dans la chronologie
+       des dossiers de Fabrice Doucet et de Gwenaëlle Gourdien. Idempotent
+       (flag + anti-doublon interne de lfi_nct_chrono_add). */
+    if (get_option('lfi_nct_sapiens_note_v1') !== '1' && function_exists('lfi_nct_chrono_add')) {
+        $note = "Entreprise de désinsectisation (blattes + punaises de lit) : Sapiens. Contact : Adrien — 02 28 01 12 16 (responsable Sapiens).";
+        $targets = ['doucet', 'gourdien'];
+        $users = get_users(['number' => 5000, 'fields' => ['ID', 'display_name']]);
+        foreach ($users as $u) {
+            $dn = mb_strtolower((string) $u->display_name);
+            foreach ($targets as $t) {
+                if (strpos($dn, $t) !== false) { lfi_nct_chrono_add((int) $u->ID, wp_date('d/m/Y'), $note, true); break; }
+            }
+        }
+        update_option('lfi_nct_sapiens_note_v1', '1', false);
+    }
+
     /* 1) Membre Tristan Rayon dans le GA Clos Toreau (créé si absent). */
     if (get_option('lfi_nct_auto_tristan') !== '1') {
         if (!get_user_by('email', 'tristan.rayon@gmail.com') && function_exists('wp_insert_user')) {
