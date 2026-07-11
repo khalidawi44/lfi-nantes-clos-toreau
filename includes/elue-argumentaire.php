@@ -74,13 +74,24 @@ function lfi_nct_app_view_argumentaire_elue() {
     $elues = lfi_nct_elues_list();
     $key = isset($_GET['e']) ? sanitize_key($_GET['e']) : '';
     $prenom = $elues[$key] ?? '';
+    /* Élu·e auto-inscrit·e via le QR (pas de ?e=) : on la salue par son prénom
+       de compte et on affiche sa fonction. */
+    $fonction_lbl = '';
+    if ($prenom === '' && is_user_logged_in()) {
+        $me = wp_get_current_user();
+        $prenom = $me->first_name ?: '';
+        $fk = (string) get_user_meta($me->ID, 'lfi_nct_fonction', true);
+        if ($fk !== '' && function_exists('lfi_nct_fonction_label')) $fonction_lbl = lfi_nct_fonction_label($fk);
+    }
 
     $st = lfi_nct_elue_stats();
     $rent = lfi_nct_elue_rent();
 
     lfi_nct_app_screen_open('🏛️ ' . ($prenom ? 'Espace de ' . $prenom : 'Espace élue') . ' — Clos Toreau', 'Pour parler aux habitant·es en connaissance de cause');
 
-    if ($prenom) echo '<div class="lfi-app-help">Bonjour <strong>' . esc_html($prenom) . '</strong>. Voici de quoi <strong>échanger avec les habitant·es du Clos Toreau</strong> : l\'ampleur des problèmes (chiffres anonymes), la répartition de leur loyer, et des points de langage.</div>';
+    if ($prenom || $fonction_lbl) {
+        echo '<div class="lfi-app-help">Bonjour' . ($prenom ? ' <strong>' . esc_html($prenom) . '</strong>' : '') . ($fonction_lbl ? ' <span style="color:#0b3d91;font-weight:700">(' . esc_html($fonction_lbl) . ')</span>' : '') . '. Voici de quoi <strong>échanger avec les habitant·es du Clos Toreau</strong> : l\'ampleur des problèmes (chiffres anonymes), la répartition de leur loyer, et des points de langage.</div>';
+    }
 
     /* ── Répartition du loyer (le cœur de l'argumentaire) ── */
     echo '<div class="lfi-app-card" style="border:2px solid #c8102e;margin-bottom:14px">';
