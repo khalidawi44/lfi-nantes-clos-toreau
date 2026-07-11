@@ -120,14 +120,12 @@ function lfi_nct_render_form($edit_id = 0) {
                 };
                 foreach ($types as $k => $label): ?>
                     <div class="lfi-prob-item">
-                        <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="<?php echo esc_attr($k); ?>" data-sub="sub-<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
-                        <?php echo $sub($k); ?>
+                        <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="<?php echo esc_attr($k); ?>"> <?php echo $label; ?></label>
                     </div>
                 <?php endforeach; ?>
                 <div class="lfi-prob-item">
-                    <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="autre" data-sub="sub-autre"> Autre — précisez :</label>
+                    <label class="lfi-check"><input type="checkbox" class="lfi-prob-cb" name="problemes_types[]" value="autre"> Autre — précisez :</label>
                     <input type="text" name="problemes_types_autre" class="lfi-other-input" placeholder="Décrivez ici le problème (texte libre)">
-                    <?php echo $sub('autre'); ?>
                 </div>
 
                 <style>
@@ -151,8 +149,26 @@ function lfi_nct_render_form($edit_id = 0) {
             </fieldset>
 
             <fieldset class="lfi-fieldset">
+                <legend class="lfi-legend">Depuis quand ? À quelle fréquence ? <span style="color:#888;font-weight:400">(en général, facultatif)</span></legend>
+                <label class="lfi-field" style="margin:0 0 6px"><span class="lfi-label">Depuis quand&nbsp;?</span>
+                    <select name="problemes_duree">
+                        <option value="">— choisir —</option>
+                        <?php foreach ($durees as $dk => $dl): ?>
+                            <option value="<?php echo esc_attr($dk); ?>"><?php echo esc_html($dl); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <div class="lfi-label" style="font-weight:700;color:#c8102e;margin:2px 0 4px">Est-ce récurrent&nbsp;?</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    <?php foreach ($recurrences as $rk => $rl): ?>
+                        <label class="lfi-radio" style="margin:0"><input type="radio" name="problemes_recurrent" value="<?php echo esc_attr($rk); ?>"> <?php echo esc_html($rl); ?></label>
+                    <?php endforeach; ?>
+                </div>
+            </fieldset>
+
+            <fieldset class="lfi-fieldset">
                 <legend class="lfi-legend">Gravité ressentie <span class="req">*</span></legend>
-                <p class="lfi-help">1 = mineur · 10 = insupportable / critique</p>
+                <p class="lfi-help">1 = mineur · 10 = insupportable / critique — une seule note pour l'ensemble</p>
                 <div class="lfi-scale">
                     <?php for ($i = 1; $i <= 10; $i++): ?>
                         <label class="lfi-radio-btn"><input type="radio" name="problemes_gravite" value="<?php echo $i; ?>"> <?php echo $i; ?></label>
@@ -331,14 +347,16 @@ function lfi_nct_render_form($edit_id = 0) {
             </fieldset>
         </div>
 
-        <fieldset class="lfi-fieldset">
-            <legend class="lfi-legend">📌 Pour rester en lien (facultatif)</legend>
-            <label class="lfi-check"><input type="checkbox" name="interesse_ga" value="1"> <strong>Intéressé·e par le Groupe d'Action</strong> — être tenu·e informé·e, participer aux actions du quartier</label>
-            <label class="lfi-field"><span class="lfi-label">Prénom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_prenom"></label>
-            <label class="lfi-field"><span class="lfi-label">Nom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_nom"></label>
-            <label class="lfi-field"><span class="lfi-label">Téléphone ou email <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_contact" placeholder="pour vous tenir informé·e"></label>
-            <p class="lfi-help">Rien n'est obligatoire ici. Ces informations servent uniquement à vous tenir informé·e des actions du quartier — jamais transmises à un tiers.</p>
-        </fieldset>
+        <details class="lfi-fieldset" style="padding:10px 14px">
+            <summary style="cursor:pointer;font-weight:700;color:#0b3d91;list-style:none">➕ Rester en lien avec le Groupe d'Action <span style="color:#888;font-weight:400">(facultatif)</span></summary>
+            <div style="margin-top:8px">
+                <label class="lfi-check"><input type="checkbox" name="interesse_ga" value="1"> <strong>Intéressé·e par le Groupe d'Action</strong> — être tenu·e informé·e, participer aux actions du quartier</label>
+                <label class="lfi-field"><span class="lfi-label">Prénom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_prenom"></label>
+                <label class="lfi-field"><span class="lfi-label">Nom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_nom"></label>
+                <label class="lfi-field"><span class="lfi-label">Téléphone ou email <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_contact" placeholder="pour vous tenir informé·e"></label>
+                <p class="lfi-help">Rien n'est obligatoire ici. Ces informations servent uniquement à vous tenir informé·e des actions du quartier — jamais transmises à un tiers.</p>
+            </div>
+        </details>
 
         <div class="lfi-info-box">
             🔒 <strong>RGPD</strong> : ces infos sont strictement internes au Groupe d'Action LFI Nantes Sud Clos Toreau, jamais transmises à un tiers. Vous pouvez demander leur suppression à tout moment.
@@ -409,7 +427,9 @@ function lfi_nct_render_submission_summary($id) {
     ];
     $rec_labels = [
         'permanent' => 'En permanence',
-        'parfois'   => 'Régulièrement',
+        'souvent'   => 'Souvent',
+        'parfois'   => 'De temps en temps',
+        'rare'      => 'Rarement / ponctuel',
         'ponctuel'  => 'Ponctuel',
     ];
 
