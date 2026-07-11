@@ -3700,8 +3700,12 @@ function lfi_nct_app_view_carte_plein($force_all = false) {
 
     echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">';
     echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    /* VERROUILLAGE : on empêche le « tirer pour rafraîchir » et tout défilement
+       de page (c'est ce qui « resynchronisait » et remettait la carte à zéro
+       quand on remontait). La carte occupe tout, on n'en sort que par le bouton. */
+    echo '<style>html.lfi-cp-lock,html.lfi-cp-lock body{margin:0!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important;position:fixed!important;width:100%!important;top:0;left:0;touch-action:none}#cp-map{touch-action:none}</style>';
     echo '<div id="cp-map" style="position:fixed;inset:0;z-index:9998;background:#eef"></div>';
-    echo '<a href="' . esc_url(lfi_nct_app_url('carte')) . '" style="position:fixed;top:12px;left:12px;z-index:10000;background:#fff;color:#c8102e;font-weight:800;padding:9px 14px;border-radius:10px;text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,.25)">← Retour</a>';
+    echo '<a href="' . esc_url(lfi_nct_app_url('carte')) . '" style="position:fixed;top:12px;left:12px;z-index:10001;background:#c8102e;color:#fff;font-weight:800;padding:11px 16px;border-radius:12px;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.35);font-size:1.02em">✕ Fermer la carte</a>';
     echo '<div style="position:fixed;top:12px;right:12px;z-index:10000;background:rgba(255,255,255,.94);border-radius:10px;padding:7px 10px;font-size:.75em;box-shadow:0 2px 6px rgba(0,0,0,.2);line-height:1.5">'
         . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7f37;margin-right:5px"></span>Sans souci</div>'
         . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#bd8600;margin-right:5px"></span>Préoccupant</div>'
@@ -3713,6 +3717,16 @@ function lfi_nct_app_view_carte_plein($force_all = false) {
     <script>
     (function init(){
         if (typeof L === 'undefined' || !document.getElementById('cp-map')) { return setTimeout(init, 200); }
+        /* Verrou anti « tirer pour rafraîchir » / défilement de page. */
+        var docEl = document.documentElement;
+        docEl.classList.add('lfi-cp-lock');
+        function unlock(){ docEl.classList.remove('lfi-cp-lock'); }
+        window.addEventListener('pagehide', unlock);
+        /* Blocage explicite du geste de pull-to-refresh au niveau document. */
+        document.addEventListener('touchmove', function(e){
+            /* on laisse la carte gérer ses propres gestes ; on bloque le reste. */
+            if (!e.target.closest || !e.target.closest('#cp-map')) { e.preventDefault(); }
+        }, {passive:false});
         function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
         /* Vue mémorisée (persiste après un rechargement → jamais « vue haute »). */
         var saved=null; try{ saved=JSON.parse(localStorage.getItem('lfi_cp_view')||'null'); }catch(e){}
