@@ -735,6 +735,7 @@ function lfi_nct_app_shortcode() {
         'signaler-bug'           => 'lfi_nct_app_view_signaler_bug',
         'victoires'              => 'lfi_nct_app_view_victoires',
         'communiques'            => 'lfi_nct_app_view_communiques',
+        'rejoindre'              => 'lfi_nct_app_view_rejoindre',
         'annuaire'               => 'lfi_nct_app_view_public_gas',
         'ga'                     => 'lfi_nct_app_view_public_ga',
     ];
@@ -853,6 +854,8 @@ function lfi_nct_app_shortcode() {
                     case 'presse-diffuser': lfi_nct_app_view_presse_diffuser(); break;
                     case 'presse-contacts': lfi_nct_app_view_presse_contacts(); break;
                     case 'communiques':     lfi_nct_app_view_communiques();     break;
+                    case 'qr-enquete':      lfi_nct_app_view_qr_enquete();      break;
+                    case 'rejoindre':       lfi_nct_app_view_rejoindre();       break;
                     case 'stats-enquete':   lfi_nct_app_view_stats_enquete();   break;
                     case 'sms-locataires':  lfi_nct_app_view_sms_locataires();  break;
                     case 'sms-blocklist':   lfi_nct_app_view_sms_blocklist();   break;
@@ -1096,6 +1099,7 @@ function lfi_nct_app_screen_close($more_tiles = true) {
                 ['💡', 'Idées d\'actions',         lfi_nct_app_url('propositions')],
                 ['📅', 'Événements',               lfi_nct_app_url('evenements')],
                 ['📋', 'Faire passer une enquête', lfi_nct_app_url('enquete')],
+                ['🔳', 'QR code enquête',          lfi_nct_app_url('qr-enquete')],
                 ['📸', 'Photos',                   lfi_nct_app_url('enquete-photos')],
                 ['🤖', 'Aide',                     lfi_nct_app_url('aide')],
             ];
@@ -2560,6 +2564,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
             ['🐀', 'Carte des rats',         'Points chauds + export preuve',      lfi_nct_app_url('carte-rats')],
             ['📋', 'Faire passer une enquête', 'Porte-à-porte · photos',            lfi_nct_app_url('enquete')],
+            ['🔳', 'QR code enquête',        'Scan → compte auto → enquête',       lfi_nct_app_url('qr-enquete')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
