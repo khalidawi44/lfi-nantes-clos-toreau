@@ -45,7 +45,7 @@ function lfi_nct_elue_stats() {
         $slug
     )) ?: [];
     $labels = [
-        'degats_eaux' => '💧 Dégâts des eaux / fuites', 'humidite' => '🦠 Moisissures / humidité',
+        'degats_eaux' => '💧 Dégâts des eaux / fuites', 'odeurs_egout' => '🤢 Odeurs d\'égout / eaux usées', 'humidite' => '🦠 Moisissures / humidité',
         'insectes' => '🐛 Nuisibles (punaises, cafards, rats)', 'chauffage' => '🔥 Chauffage / eau chaude',
         'electricite' => '⚡ Électricité / sécurité', 'ascenseur' => '🛗 Ascenseur',
         'parties_communes' => '🏢 Parties communes', 'bruit' => '🔊 Bruit',
