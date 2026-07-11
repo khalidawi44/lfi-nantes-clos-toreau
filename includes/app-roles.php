@@ -711,6 +711,7 @@ function lfi_nct_app_role_dispatch(&$handled) {
         $vue = isset($_GET['vue']) ? sanitize_key($_GET['vue']) : '';
         switch ($vue) {
             case 'enquete':          lfi_nct_app_view_enquete();          break;
+            case 'qr-enquete':       lfi_nct_app_view_qr_enquete();       break;
             case 'evenements':       lfi_nct_app_view_evenements();       break;
             case 'enquete-photos':   lfi_nct_app_view_enquete_photos();   break;
             /* Coordination : proposer une action, dire ses dispos, voir celles
