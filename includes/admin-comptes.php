@@ -221,6 +221,10 @@ function lfi_nct_admin_render_comptes_loc() {
                             if ($ufonc !== '' && function_exists('lfi_nct_fonction_label')): ?>
                                 <br><span style="background:#eef4ff;color:#0b3d91;padding:1px 6px;border-radius:3px;font-size:.85em;font-weight:700"><?php echo esc_html(lfi_nct_fonction_label($ufonc)); ?></span>
                             <?php endif; ?>
+                            <?php $uref = (string) get_user_meta($u->ID, 'lfi_nct_referent_immeuble', true);
+                            if ($uref !== ''): ?>
+                                <br><span style="background:#eef7ee;color:#186a3b;padding:1px 6px;border-radius:3px;font-size:.85em;font-weight:700">🏢 Référent·e : <?php echo esc_html($uref); ?></span>
+                            <?php endif; ?>
                             <?php if (!$rid): ?>
                                 <br><span style="background:#fff8e6;color:#bd8600;padding:1px 6px;border-radius:3px;font-size:.85em">⚠ Sans enquête</span>
                             <?php endif; ?>

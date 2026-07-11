@@ -127,6 +127,7 @@ function lfi_nct_rejoindre_handle() {
         $tel    = preg_replace('/\D/', '', (string) ($_POST['tel'] ?? ''));
         $fonction = sanitize_key($_POST['fonction'] ?? '');
         if (!isset(lfi_nct_fonctions_list()[$fonction])) $fonction = '';
+        $referent_immeuble = sanitize_text_field(wp_unslash($_POST['referent_immeuble'] ?? ''));
         if ($prenom === '' && $nom === '') { wp_safe_redirect(lfi_nct_app_url('rejoindre', ['step' => 'register', 'tel' => $tel, 'ga' => $ga, 'err' => 'nom'])); exit; }
 
         /* Anti-doublon : si le numéro existe déjà, on ne recrée pas. */
@@ -154,6 +155,7 @@ function lfi_nct_rejoindre_handle() {
         if ($ga === '') $ga = lfi_nct_qr_default_ga();
         if ($ga !== '') update_user_meta($uid, 'lfi_nct_ga', $ga);
         if ($fonction !== '') update_user_meta($uid, 'lfi_nct_fonction', $fonction);
+        if ($referent_immeuble !== '') update_user_meta($uid, 'lfi_nct_referent_immeuble', $referent_immeuble);
         update_user_meta($uid, 'lfi_nct_self_enqueteur', current_time('mysql'));
 
         wp_clear_auth_cookie(); wp_set_current_user($uid); wp_set_auth_cookie($uid, true);
@@ -200,6 +202,11 @@ function lfi_nct_app_view_rejoindre() {
             echo '<option value="' . esc_attr($slug) . '"' . selected($default_ga, $slug, false) . '>' . esc_html($lbl) . '</option>';
         }
         echo '</select></label>';
+        /* Référent·e d'un immeuble précis (facultatif) — membre du GA rattaché
+           à un bâtiment, relais des habitant·es de cet immeuble. */
+        echo '<label>🏢 Référent·e d\'un immeuble ? <span style="color:#888;font-weight:400">(facultatif)</span><input type="text" name="referent_immeuble" list="lfi-ref-adr" placeholder="Nom / adresse de l\'immeuble (ex : 14 rue Saint-Jean-de-Luz)"></label>';
+        if (function_exists('lfi_nct_addresses_datalist')) echo lfi_nct_addresses_datalist('lfi-ref-adr');
+        echo '<div class="lfi-app-help" style="margin:2px 0 4px"><small>Un·e référent·e d\'immeuble est le relais du GA pour un bâtiment précis (informer, remonter les problèmes des voisin·es).</small></div>';
         if ($tel) echo '<div class="lfi-app-help" style="margin:4px 0"><small>📱 Téléphone : ' . esc_html($tel) . '</small></div>';
         echo '<button type="submit" id="rj-submit" class="btn-primary big" style="background:#c8102e">✅ Enregistrer et faire l\'enquête</button>';
         echo '<div style="text-align:center;margin-top:8px"><a href="' . esc_url(lfi_nct_app_url('rejoindre')) . '" style="color:#666">← changer de numéro</a></div>';
