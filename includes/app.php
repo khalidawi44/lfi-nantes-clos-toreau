@@ -890,6 +890,7 @@ function lfi_nct_app_shortcode() {
                     case 'sante':              lfi_nct_app_view_sante();              break;
                     case 'sante-analyse':      lfi_nct_app_view_sante_analyse();      break;
                     case 'sante-propositions': lfi_nct_app_view_sante_propositions(); break;
+                    case 'prestataires':          lfi_nct_app_view_prestataires();           break;
                     case 'interventions':         lfi_nct_app_view_interventions();          break;
                     case 'intervention-add':      lfi_nct_app_view_intervention_add();       break;
                     case 'intervention-edit':     lfi_nct_app_view_intervention_edit();      break;
@@ -2589,6 +2590,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
         ],
         '🔧 ESPACE INTERVENTION (brigade)' => [
             ['🔧', 'Interventions',          'Travaux chez les locataires',         lfi_nct_app_url('interventions')],
+            ['🧰', 'Prestataires extérieurs', 'Sapiens (punaises)… carnet réutilisable', lfi_nct_app_url('prestataires')],
             ['☎️', 'Appels NMH',            'Journal + rapports d\'incident',       lfi_nct_app_url('appels-nmh')],
             ['⚖️', 'Recouvrement NMH',       'Mise en demeure, tribunal',           lfi_nct_app_url('recouvrements')],
             ['💶', 'Comptabilité',           'CA · relances · export factures',     lfi_nct_app_url('compta')],
