@@ -847,6 +847,7 @@ function lfi_nct_app_shortcode() {
                     case 'dossier-avocat':    lfi_nct_app_view_dossier_avocat();    break;
                     case 'signatures':      lfi_nct_app_view_signatures();      break;
                     case 'carte':           lfi_nct_app_view_carte();           break;
+                    case 'carte-plein':     lfi_nct_app_view_carte_plein();     break;
                     case 'carte-rats':      lfi_nct_app_view_carte_rats();      break;
                     case 'carte-rats-export': lfi_nct_app_view_carte_rats_export(); break;
                     case 'presse':          lfi_nct_app_view_presse();          break;
@@ -2567,6 +2568,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏠', 'Réponses',              $stats['surveys'] . ' réponse(s)',     lfi_nct_app_url('enquetes')],
             ['📊', 'Stats enquête',          'Problèmes · adresses · gravité',     lfi_nct_app_url('stats-enquete')],
             ['🗺️', 'Carte interactive',      'Tous les signalements',              lfi_nct_app_url('carte')],
+            ['🗺️', 'Carte plein écran',      'Stable · ne se réinitialise pas',    lfi_nct_app_url('carte-plein')],
             ['🐀', 'Carte des rats',         'Points chauds + export preuve',      lfi_nct_app_url('carte-rats')],
             ['📋', 'Faire passer une enquête', 'Porte-à-porte · photos',            lfi_nct_app_url('enquete')],
             ['🔳', 'QR code enquête',        'Scan → compte auto → enquête',       lfi_nct_app_url('qr-enquete')],
