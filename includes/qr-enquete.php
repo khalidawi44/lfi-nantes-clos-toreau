@@ -45,6 +45,29 @@ function lfi_nct_qr_default_ga() {
     return $cga !== '' ? $cga : 'clos-toreau';
 }
 
+/** Fonctions / qualités possibles au moment de l'inscription via le QR.
+ *  Clé = valeur stockée ; valeur = libellé affiché. '' = par défaut. */
+function lfi_nct_fonctions_list() {
+    return [
+        ''            => '🧑‍🤝‍🧑 Habitant·e / militant·e',
+        'cm'          => '🏛️ Élu·e — conseil municipal',
+        'adjoint'     => '🏛️ Élu·e — adjoint·e au maire',
+        'metropole'   => '🏙️ Élu·e — conseil métropolitain',
+        'departement' => '🏢 Élu·e — conseil départemental',
+        'region'      => '🌍 Élu·e — conseil régional',
+        'depute'      => '🇫🇷 Élu·e — député·e',
+        'senateur'    => '🏛️ Élu·e — sénateur·rice',
+        'europe'      => '🇪🇺 Élu·e — député·e européen·ne',
+        'candidat'    => '📣 Candidat·e (élection à venir)',
+        'autre_elu'   => '⭐ Autre fonction / mandat',
+    ];
+}
+/** Libellé lisible d'une fonction stockée (repli sur militant·e). */
+function lfi_nct_fonction_label($key) {
+    $l = lfi_nct_fonctions_list();
+    return $l[$key] ?? ($l[''] ?? '');
+}
+
 /** Peut-on ouvrir une session automatiquement pour ce compte via le QR ?
  *  Uniquement les membres de GA (enquêteurs), jamais admin ni locataire seul. */
 function lfi_nct_qr_can_autologin($u) {
@@ -91,6 +114,8 @@ function lfi_nct_rejoindre_handle() {
         $nom    = sanitize_text_field(wp_unslash($_POST['nom'] ?? ''));
         $ga     = sanitize_title(wp_unslash($_POST['ga'] ?? ''));
         $tel    = preg_replace('/\D/', '', (string) ($_POST['tel'] ?? ''));
+        $fonction = sanitize_key($_POST['fonction'] ?? '');
+        if (!isset(lfi_nct_fonctions_list()[$fonction])) $fonction = '';
         if ($prenom === '' && $nom === '') { wp_safe_redirect(lfi_nct_app_url('rejoindre', ['step' => 'register', 'tel' => $tel, 'ga' => $ga, 'err' => 'nom'])); exit; }
 
         /* Anti-doublon : si le numéro existe déjà, on ne recrée pas. */
@@ -117,6 +142,7 @@ function lfi_nct_rejoindre_handle() {
         /* GA choisi ; repli sur le GA « maison » (Clos Toreau) si non fourni. */
         if ($ga === '') $ga = lfi_nct_qr_default_ga();
         if ($ga !== '') update_user_meta($uid, 'lfi_nct_ga', $ga);
+        if ($fonction !== '') update_user_meta($uid, 'lfi_nct_fonction', $fonction);
         update_user_meta($uid, 'lfi_nct_self_enqueteur', current_time('mysql'));
 
         wp_clear_auth_cookie(); wp_set_current_user($uid); wp_set_auth_cookie($uid, true);
@@ -149,6 +175,9 @@ function lfi_nct_app_view_rejoindre() {
         echo '<input type="hidden" name="tel" value="' . esc_attr($tel) . '">';
         echo '<label>Prénom<input type="text" name="prenom" autocomplete="given-name" required></label>';
         echo '<label>Nom<input type="text" name="nom" autocomplete="family-name"></label>';
+        echo '<label>Votre fonction / mandat<select name="fonction">';
+        foreach (lfi_nct_fonctions_list() as $fk => $fl) echo '<option value="' . esc_attr($fk) . '">' . esc_html($fl) . '</option>';
+        echo '</select></label>';
         echo '<label>Ton groupe d\'action<select name="ga">';
         $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
         $default_ga = $ga ?: lfi_nct_qr_default_ga();
