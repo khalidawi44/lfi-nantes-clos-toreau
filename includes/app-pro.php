@@ -2292,6 +2292,13 @@ function lfi_nct_dossier_render_batailles($u, $row) {
         echo '<div style="padding:12px;border-radius:10px;background:#fff3f5;border-left:5px solid #c8102e">';
         echo '<div style="font-weight:800;color:#c8102e">⚡ Urgence — en cours</div>';
         echo '<div style="font-size:.82em;color:#555;margin-top:3px">Faire cesser le danger : travaux, relogement d\'urgence, insalubrité.</div>';
+        /* Appel rapide d'un prestataire extérieur (Sapiens pour les nuisibles…),
+           pré-filtré selon le problème du dossier. */
+        if (function_exists('lfi_nct_prestataires_quick_call')) {
+            $types_h = is_array($rdata) ? (array) ($rdata['problemes_types'] ?? []) : [];
+            $hint = in_array('insectes', $types_h, true) ? 'desinsectisation' : '';
+            lfi_nct_prestataires_quick_call($hint);
+        }
         echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'NMH a accédé à la demande (travaux lancés, relogement accordé…) ? On clôt le volet urgence : une COUPE est posée et le GA est prévenu. Le dossier reste ouvert pour l\\\'indemnisation.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-primary" style="background:#186a3b;width:100%;font-size:.86em">🏆 Bataille gagnée — clore l\'urgence</button></form>';
         echo '</div>';
         echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
