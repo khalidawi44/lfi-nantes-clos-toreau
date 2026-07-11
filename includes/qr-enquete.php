@@ -67,6 +67,17 @@ function lfi_nct_fonction_label($key) {
     $l = lfi_nct_fonctions_list();
     return $l[$key] ?? ($l[''] ?? '');
 }
+/** Cette fonction est-elle celle d'un·e élu·e / candidat·e (→ espace
+ *  argumentaire) plutôt qu'un·e enquêteur·rice militant·e (→ enquête) ? */
+function lfi_nct_fonction_is_elu($key) {
+    return $key !== '' && isset(lfi_nct_fonctions_list()[$key]);
+}
+/** Destination après connexion selon la fonction du compte : les élu·es
+ *  arrivent sur l'argumentaire (stats + loyer), les autres sur l'enquête. */
+function lfi_nct_qr_destination_for_user($uid) {
+    $f = (string) get_user_meta((int) $uid, 'lfi_nct_fonction', true);
+    return lfi_nct_fonction_is_elu($f) ? 'argumentaire-elue' : 'enquete';
+}
 
 /** Peut-on ouvrir une session automatiquement pour ce compte via le QR ?
  *  Uniquement les membres de GA (enquêteurs), jamais admin ni locataire seul. */
@@ -96,7 +107,7 @@ function lfi_nct_rejoindre_handle() {
         $u = lfi_nct_find_user_by_phone($digits);
         if ($u && lfi_nct_qr_can_autologin($u)) {
             wp_clear_auth_cookie(); wp_set_current_user($u->ID); wp_set_auth_cookie($u->ID, true);
-            wp_safe_redirect(lfi_nct_app_url('enquete', ['bienvenue' => 1])); exit;
+            wp_safe_redirect(lfi_nct_app_url(lfi_nct_qr_destination_for_user($u->ID), ['bienvenue' => 1])); exit;
         }
         if ($u) { /* compte existant mais sensible (admin/locataire) → connexion normale. */
             wp_safe_redirect(lfi_nct_app_url('rejoindre', ['exists' => 1])); exit;
@@ -122,7 +133,7 @@ function lfi_nct_rejoindre_handle() {
         $exist = $tel ? lfi_nct_find_user_by_phone($tel) : null;
         if ($exist && lfi_nct_qr_can_autologin($exist)) {
             wp_clear_auth_cookie(); wp_set_current_user($exist->ID); wp_set_auth_cookie($exist->ID, true);
-            wp_safe_redirect(lfi_nct_app_url('enquete', ['bienvenue' => 1])); exit;
+            wp_safe_redirect(lfi_nct_app_url(lfi_nct_qr_destination_for_user($exist->ID), ['bienvenue' => 1])); exit;
         }
 
         $login = lfi_nct_app_make_username($prenom ?: 'enqueteur', $nom ?: $tel);
@@ -146,7 +157,7 @@ function lfi_nct_rejoindre_handle() {
         update_user_meta($uid, 'lfi_nct_self_enqueteur', current_time('mysql'));
 
         wp_clear_auth_cookie(); wp_set_current_user($uid); wp_set_auth_cookie($uid, true);
-        wp_safe_redirect(lfi_nct_app_url('enquete', ['bienvenue' => 1])); exit;
+        wp_safe_redirect(lfi_nct_app_url(lfi_nct_qr_destination_for_user($uid), ['bienvenue' => 1])); exit;
     }
 }
 
@@ -154,9 +165,10 @@ function lfi_nct_rejoindre_handle() {
  *  VUE PUBLIQUE : /app/?vue=rejoindre (cible du QR).             *
  * -------------------------------------------------------------- */
 function lfi_nct_app_view_rejoindre() {
-    /* Déjà connecté en enquêteur/membre → direct à l'enquête. */
+    /* Déjà connecté en enquêteur/membre → direct à sa destination (élu·e →
+       argumentaire, sinon enquête). */
     if (is_user_logged_in() && function_exists('lfi_nct_user_role_ga') && lfi_nct_user_role_ga()) {
-        wp_safe_redirect(lfi_nct_app_url('enquete')); exit;
+        wp_safe_redirect(lfi_nct_app_url(lfi_nct_qr_destination_for_user(get_current_user_id()))); exit;
     }
     $step = isset($_GET['step']) ? sanitize_key($_GET['step']) : 'phone';
     $tel  = isset($_GET['tel']) ? preg_replace('/\D/', '', (string) $_GET['tel']) : '';
@@ -175,9 +187,10 @@ function lfi_nct_app_view_rejoindre() {
         echo '<input type="hidden" name="tel" value="' . esc_attr($tel) . '">';
         echo '<label>Prénom<input type="text" name="prenom" autocomplete="given-name" required></label>';
         echo '<label>Nom<input type="text" name="nom" autocomplete="family-name"></label>';
-        echo '<label>Votre fonction / mandat<select name="fonction">';
+        echo '<label>Votre fonction / mandat<select name="fonction" id="rj-fonction" onchange="rjFonction()">';
         foreach (lfi_nct_fonctions_list() as $fk => $fl) echo '<option value="' . esc_attr($fk) . '">' . esc_html($fl) . '</option>';
         echo '</select></label>';
+        echo '<div id="rj-elu-note" style="display:none;background:#eef4ff;border:1px solid #b9d0f5;border-radius:10px;padding:9px 11px;margin:2px 0 4px;font-size:.9em;color:#26374f">🏛️ En tant qu\'élu·e, vous accédez à un <strong>espace argumentaire</strong> : statistiques anonymes des enquêtes + répartition du loyer + points de langage pour parler aux habitant·es.</div>';
         echo '<label>Ton groupe d\'action<select name="ga">';
         $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
         $default_ga = $ga ?: lfi_nct_qr_default_ga();
@@ -188,9 +201,10 @@ function lfi_nct_app_view_rejoindre() {
         }
         echo '</select></label>';
         if ($tel) echo '<div class="lfi-app-help" style="margin:4px 0"><small>📱 Téléphone : ' . esc_html($tel) . '</small></div>';
-        echo '<button type="submit" class="btn-primary big" style="background:#c8102e">✅ Enregistrer et faire l\'enquête</button>';
+        echo '<button type="submit" id="rj-submit" class="btn-primary big" style="background:#c8102e">✅ Enregistrer et faire l\'enquête</button>';
         echo '<div style="text-align:center;margin-top:8px"><a href="' . esc_url(lfi_nct_app_url('rejoindre')) . '" style="color:#666">← changer de numéro</a></div>';
         echo '</form>';
+        echo '<script>function rjFonction(){var s=document.getElementById("rj-fonction"),b=document.getElementById("rj-submit"),n=document.getElementById("rj-elu-note");var elu=s&&s.value!=="";if(n)n.style.display=elu?"block":"none";if(b)b.textContent=elu?"✅ Enregistrer et voir mes arguments":"✅ Enregistrer et faire l\'enquête";}rjFonction();</script>';
         lfi_nct_app_screen_close(); return;
     }
 
