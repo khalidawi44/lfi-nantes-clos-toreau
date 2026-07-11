@@ -263,8 +263,8 @@ function lfi_nct_render_form($edit_id = 0) {
             </div>
             <fieldset class="lfi-fieldset">
                 <legend class="lfi-legend">🪪 Fiche d'adhésion — Union des Quartiers Libres</legend>
-                <label class="lfi-field"><span class="lfi-label">Prénom <span class="req">*</span></span><input type="text" name="contact_prenom"></label>
-                <label class="lfi-field"><span class="lfi-label">Nom <span class="req">*</span></span><input type="text" name="contact_nom"></label>
+                <label class="lfi-field"><span class="lfi-label">Prénom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="contact_prenom"></label>
+                <label class="lfi-field"><span class="lfi-label">Nom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="contact_nom"></label>
                 <label class="lfi-field"><span class="lfi-label">Date de naissance</span><input type="date" name="adhesion_naissance"></label>
                 <label class="lfi-field"><span class="lfi-label">Adresse complète</span><input type="text" name="adhesion_adresse" placeholder="N°, rue, étage, appartement"></label>
                 <label class="lfi-field"><span class="lfi-label">Téléphone</span><input type="tel" name="contact_tel" placeholder="06 12 34 56 78"></label>
@@ -330,6 +330,15 @@ function lfi_nct_render_form($edit_id = 0) {
                 </script>
             </fieldset>
         </div>
+
+        <fieldset class="lfi-fieldset">
+            <legend class="lfi-legend">📌 Pour rester en lien (facultatif)</legend>
+            <label class="lfi-check"><input type="checkbox" name="interesse_ga" value="1"> <strong>Intéressé·e par le Groupe d'Action</strong> — être tenu·e informé·e, participer aux actions du quartier</label>
+            <label class="lfi-field"><span class="lfi-label">Prénom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_prenom"></label>
+            <label class="lfi-field"><span class="lfi-label">Nom <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_nom"></label>
+            <label class="lfi-field"><span class="lfi-label">Téléphone ou email <span style="color:#888;font-weight:400">(facultatif)</span></span><input type="text" name="interesse_contact" placeholder="pour vous tenir informé·e"></label>
+            <p class="lfi-help">Rien n'est obligatoire ici. Ces informations servent uniquement à vous tenir informé·e des actions du quartier — jamais transmises à un tiers.</p>
+        </fieldset>
 
         <div class="lfi-info-box">
             🔒 <strong>RGPD</strong> : ces infos sont strictement internes au Groupe d'Action LFI Nantes Sud Clos Toreau, jamais transmises à un tiers. Vous pouvez demander leur suppression à tout moment.
@@ -511,6 +520,16 @@ function lfi_nct_render_submission_summary($id) {
                 <?php if ($row->contact_nom !== ''): ?><li><strong>Nom :</strong> <?php echo esc_html($row->contact_nom); ?></li><?php endif; ?>
                 <?php if ($row->contact_tel !== ''): ?><li><strong>Téléphone :</strong> <?php echo esc_html($row->contact_tel); ?></li><?php endif; ?>
                 <?php if ($row->contact_email !== ''): ?><li><strong>Email :</strong> <?php echo esc_html($row->contact_email); ?></li><?php endif; ?>
+            </ul>
+        <?php endif; ?>
+
+        <?php if (!empty($data['interesse_ga'])): ?>
+            <h3>📌 Intéressé·e par le Groupe d'Action</h3>
+            <ul class="lfi-summary-list">
+                <li><strong>Souhaite rester en lien :</strong> ✅ Oui</li>
+                <?php if (!empty($data['interesse_prenom'])): ?><li><strong>Prénom :</strong> <?php echo esc_html($data['interesse_prenom']); ?></li><?php endif; ?>
+                <?php if (!empty($data['interesse_nom'])): ?><li><strong>Nom :</strong> <?php echo esc_html($data['interesse_nom']); ?></li><?php endif; ?>
+                <?php if (!empty($data['interesse_contact'])): ?><li><strong>Contact :</strong> <?php echo esc_html($data['interesse_contact']); ?></li><?php endif; ?>
             </ul>
         <?php endif; ?>
 
