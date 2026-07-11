@@ -31,6 +31,20 @@ function lfi_nct_find_user_by_phone($phone) {
     return null;
 }
 
+/** GA par défaut du QR = le GA « maison » (Clos Toreau) : ainsi une enquête
+ *  passée via le QR est bien rattachée à Clos Toreau, sauf choix explicite. */
+function lfi_nct_qr_default_ga() {
+    $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
+    foreach ($gas as $g) {
+        if (stripos((string) ($g['nom'] ?? ''), 'clos toreau') !== false
+            || stripos((string) ($g['commune'] ?? ''), 'clos toreau') !== false) {
+            return function_exists('lfi_nct_ga_slug') ? lfi_nct_ga_slug($g['nom']) : sanitize_title($g['nom']);
+        }
+    }
+    $cga = function_exists('lfi_nct_creation_ga') ? (string) lfi_nct_creation_ga() : '';
+    return $cga !== '' ? $cga : 'clos-toreau';
+}
+
 /** Peut-on ouvrir une session automatiquement pour ce compte via le QR ?
  *  Uniquement les membres de GA (enquêteurs), jamais admin ni locataire seul. */
 function lfi_nct_qr_can_autologin($u) {
@@ -100,8 +114,8 @@ function lfi_nct_rejoindre_handle() {
         ]);
         if (is_wp_error($uid) || !$uid) { wp_safe_redirect(lfi_nct_app_url('rejoindre', ['step' => 'register', 'tel' => $tel, 'ga' => $ga, 'err' => 'create'])); exit; }
         if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
-        /* GA choisi ; repli sur le GA de création si non fourni. */
-        if ($ga === '' && function_exists('lfi_nct_creation_ga')) $ga = (string) lfi_nct_creation_ga();
+        /* GA choisi ; repli sur le GA « maison » (Clos Toreau) si non fourni. */
+        if ($ga === '') $ga = lfi_nct_qr_default_ga();
         if ($ga !== '') update_user_meta($uid, 'lfi_nct_ga', $ga);
         update_user_meta($uid, 'lfi_nct_self_enqueteur', current_time('mysql'));
 
@@ -137,7 +151,7 @@ function lfi_nct_app_view_rejoindre() {
         echo '<label>Nom<input type="text" name="nom" autocomplete="family-name"></label>';
         echo '<label>Ton groupe d\'action<select name="ga">';
         $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
-        $default_ga = $ga ?: (function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '');
+        $default_ga = $ga ?: lfi_nct_qr_default_ga();
         foreach ($gas as $g) {
             $slug = function_exists('lfi_nct_ga_slug') ? lfi_nct_ga_slug($g['nom']) : sanitize_title($g['nom']);
             $lbl = $g['nom'] . ($g['commune'] ? ' — ' . $g['commune'] : '');
