@@ -31,6 +31,33 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ RÉPARATION QR : les enquêtes saisies par des enquêteur·rices inscrit·es
+       via le QR avaient reçu comme GA le HASH md5 du nom « Clos Toreau » au lieu
+       du slug canonique 'clos-toreau' → elles étaient enregistrées mais INVISIBLES
+       dans la vue Clos Toreau. On re-tague ces enquêtes + les comptes concernés
+       vers 'clos-toreau'. Idempotent. */
+    if (get_option('lfi_nct_qr_ga_repair_v2') !== '1') {
+        global $wpdb;
+        $hashes = [];
+        if (function_exists('lfi_nct_public_gas_list') && function_exists('lfi_nct_ga_slug')) {
+            foreach (lfi_nct_public_gas_list() as $g) {
+                if (stripos((string) ($g['nom'] ?? ''), 'clos toreau') !== false) $hashes[] = lfi_nct_ga_slug($g['nom']);
+            }
+        }
+        $hashes = array_values(array_unique(array_filter($hashes)));
+        if ($hashes) {
+            $rtable = $wpdb->prefix . 'lfi_nct_responses';
+            foreach ($hashes as $h) {
+                /* Enquêtes → Clos Toreau. */
+                $wpdb->update($rtable, ['ga' => 'clos-toreau'], ['ga' => $h]);
+                /* Comptes (enquêteur·rices) dont le GA = ce hash → 'clos-toreau'. */
+                $us = get_users(['meta_key' => 'lfi_nct_ga', 'meta_value' => $h, 'fields' => ['ID'], 'number' => 5000]);
+                foreach ($us as $uu) update_user_meta((int) $uu->ID, 'lfi_nct_ga', 'clos-toreau');
+            }
+        }
+        update_option('lfi_nct_qr_ga_repair_v2', '1', false);
+    }
+
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
        le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
        « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est

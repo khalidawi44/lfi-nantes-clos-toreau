@@ -31,18 +31,88 @@ function lfi_nct_find_user_by_phone($phone) {
     return null;
 }
 
-/** GA par défaut du QR = le GA « maison » (Clos Toreau) : ainsi une enquête
- *  passée via le QR est bien rattachée à Clos Toreau, sauf choix explicite. */
+/** Slug de GA à STOCKER (meta lfi_nct_ga) pour rattacher correctement les
+ *  enquêtes au scope. IMPORTANT : le GA « maison » Clos Toreau est identifié
+ *  dans tout le système par le slug canonique 'clos-toreau' (et pas par le
+ *  hash md5 de lfi_nct_ga_slug) — sinon les enquêtes atterrissent sur un GA
+ *  fantôme et n'apparaissent pas dans la vue Clos Toreau. */
+function lfi_nct_qr_ga_value($nom) {
+    if (stripos((string) $nom, 'clos toreau') !== false) return 'clos-toreau';
+    return function_exists('lfi_nct_ga_slug') ? lfi_nct_ga_slug($nom) : sanitize_title($nom);
+}
+/** GA par défaut du QR = le GA « maison » (Clos Toreau), slug canonique. */
 function lfi_nct_qr_default_ga() {
-    $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
-    foreach ($gas as $g) {
-        if (stripos((string) ($g['nom'] ?? ''), 'clos toreau') !== false
-            || stripos((string) ($g['commune'] ?? ''), 'clos toreau') !== false) {
-            return function_exists('lfi_nct_ga_slug') ? lfi_nct_ga_slug($g['nom']) : sanitize_title($g['nom']);
-        }
+    return 'clos-toreau';
+}
+
+/* -------------------------------------------------------------- *
+ *  AUDIT ENQUÊTES : où sont TOUTES les enquêtes (par GA + qui les *
+ *  a saisies) — pour vérifier qu'elles sont bien enregistrées.   *
+ * -------------------------------------------------------------- */
+function lfi_nct_app_view_enquetes_audit() {
+    if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    if (!current_user_can('manage_options') && !(function_exists('lfi_nct_can_admin_ga') && lfi_nct_can_admin_ga())) {
+        wp_safe_redirect(lfi_nct_app_url()); exit;
     }
-    $cga = function_exists('lfi_nct_creation_ga') ? (string) lfi_nct_creation_ga() : '';
-    return $cga !== '' ? $cga : 'clos-toreau';
+    global $wpdb;
+    $t = $wpdb->prefix . 'lfi_nct_responses';
+
+    /* Consolidation manuelle : rattacher TOUTES les enquêtes non supprimées à
+       Clos Toreau (ga vide, = maison). Réservé au super-admin, avec confirm. */
+    if (!empty($_POST['lfi_enq_consolidate']) && check_admin_referer('lfi_enq_audit') && current_user_can('manage_options')) {
+        $n = (int) $wpdb->query("UPDATE $t SET ga = 'clos-toreau' WHERE deleted_at IS NULL AND ga <> 'clos-toreau'");
+        wp_safe_redirect(lfi_nct_app_url('enquetes-audit', ['done' => $n])); exit;
+    }
+
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL");
+    $today = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL AND DATE(submitted_at) = %s", current_time('Y-m-d')));
+    $by_ga = $wpdb->get_results("SELECT ga, COUNT(*) AS n FROM $t WHERE deleted_at IS NULL GROUP BY ga ORDER BY n DESC") ?: [];
+    $recent = $wpdb->get_results("SELECT id, submitted_at, adresse, ga, militant_user_id, militant_login FROM $t WHERE deleted_at IS NULL ORDER BY submitted_at DESC LIMIT 40") ?: [];
+
+    lfi_nct_app_screen_open('🔎 Audit des enquêtes', 'Où sont TOUTES les enquêtes + qui les a saisies');
+    if (isset($_GET['done'])) lfi_nct_app_flash('✅ ' . (int) $_GET['done'] . ' enquête(s) rattachée(s) à Clos Toreau.');
+
+    echo '<div style="display:flex;gap:8px;margin-bottom:12px">';
+    echo '<div style="flex:1;background:#0b3d91;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . $total . '</div><div style="font-size:.82em;opacity:.9">enquêtes au total</div></div>';
+    echo '<div style="flex:1;background:#186a3b;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . $today . '</div><div style="font-size:.82em;opacity:.9">saisies aujourd\'hui</div></div>';
+    echo '</div>';
+
+    echo '<h3 style="margin:6px 0 6px;color:#0b3d91">Répartition par groupe d\'action (GA)</h3>';
+    echo '<div class="lfi-app-help">Si des enquêtes du Clos Toreau apparaissent sous un GA au code bizarre (hash), c\'est un mauvais rattachement — le bouton plus bas les ramène toutes à Clos Toreau.</div>';
+    echo '<ul class="lfi-app-list">';
+    foreach ($by_ga as $g) {
+        $slug = (string) $g->ga;
+        $is_clos = ($slug === '' || $slug === 'clos-toreau');
+        $lbl = $is_clos ? '🏠 Clos Toreau' . ($slug === '' ? ' (historique)' : '') : '❓ GA « ' . esc_html($slug) . ' »';
+        echo '<li class="lfi-app-card"><div class="head"><div class="who">' . $lbl . '</div><div class="badge" style="background:' . ($is_clos ? '#186a3b' : '#c8102e') . ';color:#fff">' . (int) $g->n . '</div></div></li>';
+    }
+    echo '</ul>';
+
+    if (current_user_can('manage_options')) {
+        echo '<form method="post" onsubmit="return confirm(\'Rattacher TOUTES les enquêtes non supprimées à Clos Toreau ?\')" style="margin:8px 0 16px">' . wp_nonce_field('lfi_enq_audit', '_wpnonce', true, false);
+        echo '<input type="hidden" name="lfi_enq_consolidate" value="1">';
+        echo '<button type="submit" class="btn-primary big" style="background:#c8102e;width:100%">🏠 Rassembler TOUTES les enquêtes sous Clos Toreau</button></form>';
+    }
+
+    echo '<h3 style="margin:6px 0 6px;color:#0b3d91">40 dernières enquêtes (qui · quand · où · GA)</h3>';
+    if (empty($recent)) {
+        echo '<div class="lfi-app-empty">Aucune enquête enregistrée.</div>';
+    } else {
+        echo '<div style="display:flex;flex-direction:column;gap:6px">';
+        foreach ($recent as $r) {
+            $who = '';
+            if ((int) $r->militant_user_id > 0) { $u = get_userdata((int) $r->militant_user_id); $who = $u ? ($u->display_name ?: $u->user_login) : $r->militant_login; }
+            else $who = $r->militant_login ?: 'anonyme';
+            $slug = (string) $r->ga; $is_clos = ($slug === '' || $slug === 'clos-toreau');
+            echo '<div style="background:#fff;border:1px solid #eee;border-left:4px solid ' . ($is_clos ? '#186a3b' : '#c8102e') . ';border-radius:9px;padding:8px 11px">';
+            echo '<div style="font-weight:700;color:#1a1a1a">#' . (int) $r->id . ' · ' . esc_html($r->adresse ?: '(sans adresse)') . '</div>';
+            echo '<div style="font-size:.82em;color:#666;margin-top:2px">🧑 ' . esc_html($who) . ' · 🗓 ' . esc_html(wp_date('j M H:i', strtotime($r->submitted_at))) . ' · ' . ($is_clos ? '🏠 Clos Toreau' : '❓ ' . esc_html($slug)) . '</div>';
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+    echo '<div style="margin-top:12px"><a href="' . esc_url(lfi_nct_app_url('enquetes')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none">→ Voir la liste complète des enquêtes</a></div>';
+    lfi_nct_app_screen_close();
 }
 
 /** Fonctions / qualités possibles au moment de l'inscription via le QR.
@@ -197,7 +267,7 @@ function lfi_nct_app_view_rejoindre() {
         $gas = function_exists('lfi_nct_public_gas_list') ? lfi_nct_public_gas_list() : [];
         $default_ga = $ga ?: lfi_nct_qr_default_ga();
         foreach ($gas as $g) {
-            $slug = function_exists('lfi_nct_ga_slug') ? lfi_nct_ga_slug($g['nom']) : sanitize_title($g['nom']);
+            $slug = lfi_nct_qr_ga_value($g['nom']);
             $lbl = $g['nom'] . ($g['commune'] ? ' — ' . $g['commune'] : '');
             echo '<option value="' . esc_attr($slug) . '"' . selected($default_ga, $slug, false) . '>' . esc_html($lbl) . '</option>';
         }
