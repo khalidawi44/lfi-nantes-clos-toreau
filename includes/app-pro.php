@@ -3312,6 +3312,9 @@ function lfi_nct_app_view_carte($force_all = false) {
 
     lfi_nct_app_screen_open($force_all ? '🌐 Carte cumulée du réseau' : '🗺 Carte 3D des signalements', count($rows) . ' enquête(s) géolocalisée(s)' . ($pending ? ' · ' . $pending . ' à géocoder' : ''));
 
+    /* Accès à la carte PLEIN ÉCRAN 2D (stable, ne se réinitialise pas). */
+    echo '<a href="' . esc_url(lfi_nct_app_url('carte-plein')) . '" style="display:block;text-align:center;background:#0b3d91;color:#fff;font-weight:800;border-radius:10px;padding:11px;text-decoration:none;margin-bottom:12px">🗺️ Ouvrir la carte plein écran (stable)</a>';
+
     if ($force_all) {
         echo '<div class="lfi-app-help" style="background:#eef4ff;border-left:4px solid #0066a3"><strong>Carte cumulée de tout le réseau</strong> : tous les signalements de tous les groupes d\'action, sur une seule carte 3D. Vue réservée au super-admin.</div>';
     }
@@ -3641,6 +3644,90 @@ function lfi_nct_app_view_carte($force_all = false) {
     <?php
 
     lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
+ *  CARTE PLEIN ÉCRAN (2D, légère) — se charge UNE fois, ne se     *
+ *  rafraîchit pas, et MÉMORISE la position/zoom (même après un    *
+ *  rechargement accidentel → ne revient plus « en vue haute »).   *
+ * ============================================================== */
+function lfi_nct_app_view_carte_plein($force_all = false) {
+    $ok = $force_all ? current_user_can('manage_options')
+                     : (function_exists('lfi_nct_can_admin_ga') ? lfi_nct_can_admin_ga() : current_user_can('manage_options'));
+    if (!$ok) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    global $wpdb;
+    $table = $wpdb->prefix . 'lfi_nct_responses';
+    $scope = (!$force_all && function_exists('lfi_nct_responses_scope_clause'))
+        ? lfi_nct_responses_scope_clause('militant_user_id') : '';
+
+    $rows = $wpdb->get_results(
+        "SELECT id, adresse, etage, data, lat, lng FROM $table
+         WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL" . $scope . "
+         ORDER BY submitted_at DESC LIMIT 1000"
+    ) ?: [];
+
+    $type_labels = [
+        'degats_eaux' => '💧 Dégâts des eaux', 'odeurs_egout' => '🤢 Odeurs d\'égout', 'humidite' => '🌫 Humidité',
+        'insectes' => '🐜 Nuisibles', 'chauffage' => '🥶 Chauffage', 'electricite' => '⚡ Électricité',
+        'ascenseur' => '🛗 Ascenseur', 'parties_communes' => '🚪 Parties communes', 'bruit' => '🔊 Bruit',
+        'securite' => '🚨 Insécurité', 'autre' => '❗ Autre',
+    ];
+    $markers = [];
+    foreach ($rows as $r) {
+        $data = json_decode((string) $r->data, true); if (!is_array($data)) $data = [];
+        $score = function_exists('lfi_nct_gravity_score') ? lfi_nct_gravity_score($data) : (int) ($data['problemes_gravite'] ?? 0);
+        if (function_exists('lfi_nct_gravity_level')) { list($gk, $gl, $gc) = lfi_nct_gravity_level($score); }
+        else { if ($score >= 8) { $gl='Critique'; $gc='#7a0000'; } elseif ($score >= 6) { $gl='Grave'; $gc='#c8102e'; } elseif ($score >= 3) { $gl='Préoccupant'; $gc='#bd8600'; } else { $gl='Sans souci'; $gc='#1a7f37'; } }
+        $types = array_map(function ($t) use ($type_labels) { return $type_labels[$t] ?? ucfirst($t); }, (array) ($data['problemes_types'] ?? []));
+        $markers[] = [
+            'lat' => (float) $r->lat, 'lng' => (float) $r->lng,
+            'adr' => (string) $r->adresse, 'et' => (string) $r->etage,
+            'gl' => $gl, 'gc' => $gc, 'sc' => (int) $score, 'ty' => $types,
+        ];
+    }
+    $center_lat = defined('LFI_NCT_MAP_CENTER_LAT') ? (float) LFI_NCT_MAP_CENTER_LAT : 47.1933;
+    $center_lng = defined('LFI_NCT_MAP_CENTER_LNG') ? (float) LFI_NCT_MAP_CENTER_LNG : -1.5380;
+
+    echo '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">';
+    echo '<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    echo '<div id="cp-map" style="position:fixed;inset:0;z-index:9998;background:#eef"></div>';
+    echo '<a href="' . esc_url(lfi_nct_app_url('carte')) . '" style="position:fixed;top:12px;left:12px;z-index:10000;background:#fff;color:#c8102e;font-weight:800;padding:9px 14px;border-radius:10px;text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,.25)">← Retour</a>';
+    echo '<div style="position:fixed;top:12px;right:12px;z-index:10000;background:rgba(255,255,255,.94);border-radius:10px;padding:7px 10px;font-size:.75em;box-shadow:0 2px 6px rgba(0,0,0,.2);line-height:1.5">'
+        . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a7f37;margin-right:5px"></span>Sans souci</div>'
+        . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#bd8600;margin-right:5px"></span>Préoccupant</div>'
+        . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#c8102e;margin-right:5px"></span>Grave</div>'
+        . '<div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#7a0000;margin-right:5px"></span>Critique</div>'
+        . '</div>';
+    echo '<script>var LFI_CP_MARKERS=' . wp_json_encode($markers) . ',LFI_CP_C=[' . $center_lat . ',' . $center_lng . '];</script>';
+    ?>
+    <script>
+    (function init(){
+        if (typeof L === 'undefined' || !document.getElementById('cp-map')) { return setTimeout(init, 200); }
+        function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+        /* Vue mémorisée (persiste après un rechargement → jamais « vue haute »). */
+        var saved=null; try{ saved=JSON.parse(localStorage.getItem('lfi_cp_view')||'null'); }catch(e){}
+        var map=L.map('cp-map',{scrollWheelZoom:true});
+        if(saved&&saved.c){ map.setView(saved.c, saved.z||16); } else { map.setView(LFI_CP_C, 16); }
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+        map.on('moveend zoomend',function(){ try{ var c=map.getCenter(); localStorage.setItem('lfi_cp_view',JSON.stringify({c:[c.lat,c.lng],z:map.getZoom()})); }catch(e){} });
+        var pts=[];
+        (LFI_CP_MARKERS||[]).forEach(function(m){
+            if(!m.lat) return;
+            var mk=L.circleMarker([m.lat,m.lng],{radius:9,color:'#fff',weight:2,fillColor:m.gc,fillOpacity:.9}).addTo(map);
+            var h='<div style="min-width:170px"><strong>'+esc(m.adr)+'</strong>';
+            if(m.et) h+='<br><span style="color:#555">Étage '+esc(m.et)+'</span>';
+            h+='<br><span style="background:'+esc(m.gc)+';color:#fff;padding:1px 8px;border-radius:9px;font-size:.85em">'+esc(m.gl)+(m.sc?' ('+m.sc+'/10)':'')+'</span>';
+            if(m.ty&&m.ty.length){ h+='<ul style="margin:.3em 0;padding-left:1.1em">'; m.ty.forEach(function(t){h+='<li>'+esc(t)+'</li>';}); h+='</ul>'; }
+            h+='</div>';
+            mk.bindPopup(h); pts.push([m.lat,m.lng]);
+        });
+        /* Ajustement sur les points UNIQUEMENT au tout premier affichage (pas de
+           vue mémorisée) — ensuite on ne bouge plus jamais la vue tout seul. */
+        if(!saved && pts.length){ map.fitBounds(pts,{padding:[40,40],maxZoom:17}); }
+        setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 250);
+    })();
+    </script>
+    <?php
 }
 
 /* ============================================================== *
