@@ -856,6 +856,7 @@ function lfi_nct_app_shortcode() {
                     case 'presse-contacts': lfi_nct_app_view_presse_contacts(); break;
                     case 'communiques':     lfi_nct_app_view_communiques();     break;
                     case 'qr-enquete':      lfi_nct_app_view_qr_enquete();      break;
+                    case 'enquetes-audit':  lfi_nct_app_view_enquetes_audit();  break;
                     case 'qr-elues':        lfi_nct_app_view_qr_elues();        break;
                     case 'argumentaire-elue': lfi_nct_app_view_argumentaire_elue(); break;
                     case 'rejoindre':       lfi_nct_app_view_rejoindre();       break;
@@ -2569,6 +2570,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🐀', 'Carte des rats',         'Points chauds + export preuve',      lfi_nct_app_url('carte-rats')],
             ['📋', 'Faire passer une enquête', 'Porte-à-porte · photos',            lfi_nct_app_url('enquete')],
             ['🔳', 'QR code enquête',        'Scan → compte auto → enquête',       lfi_nct_app_url('qr-enquete')],
+            ['🔎', 'Audit des enquêtes',     'Où sont toutes les enquêtes · qui',  lfi_nct_app_url('enquetes-audit')],
         ],
         '🏠 ESPACE LOCATAIRES' => [
             ['🧠', 'Robot stratège',         'Meilleure tactique · amiable d\'abord', lfi_nct_app_url('strategie')],
