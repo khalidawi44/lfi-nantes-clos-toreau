@@ -3531,6 +3531,7 @@ function lfi_nct_app_enq_problem($row) {
 
     $labels = [
         'degats_eaux'      => ['💧', 'dégâts des eaux'],
+        'odeurs_egout'     => ['🤢', 'odeurs d\'égout / remontées d\'eaux usées'],
         'humidite'         => ['🌫', 'humidité / moisissures'],
         'insectes'         => ['🐜', 'nuisibles (cafards, rats…)'],
         'chauffage'        => ['🥶', 'chauffage défaillant'],
@@ -3629,6 +3630,7 @@ function lfi_nct_app_enq_message_template($mode, $row, $event_post = null) {
 function lfi_nct_enq_problem_types() {
     return [
         'degats_eaux'      => ['💧', 'Dégâts des eaux'],
+        'odeurs_egout'     => ['🤢', 'Odeurs d\'égout / remontées d\'eaux usées'],
         'humidite'         => ['🌫', 'Humidité / moisissures'],
         'insectes'         => ['🐜', 'Nuisibles (cafards, rats…)'],
         'chauffage'        => ['🥶', 'Chauffage défaillant'],
