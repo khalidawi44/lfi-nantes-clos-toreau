@@ -57,20 +57,12 @@ function lfi_nct_app_view_enquetes_audit() {
     global $wpdb;
     $t = $wpdb->prefix . 'lfi_nct_responses';
 
-    /* Consolidation manuelle : rattacher TOUTES les enquêtes non supprimées à
-       Clos Toreau (ga vide, = maison). Réservé au super-admin, avec confirm. */
-    if (!empty($_POST['lfi_enq_consolidate']) && check_admin_referer('lfi_enq_audit') && current_user_can('manage_options')) {
-        $n = (int) $wpdb->query("UPDATE $t SET ga = 'clos-toreau' WHERE deleted_at IS NULL AND ga <> 'clos-toreau'");
-        wp_safe_redirect(lfi_nct_app_url('enquetes-audit', ['done' => $n])); exit;
-    }
-
     $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL");
     $today = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL AND DATE(submitted_at) = %s", current_time('Y-m-d')));
     $by_ga = $wpdb->get_results("SELECT ga, COUNT(*) AS n FROM $t WHERE deleted_at IS NULL GROUP BY ga ORDER BY n DESC") ?: [];
     $recent = $wpdb->get_results("SELECT id, submitted_at, adresse, ga, militant_user_id, militant_login FROM $t WHERE deleted_at IS NULL ORDER BY submitted_at DESC LIMIT 40") ?: [];
 
     lfi_nct_app_screen_open('🔎 Audit des enquêtes', 'Où sont TOUTES les enquêtes + qui les a saisies');
-    if (isset($_GET['done'])) lfi_nct_app_flash('✅ ' . (int) $_GET['done'] . ' enquête(s) rattachée(s) à Clos Toreau.');
 
     echo '<div style="display:flex;gap:8px;margin-bottom:12px">';
     echo '<div style="flex:1;background:#0b3d91;color:#fff;border-radius:12px;padding:12px;text-align:center"><div style="font-size:1.7em;font-weight:900">' . $total . '</div><div style="font-size:.82em;opacity:.9">enquêtes au total</div></div>';
@@ -78,7 +70,7 @@ function lfi_nct_app_view_enquetes_audit() {
     echo '</div>';
 
     echo '<h3 style="margin:6px 0 6px;color:#0b3d91">Répartition par groupe d\'action (GA)</h3>';
-    echo '<div class="lfi-app-help">Si des enquêtes du Clos Toreau apparaissent sous un GA au code bizarre (hash), c\'est un mauvais rattachement — le bouton plus bas les ramène toutes à Clos Toreau.</div>';
+    echo '<div class="lfi-app-help">Rassemblement <strong>automatique</strong> : toutes les enquêtes du quartier sont rattachées à Clos Toreau et géolocalisées toutes seules, d\'après leur adresse. Rien à cliquer.</div>';
     echo '<ul class="lfi-app-list">';
     foreach ($by_ga as $g) {
         $slug = (string) $g->ga;
@@ -88,11 +80,10 @@ function lfi_nct_app_view_enquetes_audit() {
     }
     echo '</ul>';
 
-    if (current_user_can('manage_options')) {
-        echo '<form method="post" onsubmit="return confirm(\'Rattacher TOUTES les enquêtes non supprimées à Clos Toreau ?\')" style="margin:8px 0 16px">' . wp_nonce_field('lfi_enq_audit', '_wpnonce', true, false);
-        echo '<input type="hidden" name="lfi_enq_consolidate" value="1">';
-        echo '<button type="submit" class="btn-primary big" style="background:#c8102e;width:100%">🏠 Rassembler TOUTES les enquêtes sous Clos Toreau</button></form>';
-    }
+    /* Placement carte : combien sont géolocalisées / en attente (info seule). */
+    $geo_ok = (int) $wpdb->get_var("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL AND lat IS NOT NULL AND lng IS NOT NULL");
+    $geo_wait = (int) $wpdb->get_var("SELECT COUNT(*) FROM $t WHERE deleted_at IS NULL AND lat IS NULL AND adresse IS NOT NULL AND adresse <> ''");
+    echo '<div class="lfi-app-help" style="margin:6px 0 14px">🗺️ Sur la carte : <strong>' . $geo_ok . '</strong> enquête(s) placée(s)' . ($geo_wait > 0 ? ' · ' . $geo_wait . ' en cours de géolocalisation automatique (quelques minutes)' : ' · tout est placé ✅') . '.</div>';
 
     echo '<h3 style="margin:6px 0 6px;color:#0b3d91">40 dernières enquêtes (qui · quand · où · GA)</h3>';
     if (empty($recent)) {

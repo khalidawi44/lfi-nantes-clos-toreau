@@ -31,6 +31,17 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_auto_tristan', '1', false);
     }
 
+    /* ─ RASSEMBLEMENT AUTOMATIQUE des enquêtes sous Clos Toreau : toutes les
+       enquêtes du quartier (rue d'Hendaye, Biarritz, Saint-Jean-de-Luz…) sont
+       ramenées au GA maison, quel que soit le slug erroné reçu à la saisie.
+       Automatique, sans bouton. Idempotent (une fois). */
+    if (get_option('lfi_nct_enq_consolidate_clos_v1') !== '1') {
+        global $wpdb;
+        $rtable = $wpdb->prefix . 'lfi_nct_responses';
+        $wpdb->query("UPDATE $rtable SET ga = 'clos-toreau' WHERE deleted_at IS NULL AND ga IS NOT NULL AND ga <> '' AND ga <> 'clos-toreau'");
+        update_option('lfi_nct_enq_consolidate_clos_v1', '1', false);
+    }
+
     /* ─ RÉPARATION QR : les enquêtes saisies par des enquêteur·rices inscrit·es
        via le QR avaient reçu comme GA le HASH md5 du nom « Clos Toreau » au lieu
        du slug canonique 'clos-toreau' → elles étaient enregistrées mais INVISIBLES
