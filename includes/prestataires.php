@@ -143,6 +143,36 @@ function lfi_nct_app_view_prestataires() {
     lfi_nct_app_screen_close();
 }
 
+/** Bloc COMPACT d'appel rapide (pour l'urgence) : boutons « 📞 appeler » des
+ *  prestataires, filtrables par spécialité (ex. 'desinsectisation'). Pensé pour
+ *  être placé dans la carte d'urgence d'un dossier. */
+function lfi_nct_prestataires_quick_call($specialite = '', $title = '🧰 Appeler un prestataire en urgence') {
+    $list = lfi_nct_prestataires_get();
+    if ($specialite !== '') {
+        $filt = array_values(array_filter($list, function ($c) use ($specialite) { return (($c['specialite'] ?? '')) === $specialite; }));
+        if (!empty($filt)) $list = $filt; /* sinon on retombe sur tout le carnet */
+    }
+    if (empty($list)) {
+        echo '<div style="margin-top:8px"><a href="' . esc_url(lfi_nct_app_url('prestataires')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none;font-size:.85em">🧰 Ajouter un prestataire →</a></div>';
+        return;
+    }
+    $specs = lfi_nct_prestataire_specialites();
+    echo '<div style="margin-top:8px;background:#fff;border:1px dashed #c8102e;border-radius:10px;padding:9px 10px">';
+    echo '<div style="font-weight:800;color:#c8102e;font-size:.85em;margin-bottom:5px">' . esc_html($title) . '</div>';
+    echo '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    foreach (array_slice($list, 0, 6) as $c) {
+        $lbl = $c['nom'] . (!empty($c['contact_nom']) ? ' · ' . $c['contact_nom'] : '');
+        if (!empty($c['tel'])) {
+            echo '<a href="tel:' . esc_attr(preg_replace('/\s+/', '', $c['tel'])) . '" style="background:#c8102e;color:#fff;padding:6px 11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.82em">📞 ' . esc_html($lbl) . '</a>';
+        } else {
+            echo '<span style="background:#f4f4f4;color:#555;padding:6px 11px;border-radius:8px;font-size:.82em">' . esc_html($lbl) . ' (tél. à compléter)</span>';
+        }
+    }
+    echo '</div>';
+    echo '<div style="margin-top:5px"><a href="' . esc_url(lfi_nct_app_url('prestataires')) . '" style="color:#0b3d91;font-weight:700;text-decoration:none;font-size:.8em">Voir tout le carnet →</a></div>';
+    echo '</div>';
+}
+
 /** Petit encart « prestataires » à afficher dans un dossier (lecture seule +
  *  bouton pour gérer le carnet). Cloisonné : admins/brigade uniquement. */
 function lfi_nct_prestataires_dossier_box() {

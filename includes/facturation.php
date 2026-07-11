@@ -330,6 +330,10 @@ function lfi_nct_app_view_interventions() {
     echo '<a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('facturation-params')) . '">⚙️ Paramètres</a>';
     echo '</div>';
 
+    /* Prestataires extérieurs mobilisables (on peut passer par eux pour une
+       intervention, notamment en urgence — ex. Sapiens pour les nuisibles). */
+    if (function_exists('lfi_nct_prestataires_dossier_box')) lfi_nct_prestataires_dossier_box();
+
     if (empty($rows)) {
         echo '<div class="lfi-app-empty">Aucune intervention pour ce filtre.</div>';
         lfi_nct_app_screen_close();
