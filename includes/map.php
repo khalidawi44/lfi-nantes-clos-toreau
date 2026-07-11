@@ -165,6 +165,27 @@ function lfi_nct_geocode_pending($limit = 10) {
     return ['traitees' => count($rows), 'geocodees' => $done, 'restantes' => $remaining];
 }
 
+/* -------------------------------------------------------------- *
+ *  GÉOLOCALISATION AUTOMATIQUE (sans bouton) : une tâche de fond  *
+ *  (WP-Cron) géocode par petits lots les enquêtes en attente,    *
+ *  pour qu'elles apparaissent seules sur la carte. Ne ralentit    *
+ *  jamais l'affichage (le cron tourne dans une requête séparée).  *
+ * -------------------------------------------------------------- */
+add_filter('cron_schedules', function ($s) {
+    if (!isset($s['lfi_nct_5min'])) $s['lfi_nct_5min'] = ['interval' => 300, 'display' => 'LFI NCT — 5 min'];
+    return $s;
+});
+add_action('init', 'lfi_nct_geocode_cron_schedule', 21);
+function lfi_nct_geocode_cron_schedule() {
+    if (!wp_next_scheduled('lfi_nct_geocode_cron')) {
+        wp_schedule_event(time() + 120, 'lfi_nct_5min', 'lfi_nct_geocode_cron');
+    }
+}
+add_action('lfi_nct_geocode_cron', 'lfi_nct_geocode_cron_run');
+function lfi_nct_geocode_cron_run() {
+    if (function_exists('lfi_nct_geocode_pending')) lfi_nct_geocode_pending(10);
+}
+
 /* ------------------------------------------------------------------ */
 /* Page admin : carte                                                  */
 /* ------------------------------------------------------------------ */
