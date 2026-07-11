@@ -1573,6 +1573,9 @@ function lfi_nct_app_view_dossier() {
     /* ===== LES DEUX BATAILLES + la demande du locataire ===== */
     lfi_nct_dossier_render_batailles($u, $row);
 
+    /* ===== Prestataires extérieurs mobilisables (Sapiens…) ===== */
+    if (function_exists('lfi_nct_prestataires_dossier_box')) lfi_nct_prestataires_dossier_box();
+
     /* ===== CHRONOLOGIE (timeline structurée, auto-alimentée) ===== */
     lfi_nct_dossier_render_chrono($u);
 
