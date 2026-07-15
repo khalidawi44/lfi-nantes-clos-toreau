@@ -1422,14 +1422,22 @@ function lfi_nct_app_view_dossier() {
         } elseif ($action === 'del') {
             $idx = (int) ($_POST['step_idx'] ?? -1);
             if (isset($steps[$idx])) { array_splice($steps, $idx, 1); }
+            /* On fige les phases « déployées » pour que l'affichage ne RÉ-AJOUTE
+               pas l'étape qu'on vient de supprimer (sinon la corbeille = sans effet). */
+            update_user_meta($u->ID, 'lfi_nct_indemnisation_deployed', 1);
+            update_user_meta($u->ID, 'lfi_nct_parcours_initialized', 1);
         } elseif ($action === 'bulk_del') {
             /* Suppression MULTIPLE : on retire toutes les étapes cochées. */
             $rm = array_map('intval', (array) ($_POST['step_sel'] ?? []));
             rsort($rm); /* du plus grand index au plus petit pour ne pas décaler */
             foreach ($rm as $i) { if (isset($steps[$i])) array_splice($steps, $i, 1); }
+            update_user_meta($u->ID, 'lfi_nct_indemnisation_deployed', 1);
+            update_user_meta($u->ID, 'lfi_nct_parcours_initialized', 1);
         } elseif ($action === 'reset') {
-            /* Tout effacer le parcours. */
+            /* Tout effacer le parcours — et il RESTE vide (plus de repeuplement auto). */
             $steps = [];
+            update_user_meta($u->ID, 'lfi_nct_indemnisation_deployed', 1);
+            update_user_meta($u->ID, 'lfi_nct_parcours_initialized', 1);
         } elseif ($action === 'autofill') {
             /* Génère le parcours-type (n'ajoute que les étapes manquantes). */
             $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
@@ -2343,6 +2351,10 @@ function lfi_nct_heal_parcours_who() {
 function lfi_nct_ensure_indemnisation_steps($uid) {
     if (function_exists('lfi_nct_victoire_won') && !lfi_nct_victoire_won($uid, 'urgence')) return;
     if (!function_exists('lfi_nct_dossier_indemnisation_steps')) return;
+    /* DÉPLOIEMENT UNE SEULE FOIS : sans ce garde, chaque affichage RÉ-AJOUTAIT les
+       étapes 💶 indemnisation → impossible de supprimer une étape (« la poubelle
+       ne fait rien »). Déployé une fois, on respecte ensuite les suppressions. */
+    if (get_user_meta($uid, 'lfi_nct_indemnisation_deployed', true)) return;
     $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
     $existing = array_map(function ($s) { return $s['text'] ?? ''; }, $steps);
@@ -2398,6 +2410,9 @@ function lfi_nct_ensure_indemnisation_steps($uid) {
             }
         }
     }
+    /* Volet indemnisation désormais déployé pour ce dossier → on ne le ré-injecte
+       plus (les suppressions manuelles d'étapes sont respectées). */
+    update_user_meta($uid, 'lfi_nct_indemnisation_deployed', 1);
 }
 
 /* HEAL (une fois) : tous les dossiers dont l'urgence est déjà gagnée reçoivent
@@ -2825,14 +2840,16 @@ function lfi_nct_dossier_render_parcours($u) {
     $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
     if (!is_array($steps)) $steps = [];
 
-    /* AUTO : si aucune étape, on monte le parcours-type TOUT SEUL (plus besoin
-       de cliquer « générer »). Si l'urgence est déjà gagnée, on greffe aussi le
-       volet indemnisation. */
-    if (empty($steps) && function_exists('lfi_nct_dossier_parcours_template')) {
+    /* AUTO : si aucune étape ET que le parcours n'a jamais été monté, on monte le
+       parcours-type TOUT SEUL (plus besoin de cliquer « générer »). Une fois
+       initialisé, « Tout effacer » laisse le parcours VIDE (on ne le repeuple
+       plus automatiquement — sinon la corbeille semblait ne rien faire). */
+    if (empty($steps) && !get_user_meta($u->ID, 'lfi_nct_parcours_initialized', true) && function_exists('lfi_nct_dossier_parcours_template')) {
         foreach (lfi_nct_dossier_parcours_template() as $tpl) {
             $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+        update_user_meta($u->ID, 'lfi_nct_parcours_initialized', 1);
         if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
         if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
         $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true);
