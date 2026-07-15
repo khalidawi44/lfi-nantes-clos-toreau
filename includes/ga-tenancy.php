@@ -279,6 +279,23 @@ function lfi_nct_response_ga_of($row) {
 }
 
 /**
+ * Canonicalise un slug de GA au moment de l'ÉCRITURE (compte / enquête).
+ *
+ * Bug historique : le funnel QR fabriquait, pour tout GA autre que Clos Toreau,
+ * un slug = HASH md5 (12 hexa) du nom (lfi_nct_ga_slug). Ce hash n'est le GA
+ * d'aucun·e admin → les enquêtes taguées ainsi étaient bien ENREGISTRÉES mais
+ * INVISIBLES / « introuvables » pour le GA maison. Ici (déploiement Clos Toreau,
+ * GA unique en pratique) : slug vide OU hash md5 → 'clos-toreau'. Un slug
+ * lisible (ex. « port-boyer ») est conservé tel quel pour un éventuel multi-GA.
+ */
+function lfi_nct_ga_canon($slug) {
+    $slug = trim((string) $slug);
+    if ($slug === '' || $slug === 'clos-toreau') return 'clos-toreau';
+    if (preg_match('/^[0-9a-f]{12}$/', $slug)) return 'clos-toreau';
+    return $slug;
+}
+
+/**
  * meta_query pour cloisonner les ÉVÉNEMENTS (CPT ag_evenement) par GA.
  * Home (Clos Toreau) → événements sans rattachement ou « clos-toreau ».
  * Autre GA → seulement SES événements (vide tant qu'il n'en a pas).
