@@ -129,7 +129,19 @@ function lfi_nct_handle_submission() {
         $old_raw = $wpdb->get_var($wpdb->prepare("SELECT data FROM $table WHERE id = %d AND deleted_at IS NULL" . $sc, $edit_id));
         if ($old_raw === null) return "Enquête introuvable dans ce groupe d'action.";
         $old = json_decode((string) $old_raw, true);
-        if (is_array($old)) $data = array_merge($old, $data); /* garde photos, adhésion, etc. */
+        if (is_array($old)) {
+            /* Les NOUVELLES photos s'AJOUTENT aux anciennes (ne les écrasent pas).
+               Sans ça, éditer une enquête pour ajouter une photo effaçait les
+               photos déjà enregistrées. Le reste (adhésion/signature…) est gardé. */
+            $new_photos = (isset($data['photos']) && is_array($data['photos'])) ? $data['photos'] : [];
+            $old_photos = (isset($old['photos']) && is_array($old['photos'])) ? $old['photos'] : [];
+            $data = array_merge($old, $data); /* garde photos, adhésion, etc. */
+            if ($new_photos || $old_photos) {
+                $merged_photos = array_merge($old_photos, $new_photos);
+                $data['photos'] = $merged_photos;
+                $data['photos_count'] = count($merged_photos);
+            }
+        }
         $ok = $wpdb->update($table, [
             'adresse'           => $adresse,
             'etage'             => $etage,

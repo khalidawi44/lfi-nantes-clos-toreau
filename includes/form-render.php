@@ -245,22 +245,86 @@ function lfi_nct_render_form($edit_id = 0) {
             (function(){
                 var inp = document.getElementById('lfi-enquete-photos');
                 var box = document.getElementById('lfi-enquete-photos-preview');
+                var form = document.getElementById('lfi-nct-form');
                 if(!inp || !box) return;
-                inp.addEventListener('change', function(){
+                /* Les photos d'iPhone pèsent 3–5 Mo : plusieurs d'un coup font un
+                   envoi de 15–20 Mo qui DÉPASSE la limite du serveur → « connexion
+                   réseau perdue » et RIEN ne s'enregistre. On COMPRESSE chaque photo
+                   dans le navigateur (max 1600 px, JPEG) — l'envoi devient léger et
+                   fiable. Bonus : les HEIC iPhone sont converties en JPEG. */
+                var MAXW = 1600, Q = 0.82, busy = false;
+                function submitBtns(){ return form ? form.querySelectorAll('button[type=submit],input[type=submit]') : []; }
+                function setBusy(b){
+                    busy = b;
+                    var btns = submitBtns();
+                    for (var i=0;i<btns.length;i++){ btns[i].disabled = b; btns[i].style.opacity = b ? '.5' : ''; }
+                }
+                function compressOne(file){
+                    return new Promise(function(resolve){
+                        if(!/^image\//.test(file.type) && !/\.(jpe?g|png|heic|heif)$/i.test(file.name||'')){ resolve(file); return; }
+                        var url = URL.createObjectURL(file);
+                        var img = new Image();
+                        img.onload = function(){
+                            try{
+                                var w = img.naturalWidth||img.width, h = img.naturalHeight||img.height;
+                                if(!w||!h){ URL.revokeObjectURL(url); resolve(file); return; }
+                                var scale = Math.min(1, MAXW/Math.max(w,h));
+                                var cw = Math.max(1,Math.round(w*scale)), ch = Math.max(1,Math.round(h*scale));
+                                var cv = document.createElement('canvas'); cv.width=cw; cv.height=ch;
+                                cv.getContext('2d').drawImage(img,0,0,cw,ch);
+                                URL.revokeObjectURL(url);
+                                cv.toBlob(function(blob){
+                                    if(!blob){ resolve(file); return; }
+                                    /* Si l'original est déjà plus léger, on le garde. */
+                                    if(blob.size >= (file.size||Infinity)){ resolve(file); return; }
+                                    var name = (file.name||'photo').replace(/\.(heic|heif|png)$/i,'.jpg');
+                                    if(!/\.jpe?g$/i.test(name)) name += '.jpg';
+                                    try{ resolve(new File([blob], name, {type:'image/jpeg', lastModified: file.lastModified||0})); }
+                                    catch(e){ resolve(blob); }
+                                }, 'image/jpeg', Q);
+                            }catch(e){ try{URL.revokeObjectURL(url);}catch(_){} resolve(file); }
+                        };
+                        img.onerror = function(){ try{URL.revokeObjectURL(url);}catch(_){} resolve(file); };
+                        img.src = url;
+                    });
+                }
+                function preview(files, note){
                     box.innerHTML = '';
-                    var files = inp.files || [];
-                    if(!files.length) return;
                     var info = document.createElement('div');
                     info.style.cssText='width:100%;font-size:.9em;color:#186a3b;font-weight:700';
-                    info.textContent = '📸 ' + files.length + ' photo(s) prête(s) — horodatée(s) à l\'enregistrement.';
+                    info.textContent = note;
                     box.appendChild(info);
                     Array.prototype.forEach.call(files, function(f){
-                        if(!/^image\//.test(f.type)) return;
                         var img = document.createElement('img');
                         img.style.cssText='width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #ccc';
                         img.src = URL.createObjectURL(f);
                         box.appendChild(img);
                     });
+                }
+                inp.addEventListener('change', function(){
+                    var files = inp.files || [];
+                    if(!files.length){ box.innerHTML=''; return; }
+                    /* Sans DataTransfer on ne peut pas réinjecter les fichiers
+                       compressés : on garde l'original (au moins ça reste fonctionnel). */
+                    var canReplace = true; try{ new DataTransfer(); }catch(e){ canReplace = false; }
+                    if(!canReplace){ preview(files, '📸 ' + files.length + ' photo(s) prête(s).'); return; }
+                    setBusy(true);
+                    preview(files, '⏳ Préparation de ' + files.length + ' photo(s)…');
+                    var tasks = Array.prototype.map.call(files, compressOne);
+                    Promise.all(tasks).then(function(out){
+                        try{
+                            var dt = new DataTransfer();
+                            out.forEach(function(f){ dt.items.add(f); });
+                            inp.files = dt.files;
+                        }catch(e){}
+                        preview(inp.files, '📸 ' + inp.files.length + ' photo(s) prête(s) — horodatée(s) à l\'enregistrement.');
+                        setBusy(false);
+                    }).catch(function(){ setBusy(false); });
+                });
+                /* Filet : si on tente d'envoyer pendant la préparation, on bloque
+                   une seconde le temps que les photos soient prêtes. */
+                if(form) form.addEventListener('submit', function(e){
+                    if(busy){ e.preventDefault(); alert('Les photos finissent de se préparer, réessayez dans un instant.'); }
                 });
             })();
             </script>
