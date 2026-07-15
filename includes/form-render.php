@@ -319,6 +319,7 @@ function lfi_nct_render_form($edit_id = 0) {
                         ctx.lineWidth = 2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#111';
                     }
                     setTimeout(fit, 60);
+                    var SKEY = 'lfi_sign_backup';
                     var drawing=false, dirty=false, last=null;
                     function pos(e){
                         var r = cv.getBoundingClientRect();
@@ -329,19 +330,58 @@ function lfi_nct_render_form($edit_id = 0) {
                     function move(e){ if(!drawing) return; e.preventDefault(); var p=pos(e);
                         ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke();
                         last=p; dirty=true; }
-                    function end(){ if(!drawing) return; drawing=false;
-                        if(dirty){ try{ hidden.value = cv.toDataURL('image/png'); }catch(err){} } }
+                    /* Export ALLÉGÉ : la signature est réduite à 600px de large max,
+                       fond blanc. En porte-à-porte le réseau est faible : un POST
+                       léger part de façon fiable (le PNG plein écran Retina pesait
+                       des centaines de Ko et faisait échouer l'envoi). */
+                    function exportSig(){
+                        try{
+                            var maxW = 600, scale = Math.min(1, maxW / cv.width);
+                            var out = document.createElement('canvas');
+                            out.width = Math.max(1, Math.round(cv.width * scale));
+                            out.height = Math.max(1, Math.round(cv.height * scale));
+                            var octx = out.getContext('2d');
+                            octx.fillStyle = '#fff'; octx.fillRect(0,0,out.width,out.height);
+                            octx.drawImage(cv, 0,0, out.width, out.height);
+                            return out.toDataURL('image/png');
+                        }catch(err){ try{ return cv.toDataURL('image/png'); }catch(e){ return ''; } }
+                    }
+                    /* Capture la signature dans le champ caché + sauvegarde locale
+                       (au cas où l'envoi échoue : on la restaure au rechargement). */
+                    function commit(){ if(!dirty) return; var d = exportSig(); if(d){ hidden.value = d; try{ sessionStorage.setItem(SKEY, d); }catch(e){} } }
+                    function end(){ if(!drawing) return; drawing=false; commit(); }
                     cv.addEventListener('mousedown',start); cv.addEventListener('mousemove',move);
                     window.addEventListener('mouseup',end);
                     cv.addEventListener('touchstart',start,{passive:false});
                     cv.addEventListener('touchmove',move,{passive:false});
                     cv.addEventListener('touchend',end);
-                    if(clr) clr.addEventListener('click',function(){ ctx.clearRect(0,0,cv.width,cv.height); hidden.value=''; dirty=false; });
+                    cv.addEventListener('touchcancel',end);
+                    if(clr) clr.addEventListener('click',function(){ ctx.clearRect(0,0,cv.width,cv.height); hidden.value=''; dirty=false; try{ sessionStorage.removeItem(SKEY); }catch(e){} });
                     /* Le pavé est dans un bloc masqué au départ : on recalcule sa
                        taille quand la personne choisit « Oui » (bloc révélé). */
                     document.addEventListener('change', function(e){
                         if(e.target && e.target.name === 'revenir_ok' && e.target.value === 'oui'){ setTimeout(fit, 90); }
                     });
+                    /* FILET DE SÉCURITÉ à l'envoi : on recapture la signature (si un
+                       touchend a été manqué → sinon l'enquête partait SANS signature)
+                       et on la garde en secours. */
+                    var form = document.getElementById('lfi-nct-form');
+                    if(form){ form.addEventListener('submit', function(){ commit(); }); }
+                    /* RESTAURATION : si l'envoi précédent a échoué (réseau perdu) et
+                       qu'on revient sur CE formulaire (même onglet), on remet la
+                       signature capturée — tant qu'on n'a pas effacé ni re-signé. */
+                    try{
+                        var saved = sessionStorage.getItem(SKEY);
+                        if(saved && !hidden.value){
+                            hidden.value = saved;
+                            var img = new Image();
+                            img.onload = function(){
+                                try{ fit(); var rr = cv.getBoundingClientRect();
+                                    ctx.drawImage(img, 0, 0, rr.width, rr.height); dirty = true; }catch(e){}
+                            };
+                            img.src = saved;
+                        }
+                    }catch(e){}
                 })();
                 </script>
             </fieldset>
@@ -567,6 +607,9 @@ function lfi_nct_render_submission_summary($id) {
                 <div><strong>Signature :</strong><br><img src="<?php echo esc_url($adh['signature_url']); ?>" alt="Signature" style="max-width:280px;border:1px solid #ccc;border-radius:8px;background:#fff"></div>
             <?php endif; ?>
         <?php endif; ?>
+        <?php /* Enquête bien enregistrée → on purge la sauvegarde locale de la
+                 signature pour qu'elle ne « déborde » JAMAIS sur l'enquête suivante. */ ?>
+        <script>try{ sessionStorage.removeItem('lfi_sign_backup'); }catch(e){}</script>
     </div>
     <?php
     return ob_get_clean();
