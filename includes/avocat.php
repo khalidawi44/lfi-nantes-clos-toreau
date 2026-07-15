@@ -215,6 +215,12 @@ function lfi_nct_avocat_legal_lines($uid) {
         $L[] = "Relogement d'urgence : obligation d'hébergement/relogement du bailleur (art. L. 521-3-1 du CCH) et relogement d'office aux frais du bailleur (art. L. 521-3-2 du CCH) — SOUS RÉSERVE qu'un arrêté de mise en sécurité / de traitement de l'insalubrité assorti d'une interdiction (même temporaire) d'habiter ait été pris, ce qu'il conviendra de vérifier voire de provoquer.";
         $L[] = "Volet pénal envisageable si les issues de secours / le désenfumage ont été rendus inaccessibles (mise en danger de la vie d'autrui).";
     }
+    /* Faits aggravants d'atteinte à la vie/l'intégrité (évacuation par la fenêtre,
+       inhalation de fumées, nourrisson) → volet pénal caractérisé. Ne s'affiche
+       que si ces éléments figurent réellement dans le récit de la situation. */
+    if ($has(['par la fenetre', 'fenetre du', 'evacu', 'nourrisson', 'bebe de', 'inhal', 'fumees inhalees', 'intoxication', 'ingere des fumees', 'ingestion de fumees'])) {
+        $L[] = "Volet PÉNAL caractérisé — mise en danger de la vie d'autrui (art. 223-1 du Code pénal) et, le cas échéant, blessures involontaires : inhalation de fumées et évacuation d'enfants (dont un nourrisson) par la fenêtre d'un étage élevé, recueillis par un voisin au péril de sa propre vie. Éléments à verser au dépôt de plainte.";
+    }
     if ($has(['relog', 'heberg', 'hotel', 'expuls'])) $L[] = "Relogement / hébergement à la charge du bailleur — art. L. 521-3-1 et L. 521-3-2 du CCH (sous réserve d'un arrêté avec interdiction d'habiter).";
     if ($has(['vetement', 'effets', 'suie', 'biens', 'meubles'])) $L[] = "Prise en charge / indemnisation des biens endommagés — art. 1721 du Code civil.";
     if ($has(['moisiss', 'humidit', 'insalub', 'decence', 'asthme', 'sante'])) $L[] = "Obligation de délivrer un logement décent (art. 1719 CC ; décret décence) ; saisine possible du SCHS / de l'ARS.";
