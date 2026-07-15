@@ -209,6 +209,21 @@ function lfi_nct_avocat_assign_box($u) {
     if ($cur) {
         $av = get_user_by('id', $cur);
         echo '<div style="font-size:.86em;color:#555;margin-top:3px">Confié à <strong>' . esc_html($av ? $av->display_name : 'avocat·e') . '</strong> — il/elle voit ce dossier dans son espace. <a href="' . esc_url(lfi_nct_app_url('avocat-espace', ['uid' => (int) $cur])) . '">Voir son espace →</a></div>';
+        /* Email d'ORIENTATION pré-rempli vers l'avocat·e (problématique + demande
+           du client + mandat). Casquette : « Bien cordialement » (pas confrère). */
+        $av_mail = $av ? (string) $av->user_email : '';
+        if ($av_mail && is_email($av_mail) && stripos($av_mail, '@avocat.') === false && function_exists('lfi_nct_email_buttons_html')) {
+            $situ = (string) get_user_meta($u->ID, 'lfi_nct_situation_note', true);
+            $adr  = '';
+            $rid  = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
+            if ($rid) { global $wpdb; $rr = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)); if ($rr) $adr = (string) $rr->adresse; }
+            $moi = wp_get_current_user();
+            $subj = 'Orientation d\'un locataire — ' . $u->display_name . ($adr ? ' (' . $adr . ')' : '');
+            $body = "Maître,\n\nLe Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau et l'Union des Quartiers Libres vous orientent " . $u->display_name . ", locataire de Nantes Métropole Habitat" . ($adr ? " (" . $adr . ")" : "") . ". Nous agissons sur mandat écrit signé de sa main.\n\n"
+                . "Sa situation et ce qu'il demande :\n" . ($situ !== '' ? $situ : "[à compléter]") . "\n\n"
+                . "Nous vous transmettons le mandat, la note de synthèse et les pièces sur simple demande, et restons à votre disposition pour vous mettre en relation avec lui.\n\nBien cordialement,\n" . ($moi->display_name ?: 'Le Groupe d\'Action') . " — Union des Quartiers Libres, avec le GA LFI Nantes Sud – Clos Toreau";
+            echo '<div style="margin-top:6px">' . lfi_nct_email_buttons_html($av_mail, $subj, $body, '✉️ Email d\'orientation à l\'avocat·e', 'background:#6a1b9a') . '</div>';
+        }
     }
     $du = admin_url('admin-post.php?action=lfi_nct_avocat_assign');
     echo '<form method="post" action="' . esc_url($du) . '" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';

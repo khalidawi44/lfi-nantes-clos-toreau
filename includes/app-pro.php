@@ -2071,7 +2071,7 @@ function lfi_nct_dossier_parcours_template() {
         ['who' => 'admin',  'text' => "Appeler NMH puis relancer (1re, 2e relance)"],
         ['who' => 'admin',  'text' => "Amiable : négocier travaux / relogement / indemnisation"],
         ['who' => 'admin',  'text' => "Si échec : saisir le SCHS (insalubrité) / l'ARS"],
-        ['who' => 'admin',  'text' => "Préparer l'assignation au Tribunal Judiciaire"],
+        ['who' => 'admin',  'text' => "🧑‍⚖️ Confier le dossier à l'avocat (assignation au tribunal = son rôle)"],
     ];
 }
 
@@ -2256,7 +2256,7 @@ function lfi_nct_dossier_indemnisation_steps() {
         ['who' => 'admin', 'text' => "💶 Relancer NMH sur l'indemnisation (1re, 2e relance)"],
         ['who' => 'admin', 'text' => "💶 Si échec amiable : saisir la Commission Départementale de Conciliation"],
         ['who' => 'admin', 'text' => "💶 Consulter l'avocat partenaire (Me Valet / Me Goache)"],
-        ['who' => 'admin', 'text' => "💶 Préparer l'assignation au Tribunal Judiciaire (indemnisation)"],
+        ['who' => 'admin', 'text' => "🧑‍⚖️ Confier l'indemnisation à l'avocat"],
     ];
 }
 /* NETTOYAGE (une fois) : les parcours créés avant le modèle « propriétaire par
@@ -2429,6 +2429,9 @@ function lfi_nct_dossier_render_batailles($u, $row) {
             lfi_nct_prestataires_quick_call($hint);
         }
         echo '<form method="post" style="margin-top:8px" onsubmit="return confirm(\'NMH a accédé à la demande (travaux lancés, relogement accordé…) ? On clôt le volet urgence : une COUPE est posée et le GA est prévenu. Le dossier reste ouvert pour l\\\'indemnisation.\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-primary" style="background:#186a3b;width:100%;font-size:.86em">🏆 Bataille gagnée — clore l\'urgence</button></form>';
+        /* Amiable ÉCHOUÉ (NMH refuse) → on clôt aussi l'amiable (coupe : le GA a
+           suivi le dossier) et on bascule vers l'avocat / le juridique. */
+        echo '<form method="post" style="margin-top:6px" onsubmit="return confirm(\'L\\\'amiable a échoué (NMH refuse). On clôt le volet amiable : une COUPE est posée (le dossier a été suivi par l\\\'association) et on passe au juridique / à l\\\'avocat. Continuer ?\')">' . wp_nonce_field('lfi_dossier_win', '_wpnonce', true, false) . '<input type="hidden" name="lfi_dossier_win" value="1"><input type="hidden" name="bataille" value="urgence"><button type="submit" class="btn-ghost" style="width:100%;font-size:.84em;border-color:#6a1b9a;color:#6a1b9a">⚖️ L\'amiable a échoué → confier à l\'avocat (juridique)</button></form>';
         echo '</div>';
         echo '<div style="padding:12px;border-radius:10px;background:#fff8e6;border-left:5px solid #bd8600">';
         echo '<div style="font-weight:800;color:#bd8600">💶 Indemnisation — à suivre</div>';
@@ -2779,7 +2782,7 @@ function lfi_nct_dossier_render_parcours($u) {
         'Saisir la Commission de Conciliation',
         'Saisir le SCHS (insalubrité)',
         'Saisir l\'ARS',
-        'Préparer l\'assignation au Tribunal Judiciaire',
+        '🧑‍⚖️ Confier à l\'avocat (assignation)',
         'Envoyer le récapitulatif de facturation à NMH',
     ];
 
