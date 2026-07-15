@@ -1438,6 +1438,14 @@ function lfi_nct_app_view_dossier() {
                     $steps[] = ['text' => $tpl['text'], 'who' => $tpl['who'], 'auto' => !empty($tpl['auto']), 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
                 }
             }
+        } elseif ($action === 'situation_gen') {
+            /* Adapte le parcours à la PROBLÉMATIQUE décrite + oriente l'avocat. */
+            $note = sanitize_textarea_field(wp_unslash($_POST['situation_note'] ?? ''));
+            update_user_meta($u->ID, 'lfi_nct_situation_note', $note);
+            /* On enregistre l'état courant, on greffe, puis on relit. */
+            update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+            if (function_exists('lfi_nct_ensure_situation_steps')) lfi_nct_ensure_situation_steps($u->ID);
+            $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true); if (!is_array($steps)) $steps = [];
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
         if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
@@ -2136,6 +2144,87 @@ function lfi_nct_autovalidate_mandat_step($uid) {
     }
 }
 
+/* ============================================================== *
+ *  PARCOURS ADAPTATIF — les étapes se modulent selon la           *
+ *  problématique décrite (incendie, relogement, effets           *
+ *  personnels, santé…), avec une orientation pour l'avocat.       *
+ * ============================================================== */
+function lfi_nct_situation_norm($s) {
+    return mb_strtolower(function_exists('remove_accents') ? remove_accents((string) $s) : (string) $s);
+}
+/** Packs d'étapes greffés selon des mots-clés détectés dans la situation. */
+function lfi_nct_situation_packs() {
+    return [
+        'incendie' => ['kw' => ['incendie', 'le feu', 'un feu', 'fumee', 'desenfumage', 'exutoire', 'ascenseur', 'brul', 'sinistre'],
+            'steps' => [
+                "🔥 Établir l'origine du sinistre en PARTIE COMMUNE (ex. ascenseur) → obligations du bailleur (art. 1719 et 1721 du Code civil)",
+                "🏠 Exiger le relogement d'urgence À LA CHARGE de NMH (art. L. 521-3-2 du CCH) — pas de l'assurance personnelle du locataire",
+                "🧺 Effets personnels : inventaire + prise en charge du nettoyage / remplacement (ou remboursement)",
+                "🚑 Santé : suivi (fumées inhalées) + choc psychologique — réunir les certificats médicaux",
+                "🔎 Désenfumage : faire établir pourquoi les fumées se sont accumulées (trappe/exutoire, accès cadenassé)",
+                "⚖️ Volet PÉNAL : mise en danger de la vie d'autrui — préparer la plainte",
+                "📝 ORIENTATION AVOCAT : note de synthèse (relogement NMH + prise en charge des biens + plainte pénale)",
+            ]],
+        'relogement' => ['kw' => ['relog', 'heberg', 'hotel', 'expuls', 'a la rue', 'assurance perso', 'assurance privee', 'multirisque'],
+            'steps' => [
+                "🏠 Demander le relogement à la charge du bailleur (art. L. 521-3-2 du CCH)",
+                "✉️ Mise en demeure NMH — solution de relogement digne, délai court",
+            ]],
+        'biens' => ['kw' => ['vetement', 'affaires', 'effets personnels', 'suie', 'matelas', 'meubles', 'jouets', 'biens'],
+            'steps' => [
+                "🧺 Inventaire des biens endommagés (photos + estimation de valeur)",
+                "💶 Demande de prise en charge (nettoyage / remplacement) ou remboursement par NMH",
+            ]],
+        'sante' => ['kw' => ['moisiss', 'humidit', 'asthme', 'respiratoire', 'allergi', 'certificat medical'],
+            'steps' => [
+                "🚑 Certificat médical reliant l'état de santé au logement",
+                "🏛️ Saisir le SCHS (hygiène) / l'ARS en cas d'insalubrité",
+            ]],
+        'penal' => ['kw' => ['penal', 'plainte', 'mise en danger', 'danger', 'porter plainte'],
+            'steps' => [
+                "⚖️ Volet PÉNAL : constituer le dossier (faits, preuves, témoignages) et préparer la plainte",
+                "📝 ORIENTATION AVOCAT : réparation du préjudice + mise en danger",
+            ]],
+    ];
+}
+/** Texte-source de la situation : le commentaire saisi + l'enquête + la
+ *  chronologie + les titres d'épisodes. Sert à détecter la problématique. */
+function lfi_nct_tenant_situation_text($uid) {
+    $uid = (int) $uid; $parts = [];
+    $note = (string) get_user_meta($uid, 'lfi_nct_situation_note', true);
+    if ($note !== '') $parts[] = $note;
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    if (!$rid && function_exists('lfi_nct_user_tenant_response_id')) $rid = (int) lfi_nct_user_tenant_response_id($uid);
+    if ($rid) { global $wpdb; $r = $wpdb->get_row($wpdb->prepare("SELECT data FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)); if ($r) $parts[] = (string) $r->data; }
+    if (function_exists('lfi_nct_chrono_get')) foreach ((array) lfi_nct_chrono_get($uid) as $e) $parts[] = (string) ($e['txt'] ?? '');
+    if (function_exists('lfi_nct_episodes_get')) foreach ((array) lfi_nct_episodes_get($uid) as $e) $parts[] = (string) ($e['titre'] ?? '');
+    return lfi_nct_situation_norm(implode(' ', $parts));
+}
+/** Greffe (une seule fois par pack) les étapes correspondant à la situation. */
+function lfi_nct_ensure_situation_steps($uid) {
+    $uid = (int) $uid; if (!$uid) return;
+    $text = lfi_nct_tenant_situation_text($uid);
+    if (trim($text) === '') return;
+    $done = get_user_meta($uid, 'lfi_nct_situation_packs_done', true); if (!is_array($done)) $done = [];
+    $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true); if (!is_array($steps)) $steps = [];
+    $existing = array_map(function ($s) { return mb_strtolower(trim((string) ($s['text'] ?? ''))); }, $steps);
+    $changed = false;
+    foreach (lfi_nct_situation_packs() as $key => $pack) {
+        if (in_array($key, $done, true)) continue;
+        $hit = false;
+        foreach ($pack['kw'] as $kw) { if (strpos($text, lfi_nct_situation_norm($kw)) !== false) { $hit = true; break; } }
+        if (!$hit) continue;
+        foreach ($pack['steps'] as $st) {
+            if (in_array(mb_strtolower(trim($st)), $existing, true)) continue;
+            $steps[] = ['text' => $st, 'who' => 'admin', 'done' => false, 'echeance' => '', 'created' => current_time('Y-m-d')];
+            $existing[] = mb_strtolower(trim($st)); $changed = true;
+        }
+        $done[] = $key;
+    }
+    if ($changed) { update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps)); if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($uid); }
+    update_user_meta($uid, 'lfi_nct_situation_packs_done', array_values(array_unique($done)));
+}
+
 /* Trace la 1re connexion d'un locataire (via login classique) + auto-validation. */
 add_action('wp_login', 'lfi_nct_track_tenant_login', 10, 2);
 function lfi_nct_track_tenant_login($login, $user) {
@@ -2637,6 +2726,8 @@ function lfi_nct_dossier_render_parcours($u) {
     if (function_exists('lfi_nct_autovalidate_invite_step')) lfi_nct_autovalidate_invite_step($u->ID);
     /* Adhésion déjà signée dans l'enquête → l'étape « mandat » se coche seule. */
     if (function_exists('lfi_nct_autovalidate_mandat_step')) lfi_nct_autovalidate_mandat_step($u->ID);
+    /* Parcours adaptatif : greffe (une fois) les étapes selon la problématique. */
+    if (function_exists('lfi_nct_ensure_situation_steps')) lfi_nct_ensure_situation_steps($u->ID);
     /* Si l'urgence est déjà gagnée, on garantit le volet indemnisation greffé. */
     if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
 
@@ -2714,6 +2805,19 @@ function lfi_nct_dossier_render_parcours($u) {
     echo '</span><span style="font-size:1.2em">▾</span>';
     echo '</summary>';
     echo '<div style="padding:0 16px 16px">';
+
+    /* PARCOURS ADAPTATIF : décris la problématique → le parcours se génère selon
+       la situation (relogement, effets personnels, désenfumage, pénal…) + une
+       orientation pour l'avocat. */
+    $situ = (string) get_user_meta($u->ID, 'lfi_nct_situation_note', true);
+    echo '<form method="post" style="margin:8px 0;background:#eef4ff;border:1px solid #b9d0f5;border-radius:12px;padding:11px">';
+    wp_nonce_field('lfi_app_dossier_step');
+    echo '<input type="hidden" name="lfi_app_dossier_step" value="1"><input type="hidden" name="step_action" value="situation_gen">';
+    echo '<div style="font-weight:800;color:#0b3d91;margin-bottom:4px">🧭 Décris la situation → parcours adapté + orientation avocat</div>';
+    echo '<textarea name="situation_note" rows="4" placeholder="Ex : incendie dans l\'ascenseur (partie commune) ; famille relogée par SON assurance (illégal, ça incombe à NMH) ; tous les effets personnels à nettoyer ; enfants passés par la fenêtre du 6e ; volet pénal (mise en danger) ; comprendre pourquoi les fumées se sont accumulées malgré la trappe." style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px">' . esc_textarea($situ) . '</textarea>';
+    echo '<button type="submit" class="btn-primary" style="background:#0b3d91;width:100%;margin-top:6px">🧭 Générer / adapter le parcours à la situation</button>';
+    echo '<div style="font-size:.8em;color:#555;margin-top:4px">Détecte : incendie/partie commune, relogement à la charge de NMH, effets personnels (nettoyage/remboursement), santé, volet pénal… et ajoute une étape « orientation avocat ». Les étapes déjà présentes ne sont pas dupliquées ; tu gardes la main.</div>';
+    echo '</form>';
 
     /* Génération automatique du parcours-type (le « quand je clique, ça se monte tout seul »). */
     echo '<form method="post" style="margin:8px 0">';
