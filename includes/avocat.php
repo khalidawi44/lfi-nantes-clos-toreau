@@ -257,6 +257,21 @@ function lfi_nct_avocat_orientation_email($u) {
             }
         }
     }
+    /* Pièces versées dans le dossier (constats, vidéos, PDF, certificats…) —
+       fichiers rattachés au locataire. Liens directs, dédoublonnés. */
+    $seen = []; foreach ($pieces as $p) $seen[$p[1]] = true;
+    $dp = get_posts([
+        'post_type' => 'attachment', 'post_status' => 'any', 'posts_per_page' => 100,
+        'orderby' => 'date', 'order' => 'ASC',
+        'meta_query' => [['key' => '_lfi_tenant_user_id', 'value' => (int) $uid]],
+    ]);
+    foreach ((array) $dp as $att) {
+        $purl = wp_get_attachment_url($att->ID); if (!$purl || isset($seen[$purl])) continue;
+        $seen[$purl] = true;
+        $lab = get_the_title($att->ID); if ($lab === '') $lab = basename((string) get_attached_file($att->ID));
+        $isvid = strpos((string) get_post_mime_type($att->ID), 'video/') === 0;
+        $pieces[] = [($isvid ? 'Vidéo — ' : 'Pièce — ') . $lab, (string) $purl];
+    }
     $moi = wp_get_current_user();
     $mail = lfi_nct_ga_contact_email();
     $subj = "Orientation d'un locataire — " . $u->display_name . ($adr ? " (" . $adr . ")" : "") . " — demande de conseil";
@@ -286,7 +301,7 @@ function lfi_nct_avocat_assign_box($u) {
     if (!lfi_nct_avocat_can()) return;
     list($subj, $body) = lfi_nct_avocat_orientation_email($u);
     $id = (int) $u->ID;
-    echo '<div style="margin-top:10px;padding:11px 13px;background:#f7f0fb;border-radius:10px;border:1px solid #e2d3f0">';
+    echo '<div id="lfi-avocat-action" style="margin-top:10px;padding:11px 13px;background:#f7f0fb;border-radius:10px;border:1px solid #e2d3f0;scroll-margin-top:70px">';
     echo '<div style="font-weight:800;color:#6a1b9a">🧑‍⚖️ Envoyer le dossier à l\'avocat·e</div>';
     echo '<div class="lfi-app-help" style="margin:4px 0"><small>Email <strong>complet et prêt</strong> (faits, bases légales, liens des pièces). Rien à ajouter.</small></div>';
     echo '<input type="email" id="lfi-avmail-' . $id . '" placeholder="Email de l\'avocat·e" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:6px">';
