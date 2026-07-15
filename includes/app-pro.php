@@ -2096,6 +2096,46 @@ function lfi_nct_autovalidate_invite_step($uid) {
     }
 }
 
+/** Fiche d'adhésion (signature sur place) captée DANS L'ENQUÊTE liée au locataire.
+ *  Renvoie le tableau ['signed','date','signature_url','signature_id',…] ou null. */
+function lfi_nct_tenant_adhesion($uid) {
+    $uid = (int) $uid; if (!$uid) return null;
+    $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    if (!$rid && function_exists('lfi_nct_user_tenant_response_id')) $rid = (int) lfi_nct_user_tenant_response_id($uid);
+    if (!$rid) return null;
+    global $wpdb;
+    $row = $wpdb->get_row($wpdb->prepare("SELECT data FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+    if (!$row) return null;
+    $data = json_decode((string) $row->data, true);
+    $adh = is_array($data) ? ($data['adhesion'] ?? null) : null;
+    if (is_array($adh)) { $adh['_rid'] = $rid; return $adh; }
+    return null;
+}
+/** L'adhésion (mandat) a-t-elle déjà été SIGNÉE dans l'enquête ? */
+function lfi_nct_tenant_adhesion_signed($uid) {
+    $adh = lfi_nct_tenant_adhesion($uid);
+    return $adh && (!empty($adh['signed']) || !empty($adh['signature_url']) || !empty($adh['signature_id']));
+}
+/** AUTO-VALIDATION : le locataire a signé son adhésion (mandat) dans l'enquête →
+ *  l'étape « Faire signer l'adhésion … (mandat) » se coche toute seule. */
+function lfi_nct_autovalidate_mandat_step($uid) {
+    $uid = (int) $uid; if (!$uid) return;
+    if (!lfi_nct_tenant_adhesion_signed($uid)) return;
+    $steps = get_user_meta($uid, 'lfi_nct_suivi_steps', true);
+    if (!is_array($steps) || empty($steps)) return;
+    $changed = false;
+    foreach ($steps as $i => $s) {
+        $t = mb_strtolower((string) ($s['text'] ?? ''));
+        if (empty($s['done']) && (mb_strpos($t, 'adh') !== false || mb_strpos($t, 'mandat') !== false)) {
+            $steps[$i]['done'] = true; $steps[$i]['auto_done'] = true; $changed = true;
+        }
+    }
+    if ($changed) {
+        update_user_meta($uid, 'lfi_nct_suivi_steps', array_values($steps));
+        if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($uid);
+    }
+}
+
 /* Trace la 1re connexion d'un locataire (via login classique) + auto-validation. */
 add_action('wp_login', 'lfi_nct_track_tenant_login', 10, 2);
 function lfi_nct_track_tenant_login($login, $user) {
@@ -2595,6 +2635,24 @@ function lfi_nct_dossier_render_episodes_bar($u) {
 function lfi_nct_dossier_render_parcours($u) {
     /* Le locataire s'est connecté → l'étape d'invitation se coche toute seule. */
     if (function_exists('lfi_nct_autovalidate_invite_step')) lfi_nct_autovalidate_invite_step($u->ID);
+    /* Adhésion déjà signée dans l'enquête → l'étape « mandat » se coche seule. */
+    if (function_exists('lfi_nct_autovalidate_mandat_step')) lfi_nct_autovalidate_mandat_step($u->ID);
+    /* Si l'urgence est déjà gagnée, on garantit le volet indemnisation greffé. */
+    if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
+
+    /* Bandeau : adhésion (mandat) DÉJÀ signée dans l'enquête → on montre où elle est. */
+    if (function_exists('lfi_nct_tenant_adhesion')) {
+        $adh = lfi_nct_tenant_adhesion($u->ID);
+        if ($adh && (!empty($adh['signed']) || !empty($adh['signature_url']))) {
+            $when = !empty($adh['date']) ? wp_date('j M Y', strtotime($adh['date'])) : '';
+            echo '<div class="lfi-app-card" style="border:2px solid #186a3b;background:#eef7ee;margin-bottom:10px">';
+            echo '<div style="font-weight:800;color:#186a3b">🪪 Adhésion (mandat) déjà signée' . ($when ? ' le ' . esc_html($when) : '') . '</div>';
+            echo '<div style="font-size:.9em;color:#333;margin-top:2px">Signée par le locataire dans l\'enquête #' . (int) ($adh['_rid'] ?? 0) . ' — l\'étape « faire signer l\'adhésion » est donc validée automatiquement.</div>';
+            if (!empty($adh['signature_url'])) echo '<div style="margin-top:6px"><a href="' . esc_url($adh['signature_url']) . '" target="_blank" rel="noopener" style="color:#0b3d91;font-weight:700;text-decoration:none">✍️ Voir la signature</a></div>';
+            echo '</div>';
+        }
+    }
+
     /* Si l'urgence est déjà gagnée, on garantit le volet indemnisation greffé. */
     if (function_exists('lfi_nct_ensure_indemnisation_steps')) lfi_nct_ensure_indemnisation_steps($u->ID);
 
