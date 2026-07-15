@@ -227,7 +227,30 @@ function lfi_nct_avocat_orientation_email($u) {
     $uid = (int) $u->ID;
     $situ = (string) get_user_meta($uid, 'lfi_nct_situation_note', true);
     $adr = ''; $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    if (!$rid && function_exists('lfi_nct_user_tenant_response_id')) $rid = (int) lfi_nct_user_tenant_response_id($uid);
     if ($rid) { global $wpdb; $rr = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)); if ($rr) $adr = (string) $rr->adresse; }
+    /* PIÈCES à joindre en LIENS directs (l'avocat clique et télécharge) : le
+       mandat signé + les photos datées de l'enquête. Comme ça l'email est
+       complet, sans rien à ajouter à la main. */
+    $pieces = [];
+    if (function_exists('lfi_nct_tenant_adhesion')) {
+        $adh = lfi_nct_tenant_adhesion($uid);
+        if (is_array($adh) && !empty($adh['signature_url'])) $pieces[] = ['Mandat signé (adhésion Union des Quartiers Libres)', (string) $adh['signature_url']];
+    }
+    if ($rid) {
+        global $wpdb;
+        $draw = $wpdb->get_var($wpdb->prepare("SELECT data FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid));
+        $dd = $draw ? json_decode($draw, true) : [];
+        if (is_array($dd) && !empty($dd['photos']) && is_array($dd['photos'])) {
+            $n = 0;
+            foreach ($dd['photos'] as $ph) {
+                $pid = (int) ($ph['id'] ?? 0); if (!$pid) continue;
+                $purl = wp_get_attachment_url($pid); if (!$purl) continue;
+                $n++;
+                $pieces[] = ['Photo ' . $n . (!empty($ph['date']) ? ' (' . $ph['date'] . ')' : ''), (string) $purl];
+            }
+        }
+    }
     $moi = wp_get_current_user();
     $mail = lfi_nct_ga_contact_email();
     $subj = "Orientation d'un locataire — " . $u->display_name . ($adr ? " (" . $adr . ")" : "") . " — demande de conseil";
@@ -236,7 +259,14 @@ function lfi_nct_avocat_orientation_email($u) {
     $b .= "Le Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau et l'Union des Quartiers Libres vous orientent " . $u->display_name . ", locataire de Nantes Métropole Habitat" . ($adr ? " (" . $adr . ")" : "") . ". Nous agissons à sa demande, sur mandat écrit signé de sa main. Il/elle est déterminé·e à faire valoir ses droits et souhaite vous rencontrer.\n\n";
     $b .= "LA SITUATION — les faits, ce que NMH a fait ou n'a pas fait, ce que le locataire demande :\n" . ($situ !== '' ? $situ : "[à compléter avant envoi]") . "\n\n";
     if ($legal) { $b .= "BASES LÉGALES QUI NOUS SEMBLENT MOBILISABLES (à votre entière appréciation) :\n"; foreach ($legal as $l) $b .= "— " . $l . "\n"; $b .= "\n"; }
-    $b .= "Nous vous transmettons le mandat signé, une note de synthèse et les pièces (photos, constats, certificats médicaux) sur simple demande, et pouvons organiser un rendez-vous rapidement.\n\n";
+    if ($pieces) {
+        $b .= "PIÈCES (liens directs à télécharger) :\n";
+        foreach ($pieces as $p) $b .= "— " . $p[0] . " : " . $p[1] . "\n";
+        $b .= "\n";
+    } else {
+        $b .= "Pièces (mandat signé, photos datées, constats, certificats médicaux) disponibles sur simple demande.\n\n";
+    }
+    $b .= "Nous pouvons organiser un rendez-vous rapidement.\n\n";
     $b .= "Vous restez bien entendu seul·e juge de l'analyse juridique, de la stratégie et des suites à donner.\n\n";
     $b .= "Merci de nous répondre à cette adresse : " . $mail . ".\n\n";
     $b .= "Bien cordialement,\n" . ($moi->display_name ?: "Le Groupe d'Action") . "\nUnion des Quartiers Libres, avec le Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau";
@@ -251,10 +281,10 @@ function lfi_nct_avocat_assign_box($u) {
     list($subj, $body) = lfi_nct_avocat_orientation_email($u);
     $id = (int) $u->ID;
     echo '<div style="margin-top:10px;padding:11px 13px;background:#f7f0fb;border-radius:10px;border:1px solid #e2d3f0">';
-    echo '<div style="font-weight:800;color:#6a1b9a">🧑‍⚖️ Orienter un·e avocat·e (par email)</div>';
-    echo '<div class="lfi-app-help" style="margin:4px 0"><small>Un email clair qui <strong>prépare le dossier</strong> (faits, ce que NMH a fait/pas fait, bases légales, demande du client). L\'avocat·e <strong>répond par email</strong> à <strong>' . esc_html(lfi_nct_ga_contact_email()) . '</strong> — aucun compte ni lien vers l\'application. Il/elle garde toute latitude.</small></div>';
-    echo '<input type="email" id="lfi-avmail-' . $id . '" placeholder="Email de l\'avocat·e (ex : cabinet@…)" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:6px">';
-    echo '<button type="button" onclick="lfiAvMail(' . $id . ')" class="btn-primary" style="background:#6a1b9a;width:100%">✉️ Ouvrir l\'email d\'orientation (Gmail)</button>';
+    echo '<div style="font-weight:800;color:#6a1b9a">🧑‍⚖️ Envoyer le dossier à l\'avocat·e</div>';
+    echo '<div class="lfi-app-help" style="margin:4px 0"><small>Email <strong>complet et prêt</strong> (faits, bases légales, liens des pièces). Rien à ajouter.</small></div>';
+    echo '<input type="email" id="lfi-avmail-' . $id . '" placeholder="Email de l\'avocat·e" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:6px">';
+    echo '<button type="button" onclick="lfiAvMail(' . $id . ')" class="btn-primary" style="background:#6a1b9a;width:100%">✉️ Ouvrir l\'email tout prêt (Gmail)</button>';
     echo '<script>var LFI_AVM_' . $id . '={s:' . wp_json_encode($subj) . ',b:' . wp_json_encode($body) . '};function lfiAvMail(id){var d=window["LFI_AVM_"+id];var to=encodeURIComponent((document.getElementById("lfi-avmail-"+id)||{}).value||"");var s=encodeURIComponent(d.s),b=encodeURIComponent(d.b);var app="googlegmail:///co?to="+to+"&subject="+s+"&body="+b;var web="https://mail.google.com/mail/?view=cm&fs=1&to="+to+"&su="+s+"&body="+b;var t=Date.now();try{window.location.href=app;}catch(e){}setTimeout(function(){if(Date.now()-t<1600)window.open(web,"_blank");},700);}</script>';
     echo '</div>';
 }
