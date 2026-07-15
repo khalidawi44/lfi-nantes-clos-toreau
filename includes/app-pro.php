@@ -2547,6 +2547,16 @@ function lfi_nct_dossier_render_batailles($u, $row) {
  *  destination de NMH (sans dévoiler tout le jeu). Guide d'orientation — le
  *  chiffrage du préjudice, lui, vit dans le dossier juridique. */
 function lfi_nct_dossier_render_juridique_guidance($u, $row) {
+    /* PRIORITÉ — l'action principale : envoyer le dossier à l'avocat·e
+       (email tout prêt avec faits + bases légales + liens des pièces). */
+    if (function_exists('lfi_nct_avocat_assign_box')) lfi_nct_avocat_assign_box($u);
+
+    /* SECONDAIRE — tout le reste (voie amiable, pièces, conciliation) est RANGÉ
+       dans un seul bloc repliable pour ne pas surcharger l'écran. */
+    echo '<details style="margin-top:10px;background:#fff;border-radius:10px;border:1px solid #eee;overflow:hidden">';
+    echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#0066a3;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>🕊️ Voie amiable / conciliation <span style="color:#888;font-weight:400">(optionnel)</span></span><span>▾</span></summary>';
+    echo '<div style="padding:6px 12px 12px">';
+
     $pieces = [
         'Photos datées / horodatées de tous les désordres (avant / après)',
         'Constats et rapports officiels (SCHS, ARS, huissier si disponible)',
@@ -2556,31 +2566,25 @@ function lfi_nct_dossier_render_juridique_guidance($u, $row) {
         'Attestations de proches / voisins (témoignages sur le trouble)',
         'Quittances de loyer (loyer payé plein malgré le trouble de jouissance)',
     ];
-    echo '<details style="margin-top:10px;background:#fff;border-radius:10px;border:1px solid #eee;overflow:hidden">';
-    echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#bd8600;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>📎 Les pièces / preuves à réunir</span><span>▾</span></summary>';
-    echo '<ul style="margin:4px 0 10px;padding:0 16px 0 30px;font-size:.9em;color:#333;line-height:1.6">';
+    echo '<div style="font-weight:800;color:#bd8600;margin:2px 0 4px">📎 Les pièces / preuves à réunir</div>';
+    echo '<ul style="margin:0 0 10px;padding:0 0 0 18px;font-size:.9em;color:#333;line-height:1.6">';
     foreach ($pieces as $p) echo '<li>' . esc_html($p) . '</li>';
     echo '</ul>';
-    echo '</details>';
 
-    echo '<details style="margin-top:8px;background:#fff;border-radius:10px;border:1px solid #eee;overflow:hidden">';
-    echo '<summary style="cursor:pointer;padding:10px 12px;font-weight:800;color:#0066a3;list-style:none;display:flex;justify-content:space-between;align-items:center"><span>🎯 Stratégie amiable (ne pas dévoiler tout le jeu)</span><span>▾</span></summary>';
-    echo '<div style="padding:0 12px 12px;font-size:.9em;color:#333;line-height:1.55">';
+    echo '<div style="font-weight:800;color:#0066a3;margin:8px 0 4px">🎯 Stratégie amiable (ne pas dévoiler tout le jeu)</div>';
+    echo '<div style="font-size:.9em;color:#333;line-height:1.55">';
     echo '<p style="margin:6px 0">On adresse à Nantes Métropole Habitat une <strong>demande d\'indemnisation amiable chiffrée</strong>, en annonçant le <strong>montant global</strong> du préjudice et sa <strong>base légale</strong> (art. 1719 et 1721 du Code civil — obligation de délivrance et de jouissance paisible ; trouble de jouissance), <em>sans</em> communiquer le détail complet du calcul ni l\'intégralité des pièces.</p>';
     echo '<p style="margin:6px 0">On garde les preuves détaillées <strong>en réserve</strong> pour l\'éventuel contentieux : on montre qu\'on est solide et prêt, mais on ne livre pas tout le dossier d\'un coup.</p>';
     echo '<p style="margin:6px 0">On fixe un <strong>délai de réponse raisonnable</strong> (≈ 30 jours) et on rappelle qu\'à défaut d\'accord, on saisit la <strong>Commission Départementale de Conciliation</strong> puis le <strong>Tribunal Judiciaire de Nantes</strong>.</p>';
-    echo '<p style="margin:6px 0;color:#666"><small>Le <strong>robot architecte</strong> t\'oriente pièce par pièce et sur la formulation à envoyer.</small></p>';
     echo '</div>';
-    echo '</details>';
 
     /* Verser les pièces à transmettre (NMH / CDC / TJ). */
     if (function_exists('lfi_nct_justice_pieces_box')) lfi_nct_justice_pieces_box($u, true);
 
     /* Monter le dossier Commission de conciliation (bot justice). */
-    echo '<div style="margin-top:10px"><a class="btn-primary" style="background:#6a1b9a;width:100%;display:block;text-align:center;box-sizing:border-box" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => $u->ID])) . '">⚖️ Monter le dossier Commission de conciliation</a></div>';
+    echo '<div style="margin-top:10px"><a class="btn-ghost" style="width:100%;display:block;text-align:center;box-sizing:border-box" href="' . esc_url(lfi_nct_app_url('justice-cdc', ['uid' => $u->ID])) . '">⚖️ Monter le dossier Commission de conciliation</a></div>';
 
-    /* Confier ce dossier à un·e avocat·e (Me Valet / Me Goache). */
-    if (function_exists('lfi_nct_avocat_assign_box')) lfi_nct_avocat_assign_box($u);
+    echo '</div></details>';
 }
 
 /** Clé stable d'une étape (pour rattacher ses pièces). */
