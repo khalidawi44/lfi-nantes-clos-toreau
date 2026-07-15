@@ -86,6 +86,29 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_qr_ga_repair_v2', '1', false);
     }
 
+    /* ─ RÉCUPÉRATION des enquêtes « disparues » (ex. #75, punaise de lit) : après
+       les one-shots précédents, de NOUVELLES enquêtes ont encore été taguées avec
+       un GA en HASH md5 (bug du select QR) → invisibles / « introuvables » dans la
+       vue Clos Toreau. Ici tout le terrain appartient à Clos Toreau : on rapatrie
+       TOUTES les enquêtes (actives ET corbeille) vers 'clos-toreau', et on répare
+       les comptes enquêteur·rices dont le GA est un hash. La racine (canon à
+       l'écriture) empêche désormais toute nouvelle fuite. Idempotent. */
+    if (get_option('lfi_nct_enq_ga_heal_v3') !== '1') {
+        global $wpdb;
+        $rtable = $wpdb->prefix . 'lfi_nct_responses';
+        /* Enquêtes : tout GA non vide et différent de 'clos-toreau' → 'clos-toreau'. */
+        $wpdb->query("UPDATE $rtable SET ga = 'clos-toreau' WHERE ga IS NOT NULL AND ga <> '' AND ga <> 'clos-toreau'");
+        /* Comptes : un GA en hash md5 (12 hexa) est le bug → 'clos-toreau'. */
+        $accts = get_users(['meta_key' => 'lfi_nct_ga', 'fields' => ['ID'], 'number' => 5000]);
+        foreach ((array) $accts as $au) {
+            $auid = (int) (is_object($au) ? $au->ID : $au);
+            $cur  = (string) get_user_meta($auid, 'lfi_nct_ga', true);
+            $canon = function_exists('lfi_nct_ga_canon') ? lfi_nct_ga_canon($cur) : $cur;
+            if ($canon !== $cur) update_user_meta($auid, 'lfi_nct_ga', $canon);
+        }
+        update_option('lfi_nct_enq_ga_heal_v3', '1', false);
+    }
+
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
        le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
        « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est
