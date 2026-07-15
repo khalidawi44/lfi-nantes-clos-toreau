@@ -210,12 +210,12 @@ function lfi_nct_avocat_legal_lines($uid) {
     $has = function ($kws) use ($text, $norm) { foreach ((array) $kws as $k) { if (strpos($text, $norm($k)) !== false) return true; } return false; };
     $L = [];
     if ($has(['incendie', 'le feu', 'fumee', 'ascenseur', 'desenfumage', 'sinistre', 'exutoire'])) {
-        $L[] = "Sinistre né dans une PARTIE COMMUNE (ascenseur) : les obligations du bailleur s'appliquent — art. 1719 et 1721 du Code civil (délivrance, jouissance paisible, réparations et indemnisation).";
-        $L[] = "Relogement d'urgence À LA CHARGE DU BAILLEUR — art. L. 521-3-2 du Code de la construction et de l'habitation — et non de l'assurance personnelle du locataire.";
-        $L[] = "Jurisprudence : le bailleur ne peut renvoyer le locataire à sa multirisque habitation pour un sinistre né dans les parties communes.";
-        $L[] = "Volet pénal envisageable : mise en danger de la vie d'autrui (issues de secours / désenfumage rendus inaccessibles).";
+        $L[] = "Sinistre né dans une PARTIE COMMUNE (ascenseur), dont le bailleur est propriétaire et gestionnaire : responsabilité du bailleur — art. 1719 et 1721 du Code civil (délivrance, jouissance paisible, garantie, indemnisation) et logement décent (loi du 6 juillet 1989, art. 6).";
+        $L[] = "Le locataire n'a pas à être renvoyé vers sa propre assurance habitation pour un sinistre né dans les parties communes : la charge en incombe au bailleur.";
+        $L[] = "Relogement d'urgence : obligation d'hébergement/relogement du bailleur (art. L. 521-3-1 du CCH) et relogement d'office aux frais du bailleur (art. L. 521-3-2 du CCH) — SOUS RÉSERVE qu'un arrêté de mise en sécurité / de traitement de l'insalubrité assorti d'une interdiction (même temporaire) d'habiter ait été pris, ce qu'il conviendra de vérifier voire de provoquer.";
+        $L[] = "Volet pénal envisageable si les issues de secours / le désenfumage ont été rendus inaccessibles (mise en danger de la vie d'autrui).";
     }
-    if ($has(['relog', 'heberg', 'hotel', 'expuls'])) $L[] = "Relogement à la charge du bailleur — art. L. 521-3-2 du CCH.";
+    if ($has(['relog', 'heberg', 'hotel', 'expuls'])) $L[] = "Relogement / hébergement à la charge du bailleur — art. L. 521-3-1 et L. 521-3-2 du CCH (sous réserve d'un arrêté avec interdiction d'habiter).";
     if ($has(['vetement', 'effets', 'suie', 'biens', 'meubles'])) $L[] = "Prise en charge / indemnisation des biens endommagés — art. 1721 du Code civil.";
     if ($has(['moisiss', 'humidit', 'insalub', 'decence', 'asthme', 'sante'])) $L[] = "Obligation de délivrer un logement décent (art. 1719 CC ; décret décence) ; saisine possible du SCHS / de l'ARS.";
     if ($has(['punaise', 'blatte', 'cafard', 'nuisible', 'rongeur', 'rat'])) $L[] = "Logement décent / trouble de jouissance : infestation à la charge du bailleur — art. 1719 CC.";
