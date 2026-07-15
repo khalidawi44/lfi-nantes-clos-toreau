@@ -212,8 +212,11 @@ function lfi_nct_rejoindre_handle() {
         ]);
         if (is_wp_error($uid) || !$uid) { wp_safe_redirect(lfi_nct_app_url('rejoindre', ['step' => 'register', 'tel' => $tel, 'ga' => $ga, 'err' => 'create'])); exit; }
         if ($tel) update_user_meta($uid, 'lfi_nct_tel', $tel);
-        /* GA choisi ; repli sur le GA « maison » (Clos Toreau) si non fourni. */
+        /* GA choisi ; repli sur le GA « maison » (Clos Toreau) si non fourni.
+           Canonicalisation : un slug en HASH md5 (ancien bug du select) est
+           ramené sur 'clos-toreau' pour ne plus égarer les enquêtes. */
         if ($ga === '') $ga = lfi_nct_qr_default_ga();
+        if (function_exists('lfi_nct_ga_canon')) $ga = lfi_nct_ga_canon($ga);
         if ($ga !== '') update_user_meta($uid, 'lfi_nct_ga', $ga);
         if ($fonction !== '') update_user_meta($uid, 'lfi_nct_fonction', $fonction);
         if ($referent_immeuble !== '') update_user_meta($uid, 'lfi_nct_referent_immeuble', $referent_immeuble);

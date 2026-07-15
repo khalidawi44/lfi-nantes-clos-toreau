@@ -170,7 +170,9 @@ function lfi_nct_handle_submission() {
         /* Cloisonnement : l'enquête appartient au groupe d'action en cours de
            saisie (Clos Toreau = '' ; Rezé, Port-Boyer… = leur slug). Ainsi une
            enquête faite pour Rezé ne réapparaît jamais chez un autre GA. */
-        'ga'                => (function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : ''),
+        'ga'                => (function_exists('lfi_nct_ga_canon')
+                                    ? lfi_nct_ga_canon(function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '')
+                                    : (function_exists('lfi_nct_creation_ga') ? lfi_nct_creation_ga() : '')),
     ]);
 
     delete_transient('lfi_nct_known_addresses');
