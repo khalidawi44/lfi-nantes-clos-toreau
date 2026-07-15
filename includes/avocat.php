@@ -199,42 +199,63 @@ function lfi_nct_avocat_render_thread($tenant_uid, $title = '💬 Ligne directe 
  *  Côté ADMIN : confier un dossier à un·e avocat·e (boîte sur le  *
  *  dossier locataire).                                            *
  * -------------------------------------------------------------- */
+/** Adresse email du GA (mode de discussion avec les avocats). */
+function lfi_nct_ga_contact_email() {
+    return (string) get_option('lfi_nct_ga_contact_email', 'nantessudclostoreau@gmail.com');
+}
+/** Bases légales pertinentes détectées d'après la situation du dossier. */
+function lfi_nct_avocat_legal_lines($uid) {
+    $text = function_exists('lfi_nct_tenant_situation_text') ? lfi_nct_tenant_situation_text($uid) : '';
+    $norm = function ($s) { return function_exists('lfi_nct_situation_norm') ? lfi_nct_situation_norm($s) : mb_strtolower($s); };
+    $has = function ($kws) use ($text, $norm) { foreach ((array) $kws as $k) { if (strpos($text, $norm($k)) !== false) return true; } return false; };
+    $L = [];
+    if ($has(['incendie', 'le feu', 'fumee', 'ascenseur', 'desenfumage', 'sinistre', 'exutoire'])) {
+        $L[] = "Sinistre né dans une PARTIE COMMUNE (ascenseur) : les obligations du bailleur s'appliquent — art. 1719 et 1721 du Code civil (délivrance, jouissance paisible, réparations et indemnisation).";
+        $L[] = "Relogement d'urgence À LA CHARGE DU BAILLEUR — art. L. 521-3-2 du Code de la construction et de l'habitation — et non de l'assurance personnelle du locataire.";
+        $L[] = "Jurisprudence : le bailleur ne peut renvoyer le locataire à sa multirisque habitation pour un sinistre né dans les parties communes.";
+        $L[] = "Volet pénal envisageable : mise en danger de la vie d'autrui (issues de secours / désenfumage rendus inaccessibles).";
+    }
+    if ($has(['relog', 'heberg', 'hotel', 'expuls'])) $L[] = "Relogement à la charge du bailleur — art. L. 521-3-2 du CCH.";
+    if ($has(['vetement', 'effets', 'suie', 'biens', 'meubles'])) $L[] = "Prise en charge / indemnisation des biens endommagés — art. 1721 du Code civil.";
+    if ($has(['moisiss', 'humidit', 'insalub', 'decence', 'asthme', 'sante'])) $L[] = "Obligation de délivrer un logement décent (art. 1719 CC ; décret décence) ; saisine possible du SCHS / de l'ARS.";
+    if ($has(['punaise', 'blatte', 'cafard', 'nuisible', 'rongeur', 'rat'])) $L[] = "Logement décent / trouble de jouissance : infestation à la charge du bailleur — art. 1719 CC.";
+    return array_values(array_unique($L));
+}
+/** Email d'orientation COMPLET pour l'avocat·e (prépare le dossier, laisse la
+ *  libre appréciation). Renvoie [sujet, corps]. */
+function lfi_nct_avocat_orientation_email($u) {
+    $uid = (int) $u->ID;
+    $situ = (string) get_user_meta($uid, 'lfi_nct_situation_note', true);
+    $adr = ''; $rid = (int) get_user_meta($uid, 'lfi_nct_response_id', true);
+    if ($rid) { global $wpdb; $rr = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)); if ($rr) $adr = (string) $rr->adresse; }
+    $moi = wp_get_current_user();
+    $mail = lfi_nct_ga_contact_email();
+    $subj = "Orientation d'un locataire — " . $u->display_name . ($adr ? " (" . $adr . ")" : "") . " — demande de conseil";
+    $legal = lfi_nct_avocat_legal_lines($uid);
+    $b  = "Maître,\n\n";
+    $b .= "Le Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau et l'Union des Quartiers Libres vous orientent " . $u->display_name . ", locataire de Nantes Métropole Habitat" . ($adr ? " (" . $adr . ")" : "") . ". Nous agissons à sa demande, sur mandat écrit signé de sa main. Il/elle est déterminé·e à faire valoir ses droits et souhaite vous rencontrer.\n\n";
+    $b .= "LA SITUATION — les faits, ce que NMH a fait ou n'a pas fait, ce que le locataire demande :\n" . ($situ !== '' ? $situ : "[à compléter avant envoi]") . "\n\n";
+    if ($legal) { $b .= "BASES LÉGALES QUI NOUS SEMBLENT MOBILISABLES (à votre entière appréciation) :\n"; foreach ($legal as $l) $b .= "— " . $l . "\n"; $b .= "\n"; }
+    $b .= "Nous vous transmettons le mandat signé, une note de synthèse et les pièces (photos, constats, certificats médicaux) sur simple demande, et pouvons organiser un rendez-vous rapidement.\n\n";
+    $b .= "Vous restez bien entendu seul·e juge de l'analyse juridique, de la stratégie et des suites à donner.\n\n";
+    $b .= "Merci de nous répondre à cette adresse : " . $mail . ".\n\n";
+    $b .= "Bien cordialement,\n" . ($moi->display_name ?: "Le Groupe d'Action") . "\nUnion des Quartiers Libres, avec le Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau";
+    return [$subj, $b];
+}
+
+/** Box « Orienter un·e avocat·e » — PAR EMAIL uniquement (mode de discussion du
+ *  GA). Aucun compte, aucun lien vers l'application : l'avocat·e répond par mail
+ *  à l'adresse du GA. On prépare le dossier ; il/elle garde toute latitude. */
 function lfi_nct_avocat_assign_box($u) {
     if (!lfi_nct_avocat_can()) return;
-    $avocats = lfi_nct_avocat_list();
-    if (empty($avocats)) return;
-    $cur = lfi_nct_avocat_of_tenant($u->ID);
-    echo '<div style="margin-top:10px;padding:10px 12px;background:#f7f0fb;border-radius:10px;border:1px solid #e2d3f0">';
-    echo '<div style="font-weight:800;color:#6a1b9a">⚖️ Confier ce dossier à un·e avocat·e</div>';
-    if ($cur) {
-        $av = get_user_by('id', $cur);
-        echo '<div style="font-size:.86em;color:#555;margin-top:3px">Confié à <strong>' . esc_html($av ? $av->display_name : 'avocat·e') . '</strong> — il/elle voit ce dossier dans son espace. <a href="' . esc_url(lfi_nct_app_url('avocat-espace', ['uid' => (int) $cur])) . '">Voir son espace →</a></div>';
-        /* Email d'ORIENTATION pré-rempli vers l'avocat·e (problématique + demande
-           du client + mandat). Casquette : « Bien cordialement » (pas confrère). */
-        $av_mail = $av ? (string) $av->user_email : '';
-        if ($av_mail && is_email($av_mail) && stripos($av_mail, '@avocat.') === false && function_exists('lfi_nct_email_buttons_html')) {
-            $situ = (string) get_user_meta($u->ID, 'lfi_nct_situation_note', true);
-            $adr  = '';
-            $rid  = (int) get_user_meta($u->ID, 'lfi_nct_response_id', true);
-            if ($rid) { global $wpdb; $rr = $wpdb->get_row($wpdb->prepare("SELECT adresse FROM {$wpdb->prefix}lfi_nct_responses WHERE id = %d", $rid)); if ($rr) $adr = (string) $rr->adresse; }
-            $moi = wp_get_current_user();
-            $subj = 'Orientation d\'un locataire — ' . $u->display_name . ($adr ? ' (' . $adr . ')' : '');
-            $body = "Maître,\n\nLe Groupe d'Action La France Insoumise Nantes Sud – Clos Toreau et l'Union des Quartiers Libres vous orientent " . $u->display_name . ", locataire de Nantes Métropole Habitat" . ($adr ? " (" . $adr . ")" : "") . ". Nous agissons sur mandat écrit signé de sa main.\n\n"
-                . "Sa situation et ce qu'il demande :\n" . ($situ !== '' ? $situ : "[à compléter]") . "\n\n"
-                . "Nous vous transmettons le mandat, la note de synthèse et les pièces sur simple demande, et restons à votre disposition pour vous mettre en relation avec lui.\n\nBien cordialement,\n" . ($moi->display_name ?: 'Le Groupe d\'Action') . " — Union des Quartiers Libres, avec le GA LFI Nantes Sud – Clos Toreau";
-            echo '<div style="margin-top:6px">' . lfi_nct_email_buttons_html($av_mail, $subj, $body, '✉️ Email d\'orientation à l\'avocat·e', 'background:#6a1b9a') . '</div>';
-        }
-    }
-    $du = admin_url('admin-post.php?action=lfi_nct_avocat_assign');
-    echo '<form method="post" action="' . esc_url($du) . '" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
-    wp_nonce_field('lfi_nct_avocat_assign');
-    echo '<input type="hidden" name="tenant_uid" value="' . (int) $u->ID . '">';
-    echo '<select name="avocat_uid" style="flex:1;min-width:160px"><option value="0">— aucun / retirer —</option>';
-    foreach ($avocats as $av) echo '<option value="' . (int) $av->ID . '" ' . selected($cur, $av->ID, false) . '>' . esc_html($av->display_name) . '</option>';
-    echo '</select>';
-    echo '<button type="submit" class="btn-primary" style="background:#6a1b9a">Confier</button>';
-    echo '</form>';
-    echo '<div class="lfi-app-help" style="margin-top:4px"><small>L\'avocat·e reçoit la note structurée + les pièces, et une ligne directe avec toi. Le préjudice chiffré du dossier lui est transmis.</small></div>';
+    list($subj, $body) = lfi_nct_avocat_orientation_email($u);
+    $id = (int) $u->ID;
+    echo '<div style="margin-top:10px;padding:11px 13px;background:#f7f0fb;border-radius:10px;border:1px solid #e2d3f0">';
+    echo '<div style="font-weight:800;color:#6a1b9a">🧑‍⚖️ Orienter un·e avocat·e (par email)</div>';
+    echo '<div class="lfi-app-help" style="margin:4px 0"><small>Un email clair qui <strong>prépare le dossier</strong> (faits, ce que NMH a fait/pas fait, bases légales, demande du client). L\'avocat·e <strong>répond par email</strong> à <strong>' . esc_html(lfi_nct_ga_contact_email()) . '</strong> — aucun compte ni lien vers l\'application. Il/elle garde toute latitude.</small></div>';
+    echo '<input type="email" id="lfi-avmail-' . $id . '" placeholder="Email de l\'avocat·e (ex : cabinet@…)" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;margin-bottom:6px">';
+    echo '<button type="button" onclick="lfiAvMail(' . $id . ')" class="btn-primary" style="background:#6a1b9a;width:100%">✉️ Ouvrir l\'email d\'orientation (Gmail)</button>';
+    echo '<script>var LFI_AVM_' . $id . '={s:' . wp_json_encode($subj) . ',b:' . wp_json_encode($body) . '};function lfiAvMail(id){var d=window["LFI_AVM_"+id];var to=encodeURIComponent((document.getElementById("lfi-avmail-"+id)||{}).value||"");var s=encodeURIComponent(d.s),b=encodeURIComponent(d.b);var app="googlegmail:///co?to="+to+"&subject="+s+"&body="+b;var web="https://mail.google.com/mail/?view=cm&fs=1&to="+to+"&su="+s+"&body="+b;var t=Date.now();try{window.location.href=app;}catch(e){}setTimeout(function(){if(Date.now()-t<1600)window.open(web,"_blank");},700);}</script>';
     echo '</div>';
 }
 
