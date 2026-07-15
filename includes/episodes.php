@@ -28,19 +28,46 @@ if (!defined('ABSPATH')) exit;
  *  distincts, car ce n'est pas le même trouble). */
 function lfi_nct_episode_types() {
     return [
+        'incendie'    => ['🔥', 'Incendie / sinistre'],
         'punaises'    => ['🛏️', 'Punaises de lit'],
         'blattes'     => ['🪳', 'Blattes / cafards'],
         'rongeurs'    => ['🐀', 'Rongeurs (souris, rats)'],
         'nuisibles'   => ['🐛', 'Autres nuisibles'],
         'fuite'       => ['💧', 'Fuite / dégât des eaux'],
         'moisissure'  => ['🦠', 'Moisissures / humidité'],
-        'chauffage'   => ['🔥', 'Chauffage / eau chaude'],
+        'chauffage'   => ['🌡️', 'Chauffage / eau chaude'],
         'electricite' => ['⚡', 'Électricité / sécurité'],
         'menuiserie'  => ['🚪', 'Fenêtres / portes / menuiseries'],
         'parties'     => ['🏢', 'Parties communes / ascenseur'],
         'infestation' => ['🐛', 'Infestation (ancien — à préciser)'],
         'autre'       => ['🏠', 'Autre trouble'],
     ];
+}
+
+/** Devine le TYPE d'incident d'après le récit de la situation / l'enquête, pour
+ *  ne pas afficher « Punaises de lit » par défaut sur un dossier non typé.
+ *  Renvoie une clé de lfi_nct_episode_types(), ou '' si rien de net. */
+function lfi_nct_episode_detect_type($uid) {
+    $text = function_exists('lfi_nct_tenant_situation_text') ? lfi_nct_tenant_situation_text((int) $uid) : '';
+    if (trim($text) === '') return '';
+    $norm = function ($s) { return function_exists('lfi_nct_situation_norm') ? lfi_nct_situation_norm($s) : mb_strtolower($s); };
+    $t = $norm($text);
+    $map = [
+        'incendie'    => ['incendie', 'le feu', 'un feu', 'fumee', 'brul', 'sinistre', 'desenfumage'],
+        'punaises'    => ['punaise'],
+        'blattes'     => ['blatte', 'cafard'],
+        'rongeurs'    => ['rat', 'souris', 'rongeur'],
+        'fuite'       => ['fuite', 'degat des eaux', 'infiltration'],
+        'moisissure'  => ['moisiss', 'humidit'],
+        'chauffage'   => ['chauffage', 'eau chaude', 'radiateur'],
+        'electricite' => ['electric', 'court-circuit', 'disjonct'],
+        'menuiserie'  => ['fenetre', 'porte', 'menuiserie', 'volet'],
+        'parties'     => ['ascenseur', 'partie commune', 'parties communes', 'hall', 'cage d escalier'],
+    ];
+    foreach ($map as $key => $kws) {
+        foreach ($kws as $kw) { if (strpos($t, $norm($kw)) !== false) return $key; }
+    }
+    return '';
 }
 
 function lfi_nct_episodes_get($uid) {

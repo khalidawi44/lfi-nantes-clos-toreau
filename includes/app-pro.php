@@ -2692,9 +2692,16 @@ function lfi_nct_dossier_render_episodes_bar($u) {
         echo '<form method="post" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin:0">' . wp_nonce_field('lfi_app_episode', '_wpnonce', true, false);
         echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="rename"><input type="hidden" name="ep_id" value="' . (int) $active . '">';
         echo '<input type="text" name="ep_titre" value="' . esc_attr($cur['titre'] ?? '') . '" style="font-size:.82em;flex:1;min-width:140px">';
+        /* Type de l'incident : le type ENREGISTRÉ s'il existe, sinon un type
+           DEVINÉ d'après l'enquête (ex. incendie) — jamais « Punaises de lit »
+           par défaut sur un dossier non typé. Placeholder neutre si rien. */
+        $cur_type = (string) ($cur['type'] ?? '');
+        $sel_type = $cur_type !== '' ? $cur_type : (function_exists('lfi_nct_episode_detect_type') ? lfi_nct_episode_detect_type($uid) : '');
         echo '<select name="ep_type" style="font-size:.8em">';
-        foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '"' . (($cur['type'] ?? '') === $tk ? ' selected' : '') . '>' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
+        echo '<option value=""' . ($sel_type === '' ? ' selected' : '') . '>— type d\'incident —</option>';
+        foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '"' . ($sel_type === $tk ? ' selected' : '') . '>' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
         echo '</select>';
+        if ($cur_type === '' && $sel_type !== '') echo '<span style="font-size:.7em;color:#0b3d91">type deviné — 💾 pour confirmer</span>';
         echo '<label style="font-size:.72em;color:#666;display:flex;align-items:center;gap:3px">📅<input type="date" name="ep_ouvert" value="' . esc_attr($cur['ouvert'] ?? '') . '" style="font-size:.78em"></label>';
         echo '<button type="submit" class="btn-ghost" style="font-size:.8em">💾</button></form>';
         echo '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">';
@@ -2777,9 +2784,10 @@ function lfi_nct_dossier_render_episodes_bar($u) {
     echo '<input type="hidden" name="lfi_app_episode" value="1"><input type="hidden" name="ep_action" value="create">';
     echo '<span style="font-size:.82em;font-weight:800;color:#c8102e">＋ Nouvel incident :</span>';
     echo '<select name="ep_type" style="font-size:.8em">';
+    echo '<option value="" selected>— type —</option>';
     foreach ($types as $tk => $tv) echo '<option value="' . esc_attr($tk) . '">' . $tv[0] . ' ' . esc_html($tv[1]) . '</option>';
     echo '</select>';
-    echo '<input type="text" name="ep_titre" placeholder="Titre (ex : Infestation 2025)" style="font-size:.82em;flex:1;min-width:130px">';
+    echo '<input type="text" name="ep_titre" placeholder="Titre (ex : Incendie ascenseur 2026)" style="font-size:.82em;flex:1;min-width:130px">';
     echo '<button type="submit" class="btn-primary" style="font-size:.8em;background:#c8102e">Créer</button></form>';
 
     echo '</div></details>';
@@ -2915,6 +2923,17 @@ function lfi_nct_dossier_render_parcours($u) {
             echo '<input type="checkbox" form="lfi-step-bulk" name="step_sel[]" value="' . (int) $idx . '" onclick="event.stopPropagation()" title="Sélectionner pour suppression multiple" style="margin-right:7px;vertical-align:middle;width:17px;height:17px">';
             echo ($done ? '✅ ' : '📂 ') . esc_html($s['text']) . ' ' . $badge . ($np ? ' <span style="color:#0066a3;font-size:.8em;font-weight:700">· 📎 ' . $np . '</span>' : '') . '</summary>';
             echo '<div style="padding:2px 11px 11px">';
+            /* 🔗 ACTION DE L'ÉTAPE : la timeline oriente vers la chose à faire.
+               Étape « avocat » → le bloc email avocat (avec pièces). Étape « NMH »
+               → la correspondance / les courriers NMH du dossier juridique. */
+            $stxt = function_exists('lfi_nct_situation_norm') ? lfi_nct_situation_norm((string) ($s['text'] ?? '')) : mb_strtolower((string) ($s['text'] ?? ''));
+            if (strpos($stxt, 'avocat') !== false || strpos($stxt, 'assignation') !== false) {
+                echo '<a href="#lfi-avocat-action" class="btn-primary" style="background:#6a1b9a;display:block;text-align:center;box-sizing:border-box;font-size:.82em;margin-bottom:8px">🧑‍⚖️ → Envoyer le dossier à l\'avocat (email + pièces)</a>';
+            } elseif (strpos($stxt, 'nmh') !== false || strpos($stxt, 'nantes metropole') !== false || strpos($stxt, 'mise en demeure') !== false || strpos($stxt, 'relance') !== false || strpos($stxt, 'relanc') !== false || (strpos($stxt, 'ecrire') !== false && strpos($stxt, 'nmh') !== false)) {
+                $jid = function_exists('lfi_nct_dossier_find_for_tenant') ? lfi_nct_dossier_find_for_tenant($u->ID) : null;
+                $nmh_url = $jid ? (lfi_nct_app_url('dossier-juridique-edit', ['id' => (int) $jid->id]) . '#sec-emails') : lfi_nct_app_url('dossier-juridique-edit', ['uid' => $u->ID]);
+                echo '<a href="' . esc_url($nmh_url) . '" class="btn-primary" style="background:#c8102e;display:block;text-align:center;box-sizing:border-box;font-size:.82em;margin-bottom:8px">✉️ → Écrire / répondre à NMH (courriers du dossier)</a>';
+            }
             /* Étape « inviter sur l'appli » : explique l'auto-validation + le manuel. */
             if (mb_stripos((string) ($s['text'] ?? ''), 'invitation') !== false) {
                 $conn = lfi_nct_tenant_has_connected($u->ID);
