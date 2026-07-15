@@ -109,6 +109,27 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_enq_ga_heal_v3', '1', false);
     }
 
+    /* ─ ÉLAGAGE des parcours EXISTANTS : les dossiers créés avant la correction
+       gardaient des étapes obsolètes (« Préparer l'assignation au Tribunal… » à
+       notre charge, « Chiffrer le préjudice avec la personne »). On applique
+       l'élagage à tous les dossiers pour qu'ils reflètent le parcours à jour
+       (assignation = rôle de l'avocat ; chiffrage = expertise). Idempotent. */
+    if (get_option('lfi_nct_parcours_prune_v1') !== '1'
+        && defined('LFI_NCT_ROLE_TENANT') && function_exists('lfi_nct_parcours_prune_steps')) {
+        $tenants = get_users(['role' => LFI_NCT_ROLE_TENANT, 'number' => 5000, 'fields' => ['ID']]);
+        foreach ((array) $tenants as $tu) {
+            $tid = (int) (is_object($tu) ? $tu->ID : $tu);
+            $steps = get_user_meta($tid, 'lfi_nct_suivi_steps', true);
+            if (!is_array($steps) || empty($steps)) continue;
+            $pruned = lfi_nct_parcours_prune_steps($steps);
+            if ($pruned !== $steps) {
+                update_user_meta($tid, 'lfi_nct_suivi_steps', array_values($pruned));
+                if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($tid);
+            }
+        }
+        update_option('lfi_nct_parcours_prune_v1', '1', false);
+    }
+
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
        le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
        « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est
