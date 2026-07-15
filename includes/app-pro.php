@@ -1447,6 +1447,13 @@ function lfi_nct_app_view_dossier() {
             if (function_exists('lfi_nct_ensure_situation_steps')) lfi_nct_ensure_situation_steps($u->ID);
             $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true); if (!is_array($steps)) $steps = [];
         }
+        /* GÉNÉRATION : on ÉLAGUE les étapes obsolètes (chiffrage du préjudice =
+           expertise ; « préparer l'assignation » = rôle de l'avocat, pas le nôtre)
+           pour que « générer le parcours » reflète VRAIMENT le parcours à jour et
+           ne laisse pas traîner d'anciennes étapes. */
+        if (in_array($action, ['autofill', 'situation_gen'], true) && function_exists('lfi_nct_parcours_prune_steps')) {
+            $steps = lfi_nct_parcours_prune_steps($steps);
+        }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
         /* Après une GÉNÉRATION de parcours, on auto-coche tout de suite ce qui est
            déjà acquis (invitation aboutie, adhésion signée) pour ne pas re-proposer
@@ -2219,6 +2226,37 @@ function lfi_nct_tenant_situation_text($uid) {
     if (function_exists('lfi_nct_episodes_get')) foreach ((array) lfi_nct_episodes_get($uid) as $e) $parts[] = (string) ($e['titre'] ?? '');
     return lfi_nct_situation_norm(implode(' ', $parts));
 }
+/** ÉLAGAGE des étapes obsolètes d'un parcours (sur génération + soin des
+ *  dossiers anciens). Retire ce qui n'est plus de notre ressort :
+ *   - « Chiffrer le préjudice avec la personne » → c'est une EXPERTISE (avocat/juge) ;
+ *   - « Préparer l'assignation au Tribunal… » (à NOTRE charge) → rôle de l'AVOCAT :
+ *     on remplace par « 🧑‍⚖️ Confier le dossier à l'avocat », sans créer de doublon.
+ *  Conserve l'état (fait / échéance / besoins) des étapes gardées. Idempotent. */
+function lfi_nct_parcours_prune_steps($steps) {
+    if (!is_array($steps) || empty($steps)) return $steps;
+    $norm = function ($s) { $s = (string) $s; if (function_exists('remove_accents')) $s = remove_accents($s); return mb_strtolower($s); };
+    $has_confier = false;
+    foreach ($steps as $s) { $t = $norm($s['text'] ?? ''); if (strpos($t, 'confier') !== false && strpos($t, 'avocat') !== false) { $has_confier = true; break; } }
+    $out = [];
+    foreach ($steps as $s) {
+        $t = $norm($s['text'] ?? '');
+        /* Chiffrage du préjudice « avec la personne » : obsolète (expertise). */
+        if (strpos($t, 'chiffrer le prejudice avec la personne') !== false) continue;
+        /* Assignation DIY (« préparer l'assignation au tribunal ») → avocat. */
+        $diy_assign = (strpos($t, 'assignation') !== false
+            && (strpos($t, 'tribunal') !== false || strpos($t, 'preparer') !== false)
+            && strpos($t, 'confier') === false && strpos($t, 'avocat') === false);
+        if ($diy_assign) {
+            if ($has_confier) continue; /* déjà une étape « confier à l'avocat » → on retire le doublon */
+            $s['text'] = "🧑‍⚖️ Confier le dossier à l'avocat (assignation au tribunal = son rôle)";
+            $s['who']  = 'admin';
+            $has_confier = true;
+        }
+        $out[] = $s;
+    }
+    return array_values($out);
+}
+
 /** Greffe (une seule fois par pack) les étapes correspondant à la situation. */
 function lfi_nct_ensure_situation_steps($uid) {
     $uid = (int) $uid; if (!$uid) return;
