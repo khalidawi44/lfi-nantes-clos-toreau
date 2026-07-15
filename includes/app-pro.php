@@ -1448,6 +1448,16 @@ function lfi_nct_app_view_dossier() {
             $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true); if (!is_array($steps)) $steps = [];
         }
         update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+        /* Après une GÉNÉRATION de parcours, on auto-coche tout de suite ce qui est
+           déjà acquis (invitation aboutie, adhésion signée) pour ne pas re-proposer
+           une étape déjà faite (ex. « faire signer l'adhésion » alors qu'elle est
+           signée). On relit ensuite les étapes mises à jour avant la redirection. */
+        if (in_array($action, ['autofill', 'situation_gen'], true)) {
+            if (function_exists('lfi_nct_autovalidate_invite_step')) lfi_nct_autovalidate_invite_step($u->ID);
+            if (function_exists('lfi_nct_autovalidate_mandat_step')) lfi_nct_autovalidate_mandat_step($u->ID);
+            $steps = get_user_meta($u->ID, 'lfi_nct_suivi_steps', true); if (!is_array($steps)) $steps = [];
+            update_user_meta($u->ID, 'lfi_nct_suivi_steps', array_values($steps));
+        }
         if (function_exists('lfi_nct_episode_save_active')) lfi_nct_episode_save_active($u->ID);
         wp_safe_redirect(lfi_nct_app_url('dossier', ['uid' => $u->ID, 'ep' => $ep_req, 'step_saved' => 1]));
         exit;
@@ -2066,7 +2076,6 @@ function lfi_nct_dossier_parcours_template() {
         ['who' => 'tenant', 'text' => "Le locataire s'empare de son dossier (fiche, objectif, photos)", 'auto' => 1],
         ['who' => 'admin',  'text' => "Prendre contact et visiter l'appartement (constat, photos)"],
         ['who' => 'admin',  'text' => "Faire signer l'adhésion à l'association (mandat)"],
-        ['who' => 'admin',  'text' => "Chiffrer le préjudice avec la personne (selon ses pièces)"],
         ['who' => 'admin',  'text' => "Écrire à NMH : mise en demeure travaux (mandat requis)"],
         ['who' => 'admin',  'text' => "Appeler NMH puis relancer (1re, 2e relance)"],
         ['who' => 'admin',  'text' => "Amiable : négocier travaux / relogement / indemnisation"],
@@ -2185,6 +2194,16 @@ function lfi_nct_situation_packs() {
                 "⚖️ Volet PÉNAL : constituer le dossier (faits, preuves, témoignages) et préparer la plainte",
                 "📝 ORIENTATION AVOCAT : réparation du préjudice + mise en danger",
             ]],
+        /* Amiable déjà tenté et échoué → route COURTE, on ne réempile pas le
+           parcours amiable générique : 1 appel NMH (échec) → on clôt l'amiable →
+           on confie à l'avocat. Le chiffrage du préjudice est une expertise, pas
+           notre travail (voir volet indemnisation). */
+        'juridique_direct' => ['kw' => ['juridique direct', 'directement le volet juridique', 'directement en juridique', 'amiable echoue', 'amiable a echoue', 'amiable n a pas fonctionne', 'n a pas reussi a contacter', 'refus de nmh', 'nmh a refuse', 'assurance privee', 'passer en juridique', 'aller au tribunal', 'contentieux'],
+            'steps' => [
+                "📞 1er contact NMH (mise en demeure travaux) — cocher ÉCHEC si refus / injoignable / renvoi vers l'assurance perso",
+                "✂️ Amiable ÉCHOUÉ → clore le volet amiable et passer en JURIDIQUE",
+                "📝 ORIENTATION AVOCAT : note de synthèse (demandes du locataire, ce que NMH a/n'a pas fait, fondements juridiques) — réponse par email à l'association",
+            ]],
     ];
 }
 /** Texte-source de la situation : le commentaire saisi + l'enquête + la
@@ -2251,7 +2270,7 @@ function lfi_nct_mark_tenant_connected() {
  *  gagnée. Réparer le préjudice — amiable d'abord, puis judiciaire. */
 function lfi_nct_dossier_indemnisation_steps() {
     return [
-        ['who' => 'admin', 'text' => "💶 Chiffrer le préjudice subi (trouble de jouissance, frais engagés, santé)"],
+        ['who' => 'admin', 'text' => "💶 Préjudice : réunir les pièces (loyers, frais, santé) — le chiffrage relève d'une EXPERTISE (demandée par l'avocat au juge), pas de nous"],
         ['who' => 'admin', 'text' => "💶 Écrire à NMH : demande d'indemnisation amiable (mandat requis)"],
         ['who' => 'admin', 'text' => "💶 Relancer NMH sur l'indemnisation (1re, 2e relance)"],
         ['who' => 'admin', 'text' => "💶 Si échec amiable : saisir la Commission Départementale de Conciliation"],
