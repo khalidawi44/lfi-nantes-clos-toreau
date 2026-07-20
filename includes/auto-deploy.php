@@ -130,6 +130,33 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_parcours_prune_v1', '1', false);
     }
 
+    /* ─ COUPE relogement de M. KEITA : le relogement de la famille a été obtenu
+       publiquement, 5 jours après l'incendie (4 rue de Saint-Jean-de-Luz). On
+       attribue la COUPE du volet urgence à son dossier (marque le dossier « gagné »
+       + célébration GA). Ciblé sur le nom « Keita » + compte lié. Idempotent (une
+       coupe par bataille). Réversible via lfi_nct_victoire_annuler si erreur.
+       Le flag n'est posé qu'en cas de SUCCÈS (on réessaie tant que le dossier lié
+       n'existe pas). La table des dossiers est petite → LIKE peu coûteux. */
+    if (get_option('lfi_nct_keita_coupe_v1') !== '1' && function_exists('lfi_nct_victoire_record')) {
+        global $wpdb;
+        $dt = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
+        $rows = $wpdb->get_results(
+            "SELECT id, tenant_user_id FROM $dt
+             WHERE tenant_nom LIKE '%Keita%' AND tenant_user_id IS NOT NULL AND tenant_user_id > 0"
+        );
+        $done = 0;
+        foreach ((array) $rows as $r) {
+            $uid = (int) $r->tenant_user_id;
+            if ($uid && !lfi_nct_victoire_won($uid, 'urgence')) {
+                lfi_nct_victoire_record($uid, 'urgence', (int) $r->id, 'relogement-incendie-2026-07');
+                $done++;
+            } elseif ($uid) {
+                $done++; /* déjà gagné = considéré comme fait */
+            }
+        }
+        if ($done > 0) update_option('lfi_nct_keita_coupe_v1', '1', false);
+    }
+
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
        le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
        « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est
