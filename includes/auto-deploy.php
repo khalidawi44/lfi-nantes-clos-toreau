@@ -130,31 +130,72 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_parcours_prune_v1', '1', false);
     }
 
-    /* ─ COUPE relogement de M. KEITA : le relogement de la famille a été obtenu
-       publiquement, 5 jours après l'incendie (4 rue de Saint-Jean-de-Luz). On
-       attribue la COUPE du volet urgence à son dossier (marque le dossier « gagné »
-       + célébration GA). Ciblé sur le nom « Keita » + compte lié. Idempotent (une
-       coupe par bataille). Réversible via lfi_nct_victoire_annuler si erreur.
-       Le flag n'est posé qu'en cas de SUCCÈS (on réessaie tant que le dossier lié
-       n'existe pas). La table des dossiers est petite → LIKE peu coûteux. */
-    if (get_option('lfi_nct_keita_coupe_v1') !== '1' && function_exists('lfi_nct_victoire_record')) {
-        global $wpdb;
-        $dt = $wpdb->prefix . 'lfi_nct_dossiers_locataires';
-        $rows = $wpdb->get_results(
-            "SELECT id, tenant_user_id FROM $dt
-             WHERE tenant_nom LIKE '%Keita%' AND tenant_user_id IS NOT NULL AND tenant_user_id > 0"
-        );
+    /* ─ COUPE relogement de M. KEITA : relogement obtenu publiquement 5 jours
+       après l'incendie. On vise le COMPTE WP de Keita (identifiant sûr : le compte
+       lié à l'ENQUÊTE #75, + filet par le nom « Keita »), pas la table des dossiers
+       (dont le tenant_user_id peut être vide). Pose la coupe du volet urgence
+       (bandeau « GAGNÉE » sur le dossier + célébration GA). Idempotent, réversible. */
+    if (get_option('lfi_nct_keita_coupe_v2') !== '1' && function_exists('lfi_nct_victoire_record')) {
+        $uids = [];
+        foreach ((array) get_users(['meta_key' => 'lfi_nct_response_id', 'meta_value' => '75', 'fields' => ['ID'], 'number' => 10]) as $x) $uids[] = (int) (is_object($x) ? $x->ID : $x);
+        foreach ((array) get_users(['search' => '*Keita*', 'search_columns' => ['display_name', 'user_login', 'user_nicename'], 'fields' => ['ID'], 'number' => 10]) as $x) $uids[] = (int) (is_object($x) ? $x->ID : $x);
+        $uids = array_values(array_unique(array_filter($uids)));
         $done = 0;
-        foreach ((array) $rows as $r) {
-            $uid = (int) $r->tenant_user_id;
-            if ($uid && !lfi_nct_victoire_won($uid, 'urgence')) {
-                lfi_nct_victoire_record($uid, 'urgence', (int) $r->id, 'relogement-incendie-2026-07');
-                $done++;
-            } elseif ($uid) {
-                $done++; /* déjà gagné = considéré comme fait */
-            }
+        foreach ($uids as $uid) {
+            if (!lfi_nct_victoire_won($uid, 'urgence')) lfi_nct_victoire_record($uid, 'urgence', 0, 'relogement-incendie-2026-07');
+            $done++;
         }
-        if ($done > 0) update_option('lfi_nct_keita_coupe_v1', '1', false);
+        if ($done > 0) update_option('lfi_nct_keita_coupe_v2', '1', false);
+    }
+
+    /* ─ RÉUSSITES incendie FORCÉES : les 3 acquis (relogement, portage courses,
+       suivi psy Les Pas) n'apparaissaient pas car l'interrupteur
+       « lfi_nct_reussites_seed_off » (posé lors d'une remise à zéro) bloque TOUTE
+       injection de réussites intégrées. On les ajoute ici DIRECTEMENT (hors seed),
+       publiées, cloisonnées Clos Toreau → le compteur « Victoires » les compte. */
+    if (get_option('lfi_nct_reussites_incendie_v1') !== '1'
+        && function_exists('lfi_nct_reussites') && function_exists('lfi_nct_reussites_save')) {
+        $rs = [
+            'relogement-incendie-2026-07' => [
+                'titre'    => 'Relogement d\'une famille obtenu 5 jours après un incendie',
+                'situation'=> "Après l'incendie des 11-12 juillet dans un immeuble du Clos Toreau (sinistre né en partie commune), une famille se retrouvait sans solution digne — renvoyée vers sa propre assurance alors que la charge incombe au bailleur. Cinq jours de pression médiatique publique sur l'inaction de Nantes Métropole Habitat et de la mairie de Nantes ont abouti au relogement effectif de la famille.",
+                'resultat' => 'relogement',
+                'resultat_detail' => 'Famille relogée. Les volets indemnisation et pénal restent à mener (dossier ouvert).',
+            ],
+            'portage-courses-2026-07' => [
+                'titre'    => 'Portage de courses au pied de l\'immeuble pour les familles vulnérables',
+                'situation'=> "Dans la foulée de la mobilisation post-incendie au Clos Toreau, un service de portage de courses au pied de l'immeuble a été mis en place pour les familles vulnérables. Cette réponse a suivi la mise en lumière publique de l'inaction du bailleur et de la mairie.",
+                'resultat' => 'autre',
+                'resultat_detail' => 'Portage de courses effectif pour les familles vulnérables.',
+            ],
+            'suivi-psy-lespas-2026-07' => [
+                'titre'    => 'Prise en charge psychologique des habitant·es par l\'association Les Pas',
+                'situation'=> "Après l'incendie, une prise en charge psychologique des habitant·es a été assurée par l'association Les Pas. Là encore, cette réponse est arrivée après la mise en lumière publique de l'inaction de NMH et de la mairie.",
+                'resultat' => 'autre',
+                'resultat_detail' => 'Accompagnement psychologique assuré par l\'association Les Pas.',
+            ],
+        ];
+        $list = lfi_nct_reussites();
+        $have = [];
+        foreach ($list as $r) if (!empty($r['seed_key'])) $have[$r['seed_key']] = 1;
+        $changed = false; $i = 0;
+        foreach ($rs as $key => $s) {
+            if (isset($have[$key])) continue;
+            $s['id']              = (int) round(microtime(true) * 1000) + $i++;
+            $s['seed_key']        = $key;
+            $s['leviers']         = ['accompagnement', 'courrier'];
+            $s['leviers_detail']  = '';
+            $s['delai']           = '';
+            $s['quartier']        = 'Clos Toreau (Nantes Sud)';
+            $s['ga']              = 'clos-toreau';
+            $s['anonymize_names'] = '';
+            $s['publie']          = true;
+            $s['auto']            = true;
+            $s['date']            = current_time('mysql');
+            $list[] = $s; $changed = true;
+        }
+        if ($changed) lfi_nct_reussites_save($list);
+        update_option('lfi_nct_reussites_incendie_v1', '1', false);
     }
 
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
