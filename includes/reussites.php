@@ -79,6 +79,24 @@ function lfi_nct_reussites_seed_builtin() {
             'resultat' => 'travaux',
             'resultat_detail' => 'Traitement relancé (volet urgence). Le protocole complet, le traitement des logements voisins et la réparation du préjudice restent à verrouiller (dossier ouvert).',
         ],
+        'relogement-incendie-2026-07' => [
+            'titre'    => 'Relogement d\'une famille obtenu 5 jours après un incendie',
+            'situation'=> "Après l'incendie des 11-12 juillet dans un immeuble du Clos Toreau (sinistre né en partie commune), une famille se retrouvait sans solution digne — renvoyée vers sa propre assurance alors que la charge incombe au bailleur. Cinq jours de pression médiatique publique sur l'inaction de Nantes Métropole Habitat et de la mairie de Nantes ont abouti au relogement effectif de la famille.",
+            'resultat' => 'relogement',
+            'resultat_detail' => 'Famille relogée. Les volets indemnisation et pénal (mise en danger) restent à mener (dossier ouvert).',
+        ],
+        'portage-courses-2026-07' => [
+            'titre'    => 'Portage de courses au pied de l\'immeuble pour les familles vulnérables',
+            'situation'=> "Dans la foulée de la mobilisation post-incendie au Clos Toreau, un service de portage de courses au pied de l'immeuble a été mis en place pour les familles vulnérables. Cette réponse n'est pas venue spontanément : elle a suivi la mise en lumière publique de l'inaction du bailleur et de la mairie.",
+            'resultat' => 'autre',
+            'resultat_detail' => 'Portage de courses effectif pour les familles vulnérables.',
+        ],
+        'suivi-psy-lespas-2026-07' => [
+            'titre'    => 'Prise en charge psychologique des habitant·es par l\'association Les Pas',
+            'situation'=> "Après l'incendie, une prise en charge psychologique des habitant·es a été assurée par l'association Les Pas, qui accompagne les habitant·es des quartiers de Nantes. Là encore, cette réponse est arrivée après — et grâce à — la mise en lumière publique de l'inaction de Nantes Métropole Habitat et de la mairie.",
+            'resultat' => 'autre',
+            'resultat_detail' => 'Accompagnement psychologique assuré par l\'association Les Pas.',
+        ],
     ];
 
     $list = lfi_nct_reussites();
