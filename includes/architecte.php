@@ -48,12 +48,16 @@ function lfi_nct_architecte_scan() {
         $want_travaux = in_array('travaux_urgents', $demandes, true);
         $want_indem   = in_array('indemnisation', $demandes, true) || in_array('reduction_loyer', $demandes, true);
         $age_days = $r->updated_at ? (int) floor((strtotime($today) - strtotime($r->updated_at)) / 86400) : 0;
+        /* Bataille URGENCE déjà gagnée (relogement/travaux obtenus) → on n'interpelle
+           plus sur les leviers d'urgence (documenter, relancer, relogement…). Seul
+           le volet indemnisation reste actif. */
+        $urg_won = ($uid && function_exists('lfi_nct_victoire_won')) ? (lfi_nct_victoire_won($uid, 'urgence') !== '') : false;
 
         /* PRIORITÉ 1 — urgent. */
-        if ($delai_passe && !$schs) {
+        if (!$urg_won && $delai_passe && !$schs) {
             $push(1, '⏰', $nom, 'Délai NMH dépassé et pas de SCHS : saisis le service d\'hygiène (en gardant l\'amiable ouvert).', $uid);
         }
-        if ($has_med && !$lrar_relog) {
+        if (!$urg_won && $has_med && !$lrar_relog) {
             $push(1, '🏥', $nom, 'Certificat médical au dossier mais aucune demande de relogement envoyée : active ce levier, c\'est le plus fort.', $uid);
         }
 
@@ -62,18 +66,18 @@ function lfi_nct_architecte_scan() {
            l'analyse et la rédaction de la réponse sont faites par l'assistant, et la
            réponse prête arrive dans « À envoyer ». L'architecte ne propose ici que des
            coups à jouer — pas des tâches de lecture/analyse à faire soi-même.) */
-        if ($want_travaux && !$lrar_trav) {
+        if (!$urg_won && $want_travaux && !$lrar_trav) {
             $push(2, '📨', $nom, 'Travaux demandés mais mise en demeure pas encore envoyée : propose aussi le levier brigade.', $uid);
         }
 
         /* PRIORITÉ 3 — consolidation. */
-        if (!$has_const) {
+        if (!$urg_won && !$has_const) {
             $push(3, '📝', $nom, 'Dossier peu documenté : constatations + photos datées (c\'est le capital de négociation).', $uid);
         }
         if ($want_indem && $analyse === '' && !$recu) {
             $push(3, '💶', $nom, 'Réparation du préjudice demandée mais rien d\'engagé : prépare le chiffrage (trouble de jouissance…).', $uid);
         }
-        if ($age_days >= 21 && ($r->statut ?? '') === 'ouvert') {
+        if (!$urg_won && $age_days >= 21 && ($r->statut ?? '') === 'ouvert') {
             $push(3, '💤', $nom, 'Aucun mouvement depuis ' . $age_days . ' jours : relance NMH ou fais avancer d\'un cran.', $uid);
         }
     }

@@ -96,6 +96,9 @@ function lfi_nct_alertes_auto() {
             $tu = get_userdata($tuid);
             if ($tu && (in_array('administrator', (array) $tu->roles, true)
                 || (defined('LFI_NCT_ROLE_GA') && in_array(LFI_NCT_ROLE_GA, (array) $tu->roles, true)))) $skip_contact = true;
+            /* Bataille urgence déjà GAGNÉE (relogement/travaux obtenus) → on a
+               forcément déjà pris contact : plus de « premier contact à faire ». */
+            if (function_exists('lfi_nct_victoire_won') && lfi_nct_victoire_won($tuid, 'urgence') !== '') $skip_contact = true;
         }
         if (preg_match('/mod[eè]le|d[ée]mo|\btest\b|exemple|sp[eé]cimen/iu', $full)) $skip_contact = true;
 
