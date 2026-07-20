@@ -24,6 +24,7 @@ function lfi_nct_prefecture_contact() {
         'nom'       => '',
         'fonction'  => '',
         'email'     => '',
+        'tel'       => '',
         /* 2ᵉ interlocutrice : Gwenaëlle Gourdien */
         'nom2'      => 'Gwenaëlle Gourdien',
         'fonction2' => '',
@@ -34,7 +35,15 @@ function lfi_nct_prefecture_contact() {
     if ($c['nom'] === '')      $c['nom']      = 'Mélanie LAURINE';
     if ($c['fonction'] === '') $c['fonction'] = 'Déléguée du Préfet';
     if ($c['email'] === '')    $c['email']    = 'melanie.laurine@loire-atlantique.gouv.fr';
+    if ($c['tel'] === '')      $c['tel']      = '+33 7 88 14 93 78';
     return $c;
+}
+
+/** Numéro de la déléguée nettoyé pour les liens tel:/sms: (chiffres + « + »). */
+function lfi_nct_prefecture_tel_clean() {
+    $t = (string) (lfi_nct_prefecture_contact()['tel'] ?? '');
+    $t = preg_replace('/[^\d+]/', '', $t);
+    return $t;
 }
 
 /** Liste des emails préfecture renseignés (déléguée + Gwenaëlle). */
@@ -272,6 +281,7 @@ function lfi_nct_app_view_prefecture() {
             'nom'       => sanitize_text_field(wp_unslash($_POST['pref_nom'] ?? '')),
             'fonction'  => sanitize_text_field(wp_unslash($_POST['pref_fonction'] ?? '')),
             'email'     => sanitize_email(wp_unslash($_POST['pref_email'] ?? '')),
+            'tel'       => sanitize_text_field(wp_unslash($_POST['pref_tel'] ?? '')),
             'nom2'      => sanitize_text_field(wp_unslash($_POST['pref_nom2'] ?? '')),
             'fonction2' => sanitize_text_field(wp_unslash($_POST['pref_fonction2'] ?? '')),
             'email2'    => sanitize_email(wp_unslash($_POST['pref_email2'] ?? '')),
@@ -375,6 +385,22 @@ function lfi_nct_app_view_prefecture() {
         echo '<div class="lfi-app-help"><small>Le rapport s\'ouvre en page imprimable : « Imprimer » → « Enregistrer au format PDF », puis tu joins le PDF à ton email.</small></div>';
     }
 
+    /* ===== Contact direct de la déléguée (Appeler · SMS · Email) ===== */
+    $tel_clean = lfi_nct_prefecture_tel_clean();
+    if ($contact['tel'] !== '' || $contact['email'] !== '') {
+        echo '<h3 style="margin:22px 0 6px">📞 Contacter ' . esc_html($contact['nom'] ?: 'la déléguée') . '</h3>';
+        if ($contact['fonction']) echo '<div class="lfi-app-help" style="margin:0 0 6px"><small>' . esc_html($contact['fonction']) . ($contact['tel'] ? ' · ' . esc_html($contact['tel']) : '') . '</small></div>';
+        echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">';
+        if ($tel_clean !== '') {
+            echo '<a class="btn-primary" href="tel:' . esc_attr($tel_clean) . '">📞 Appeler</a>';
+            echo '<a class="btn-primary" style="background:#0066a3" href="sms:' . esc_attr($tel_clean) . '">📱 SMS</a>';
+        }
+        if ($contact['email'] !== '') {
+            echo '<a class="btn-ghost" href="mailto:' . esc_attr($contact['email']) . '">✉️ Email direct</a>';
+        }
+        echo '</div>';
+    }
+
     /* ===== Boutons d'envoi (avec suivi des correspondances) ===== */
     echo '<h3 style="margin:22px 0 6px">📨 Écrire (avec suivi)</h3>';
     echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">';
@@ -469,6 +495,7 @@ function lfi_nct_app_view_prefecture() {
     echo '<label>Déléguée — nom<input type="text" name="pref_nom" value="' . esc_attr($contact['nom']) . '" placeholder="Mme …"></label>';
     echo '<label>Fonction<input type="text" name="pref_fonction" value="' . esc_attr($contact['fonction']) . '" placeholder="ex : déléguée du préfet / cheffe de projet quartier"></label>';
     echo '<label>Email<input type="email" name="pref_email" value="' . esc_attr($contact['email']) . '" placeholder="prenom.nom@loire-atlantique.gouv.fr"></label>';
+    echo '<label>Téléphone<input type="tel" name="pref_tel" value="' . esc_attr($contact['tel']) . '" placeholder="+33 7 88 14 93 78"></label>';
     echo '</div>';
     echo '<div style="border-left:3px solid #0066a3;padding-left:10px;margin:8px 0">';
     echo '<label>2ᵉ interlocutrice — nom<input type="text" name="pref_nom2" value="' . esc_attr($contact['nom2']) . '" placeholder="Gwenaëlle Gourdien"></label>';
