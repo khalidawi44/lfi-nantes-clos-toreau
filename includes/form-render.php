@@ -63,6 +63,10 @@ function lfi_nct_render_form($edit_id = 0) {
             <fieldset class="lfi-fieldset">
                 <legend class="lfi-legend">Lesquels ? (cochez tout ce qui s'applique)</legend>
                 <?php
+                /* Clos Toreau (GA maison) = bloc « eau chaude » détaillé plus bas.
+                   Ailleurs, pas de bloc dédié : l'eau chaude est une simple option. */
+                $lfi_is_clos = !function_exists('lfi_nct_scope_ga_slug')
+                    || in_array(lfi_nct_scope_ga_slug(), ['', 'clos-toreau'], true);
                 /* Types de base + ceux appris des saisies précédentes (cf. lfi_nct_learn_custom_problem) */
                 $types = function_exists('lfi_nct_problem_types_all') ? lfi_nct_problem_types_all() : [
                     'degats_eaux'      => '💧 Dégâts des eaux / fuites / infiltrations',
@@ -75,6 +79,11 @@ function lfi_nct_render_form($edit_id = 0) {
                     'bruit'            => '🔊 Nuisances sonores / voisinage',
                     'securite'         => '🚨 Insécurité (entrées, parties communes…)',
                 ];
+                /* Hors Clos Toreau : l'eau chaude devient une option parmi les autres
+                   (au Clos Toreau elle a son bloc détaillé, on ne double pas). */
+                if (!$lfi_is_clos && !isset($types['eau_chaude'])) {
+                    $types['eau_chaude'] = '🚿 Coupures d\'eau chaude';
+                }
                 ?>
                 <p class="lfi-help">Pour chaque problème coché, précisez <strong>depuis quand</strong> et <strong>combien de fois par an</strong> (estimation).</p>
                 <?php
@@ -200,10 +209,9 @@ function lfi_nct_render_form($edit_id = 0) {
 
         <?php
         /* Section « coupures d'eau chaude » : spécifique au Clos Toreau (fait de
-           quartier). On ne l'affiche QUE pour ce GA (home / clos-toreau). */
-        $lfi_eau_chaude = !function_exists('lfi_nct_scope_ga_slug')
-            || in_array(lfi_nct_scope_ga_slug(), ['', 'clos-toreau'], true);
-        if ($lfi_eau_chaude): ?>
+           quartier). On ne l'affiche QUE pour ce GA (home / clos-toreau) ; ailleurs
+           l'eau chaude est déjà proposée en simple option ci-dessus. */
+        if ($lfi_is_clos): ?>
         <fieldset class="lfi-fieldset">
             <legend class="lfi-legend">🚿 Coupures d'eau chaude récurrentes</legend>
             <p class="lfi-help">
@@ -513,6 +521,7 @@ function lfi_nct_render_submission_summary($id) {
         'humidite'         => 'Humidité / moisissures',
         'insectes'         => 'Insectes / nuisibles',
         'chauffage'        => 'Chauffage insuffisant',
+        'eau_chaude'       => 'Coupures d\'eau chaude',
         'electricite'      => 'Problèmes électriques',
         'ascenseur'        => 'Ascenseur',
         'parties_communes' => 'Parties communes',
