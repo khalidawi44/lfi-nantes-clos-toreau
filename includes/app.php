@@ -2606,6 +2606,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['⚖️', 'Avocat·es partenaires',  'Confier un dossier · ligne directe',  lfi_nct_app_url('avocats')],
             ['⚖️', 'Cadre juridique',        'Ce qui est facturable, par qui',      lfi_nct_app_url('cadre-juridique')],
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
+            ['🐛', 'Argumentaire NMH (nuisibles)', 'PDF anonyme · problème systémique · punaises', lfi_nct_app_url('argumentaire-nmh')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
         ],
         '👶 VOLET PROTECTION DE L\'ENFANCE' => [
