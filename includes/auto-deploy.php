@@ -198,6 +198,31 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_reussites_incendie_v1', '1', false);
     }
 
+    /* ─ MIGRATION RGPD : les fiches locataires content/dossiers/{slug}.php
+       contiennent des données personnelles SENSIBLES (santé, mineurs) et ne
+       doivent PAS rester dans le dépôt Git (public). On les recopie dans des
+       options WordPress PRIVÉES (lfi_nct_fiche_{slug}), afin de pouvoir ensuite
+       supprimer les fichiers du dépôt ET de l'historique sans casser l'app.
+       Le flag n'est posé qu'une fois l'import fait (dossier de fichiers présent). */
+    if (get_option('lfi_nct_fiches_migrated_v1') !== '1'
+        && function_exists('lfi_nct_content_dir') && function_exists('lfi_nct_content_dossier_file')) {
+        $dir = lfi_nct_content_dir() . 'dossiers/';
+        if (is_dir($dir)) {
+            $index = (array) get_option('lfi_nct_fiches_index', []);
+            foreach ((array) glob($dir . '*.php') as $f) {
+                $slug = basename($f, '.php');
+                if ($slug === '') continue;
+                $d = lfi_nct_content_dossier_file($slug);
+                if (is_array($d) && $d) {
+                    update_option('lfi_nct_fiche_' . $slug, $d, false);
+                    if (!in_array($slug, $index, true)) $index[] = $slug;
+                }
+            }
+            update_option('lfi_nct_fiches_index', array_values($index), false);
+            update_option('lfi_nct_fiches_migrated_v1', '1', false);
+        }
+    }
+
     /* ─ RÉPARATION des LIENS de dossiers juridiques corrompus : un dossier dont
        le compte lié (tenant_user_id) CONTREDIT le nom du dossier (ex. dossier de
        « Marie Croyère » pointant vers le compte de « Fabrice Doucet ») est

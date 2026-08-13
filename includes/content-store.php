@@ -264,21 +264,40 @@ function lfi_nct_content_nmh_for_dossier($dossier_id) {
  *  DOSSIERS LOCATAIRES (fiche maître par locataire, gérée code)   *
  * ============================================================== */
 
-/** Charge la fiche maître d'un locataire : content/dossiers/{slug}.php */
-function lfi_nct_content_dossier($slug) {
+/** Lit la fiche UNIQUEMENT depuis le fichier content/dossiers/{slug}.php (compat/migration). */
+function lfi_nct_content_dossier_file($slug) {
     $slug = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $slug));
     if ($slug === '') return [];
     return lfi_nct_content_load('dossiers/' . $slug . '.php');
 }
 
-/** Liste des fiches dossiers disponibles (slugs). */
+/**
+ * Charge la fiche maître d'un locataire.
+ * SÉCURITÉ / RGPD : ces fiches contiennent des données personnelles sensibles.
+ * Elles ne doivent JAMAIS vivre dans le dépôt Git (public). Source de vérité =
+ * l'option WordPress privée « lfi_nct_fiche_{slug} ». On ne retombe sur le
+ * fichier que s'il existe encore (période de migration).
+ */
+function lfi_nct_content_dossier($slug) {
+    $slug = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $slug));
+    if ($slug === '') return [];
+    $opt = get_option('lfi_nct_fiche_' . $slug, null);
+    if (is_array($opt) && $opt) return $opt;
+    return lfi_nct_content_dossier_file($slug);
+}
+
+/** Liste des fiches dossiers disponibles (slugs) : base privée + fichiers restants. */
 function lfi_nct_content_dossiers_list() {
-    $dir = lfi_nct_content_dir() . 'dossiers/';
-    if (!is_dir($dir)) return [];
-    $out = [];
-    foreach ((array) glob($dir . '*.php') as $f) {
-        $out[] = basename($f, '.php');
+    $slugs = [];
+    foreach ((array) get_option('lfi_nct_fiches_index', []) as $s) {
+        $s = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $s));
+        if ($s !== '') $slugs[$s] = 1;
     }
+    $dir = lfi_nct_content_dir() . 'dossiers/';
+    if (is_dir($dir)) {
+        foreach ((array) glob($dir . '*.php') as $f) $slugs[basename($f, '.php')] = 1;
+    }
+    $out = array_keys($slugs);
     sort($out);
     return $out;
 }
