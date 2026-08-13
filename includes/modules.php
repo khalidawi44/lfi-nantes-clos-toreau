@@ -35,7 +35,7 @@ function lfi_nct_modules_registry() {
         'prefecture' => [
             'label'  => 'Préfecture',
             'desc'   => 'Partage anonyme des données par bâtiment + correspondance avec la préfecture.',
-            'routes' => ['prefecture', 'prefecture-rapport', 'prefecture-email'],
+            'routes' => ['prefecture', 'prefecture-rapport', 'prefecture-email', 'argumentaire-nmh'],
             'default'=> true,
         ],
         'reussites' => [

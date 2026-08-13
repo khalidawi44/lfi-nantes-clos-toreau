@@ -945,6 +945,7 @@ function lfi_nct_app_shortcode() {
                     case 'ga-liste':              lfi_nct_app_view_ga_liste();               break;
                     case 'prefecture':            lfi_nct_app_view_prefecture();             break;
                     case 'prefecture-rapport':    lfi_nct_app_view_prefecture_rapport();     break;
+                    case 'argumentaire-nmh':      lfi_nct_app_view_argumentaire_nmh();       break;
                     case 'prefecture-email':      lfi_nct_app_view_prefecture_email();       break;
                     case 'reussites':             lfi_nct_app_view_reussites();              break;
                     case 'dossier-wizard':        lfi_nct_app_view_dossier_wizard();         break;
