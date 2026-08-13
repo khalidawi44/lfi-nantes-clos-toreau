@@ -381,8 +381,9 @@ function lfi_nct_app_view_prefecture() {
 
         echo '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0">';
         echo '<a class="btn-primary big" href="' . esc_url(lfi_nct_app_url('prefecture-rapport')) . '">📄 Rapport anonyme à imprimer / PDF</a>';
+        echo '<a class="btn-primary big" style="background:#8a1f1f" href="' . esc_url(lfi_nct_app_url('argumentaire-nmh')) . '">🐛 Argumentaire systémique NMH — nuisibles (PDF)</a>';
         echo '</div>';
-        echo '<div class="lfi-app-help"><small>Le rapport s\'ouvre en page imprimable : « Imprimer » → « Enregistrer au format PDF », puis tu joins le PDF à ton email.</small></div>';
+        echo '<div class="lfi-app-help"><small>Le rapport s\'ouvre en page imprimable : « Imprimer » → « Enregistrer au format PDF », puis tu joins le PDF à ton email. L\'<strong>argumentaire nuisibles</strong> est une note anonyme prête à verser à un dossier locataire (ex. punaises de lit) : il montre le caractère <strong>systémique</strong> du problème, sans aucun nom.</small></div>';
     }
 
     /* ===== Contact direct de la déléguée (Appeler · SMS · Email) ===== */
@@ -754,6 +755,116 @@ function lfi_nct_app_view_prefecture_rapport() {
     echo '<p class="pj">Document établi par l\'association Union des Quartiers Libres dans le cadre de son action d\'accompagnement des habitant·es. Données agrégées et anonymisées ; le détail individuel n\'est pas communiqué.</p>';
 
     echo '</div>'; // .lfi-rec-doc
+
+    lfi_nct_app_screen_close(false);
+}
+
+/* ============================================================== *
+ *  VUE : Argumentaire systémique NMH — nuisibles (PDF anonyme)   *
+ *  Pour un dossier locataire (ex. punaises de lit) : démontre le *
+ *  caractère GÉNÉRAL des désordres dans le parc NMH, sans aucune *
+ *  donnée nominative ni citation individuelle.                   *
+ * ============================================================== */
+function lfi_nct_app_view_argumentaire_nmh() {
+    if (!lfi_nct_app_guard_brigade()) return;
+
+    $agg     = lfi_nct_prefecture_aggregate_by_building();
+    $labels  = $agg['labels'];
+    $totaux  = lfi_nct_prefecture_totaux($agg);
+    $foyers_total = (int) $agg['foyers_total'];
+    $nb_bat  = count($agg['buildings']);
+
+    /* Nuisibles (cafards, punaises, rongeurs) = clé « insectes ». */
+    $nuis_foyers = (int) ($totaux['insectes'] ?? 0);
+    $nuis_bats = 0;
+    foreach ($agg['buildings'] as $b) if (!empty($b['types']['insectes'])) $nuis_bats++;
+    $pct_nuis = $foyers_total > 0 ? (int) round($nuis_foyers / $foyers_total * 100) : 0;
+
+    /* Contexte général : foyers déclarant au moins un problème. */
+    $foyers_pb = 0;
+    foreach ($agg['buildings'] as $b) $foyers_pb += (int) $b['foyers_problemes'];
+    $pct_pb = $foyers_total > 0 ? (int) round($foyers_pb / $foyers_total * 100) : 0;
+
+    lfi_nct_app_screen_open('🐛 Argumentaire systémique NMH', 'Note anonyme — nuisibles / punaises de lit');
+
+    if (function_exists('lfi_nct_rec_doc_styles')) lfi_nct_rec_doc_styles();
+    ?>
+    <style>
+    @media (max-width: 640px) {
+        .lfi-rec-doc { padding: 16px !important; max-width: 100% !important; box-sizing: border-box; }
+        .lfi-rec-doc table.detail { table-layout: fixed; width: 100%; }
+    }
+    .lfi-rec-doc { overflow-x: hidden; }
+    .lfi-rec-doc table.detail td { word-break: break-word; overflow-wrap: anywhere; }
+    </style>
+    <?php
+
+    echo '<div class="lfi-rec-doc">';
+
+    echo '<div class="expediteur"><strong>Association Union des Quartiers Libres</strong><br>';
+    echo 'Groupe d\'Action — Nantes Sud / Clos Toreau<br>';
+    echo 'Contact : ' . esc_html(function_exists('lfi_nct_ga_gmail') ? lfi_nct_ga_gmail() : '') . '</div>';
+
+    echo '<div class="lieu-date">À Nantes, le ' . esc_html(wp_date('j F Y')) . '</div>';
+
+    echo '<h1>Note argumentaire — caractère systémique des désordres dans le parc NMH du Clos-Toreau</h1>';
+
+    echo '<p class="objet">Objet : éléments agrégés issus d\'une enquête de terrain (porte-à-porte logement, quartier Clos Toreau, Nantes Sud), établissant que les nuisibles (dont punaises de lit) et les désordres relèvent d\'un problème récurrent et collectif, et non d\'un cas isolé.</p>';
+
+    echo '<div class="citations"><strong>Garantie d\'anonymat.</strong> Ce document ne comporte aucune donnée nominative : ni nom, ni numéro de porte ou d\'appartement, ni téléphone, ni citation individuelle. Seules figurent des données <strong>agrégées par immeuble</strong>. L\'enquête détaillée demeure interne à l\'association.</div>';
+
+    /* ── Le chiffre clé ── */
+    echo '<h2>1. Un problème collectif, pas un cas isolé</h2>';
+    if ($foyers_total === 0) {
+        echo '<p><em>Aucune réponse d\'enquête enregistrée à ce jour.</em></p>';
+    } else {
+        echo '<p>L\'enquête a rencontré <strong>' . $foyers_total . ' foyer(s)</strong> répartis sur <strong>' . $nb_bat . ' bâtiment(s)</strong> du quartier. Parmi eux :</p>';
+        echo '<table class="detail">';
+        echo '<tr class="total"><td colspan="2">Nuisibles (cafards, punaises de lit, rongeurs)</td></tr>';
+        echo '<tr><td>Foyers déclarant des nuisibles</td><td class="num">' . $nuis_foyers . ' foyer(s)</td></tr>';
+        echo '<tr><td>Part des foyers enquêtés concernés</td><td class="num">' . $pct_nuis . ' %</td></tr>';
+        echo '<tr><td>Bâtiments distincts touchés</td><td class="num">' . $nuis_bats . ' immeuble(s)</td></tr>';
+        echo '</table>';
+        echo '<p>La présence des mêmes désordres dans <strong>plusieurs immeubles distincts</strong>, chez des foyers sans lien entre eux, caractérise un <strong>défaut de traitement structurel du bailleur</strong> — et exclut la thèse d\'une négligence individuelle du locataire.</p>';
+
+        /* ── Détail nuisibles par bâtiment ── */
+        $lignes = [];
+        foreach ($agg['buildings'] as $b) {
+            $n = (int) ($b['types']['insectes'] ?? 0);
+            if ($n > 0) $lignes[] = [$b['adresse'], $n, (int) $b['foyers']];
+        }
+        if ($lignes) {
+            echo '<h2>2. Répartition des nuisibles par immeuble</h2>';
+            echo '<table class="detail">';
+            echo '<tr class="total"><td>Immeuble</td><td class="num">Foyers touchés</td></tr>';
+            foreach ($lignes as $l) {
+                echo '<tr><td>' . esc_html($l[0]) . '</td><td class="num">' . (int) $l[1] . ' / ' . (int) $l[2] . '</td></tr>';
+            }
+            echo '</table>';
+        }
+
+        /* ── Contexte : malfaçon générale ── */
+        echo '<h2>3. Un contexte de désordres généralisés</h2>';
+        echo '<p>Au-delà des nuisibles, <strong>' . $foyers_pb . ' foyer(s) (' . $pct_pb . ' %)</strong> déclarent au moins un désordre. Décompte, tous immeubles confondus :</p>';
+        echo '<table class="detail">';
+        foreach ($totaux as $k => $n) {
+            if ($n > 0) echo '<tr><td>' . esc_html($labels[$k]) . '</td><td class="num">' . (int) $n . ' foyer(s)</td></tr>';
+        }
+        echo '</table>';
+    }
+
+    /* ── Fondements juridiques ── */
+    echo '<h2>4. Rappel du cadre légal</h2>';
+    echo '<div class="citations">';
+    echo '<p><strong>Logement décent, exempt de nuisibles.</strong> Le bailleur doit remettre et maintenir un logement décent, <em>exempt de toute infestation d\'espèces nuisibles et de parasites</em> (art. 6 de la loi n° 89-462 du 6 juillet 1989, modifié ; décret n° 2002-120 du 30 janvier 2002).</p>';
+    echo '<p><strong>Obligations d\'entretien et de jouissance paisible.</strong> Le bailleur délivre le logement en bon état et y fait les réparations nécessaires ; il doit au preneur la jouissance paisible (art. 1719 et 1720 du Code civil). Le traitement d\'une infestation non imputable au locataire incombe au bailleur.</p>';
+    echo '</div>';
+
+    echo '<p class="pj">Document établi par l\'association Union des Quartiers Libres dans le cadre de son action d\'accompagnement des habitant·es. Données agrégées et anonymisées ; le détail individuel n\'est pas communiqué. Chiffres arrêtés à la date ci-dessus, susceptibles d\'évoluer avec l\'avancement de l\'enquête.</p>';
+
+    echo '</div>'; // .lfi-rec-doc
+
+    echo '<div class="no-print" style="margin-top:14px"><a class="btn-ghost" href="' . esc_url(lfi_nct_app_url('prefecture')) . '">← Retour au volet Préfecture</a></div>';
 
     lfi_nct_app_screen_close(false);
 }
