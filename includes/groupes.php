@@ -150,6 +150,65 @@ function lfi_nct_groupes($include_archived = false) {
 }
 
 /* ============================================================== *
+ *  VUE MEMBRE : « Mon groupe d'action » — choisir / changer son GA *
+ *  Ouverte à TOUT membre connecté. Les inscrit·es de la campagne   *
+ *  logement ont été affecté·es d'office au Clos Toreau : ils/elles  *
+ *  doivent pouvoir rejoindre LEUR groupe d'action local.           *
+ * ============================================================== */
+function lfi_nct_app_view_mon_ga() {
+    if (!is_user_logged_in()) { wp_safe_redirect(lfi_nct_app_url()); exit; }
+    $uid = get_current_user_id();
+
+    /* Enregistrement du choix. */
+    if (!empty($_POST['lfi_mon_ga_save']) && check_admin_referer('lfi_mon_ga')) {
+        $slug = sanitize_title(wp_unslash($_POST['mon_ga'] ?? ''));
+        if ($slug === 'clos-toreau') $slug = ''; // espace « maison » = meta vide
+        $ok = ($slug === '');
+        if (!$ok) {
+            foreach (lfi_nct_groupes() as $g) { if ($g['slug'] === $slug) { $ok = true; break; } }
+        }
+        if ($ok) {
+            update_user_meta($uid, 'lfi_nct_ga', $slug);
+            /* Garde les compteurs justes : met à jour la table membres (par email). */
+            $u = get_userdata($uid);
+            if ($u && $u->user_email) {
+                global $wpdb;
+                $t = $wpdb->prefix . 'lfi_nct_membres';
+                $wpdb->query($wpdb->prepare("UPDATE $t SET ga = %s WHERE email = %s", $slug, $u->user_email));
+            }
+            wp_safe_redirect(lfi_nct_app_url('mon-ga', ['ok' => 1])); exit;
+        }
+    }
+
+    $current = lfi_nct_user_ga($uid);                       // '' = Clos Toreau
+    $current_norm = ($current === '') ? 'clos-toreau' : $current;
+
+    lfi_nct_app_screen_open('👥 Mon groupe d\'action', 'Choisis le groupe qui te correspond');
+    if (!empty($_GET['ok'])) lfi_nct_app_flash('✅ Ton groupe d\'action a été mis à jour. Merci !');
+    echo '<div class="lfi-app-help">Lors de ton inscription, tu as été rattaché·e à un groupe par défaut. Choisis ici <strong>ton</strong> groupe d\'action local : tu recevras ensuite les infos et les rendez-vous du bon groupe.</div>';
+
+    $opts = [['clos-toreau', 'Clos Toreau — Nantes Sud', 'Le groupe historique (par défaut).']];
+    foreach (lfi_nct_groupes() as $g) {
+        if (($g['slug'] ?? '') === 'clos-toreau') continue;
+        $opts[] = [$g['slug'], $g['nom'], trim((string) ($g['secteur'] ?? ''))];
+    }
+
+    echo '<form method="post"><div style="display:flex;flex-direction:column;gap:8px;margin:12px 0">';
+    foreach ($opts as $o) {
+        $checked = ($o[0] === $current_norm) ? ' checked' : '';
+        echo '<label class="lfi-app-card" style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;cursor:pointer">';
+        echo '<input type="radio" name="mon_ga" value="' . esc_attr($o[0]) . '"' . $checked . ' style="margin-top:3px">';
+        echo '<span><strong>' . esc_html($o[1]) . '</strong>' . ($o[2] !== '' ? '<br><small style="color:#666">' . esc_html($o[2]) . '</small>' : '') . '</span>';
+        echo '</label>';
+    }
+    echo '</div>';
+    wp_nonce_field('lfi_mon_ga');
+    echo '<button class="btn-primary big" name="lfi_mon_ga_save" value="1">✅ Enregistrer mon groupe</button>';
+    echo '</form>';
+    lfi_nct_app_screen_close();
+}
+
+/* ============================================================== *
  *  VUE : annuaire des groupes d'action                            *
  * ============================================================== */
 function lfi_nct_app_view_groupes() {

@@ -984,6 +984,7 @@ function lfi_nct_app_shortcode() {
                     case 'rgpd-politique':        lfi_nct_app_view_rgpd_politique();         break;
                     case 'guide':                 lfi_nct_app_view_guide();                  break;
                     case 'groupes':               lfi_nct_app_view_groupes();                break;
+                    case 'mon-ga':                lfi_nct_app_view_mon_ga();                 break;
                     case 'reseau-ga':             lfi_nct_app_view_reseau_ga();              break;
                     case 'reseau-carte':          lfi_nct_app_view_carte(true);              break;
                     case 'reseau-stats-enquete':  lfi_nct_app_view_stats_enquete(true);      break;
@@ -2608,6 +2609,7 @@ function lfi_nct_admin_get_tiles_sections($stats = null) {
             ['🏛️', 'Préfecture',            'Partage anonyme par bâtiment',        lfi_nct_app_url('prefecture')],
             ['🐛', 'Argumentaire NMH (nuisibles)', 'PDF anonyme · problème systémique · punaises', lfi_nct_app_url('argumentaire-nmh')],
             ['🏆', 'Réussites',             'Victoires anonymes · articles',       lfi_nct_app_url('reussites')],
+            ['👥', 'Mon groupe d\'action',   'Choisir / changer mon GA',            lfi_nct_app_url('mon-ga')],
         ],
         '👶 VOLET PROTECTION DE L\'ENFANCE' => [
             ['👶', 'Protection de l\'enfance', 'ASE · Conseil départemental · séparé du logement', lfi_nct_app_url('ase')],

@@ -96,7 +96,18 @@ function lfi_nct_sms_db_setup() {
         $wpdb->query("UPDATE $tpl_table SET ajouter_stop = 0");
     }
 
-    update_option(LFI_NCT_SMS_DBVER, '4', false);
+    // Upgrade vers DBVER 5 : modèle « Choisir mon groupe d'action ». Les inscrit·es
+    // de la campagne logement ont été affecté·es d'office au Clos Toreau ; ce SMS
+    // leur donne le lien pour rejoindre LEUR groupe d'action local.
+    if (in_array(get_option(LFI_NCT_SMS_DBVER), ['1','2','3','4'], true)) {
+        $wpdb->insert($tpl_table, [
+            'nom' => '👥 Choisir mon groupe d\'action', 'categorie' => 'accueil',
+            'body' => "Salut {{prenom}} ! Tu t'es inscrit·e via le Clos Toreau. Tu peux choisir TON groupe d'action local ici (2 min) : {{lien_mon_ga}}",
+            'ajouter_stop' => 0,
+        ]);
+    }
+
+    update_option(LFI_NCT_SMS_DBVER, '5', false);
 }
 
 function lfi_nct_sms_categories() {
@@ -119,6 +130,7 @@ function lfi_nct_sms_render($body, $membre, $extra = []) {
         'nom'     => $membre->nom,
         'pseudo'  => $membre->pseudo,
         'statut'  => $membre->statut,
+        'lien_mon_ga' => function_exists('lfi_nct_app_url') ? lfi_nct_app_url('mon-ga') : '',
     ], $extra);
     $out = $body;
     foreach ($vars as $k => $v) {
