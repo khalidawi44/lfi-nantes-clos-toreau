@@ -3460,6 +3460,46 @@ function lfi_nct_app_view_sms() {
         echo '</div>';
     }
 
+    /* ---- 📣 SMS de GROUPE : prévenir tout le monde d'un coup ----
+       Ouvre l'appli SMS avec TOUS les numéros du GA. Le format multi-destinataires
+       diffère iPhone (virgule) / Android (point-virgule) → deux boutons. */
+    if ($membres) {
+        $group_body = '';
+        if ($tpl_row) {
+            $group_body = function_exists('lfi_nct_sms_render')
+                ? lfi_nct_sms_render($tpl_row->body, (object) ['prenom' => '', 'nom' => '', 'pseudo' => '', 'statut' => ''], $event_vars)
+                : $tpl_row->body;
+            $group_body = preg_replace('/\{\{[a-z_]+\}\}/', '', $group_body);   // variables non résolues (ex. {{prenom}})
+            $group_body = trim(preg_replace('/[ \t]{2,}/', ' ', $group_body));
+        }
+        $nums = [];
+        foreach ($membres as $m) {
+            $n = preg_replace('/[^\d+]/', '', (string) $m->tel);
+            if ($n !== '') $nums[$n] = 1;
+        }
+        $nums = array_keys($nums);
+        $count = count($nums);
+        if ($count > 0) {
+            $ios_pre = 'sms:' . implode(',', $nums) . '&body=';
+            $and_pre = 'sms:' . implode(';', $nums) . '?body=';
+            echo '<div class="lfi-app-card" style="border-left:4px solid #0066a3;margin-top:18px">';
+            echo '<div class="head"><div class="who">📣 SMS de groupe — à tous (' . (int) $count . ')</div></div>';
+            echo '<div class="lfi-app-help" style="background:#fff3cd;border-left:4px solid #d39e00"><small>⚠️ En SMS de groupe, <strong>chaque destinataire voit les numéros des autres</strong>. Le format diffère selon le téléphone : choisis le bon bouton. Choisis un modèle ci-dessus pour pré-remplir le texte.</small></div>';
+            echo '<textarea rows="5" class="sms-body" id="lfi-grp-body" oninput="lfiGrpSync()">' . esc_textarea($group_body) . '</textarea>';
+            echo '<div class="lfi-app-help"><small><span id="lfi-grp-count">' . strlen($group_body) . '</span> caractères · ' . (int) $count . ' destinataires</small></div>';
+            echo '<div class="row-actions">';
+            echo '<a class="btn-primary big" id="lfi-grp-ios" href="' . esc_url($ios_pre . rawurlencode($group_body)) . '">📲 iPhone</a>';
+            echo '<a class="btn-primary big" style="background:#0a7d33" id="lfi-grp-and" href="' . esc_url($and_pre . rawurlencode($group_body)) . '">🤖 Android</a>';
+            echo '<button type="button" class="btn-ghost" onclick="navigator.clipboard.writeText(document.getElementById(\'lfi-grp-body\').value);this.textContent=\'✓ Copié\';">📋 Copier le texte</button>';
+            echo '</div>';
+            echo '<script>function lfiGrpSync(){var t=document.getElementById("lfi-grp-body").value;var b=encodeURIComponent(t);'
+               . 'document.getElementById("lfi-grp-ios").href=' . wp_json_encode($ios_pre) . '+b;'
+               . 'document.getElementById("lfi-grp-and").href=' . wp_json_encode($and_pre) . '+b;'
+               . 'document.getElementById("lfi-grp-count").textContent=t.length;}</script>';
+            echo '</div>';
+        }
+    }
+
     lfi_nct_app_screen_close();
 }
 
