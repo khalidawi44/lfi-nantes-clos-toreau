@@ -23,7 +23,7 @@ const LFI_NCT_SMS_DBVER = 'lfi_nct_sms_db_ver';
 
 add_action('init', 'lfi_nct_sms_db_setup', 5);
 function lfi_nct_sms_db_setup() {
-    if (get_option(LFI_NCT_SMS_DBVER) === '4') return;
+    if (get_option(LFI_NCT_SMS_DBVER) === '5') return;
     global $wpdb;
     $charset = $wpdb->get_charset_collate();
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
