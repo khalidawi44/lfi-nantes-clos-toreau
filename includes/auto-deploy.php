@@ -198,6 +198,53 @@ function lfi_nct_auto_deploy() {
         update_option('lfi_nct_reussites_incendie_v1', '1', false);
     }
 
+    /* ─ COUPE volet urgence — Mme FADIGA : dossier clos, NMH intervient (prises
+       électriques, humidité, mur dégradé). Vise le COMPTE WP par le nom (filet),
+       idempotent. */
+    if (get_option('lfi_nct_fadiga_coupe_v1') !== '1' && function_exists('lfi_nct_victoire_record')) {
+        $uids = [];
+        foreach ((array) get_users(['search' => '*Fadiga*', 'search_columns' => ['display_name', 'user_login', 'user_nicename'], 'fields' => ['ID'], 'number' => 10]) as $x) $uids[] = (int) (is_object($x) ? $x->ID : $x);
+        $uids = array_values(array_unique(array_filter($uids)));
+        $done = 0;
+        foreach ($uids as $uid) {
+            if (!lfi_nct_victoire_won($uid, 'urgence')) lfi_nct_victoire_record($uid, 'urgence', 0, 'travaux-fadiga-2026-08');
+            $done++;
+        }
+        if ($done > 0) update_option('lfi_nct_fadiga_coupe_v1', '1', false);
+    }
+
+    /* ─ RÉUSSITE anonyme — Mme FADIGA : travaux obtenus (électricité, humidité,
+       mur dégradé). Publiée, cloisonnée Clos Toreau, sans nom (règle cloisonnement). */
+    if (get_option('lfi_nct_reussite_fadiga_v1') !== '1'
+        && function_exists('lfi_nct_reussites') && function_exists('lfi_nct_reussites_save')) {
+        $key = 'travaux-fadiga-2026-08';
+        $list = lfi_nct_reussites();
+        $have = false;
+        foreach ($list as $r) if (($r['seed_key'] ?? '') === $key) { $have = true; break; }
+        if (!$have) {
+            $s = [
+                'titre'    => 'Prises électriques, humidité et mur dégradé : travaux obtenus au Clos Toreau',
+                'situation'=> "Une locataire du Clos Toreau signalait plusieurs désordres dans son logement : prises électriques défectueuses, humidité persistante et un mur intérieur dégradé (enduit décrépi). Après l'accompagnement de l'association, le bailleur Nantes Métropole Habitat s'est déplacé sur place et s'est engagé à réparer les prises, traiter l'humidité et reprendre le mur abîmé.",
+                'resultat' => 'travaux',
+                'resultat_detail' => 'Intervention de NMH obtenue sur place : réparation des prises électriques, traitement de l\'humidité et reprise du mur dégradé.',
+                'id'              => (int) round(microtime(true) * 1000),
+                'seed_key'        => $key,
+                'leviers'         => ['accompagnement', 'courrier'],
+                'leviers_detail'  => '',
+                'delai'           => '',
+                'quartier'        => 'Clos Toreau (Nantes Sud)',
+                'ga'              => 'clos-toreau',
+                'anonymize_names' => '',
+                'publie'          => true,
+                'auto'            => true,
+                'date'            => current_time('mysql'),
+            ];
+            $list[] = $s;
+            lfi_nct_reussites_save($list);
+        }
+        update_option('lfi_nct_reussite_fadiga_v1', '1', false);
+    }
+
     /* ─ MIGRATION RGPD : les fiches locataires content/dossiers/{slug}.php
        contiennent des données personnelles SENSIBLES (santé, mineurs) et ne
        doivent PAS rester dans le dépôt Git (public). On les recopie dans des
