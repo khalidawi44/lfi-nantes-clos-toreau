@@ -26,6 +26,15 @@
 - À l'**avocat** : LFI + Union des Quartiers Libres. Fabrice **n'est pas avocat**
   → **jamais « confraternellement »** (utiliser « Bien cordialement »).
 
+## Poste réseaux sociaux — format standard (règle permanente)
+Dès que Fabrice demande « fais-moi un poste pour les réseaux », livrer TOUJOURS
+les 3 éléments ensemble, sans qu'il ait à le repréciser :
+1. **Le texte** (caption prête à coller) ;
+2. **Le visuel** (PNG 1080×1350, généré via `tools/ql-visual-templates/` —
+   photos réelles si fournies/disponibles, sinon texte seul ; jamais de nom
+   de locataire dessus, cf. cloisonnement) ;
+3. **Les hashtags** (bloc prêt, pertinents au sujet + génériques du GA).
+
 ## Déploiement
 - Travailler sur la branche `claude/conversation-continuity-devices-giNbj`,
   puis merger sur `main` (le site déploie depuis `main`).
